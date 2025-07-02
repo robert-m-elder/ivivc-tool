@@ -1,0 +1,282 @@
+/* static/css/styles.css */
+
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+    background-color: #f0f0f0;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+h1 {
+    color: #333;
+    text-align: center;
+    width: 100%;
+    padding: 20px 0;
+    margin: 0;
+    background-color: #fff;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+#vertical-tabs {
+    display: flex;
+    width: 90%;
+    max-width: 1800px;
+    height: calc(100vh - 100px); /* Subtract the height of the h1 and some padding */
+    margin: 20px auto;
+    background-color: white;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+.ui-tabs-vertical {
+    display: flex;
+    width: 100%;
+    height: 100%;
+}
+
+.ui-tabs-vertical .ui-tabs-nav {
+    padding: .2em .1em .2em .2em;
+    width: 15%;
+    background: #f6f6f6;
+    border-right: 1px solid #aaa;
+    overflow-y: auto;
+}
+
+.ui-tabs-vertical .ui-tabs-nav li {
+    clear: left;
+    width: 100%;
+    border-bottom-width: 1px !important;
+    border-right-width: 0 !important;
+    margin: 0 -1px .2em 0;
+}
+
+.ui-tabs-vertical .ui-tabs-nav li a {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    box-sizing: border-box;
+}
+
+.ui-tabs-vertical .ui-tabs-nav li.ui-tabs-active {
+    padding-bottom: 0;
+    padding-right: .1em;
+    border-right-width: 1px;
+    background-color: #007CBA;
+    margin: 0 -1px .2em 0;
+}
+
+.ui-tabs-vertical .ui-tabs-panel {
+    padding: 1em;
+    width: 80%;
+    box-sizing: border-box;
+    overflow-y: auto;
+}
+
+.ui-tabs-panel h2 {
+    color: #2c3e50;
+    border-bottom: 2px solid #007CBA;
+    padding-bottom: 10px;
+}
+
+.ui-tabs-panel img {
+    max-width: 50%;
+    height: auto;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 5px;
+    margin-bottom: 20px;
+}
+
+.ui-tabs-panel h3 {
+    color: #34495e;
+    margin-top: 20px;
+}
+
+.ui-tabs-panel p {
+    margin: 5px 0;
+    color: #555;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+th, td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+
+th {
+    background-color: #f2f2f2;
+    font-weight: bold;
+}
+
+tr {
+    background-color: #ffffff;
+}
+
+tr:hover {
+    background-color: #f0f0f0 !important;
+}
+
+tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+.model-result {
+    margin-bottom: 30px;
+    padding: 20px;
+    background-color: #f9f9f9;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.model-result h4 {
+    margin-top: 15px;
+    margin-bottom: 5px;
+    color: #2c3e50;
+}
+
+.model-result p {
+    margin: 5px 0;
+}
+
+.mjx-chtml {
+    font-size: 120% !important;
+}
+
+#preprocessing-options, #approach-model-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+}
+
+#preprocessing-options th, #approach-model-table th {
+    background-color: #e0e0e0;
+}
+
+#preprocessing-options tr, #approach-model-table tr {
+    background-color: #ffffff
+}
+
+#preprocessing-options td, #approach-model-table td {
+    background-color: #ffffff;
+}
+
+#preprocessing-options th, #preprocessing-options td {
+    /*border: 1px solid #ddd;
+    padding: 5px;
+    text-align: left;*/
+    vertical-align: top;
+}
+
+.preprocessing-options th {
+    background-color: #f2f2f2;
+    font-weight: bold;
+}
+
+.preprocessing-options label {
+    display: block;
+    margin-bottom: 0px;
+}
+
+.preprocessing-options input[type="checkbox"] {
+    margin-right: 0px;
+}
+
+/* Style for error messages */
+.error {
+    color: #ff0000;  /* Red text color */
+    font-style: italic;
+    /*font-weight: bold;*/
+}
+
+/* Style for error cells in the comparison table */
+table td.error {
+    color: #ff0000;  /* Red text color */
+    font-style: italic;
+    /*font-weight: bold;*/
+    background-color: #ffeeee;  /* Light red background for better visibility */
+}
+
+/* Add a subtle red border to model result divs with errors */
+.model-result.has-error {
+    border-left: 3px solid #ff0000;
+    padding-left: 10px;
+}
+
+/*.plotly-graph-div {
+    width: 100%;
+}*/
+
+.plot-container {
+    width: 100%;
+    height: 0;
+    padding-bottom: 40%; /* Adjust this value to change the aspect ratio */
+    position: relative;
+    margin-top: 0px;
+    font-size: 14px;  /* Base size */
+}
+
+@media (max-width: 600px) {
+    .plot-container {
+        font-size: 12px;  /* Smaller base size for small screens */
+    }
+}
+
+.plot-container .plotly-graph-div {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+a.dt-button2 {
+    display: inline-block;
+    padding: 0.5em 1em;
+    margin: 0.1em;
+    border: 1px solid #999;
+    border-radius: 2px;
+    cursor: pointer;
+    font-size: 0.88em;
+    line-height: 1.6em;
+    color: black;
+    white-space: nowrap;
+    overflow: hidden;
+    background-color: #e9e9e9;
+    background-image: linear-gradient(to bottom, white 0%, #e9e9e9 100%);
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    text-decoration: none;
+    outline: none;
+}
+
+a.dt-button2:hover {
+    background-color: #e2e2e2;
+    background-image: linear-gradient(to bottom, #f9f9f9 0%, #e2e2e2 100%);
+}
+
+a.dt-button2:active {
+    background-color: #dadada;
+    background-image: linear-gradient(to bottom, #f3f3f3 0%, #dadada 100%);
+    box-shadow: inset 1px 1px 3px #666;
+}
+
+.custom-button-container {
+    display: flex;
+    /*justify-content: flex-end;*/
+    margin-top: 10px;  /* Adjust as needed to match spacing with DataTables buttons */
+}

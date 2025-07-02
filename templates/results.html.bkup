@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Correlation Results</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+</head>
+<body>
+    <h1>Correlation Results</h1>
+    
+    <div id="vertical-tabs">
+        <ul>
+            <li><a href="#comparison">Model Comparison</a></li>
+            {% for model_name in results %}
+            <li><a href="#{{ model_name }}">{{ models[model_name].display_name }}</a></li>
+            {% endfor %}
+        </ul>
+        
+        <div id="comparison">
+            <h2>Model Comparison</h2>
+            <img src="data:image/png;base64,{{ comparison.plot }}" alt="Model Comparison Plot">
+            <h3>R-squared Values</h3>
+            <table>
+                <tr>
+                    <th>Model</th>
+                    <th>R-squared</th>
+                </tr>
+                {% for data in comparison.data %}
+                <tr>
+                    <td>{{ data.model }}</td>
+                    <td>{{ data.r_squared }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+        
+        {% for model_name, model_results in results.items() %}
+        <div id="{{ model_name }}">
+            <h2>{{ models[model_name].display_name }}</h2>
+            <img src="data:image/png;base64,{{ model_results.plot }}" alt="{{ models[model_name].display_name }} Plot">
+            <h3>Parameters</h3>
+            {% for param, value in model_results.params.items() %}
+            <p>{{ param }}: {{ value }}</p>
+            {% endfor %}
+            <h3>Goodness of Fit</h3>
+            <p>R-squared: {{ model_results.stats.r_squared }}</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <script>
+        $(function() {
+            $("#vertical-tabs").tabs().addClass("ui-tabs-vertical ui-helper-clearfix");
+            $("#vertical-tabs li").removeClass("ui-corner-top").addClass("ui-corner-left");
+        });
+    </script>
+</body>
+</html>

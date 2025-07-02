@@ -1,0 +1,111 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Time Series Correlation App</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="{{ url_for('static', filename='js/index.js') }}" defer></script>
+</head>
+<body>
+    <h1>Time Series Correlation App</h1>
+    <form method="post" enctype="multipart/form-data" id="upload-form">
+        <div>
+            <h3>Select Data:</h3>
+                <div>
+                    <!--<label for="file">Upload Spreadsheet:</label>--!>
+                    <input type="file" name="file" id="file" accept=".xlsx,.xls,.csv" required>
+                </div>
+                <div id="sheet-selection" style="display: none;">
+                    <label for="sheet">Select Sheet:</label>
+                    <select name="sheet" id="sheet"></select>
+                </div>
+                <div>
+                    <label for="output_directory">Output Directory:</label>
+                    <input type="text" id="output_directory" name="output_directory" value="{{ output_directory }}">
+                </div>
+        </div>
+        <div>
+            <h3>Select Approaches and Models:</h3>
+            <table id="approach-model-table">
+                <tr>
+                    {% for approach_id, approach in approaches.items() %}
+                    <th>{{ approach.display_name }}</th>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    {% for approach_id, approach in approaches.items() %}
+                    <td>
+                        <label>
+                            <input type="checkbox" name="approaches" value="{{ approach_id }}" checked>
+                            Include {{ approach.display_name }}
+                        </label>
+                    </td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    {% for approach_id, approach in approaches.items() %}
+                    <td>
+                        {% for model_name in approach.models %}
+                        <label>
+                            <input type="checkbox" name="models" value="{{ approach_id }}:{{ model_name }}" checked>
+                            {{ models[model_name].display_name }}
+                        </label><br>
+                        {% endfor %}
+                    </td>
+                    {% endfor %}
+                </tr>
+            </table>
+        </div>
+        <div>
+            <h3>Select Preprocessing Options:</h3>
+            <table id="preprocessing-options">
+                <tr>
+                    <th>Normalization</th>
+                    <th>Scaling</th>
+                    <th>Interpolation</th>
+                </tr>
+                <tr>
+                    <td>
+                        {% for norm_name, norm_func in preprocessing_options['normalization'].items() %}
+                        <label>
+                            <input type="checkbox" name="normalizations" value="{{ norm_name }}">
+                            {{ norm_name }}
+                        </label><br>
+                        {% endfor %}
+                    </td>
+                    <td>
+                        {% for scale_name, scale_func in preprocessing_options['scaling'].items() %}
+                        <label>
+                            <input type="checkbox" name="scalings" value="{{ scale_name }}">
+                            {{ scale_name }}
+                        </label><br>
+                        {% endfor %}
+                    </td>
+                    <td>
+                        {% for interp_name, interp_func in preprocessing_options['interpolation'].items() %}
+                        <label>
+                            <input type="checkbox" name="interpolation" value="{{ interp_name }}" {% if interp_name == "default_interpolation" %}checked{% endif %} >
+                            {{ interp_name }}
+                        </label><br>
+                        {% endfor %}
+                    </td>
+                </tr>
+            </table>
+        </div>
+        <div>
+            <h3>Select Metrics:</h3>
+            {% for metric_name, metric_info in metrics.items() %}
+            <label>
+                <input type="checkbox" name="metrics" value="{{ metric_name }}" checked>
+                {{ metric_info.display_name }}
+            </label><br>
+            {% endfor %}
+        </div>
+        <div>
+            <input type="submit" value="Analyze Data">
+        </div>
+    </form>
+</body>
+</html>
+

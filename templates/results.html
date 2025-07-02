@@ -1,0 +1,168 @@
+<!-- results.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Correlation Results</title>
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <script type="text/javascript" charset="utf8" src="https://code.jquery.com/jquery-3.7.1.js"></script>
+    <!--<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>-->
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="https://cdn.plot.ly/plotly-3.0.1.min.js" charset="utf-8"></script>
+
+    <!--<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.10.24/css/jquery.dataTables.css">
+    <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.10.24/js/jquery.dataTables.js"></script>-->
+
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/2.3.2/css/dataTables.dataTables.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/buttons/3.2.3/css/buttons.dataTables.css">
+    <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/2.3.2/js/dataTables.js"></script>
+    <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/buttons/3.2.3/js/dataTables.buttons.js"></script>
+    <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/buttons/3.2.3/js/buttons.dataTables.js"></script>
+    <script type="text/javascript" charset="utf8" src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script type="text/javascript" charset="utf8" src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+    <script type="text/javascript" charset="utf8" src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+    <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/buttons/3.2.3/js/buttons.html5.min.js"></script>
+    <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/buttons/3.2.3/js/buttons.print.min.js"></script>
+
+    <script src="{{ url_for('static', filename='js/results.js') }}" defer></script>
+</head>
+<body>
+    <h1>Correlation Results</h1>
+    
+    <div id="vertical-tabs">
+        <ul>
+            <li><a href="#processing">Data Processing</a></li>
+            {% for approach_id in selected_approaches %}
+                <li><a href="#{{ approach_id }}">{{ approaches[approach_id].display_name }}</a></li>
+            {% endfor %}
+            <li><a href="#comparison">Model Comparison</a></li>
+        </ul>
+
+        <div id="processing">
+            <h2>Data Processing</h2>
+            <h3>Preprocessing Applied:</h3>
+                <h4>Normalization:</h4>
+                <ul>
+                    {% for norm in selected_normalizations %}
+                    <li>{{ norm }}</li>
+                    {% endfor %}
+                </ul>
+                <h4>Scaling:</h4>
+                <ul>
+                    {% for scale in selected_scalings %}
+                    <li>{{ scale }}</li>
+                    {% endfor %}
+                </ul>
+                <h4>Interpolation:</h4>
+                <ul>
+                    {% for interp in selected_interpolation %}
+                    <li>{{ interp }}</li>
+                    {% endfor %}
+                </ul>
+            <!--<img src="data:image/png;base64,{{ interpolation }}" alt="Data Processing Plot">-->
+            <div class="plot-container">
+                {{ interpolation_info['plot'] | safe }}
+            </div>
+            <div class="custom-button-container"><a href="/download/{{ interpolation_info['filename'] }}"  class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none; color: inherit;"><span>Download Data</span></a></div>
+            <!--{#<a href="/download/{{ interpolation_info['filename'] }}" class="btn btn-primary">Download Data</a>#}-->
+            <!--<a href="{{ url_for('download_excel', filename=interpolation_info['filename']) }}" class="btn btn-primary">Download Data</a>-->
+        </div>
+        
+        <div id="comparison">
+            <h2>Model Comparison</h2>
+            <!--<img src="data:image/png;base64,{ { comparison.plot } }" alt="Model Comparison Plot">--!>
+            {% if "approach1" in selected_approaches %}
+                <h3>{{ approaches["approach1"].display_name }}</h3>
+                {{ comparisons["approach1"] | safe }}
+            {% endif %}
+            {% if "approach2" in selected_approaches %}
+                <h3>{{ approaches["approach2"].display_name }}</h3>
+                {{ comparisons["approach2"] | safe }}
+            {% endif %}
+        </div> 
+
+        {% for approach_id in selected_approaches %}
+            <div id="{{ approach_id }}">
+                <h2>{{ approaches[approach_id].display_name }}</h2>
+                <!--{# <p><strong>Preprocessing:</strong> {{ approaches[approach_id].preprocess.__name__ if approaches[approach_id].preprocess else 'None' }}</p> #}--!>
+                {% for model_key, model_results in results.items() %}
+                    {% if model_key.startswith(approach_id) %}
+                        {% if approach_id == "approach1" %}
+                        {% set model_name = model_key.split(':')[1] %}
+                            <div class="model-result {% if model_results.error %}has-error{% endif %}">
+                                <h3>{{ models[model_name].display_name }}</h3>
+                                {% if model_results.error %}
+                                    <p class="error">Error: {{ model_results.error }}</p>
+                                {% else %}
+                                    <!--{#<img src="data:image/png;base64,{{ model_results.plot }}" alt="{{ models[model_name].display_name }} Plot">#}-->
+                                    <div class="plot-container">
+                                        {{ model_results['plot']['plot'] | safe }}
+                                    </div>
+                                    <div class="custom-button-container"><a href="/download/{{ model_results['plot']['filename'] }}"  class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none; color: inherit;"><span>Download Data</span></a></div>
+                                    <!--{#<a href="/download/{{ model_results['plot']['filename'] }}" class="btn btn-primary">Download Data</a>#}-->
+                                    <h4>Function</h4>
+                                    <p>\[{{ model_results.function }}\]</p>
+                                    <h4>Final model parameters</h4>
+                                    {% for param, value in model_results.params.items() %}
+                                    <p>{{ param }}: {{ value | round(4) }}</p>
+                                    {% endfor %}
+                                    <h4>Goodness of fit</h4>
+                                    {{ model_results.stats_table | safe }}
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                        {% if approach_id == "approach2" %}
+                        {% set model_name = model_key.split(':')[1] %}
+                            <div class="model-result {% if model_results.error %}has-error{% endif %}">
+                                <h3>Model: {{ models[model_name].display_name }}</h3>
+                                {% if model_results.error %}
+                                    <p class="error">Error: {{ model_results.error }}</p>
+                                {% else %}
+                                    <!--{#<img src="data:image/png;base64,{{ model_results.plot }}" alt="{{ models[model_name].display_name }} Plot">#}-->
+                                    <div class="plot-container">
+                                        {{ model_results['plot']['plot'] | safe }}
+                                    </div>
+                                    <div class="custom-button-container"><a href="/download/{{ model_results['plot']['filename'] }}"  class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none; color: inherit;"><span>Download Data</span></a></div>
+                                    <h4>Function</h4>
+                                    <p>\[{{ model_results.function }}\]</p>
+                                    <h4>Dataset 1</h4>
+                                    <h4>Final model parameters</h4>
+                                    {% for param, value in model_results.params[0].items() %}
+                                    <p>{{ param }}: {{ value | round(4) }}</p>
+                                    {% endfor %}
+                                    <h4>Goodness of Fit</h4>
+                                    {{ model_results.stats_table[0] | safe }}
+                                    <h4>Dataset 2</h4>
+                                    <h4>Final model parameters</h4>
+                                    {% for param, value in model_results.params[1].items() %}
+                                    <p>{{ param }}: {{ value | round(4) }}</p>
+                                    {% endfor %}
+                                    <h4>Goodness of Fit</h4>
+                                    {{ model_results.stats_table[1] | safe }}
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                        {% if approach_id == "approach3" %}
+                            <div class="model-result {% if model_results.error %}has-error{% endif %}">
+                                <!--{#<img src="data:image/png;base64,{{ model_results.plot_v }}" alt="Approach 3 Value Plot">#}-->
+                                <!--{#<img src="data:image/png;base64,{{ model_results.plot_t }}" alt="Approach 3 Time Plot">#}-->
+                                <div class="plot-container">
+                                    {{ model_results['plot_v']['plot'] | safe }}
+                                </div>
+                                <div class="custom-button-container"><a href="/download/{{ model_results['plot_v']['filename'] }}"  class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none; color: inherit;"><span>Download Data</span></a></div>
+                                <p></p>
+                                <div class="plot-container">
+                                    {{ model_results['plot_t']['plot'] | safe }}
+                                </div>
+                                <div class="custom-button-container"><a href="/download/{{ model_results['plot_t']['filename'] }}"  class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none; color: inherit;"><span>Download Data</span></a></div>
+                            </div>
+                        {% endif %}
+                    {% endif %}
+                {% endfor %}
+            </div>
+        {% endfor %}
+    </div>
+</body>
+</html>
+
