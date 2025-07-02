@@ -75,6 +75,8 @@ def auto_grid_search(func, x, y, param_min=1e-6, param_max=1e6, num_points=25):
     """
     # Automatically determine the number of parameters
     num_params = len(inspect.signature(func).parameters) - 1  # subtract 1 for 'x'
+    
+    if num_params>2: num_points = num_points // 2
 
     # Generate log-spaced ranges for each parameter, including negative values
     tmp_range = np.logspace(np.log10(param_min), np.log10(param_max), num=num_points)
@@ -123,6 +125,23 @@ def calculate_tau(model_function, params):
     # Normalize by dividing by the initial value
     tau = integral / f_0
     return tau
+
+def calculate_tau_with_uncertainty(model_function, params, pcov, num_samples=1000):
+    # Generate samples from the multivariate normal distribution
+    param_samples = np.random.multivariate_normal(params, pcov, num_samples)
+    tau_samples = []
+    for sample in param_samples:
+        # Get the initial value
+        f_0 = model_function(0, *sample)
+        # Integrate from 0 to infinity
+        integral, _ = sp.integrate.quad(model_function, 0, np.inf, args=tuple(sample), limit=100)
+        # Normalize by dividing by the initial value
+        tau = integral / f_0
+        tau_samples.append(tau)
+    # Calculate mean and standard deviation of tau
+    tau_mean = np.mean(tau_samples)
+    tau_std = np.std(tau_samples)
+    return tau_mean, tau_std
 
 ## time constant
 def get_tau(modelname,popt):

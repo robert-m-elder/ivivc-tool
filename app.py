@@ -7,20 +7,24 @@ from flask import send_from_directory, send_file
 
 import numpy as np
 import pandas as pd
-import sklearn
-import sklearn.model_selection
+#import sklearn
+#import sklearn.model_selection
+# for correct error propagation
+import uncertainties as unc
+import uncertainties.unumpy as unp
 
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
+import traceback
 import warnings
 from scipy.optimize import OptimizeWarning
 from sklearn.exceptions import UndefinedMetricWarning
 
 from models import models, approaches
 from preprocessing import preprocessing_options
-from utilities.evaluation import evaluate_goodness_of_fit, cross_validation_curve_fit, cross_validation_schemes, auto_grid_search, calculate_tau
+from utilities.evaluation import evaluate_goodness_of_fit, cross_validation_curve_fit, cross_validation_schemes, auto_grid_search, calculate_tau, calculate_tau_with_uncertainty
 from utilities.model_display import get_human_readable_function
 from metrics import metrics
 
@@ -36,7 +40,6 @@ DEFAULT_OUTPUT_DIR = os.path.join(app.root_path, 'output')
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    print(metrics)
     if request.method == 'POST':
         file = request.files['file']
         selected_models = request.form.getlist('models')
@@ -52,7 +55,6 @@ def index():
         os.makedirs(output_directory, exist_ok=True)
 
         human_readable_functions = {model_name:get_human_readable_function(models[model_name]['model_function']) for model_name in set([m.split(':')[-1] for m in selected_models])}
-        #print(human_readable_functions)
 
         if not file or not selected_models or not selected_approaches or not selected_metrics:
             return "Please upload a file, select at least one model, one approach, and one metric", 400
@@ -101,8 +103,14 @@ def index():
             if len(model_key.split(':'))>1:
                 model_name = model_key.split(':')[-1]
                 results[model_key]['function'] = human_readable_functions[model_name]
-        pprint(results.keys())
+        #pprint(results.keys())
         #print(results['approach3'])
+#        for model_key in results:
+#            if 'approach2' in model_key:
+#                print(results[model_key])
+#                pprint(results[model_key]['params'])
+#                pprint(results[model_key]['uparams'])
+#                pprint(results[model_key]['tau'])
         comparisons = {}
         for approach in selected_approaches:
             comparisons[approach] = create_comparison(results, approach)
@@ -231,6 +239,10 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, o
                 #stats_table1 = pd.concat([pd.DataFrame({metrics[metric]['display_name']:v for metric,v in gof1.items()}, index=[0]), pd.DataFrame({'CV '+metrics[metric]['display_name']:v for metric,v in cvs1_mean.items()}, index=[0])], axis=1)
                 #upopt1 = unc.correlated_values(popt1, pcov1)
                 #tau1 = get_tau(modelname, upopt1)
+                popt1, pcov1 = list(model_result1['params'].values()), model_result1['pcov']
+                upopt1 = unc.correlated_values(popt1, pcov1)
+                upopt1 = dict(zip(model_result1['params'].keys(),upopt1))
+                tau1 = unc.ufloat(*calculate_tau_with_uncertainty(models[model_name]['model_function'], popt1, pcov1))
                 ## dataset 2
                 # get rough initial estimate of parameters
                 p0 = auto_grid_search(models[model_name]['model_function'], x2, y2, param_min=1e-6, param_max=1e6, num_points=25)
@@ -247,6 +259,10 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, o
                 #stats_table2 = pd.concat([pd.DataFrame({metrics[metric]['display_name']:v for metric,v in gof2.items()}, index=[0]), pd.DataFrame({'CV '+metrics[metric]['display_name']:v for metric,v in cvs2_mean.items()}, index=[0])], axis=1)
                 #upopt2 = unc.correlated_values(popt2, pcov2)
                 #tau2 = get_tau(modelname, upopt2)
+                popt2, pcov2 = list(model_result2['params'].values()), model_result2['pcov']
+                upopt2 = unc.correlated_values(popt2, pcov2)
+                upopt2 = dict(zip(model_result2['params'].keys(),upopt2))
+                tau2 = unc.ufloat(*calculate_tau_with_uncertainty(models[model_name]['model_function'], popt2, pcov2))
                 # outputs
                 plot_image = create_plotly_a2(x1, y1, x2, y2, {
                     'model_name': models[model_name]['display_name'],
@@ -257,6 +273,8 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, o
                 }, output_directory)
                 results[model_key] = {
                     'params': [model_result1['params'],model_result2['params']],
+                    'uparams': [upopt1,upopt2],
+                    'tau': [tau1,tau2],
                     'stats': [stats1,stats2],
                     'stats_table': [stats_table1.to_html(classes='table table-striped', index=True), stats_table2.to_html(classes='table table-striped', index=True)],
                     'plot': plot_image
@@ -270,6 +288,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, o
         except Exception as e:
             # If an error occurs, store the error message
             results[model_key] = {'error': str(e)}
+            traceback.print_exc()
     
     return results
 
@@ -288,7 +307,7 @@ def create_comparison(results, approach):
                     })
                 else:
                     if approach == 'approach1':
-                        tmp_comparison_data = {'model': models[model_name]['display_name']}
+                        tmp_comparison_data = {'Model': models[model_name]['display_name']}
                         for k,v in model_results['stats'].iloc[0].items():
                             if k.startswith('CV '):
                                 metric = k[3:]

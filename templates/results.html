@@ -128,16 +128,32 @@
                                     <p>\[{{ model_results.function }}\]</p>
                                     <h4>Dataset 1</h4>
                                     <h4>Final model parameters</h4>
-                                    {% for param, value in model_results.params[0].items() %}
-                                    <p>{{ param }}: {{ value | round(4) }}</p>
+                                    <!--{# {% for param, value in model_results.params[0].items() %}
+                                    <p>{{ param }}: {{ value | round(4) }}</p> #}-->
+                                    {% for param, value in model_results.uparams[0].items() %}
+                                    <p>{{ param }}: {{ value.n | round(4) }} &plusmn; {{ value.s | round(4) }}</p>
                                     {% endfor %}
+                                    <h4>Time constant</h4>
+                                    {% if model_results.tau[0].n > 0 %}
+                                        <p>Tau: {{  model_results.tau[0].n | round(4) }} &plusmn; {{ model_results.tau[0].s |round(4) }}</p>
+                                    {% else %}
+                                        <p>Tau: N/A</p>
+                                    {% endif %}
                                     <h4>Goodness of Fit</h4>
                                     {{ model_results.stats_table[0] | safe }}
                                     <h4>Dataset 2</h4>
                                     <h4>Final model parameters</h4>
-                                    {% for param, value in model_results.params[1].items() %}
-                                    <p>{{ param }}: {{ value | round(4) }}</p>
+                                    <!--{# {% for param, value in model_results.params[1].items() %}
+                                    <p>{{ param }}: {{ value | round(4) }}</p> #}-->
+                                    {% for param, value in model_results.uparams[1].items() %}
+                                    <p>{{ param }}: {{ value.n | round(4) }} &plusmn; {{ value.s | round(4) }}</p>
                                     {% endfor %}
+                                    <h4>Time constant</h4>
+                                    {% if model_results.tau[1].n > 0 %}
+                                        <p>Tau: {{  model_results.tau[1].n | round(4) }} &plusmn; {{ model_results.tau[1].s |round(4) }}</p>
+                                    {% else %}
+                                        <p>Tau: N/A</p>
+                                    {% endif %}
                                     <h4>Goodness of Fit</h4>
                                     {{ model_results.stats_table[1] | safe }}
                                 {% endif %}
