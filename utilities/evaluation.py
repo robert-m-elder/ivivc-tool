@@ -11,6 +11,9 @@ import inspect
 from itertools import product
 from metrics import metrics
 
+from joblib import Parallel, delayed
+import multiprocessing
+
 cross_validation_schemes = {
                             'approach1':sklearn.model_selection.ShuffleSplit(n_splits=50, test_size=0.2, random_state=12345),
                             'approach2':sklearn.model_selection.ShuffleSplit(n_splits=50, test_size=0.2, random_state=12345),
@@ -51,7 +54,42 @@ def evaluate_goodness_of_fit(y_true, y_pred):
         'nrmse': nrmse
     }
 
-def auto_grid_search(func, x, y, param_min=1e-6, param_max=1e6, num_points=25):
+def auto_grid_search(func, x, y, param_min=1e-6, param_max=1e6, num_points=100):
+    num_params = len(inspect.signature(func).parameters) - 1  # subtract 1 for 'x'
+    
+    # Define the objective function with warning filter
+    def objective(params):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            return np.sum((y - func(x, *params))**2)
+    
+    # Generate random starting points (log-uniform distribution)
+    log_min, log_max = np.log10(param_min), np.log10(param_max) 
+    random_starts = np.power(10, np.random.uniform(log_min, log_max, size=(num_points, num_params)))
+    
+    # Add negative values
+    random_starts *= np.random.choice([-1, 1], size=random_starts.shape)
+
+    # Wrapper function for minimize to catch warnings
+    def minimize_wrapper(x0):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            return sp.optimize.minimize(objective, x0, method='Nelder-Mead')
+
+    # Parallel optimization with warning filter
+    num_cores = multiprocessing.cpu_count()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        results = Parallel(n_jobs=num_cores)(
+            delayed(minimize_wrapper)(x0) for x0 in random_starts
+        )
+    
+    # Find the best result
+    best_result = min(results, key=lambda x: x.fun)
+    
+    return best_result.x
+
+def auto_grid_search_old(func, x, y, param_min=1e-6, param_max=1e6, num_points=25):
     """
     Perform an automatic grid search for the best parameters of a given function,
     including both positive and negative log-scaled values.
@@ -134,7 +172,9 @@ def calculate_tau_with_uncertainty(model_function, params, pcov, num_samples=100
         # Get the initial value
         f_0 = model_function(0, *sample)
         # Integrate from 0 to infinity
-        integral, _ = sp.integrate.quad(model_function, 0, np.inf, args=tuple(sample), limit=100)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=sp.integrate.IntegrationWarning)
+            integral, _ = sp.integrate.quad(model_function, 0, np.inf, args=tuple(sample), limit=100)
         # Normalize by dividing by the initial value
         tau = integral / f_0
         tau_samples.append(tau)

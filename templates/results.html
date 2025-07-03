@@ -25,11 +25,23 @@
     <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/buttons/3.2.3/js/buttons.html5.min.js"></script>
     <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/buttons/3.2.3/js/buttons.print.min.js"></script>
 
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/colreorder/2.1.1/css/colReorder.dataTables.min.css">
+    <script type="text/javascript" src="https://cdn.datatables.net/colreorder/2.1.1/js/dataTables.colReorder.js"></script>
+    <script type="text/javascript" src="https://cdn.datatables.net/colreorder/2.1.1/js/colReorder.dataTables.js"></script>
+
     <script src="{{ url_for('static', filename='js/results.js') }}" defer></script>
 </head>
 <body>
-    <h1>Correlation Results</h1>
-    
+    <header>
+        <h1>
+            Correlation Results
+            <div class="header-image">
+                <img src="{{ url_for('static', filename='images/Logo_FDA_Primary_Blue.png') }}" alt="FDA Logo">
+                <!--<img src="{{ url_for('static', filename='images/Logo_FDA_Primary_WhiteOnBlue_CDRH.png') }}" alt="FDA/CDRH Logo">-->
+            </div>
+        </h1>
+    </header>
+
     <div id="vertical-tabs">
         <ul>
             <li><a href="#processing">Data Processing</a></li>
@@ -74,11 +86,19 @@
             <!--<img src="data:image/png;base64,{ { comparison.plot } }" alt="Model Comparison Plot">--!>
             {% if "approach1" in selected_approaches %}
                 <h3>{{ approaches["approach1"].display_name }}</h3>
+                <h4>Performance Metrics</h4>
                 {{ comparisons["approach1"] | safe }}
+                <h4>Pairwise Model Comparison (Kolmogorov-Smirnov Test p-values)</h4>
+                {{ ks_tables["approach1"][0] | safe}}
             {% endif %}
             {% if "approach2" in selected_approaches %}
                 <h3>{{ approaches["approach2"].display_name }}</h3>
+                <h4>Performance Metrics</h4>
                 {{ comparisons["approach2"] | safe }}
+                <h4>Pairwise Model Comparison (Kolmogorov-Smirnov Test p-values), Dataset 1</h4>
+                {{ ks_tables["approach2"][0] | safe}}
+                <h4>Pairwise Model Comparison (Kolmogorov-Smirnov Test p-values), Dataset 2</h4>
+                {{ ks_tables["approach2"][1] | safe}}
             {% endif %}
         </div> 
 

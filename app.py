@@ -6,6 +6,7 @@ from flask import Flask, render_template, request, jsonify
 from flask import send_from_directory, send_file
 
 import numpy as np
+import scipy as sp
 import pandas as pd
 #import sklearn
 #import sklearn.model_selection
@@ -56,12 +57,12 @@ def index():
 
         human_readable_functions = {model_name:get_human_readable_function(models[model_name]['model_function']) for model_name in set([m.split(':')[-1] for m in selected_models])}
 
-        if not file or not selected_models or not selected_approaches or not selected_metrics:
-            return "Please upload a file, select at least one model, one approach, and one metric", 400
-
         # add placeholder for approach3
         if 'approach3' in selected_approaches:
             selected_models.append('approach3')
+
+        if not file or not selected_models or not selected_approaches or not selected_metrics:
+            return "Please upload a file, select at least one model, one approach, and one metric", 400
 
         print(selected_models)
         print(selected_approaches)
@@ -111,11 +112,10 @@ def index():
 #                pprint(results[model_key]['params'])
 #                pprint(results[model_key]['uparams'])
 #                pprint(results[model_key]['tau'])
-        comparisons = {}
+        comparisons, ks_tables = {}, {}
         for approach in selected_approaches:
-            comparisons[approach] = create_comparison(results, approach)
-        #pprint(comparisons)
-        return render_template('results.html', results=results, models=models, interpolation_info=interpolation_info, comparisons=comparisons, 
+            comparisons[approach], ks_tables[approach] = create_comparison(results, approach)
+        return render_template('results.html', results=results, models=models, interpolation_info=interpolation_info, comparisons=comparisons, ks_tables=ks_tables, 
                                approaches=approaches, selected_approaches=selected_approaches, 
                                selected_scalings=selected_scalings, selected_normalizations=selected_normalizations, selected_interpolation=selected_interpolation,
                                metrics=metrics, selected_metrics=selected_metrics, output_directory=output_directory)
@@ -190,7 +190,9 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, o
                 m = ~np.isnan(ti1) & ~np.isnan(ti2)
                 x,y = ti1[m], ti2[m]
                 # get rough initial estimate of parameters
-                p0 = auto_grid_search(models[model_name]['model_function'], x, y, param_min=1e-6, param_max=1e6, num_points=25)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", category=RuntimeWarning)
+                    p0 = auto_grid_search(models[model_name]['model_function'], x, y, param_min=1e-6, param_max=1e6)
                 # cross-validation
                 cvs = cross_validation_curve_fit(x, y, models[model_name]['model_function'], cv, selected_metrics, p0=p0, kwargs=models[model_name]['fit_kwargs'])
                 cvs_mean = {f'{metric}':values.mean() for metric,values in cvs.items()}
@@ -213,6 +215,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, o
                 results[model_key] = {
                     'params': model_result['params'],
                     'stats': stats,
+                    'predictions': y_pred,
                     'stats_table': stats_table.to_html(classes='table table-striped', index=True),
                     'plot': plot_image
                 }
@@ -225,7 +228,9 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, o
                 x2,y2 = ti2[m], mm[m]
                 ## dataset 1
                 # get rough initial estimate of parameters
-                p0 = auto_grid_search(models[model_name]['model_function'], x1, y1, param_min=1e-6, param_max=1e6, num_points=25)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", category=RuntimeWarning)
+                    p0 = auto_grid_search(models[model_name]['model_function'], x1, y1, param_min=1e-6, param_max=1e6)
                 # cross-validation
                 cvs1 = cross_validation_curve_fit(x1, y1, models[model_name]['model_function'], cv, selected_metrics, p0=p0, kwargs=models[model_name]['fit_kwargs'])
                 cvs1_mean = {f'{metric}':v.mean() for metric,v in cvs1.items()}
@@ -242,10 +247,17 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, o
                 popt1, pcov1 = list(model_result1['params'].values()), model_result1['pcov']
                 upopt1 = unc.correlated_values(popt1, pcov1)
                 upopt1 = dict(zip(model_result1['params'].keys(),upopt1))
-                tau1 = unc.ufloat(*calculate_tau_with_uncertainty(models[model_name]['model_function'], popt1, pcov1))
+                tau1 = calculate_tau_with_uncertainty(models[model_name]['model_function'], popt1, pcov1)
+                # deal with integration failure
+                if tau1[0]>0:
+                    tau1 = unc.ufloat(*tau1)
+                else:
+                    tau1 = unc.ufloat(0,1)
                 ## dataset 2
                 # get rough initial estimate of parameters
-                p0 = auto_grid_search(models[model_name]['model_function'], x2, y2, param_min=1e-6, param_max=1e6, num_points=25)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", category=RuntimeWarning)
+                    p0 = auto_grid_search(models[model_name]['model_function'], x2, y2, param_min=1e-6, param_max=1e6)
                 # cross-validation
                 cvs2 = cross_validation_curve_fit(x2, y2, models[model_name]['model_function'], cv, selected_metrics, p0=p0, kwargs=models[model_name]['fit_kwargs'])
                 cvs2_mean = {f'{metric}':v.mean() for metric,v in cvs2.items()}
@@ -262,7 +274,12 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, o
                 popt2, pcov2 = list(model_result2['params'].values()), model_result2['pcov']
                 upopt2 = unc.correlated_values(popt2, pcov2)
                 upopt2 = dict(zip(model_result2['params'].keys(),upopt2))
-                tau2 = unc.ufloat(*calculate_tau_with_uncertainty(models[model_name]['model_function'], popt2, pcov2))
+                tau2 = calculate_tau_with_uncertainty(models[model_name]['model_function'], popt2, pcov2)
+                # deal with integration failure
+                if tau2[0]>0:
+                    tau2 = unc.ufloat(*tau2)
+                else:
+                    tau2 = unc.ufloat(0,1)
                 # outputs
                 plot_image = create_plotly_a2(x1, y1, x2, y2, {
                     'model_name': models[model_name]['display_name'],
@@ -276,6 +293,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, o
                     'uparams': [upopt1,upopt2],
                     'tau': [tau1,tau2],
                     'stats': [stats1,stats2],
+                    'predictions': [y_pred1,y_pred2],
                     'stats_table': [stats_table1.to_html(classes='table table-striped', index=True), stats_table2.to_html(classes='table table-striped', index=True)],
                     'plot': plot_image
                 }
@@ -294,15 +312,18 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, o
 
 def create_comparison(results, approach):
     comparison_data = []
+    model_keys, model_display_names = [],[]
     for model_key, model_results in results.items():
             if len(model_key.split(':'))>1:
                 approach_id, model_name = model_key.split(':')
             else:
                 approach_id = model_key
             if approach_id == approach:
+                model_keys.append(model_key)
+                model_display_names.append(models[model_name]['display_name'])
                 if 'error' in model_results and model_results['error'] is not None:
                     comparison_data.append({
-                        'model': models[model_name]['display_name'],
+                        'Model': models[model_name]['display_name'],
                         'error': model_results['error']
                     })
                 else:
@@ -327,7 +348,36 @@ def create_comparison(results, approach):
                             comparison_data.append(tmp_comparison_data)
 
     df = pd.DataFrame(comparison_data)
-    return df.to_html(classes='table table-striped', index=False)
+    metrics_table = df.to_html(classes='table table-striped', index=False, float_format=lambda x: f'{x:.4f}')
+
+    # Create pairwise comparison table using KS test
+    n_models = len(model_keys)
+    if approach == 'approach1':
+        ks_matrix = np.zeros((n_models, n_models))
+        np.fill_diagonal(ks_matrix, 1)
+        for i in range(n_models):
+            for j in range(i+1, n_models):
+                _, p_value = sp.stats.ks_2samp(results[model_keys[i]]['predictions'], results[model_keys[j]]['predictions'])
+                ks_matrix[i, j] = ks_matrix[j, i] = p_value
+        df_ks = pd.DataFrame(ks_matrix, index=model_display_names, columns=model_display_names)
+        ks_table = df_ks.to_html(classes='table table-striped', float_format=lambda x: f'{x:.4f}')
+        ks_tables = [ks_table]
+    elif approach == 'approach2':
+        ks_tables = []
+        for r in [1,2]:
+            ks_matrix = np.zeros((n_models, n_models))
+            np.fill_diagonal(ks_matrix, 1)
+            for i in range(n_models):
+                for j in range(i+1, n_models):
+                    _, p_value = sp.stats.ks_2samp(results[model_keys[i]]['predictions'][r-1], results[model_keys[j]]['predictions'][r-1])
+                    ks_matrix[i, j] = ks_matrix[j, i] = p_value
+            df_ks = pd.DataFrame(ks_matrix, index=model_display_names, columns=model_display_names)
+            ks_table = df_ks.to_html(classes='table table-striped', float_format=lambda x: f'{x:.4f}')
+            ks_tables.append(ks_table)
+    elif approach == 'approach3':
+        ks_tables = [None]
+
+    return metrics_table, ks_tables
     
 def create_plotly_table(df):
     numeric_cols = df.select_dtypes(include='number').columns
@@ -455,10 +505,16 @@ def create_interpolation_plotly(t1, m1, t2, m2, tt, mi1, mi2, output_directory):
 
 def write_plotly_data_to_excel(fig, filename, directory):
     full_path = os.path.join(directory, filename)
+    # Extract axis titles
+    x_title = fig.layout.xaxis.title.text if fig.layout.xaxis.title else 'x'
+    y_title = fig.layout.yaxis.title.text if fig.layout.yaxis.title else 'y'
     with pd.ExcelWriter(full_path, engine='openpyxl') as writer:
         for trace in fig.data:
-            df = pd.DataFrame({'x': trace.x, 'y': trace.y})
-            df.to_excel(writer, sheet_name=trace.name, index=False)
+            df = pd.DataFrame({
+                x_title: trace.x,
+                y_title: trace.y
+            })
+            df.to_excel(writer, sheet_name=trace.name[:31], index=False)
     return full_path
 
 def create_plotly_a1(x, y, model_info, output_directory):
@@ -787,57 +843,4 @@ def create_plotly_a3(x, y1, y2, output_directory, ptype='v'):
 
 if __name__ == '__main__':
     app.run(debug=True)
-
-#def create_plot(x, y, model_results):
-#    # Create trace for original data points
-#    trace_data = go.Scatter(
-#        x=x,
-#        y=y,
-#        mode='markers',
-#        name='Original Data',
-#        marker=dict(
-#            size=8,
-#            color='blue',
-#            symbol='circle'
-#        )
-#    )
-#
-#    # Generate points for smooth curve of the fitted model
-#    x_smooth = np.linspace(min(x), max(x), 200)
-#    y_smooth = model_results['model_function'](x_smooth, *model_results['params'].values())
-#    model_name = model_results['model_name']
-#
-#    # Create trace for fitted model curve
-#    trace_fit = go.Scatter(
-#        x=x_smooth,
-#        y=y_smooth,
-#        mode='lines',
-#        name=model_name,
-#        line=dict(
-#            color='red',
-#            width=2
-#        )
-#    )
-#
-#    # Combine all traces
-#    data = [trace_data, trace_fit]
-#
-#    # Set up the layout
-#    layout = go.Layout(
-#        title=f'Time Series Data with {model_name}',
-#        xaxis=dict(title='Time'),
-#        yaxis=dict(title='Value'),
-#        hovermode='closest',
-#        legend=dict(x=0.1, y=0.9),
-#        template='plotly_white'
-#    )
-#
-#    # Create the figure
-#    fig = go.Figure(data=data, layout=layout)
-#
-#    # Convert the figure to JSON for rendering in the template
-#    #plot_json = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
-#    plot_json = fig.to_json()
-#
-#    return plot_json
 

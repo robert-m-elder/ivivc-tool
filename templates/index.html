@@ -6,28 +6,40 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="{{ url_for('static', filename='js/index.js') }}" defer></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 </head>
 <body>
-    <h1>In Vitro-In Vivo Correlation (IVIVC) App</h1>
-    <form method="post" enctype="multipart/form-data" id="upload-form">
-        <div>
+    <header>
+        <h1>
+            In Vitro-In Vivo Correlation (IVIVC) App
+            <div class="header-image">
+                <img src="{{ url_for('static', filename='images/Logo_FDA_Primary_Blue.png') }}" alt="FDA Logo">
+                <!--<img src="{{ url_for('static', filename='images/Logo_FDA_Primary_WhiteOnBlue_CDRH.png') }}" alt="FDA/CDRH Logo">-->
+            </div>
+        </h1>
+    </header>
+
+    <main>
+    <form method="post" enctype="multipart/form-data" id="upload-form" class="analysis-form">
+        <div class="form-section">
             <h3>Select Data:</h3>
-                <div>
-                    <!--<label for="file">Upload Spreadsheet:</label>--!>
-                    <input type="file" name="file" id="file" accept=".xlsx,.xls,.csv" required>
-                </div>
-                <div id="sheet-selection" style="display: none;">
-                    <label for="sheet">Select Sheet:</label>
-                    <select name="sheet" id="sheet"></select>
-                </div>
-                <div>
-                    <label for="output_directory">Output Directory:</label>
-                    <input type="text" id="output_directory" name="output_directory" value="{{ output_directory }}">
-                </div>
+            <div class="form-group">
+                <label for="file">Upload Spreadsheet:</label>
+                <input type="file" name="file" id="file" accept=".xlsx,.xls,.csv" required>
+            </div>
+            <div id="sheet-selection" class="form-group" style="display: none;">
+                <label for="sheet">Select Worksheet:</label>
+                <select name="sheet" id="sheet"></select>
+            </div>
+            <div class="form-group">
+                <label for="output_directory">Output Directory:</label>
+                <input type="text" id="output_directory" name="output_directory" value="{{ output_directory }}">
+            </div>
         </div>
-        <div>
+
+        <div class="form-section">
             <h3>Select Approaches and Models:</h3>
-            <table id="approach-model-table">
+            <table id="approach-model-table" class="option-table">
                 <tr>
                     {% for approach_id, approach in approaches.items() %}
                     <th>{{ approach.display_name }}</th>
@@ -45,6 +57,11 @@
                 </tr>
                 <tr>
                     {% for approach_id, approach in approaches.items() %}
+                    <th>Models:</th>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    {% for approach_id, approach in approaches.items() %}
                     <td>
                         {% for model_name in approach.models %}
                         <label>
@@ -57,9 +74,10 @@
                 </tr>
             </table>
         </div>
-        <div>
+
+        <div class="form-section">
             <h3>Select Preprocessing Options:</h3>
-            <table id="preprocessing-options">
+            <table id="preprocessing-options" class="option-table">
                 <tr>
                     <th>Normalization</th>
                     <th>Scaling</th>
@@ -93,19 +111,24 @@
                 </tr>
             </table>
         </div>
-        <div>
+
+        <div class="form-section">
             <h3>Select Metrics:</h3>
-            {% for metric_name, metric_info in metrics.items() %}
-            <label>
-                <input type="checkbox" name="metrics" value="{{ metric_name }}" checked>
-                {{ metric_info.display_name }}
-            </label><br>
-            {% endfor %}
+            <div class="checkbox-grid">
+                {% for metric_name, metric_info in metrics.items() %}
+                <label class="checkbox-item">
+                    <input type="checkbox" name="metrics" value="{{ metric_name }}" checked>
+                    <span>{{ metric_info.display_name }}</span>
+                </label>
+                {% endfor %}
+            </div>
         </div>
-        <div>
-            <input type="submit" value="Analyze Data">
+
+        <div class="form-section">
+            <input type="submit" value="Analyze Data" class="submit-button">
         </div>
     </form>
+    </main>
 </body>
 </html>
 

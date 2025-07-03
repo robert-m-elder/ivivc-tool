@@ -3,21 +3,53 @@ $(function() {
     $("#vertical-tabs li").removeClass("ui-corner-top").addClass("ui-corner-left");
 });
 
-$(document).ready( function() {
-    $('.dataframe').DataTable({
-        paging: false,
-        searching: false,
-        info: false,
-        ordering: true,
-        responsive: true,
-        layout: {
-            bottomStart: {
-                buttons: ['copy', 'csv', 'excel']
-            }
+// DataTables
+$.extend(true, $.fn.dataTable.defaults, {
+    paging: false,
+    searching: false,
+    info: false,
+    ordering: true,
+    responsive: true,
+    dom: 'frtip<"custom-button-container"B>',
+    buttons: [
+        {
+            extend: 'excel',
+            text: 'Download Data'
         }
-    });
+    ],
+    layout: {
+        bottomStart: {
+            buttons: ['excel']
+        }
+    },
 });
 
+$(document).ready(function() {
+    $('.dataframe').DataTable();
+});
+
+/*function sortColumns(dt, rowIndex) {
+    var table = dt.table();
+    var rowData = table.row(rowIndex).data();
+    var indices = Object.keys(rowData).slice(1);  // Exclude the first column (arrows)
+    var $arrow = $(table.row(rowIndex).node()).find('.row-sorter');
+    var isDescending = $arrow.text() === '↓';
+    
+    // Sort indices based on the values in the selected row
+    indices.sort(function(a, b) {
+        return isDescending ? rowData[a] - rowData[b] : rowData[b] - rowData[a];
+    });
+    
+    // Reorder columns based on the sorted indices
+    var newOrder = [0].concat(indices.map(i => parseInt(i)));  // Keep arrow column first
+    table.colReorder.order(newOrder);
+    
+    // Update sorting arrows
+    $('.row-sorter').text('↕️');  // Reset all arrows
+    $arrow.text(isDescending ? '↑' : '↓');  // Set arrow for sorted row
+}*/
+
+// Fit plots to containers
 // Store original sizes of plots
 var plotSizes = {};
 
@@ -107,81 +139,4 @@ var observer = new MutationObserver(debounce(function() { ensureResizePlots(fals
 
 // Start observing the document with the configured parameters
 observer.observe(document.body, { childList: true, subtree: true });
-
-/*
-function resizePlots() {
-    var plotContainers = document.querySelectorAll('.plot-container');
-    plotContainers.forEach(function(plotContainer) {
-        var plot = plotContainer.querySelector('.plotly-graph-div');
-        if (plot && plot.layout) {
-            var containerWidth = plotContainer.offsetWidth;
-            var containerHeight = plotContainer.offsetHeight;
-            Plotly.relayout(plot, {
-                width: containerWidth,
-                height: containerHeight
-            });
-        }
-    });
-}
-
-function ensureResizePlots() {
-    resizePlots();
-    // Add a slight delay to catch any plots that might render late
-    setTimeout(resizePlots, 10);
-    // Add another check after a longer delay
-    setTimeout(resizePlots, 500);
-}
-
-// Debounce function to limit how often resizePlots is called
-function debounce(func, wait) {
-    var timeout;
-    return function() {
-        var context = this, args = arguments;
-        clearTimeout(timeout);
-        timeout = setTimeout(function() {
-            func.apply(context, args);
-        }, wait);
-    };
-}
-
-// Use debounced version for window resize
-window.addEventListener('resize', debounce(resizePlots, 250));
-
-// Initial resize
-document.addEventListener('DOMContentLoaded', ensureResizePlots);
-
-// Additional check after all resources have loaded
-window.addEventListener('load', ensureResizePlots);
-
-// Resize plots when tab is changed (if using tabs)
-$(document).ready(function() {
-    if (typeof $.ui !== 'undefined' && typeof $.ui.tabs !== 'undefined') {
-        $(".tabs").tabs({
-            activate: function(event, ui) {
-                ensureResizePlots();
-            }
-        });
-    }
-});
-
-// MutationObserver to watch for changes in the DOM
-var observer = new MutationObserver(debounce(ensureResizePlots, 250));
-
-// Start observing the document with the configured parameters
-observer.observe(document.body, { childList: true, subtree: true });
-
-// Additional check for plots that might be initially hidden
-function checkHiddenPlots() {
-    var plotContainers = document.querySelectorAll('.plot-container');
-    plotContainers.forEach(function(plotContainer) {
-        if (plotContainer.offsetParent !== null && !plotContainer.dataset.resized) {
-            resizePlots();
-            plotContainer.dataset.resized = 'true';
-        }
-    });
-}
-
-// Run checkHiddenPlots periodically
-setInterval(checkHiddenPlots, 1000);
-*/
 
