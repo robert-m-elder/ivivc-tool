@@ -216,7 +216,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, o
                     'params': model_result['params'],
                     'stats': stats,
                     'predictions': y_pred,
-                    'stats_table': stats_table.to_html(classes='table table-striped', index=True),
+                    'stats_table': stats_table.to_html(classes='table table-striped', index=True, float_format=lambda x: f'{x:.4f}'),
                     'plot': plot_image
                 }
             elif approach_id == 'approach2':
@@ -294,7 +294,8 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, o
                     'tau': [tau1,tau2],
                     'stats': [stats1,stats2],
                     'predictions': [y_pred1,y_pred2],
-                    'stats_table': [stats_table1.to_html(classes='table table-striped', index=True), stats_table2.to_html(classes='table table-striped', index=True)],
+                    'stats_table': [stats_table1.to_html(classes='table table-striped', index=True, float_format=lambda x: f'{x:.4f}'), 
+                                    stats_table2.to_html(classes='table table-striped', index=True, float_format=lambda x: f'{x:.4f}')],
                     'plot': plot_image
                 }
             elif approach_id == 'approach3':

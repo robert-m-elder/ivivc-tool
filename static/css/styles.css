@@ -155,7 +155,7 @@ input[type="checkbox"]:hover {
     font-size: 14px;
 }*/
 
-.submit-button {
+/*.submit-button {
     background-color: #007cba;
     color: white;
     padding: 10px 20px;
@@ -167,7 +167,7 @@ input[type="checkbox"]:hover {
 
 .submit-button:hover {
     background-color: #222c67;
-}
+}*/
 
 @media (min-width: 768px) {
     .form-group {
@@ -453,7 +453,7 @@ table td.error {
     height: 100% !important;
 }
 
-a.dt-button2 {
+/*a.dt-button2 {
     display: inline-block;
     padding: 0.5em 1em;
     margin: 0.1em;
@@ -484,6 +484,63 @@ a.dt-button2:active {
     background-color: #dadada;
     background-image: linear-gradient(to bottom, #f3f3f3 0%, #dadada 100%);
     box-shadow: inset 1px 1px 3px #666;
+}*/
+
+/* Styles for submit button, DataTables buttons, and custom dt-button2 */
+.submit-button,
+.dt-button,
+a.dt-button2 {
+    background-color: #007cba;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    text-decoration: none; /* Remove underline from links */
+    display: inline-block; /* Ensure proper rendering for anchor tags */
+    text-align: center; /* Center text for all button types */
+    transition: background-color 0.3s ease; /* Smooth transition for hover effect */
+}
+
+/* Hover effect for all button types */
+.submit-button:hover,
+.dt-button:hover,
+a.dt-button2:hover {
+    background-color: #222c67;
+}
+
+/* Active state for buttons */
+.submit-button:active,
+.dt-button:active,
+a.dt-button2:active {
+    background-color: #1a2150; /* Slightly darker shade for pressed state */
+}
+
+/* Focus state for accessibility */
+.submit-button:focus,
+.dt-button:focus,
+a.dt-button2:focus {
+    outline: 2px solid #4a90e2;
+    outline-offset: 2px;
+}
+
+/* Specific adjustments for DataTables buttons if needed */
+.dt-button {
+    margin-right: 5px; /* Add some space between DataTables buttons */
+}
+
+/* If DataTables buttons are in a button group, you might want to adjust the border-radius */
+.dt-button-collection .dt-button {
+    border-radius: 0;
+}
+.dt-button-collection .dt-button:first-child {
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+}
+.dt-button-collection .dt-button:last-child {
+    border-bottom-left-radius: 4px;
+    border-bottom-right-radius: 4px;
 }
 
 .custom-button-container {
