@@ -42,16 +42,17 @@ IS_PRODUCTION = 'PYTHONANYWHERE_DOMAIN' in os.environ
 # Basic configuration
 app.config['DEBUG'] = not IS_PRODUCTION
 app.config['ENV'] = 'production' if IS_PRODUCTION else 'development'
-
-# Detect if running on PythonAnywhere
+# Other configuration for PythonAnywhere
 if IS_PRODUCTION:
     # PythonAnywhere-specific settings
     app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MiB
     num_cores_for_grid_search = 1
+    num_points_for_grid_search = 10
 else:
     # Local development settings
     app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MiB
     num_cores_for_grid_search = None
+    num_points_for_grid_search = 100
 
 default_interpolation = 'default_interpolation'
 
@@ -247,7 +248,8 @@ def process_data(data, selected_models, selected_approaches, selected_metrics):
                 # get rough initial estimate of parameters
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", category=RuntimeWarning)
-                    p0 = auto_grid_search(models[model_name]['model_function'], x, y, param_min=1e-6, param_max=1e6)
+                    p0 = auto_grid_search(models[model_name]['model_function'], x, y, param_min=1e-6, param_max=1e6, 
+                                          num_points=num_points_for_grid_search, num_cores=num_cores_for_grid_search)
                 # cross-validation
                 cvs = cross_validation_curve_fit(x, y, models[model_name]['model_function'], cv, selected_metrics, p0=p0, kwargs=models[model_name]['fit_kwargs'])
                 cvs_mean = {f'{metric}':values.mean() for metric,values in cvs.items()}
@@ -285,7 +287,8 @@ def process_data(data, selected_models, selected_approaches, selected_metrics):
                 # get rough initial estimate of parameters
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", category=RuntimeWarning)
-                    p0 = auto_grid_search(models[model_name]['model_function'], x1, y1, param_min=1e-6, param_max=1e6)
+                    p0 = auto_grid_search(models[model_name]['model_function'], x1, y1, param_min=1e-6, param_max=1e6, 
+                                          num_points=num_points_for_grid_search, num_cores=num_cores_for_grid_search)
                 # cross-validation
                 cvs1 = cross_validation_curve_fit(x1, y1, models[model_name]['model_function'], cv, selected_metrics, p0=p0, kwargs=models[model_name]['fit_kwargs'])
                 cvs1_mean = {f'{metric}':v.mean() for metric,v in cvs1.items()}
@@ -312,7 +315,8 @@ def process_data(data, selected_models, selected_approaches, selected_metrics):
                 # get rough initial estimate of parameters
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", category=RuntimeWarning)
-                    p0 = auto_grid_search(models[model_name]['model_function'], x2, y2, param_min=1e-6, param_max=1e6)
+                    p0 = auto_grid_search(models[model_name]['model_function'], x2, y2, param_min=1e-6, param_max=1e6, 
+                                          num_points=num_points_for_grid_search, num_cores=num_cores_for_grid_search)
                 # cross-validation
                 cvs2 = cross_validation_curve_fit(x2, y2, models[model_name]['model_function'], cv, selected_metrics, p0=p0, kwargs=models[model_name]['fit_kwargs'])
                 cvs2_mean = {f'{metric}':v.mean() for metric,v in cvs2.items()}

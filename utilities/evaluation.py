@@ -54,7 +54,7 @@ def evaluate_goodness_of_fit(y_true, y_pred):
         'nrmse': nrmse
     }
 
-def auto_grid_search(func, x, y, param_min=1e-6, param_max=1e6, num_points=100, num_procs=None):
+def auto_grid_search(func, x, y, param_min=1e-6, param_max=1e6, num_points=100, num_cores=None):
     num_params = len(inspect.signature(func).parameters) - 1  # subtract 1 for 'x'
     
     # Define the objective function with warning filter
