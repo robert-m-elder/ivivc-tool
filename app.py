@@ -1,6 +1,5 @@
 import io,re,os
 import base64
-from pprint import pprint
 
 from flask import Flask, render_template, request, jsonify
 from flask import send_from_directory, send_file
@@ -8,8 +7,7 @@ from flask import send_from_directory, send_file
 import numpy as np
 import scipy as sp
 import pandas as pd
-#import sklearn
-#import sklearn.model_selection
+
 # for correct error propagation
 import uncertainties as unc
 import uncertainties.unumpy as unp
@@ -39,6 +37,22 @@ app = Flask(__name__)
 # Set the default output directory
 #DEFAULT_OUTPUT_DIR = os.path.join(app.root_path, 'output')
 
+# Determine environment
+IS_PRODUCTION = 'PYTHONANYWHERE_DOMAIN' in os.environ
+# Basic configuration
+app.config['DEBUG'] = not IS_PRODUCTION
+app.config['ENV'] = 'production' if IS_PRODUCTION else 'development'
+
+# Detect if running on PythonAnywhere
+if IS_PRODUCTION:
+    # PythonAnywhere-specific settings
+    app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MiB
+    num_cores_for_grid_search = 1
+else:
+    # Local development settings
+    app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MiB
+    num_cores_for_grid_search = None
+
 default_interpolation = 'default_interpolation'
 
 @app.route('/', methods=['GET', 'POST'])
@@ -67,12 +81,12 @@ def index():
         if not file or not selected_models or not selected_approaches or not selected_metrics:
             return "Please upload a file, select at least one model, one approach, and one metric", 400
 
-        print(selected_models)
-        print(selected_approaches)
-        print(selected_scalings)
-        print(selected_normalizations)
-        print(selected_interpolation)
-        print(selected_metrics)
+        #print(selected_models)
+        #print(selected_approaches)
+        #print(selected_scalings)
+        #print(selected_normalizations)
+        #print(selected_interpolation)
+        #print(selected_metrics)
 
         # Read data
         filename = file.filename
@@ -82,7 +96,7 @@ def index():
             df = pd.read_csv(file)
         else:
             sheet_name = request.form.get('sheet')
-            print(sheet_name)
+            #print(sheet_name)
             if not sheet_name:
                 return "Please select a sheet for Excel files", 400
             df = pd.read_excel(file, sheet_name=sheet_name)
@@ -155,7 +169,7 @@ def index():
                 print(f"Error processing prediction file: {e}")
                 prediction_results = {'error': str(e)}
 
-        print(prediction_results)
+        #print(prediction_results)
 
         return render_template('results.html', results=results, models=models, interpolation_info=interpolation_info, comparisons=comparisons, ks_tables=ks_tables, 
                                approaches=approaches, selected_approaches=selected_approaches, 
@@ -1294,6 +1308,6 @@ def create_prediction_plot_a3(t_pred, m_pred, var_pred_scaled, ptype='v'):
 
     return {'plot': plot_html, 'table_html': table_html}
 
-if __name__ == '__main__':
+if not IS_PRODUCTION and __name__ == '__main__':
     app.run(debug=True)
 

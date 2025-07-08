@@ -54,7 +54,7 @@ def evaluate_goodness_of_fit(y_true, y_pred):
         'nrmse': nrmse
     }
 
-def auto_grid_search(func, x, y, param_min=1e-6, param_max=1e6, num_points=100):
+def auto_grid_search(func, x, y, param_min=1e-6, param_max=1e6, num_points=100, num_procs=None):
     num_params = len(inspect.signature(func).parameters) - 1  # subtract 1 for 'x'
     
     # Define the objective function with warning filter
@@ -77,7 +77,8 @@ def auto_grid_search(func, x, y, param_min=1e-6, param_max=1e6, num_points=100):
             return sp.optimize.minimize(objective, x0, method='Nelder-Mead')
 
     # Parallel optimization with warning filter
-    num_cores = multiprocessing.cpu_count()
+    if num_cores is None:
+        num_cores = multiprocessing.cpu_count()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=RuntimeWarning)
         results = Parallel(n_jobs=num_cores)(
