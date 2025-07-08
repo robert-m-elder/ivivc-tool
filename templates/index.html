@@ -22,9 +22,15 @@
     <main>
     <form method="post" enctype="multipart/form-data" id="upload-form" class="analysis-form">
         <div class="form-section">
-            <h3>Select Data:</h3>
+            <h3>
+                Select Data:
+                <button type="button" class="help-btn" data-modal="data-help"><span class="help-icon">?</span></button>
+            </h3>
             <div class="form-group">
-                <label for="file">Upload Dataset for Fitting:</label>
+                <label for="file">
+                    Upload Dataset for Fitting:
+                    <button type="button" class="help-btn-small" data-modal="fitting-data-help">?</button>
+                </label>
                 <input type="file" name="file" id="file" accept=".xlsx,.xls,.csv" required>
                 <button type="button" class="btn btn-sm btn-outline-secondary mt-1 clear-file-btn" data-target="file">
                     Clear Selection
@@ -38,7 +44,10 @@
                 </select>
             </div>
             <div class="form-group">
-                <label for="prediction_file">Upload Dataset for Prediction (Optional):</label>
+                <label for="prediction_file">
+                    Upload Dataset for Prediction (Optional):
+                    <button type="button" class="help-btn-small" data-modal="prediction-data-help">?</button>
+                </label>
                 <input type="file" class="form-control-file" id="prediction_file" name="prediction_file" accept=".csv,.xlsx,.xls">
                 <button type="button" class="btn btn-sm btn-outline-secondary mt-1 clear-file-btn" data-target="prediction_file">
                     Clear Selection
@@ -58,11 +67,19 @@
         </div>
 
         <div class="form-section">
-            <h3>Select Approaches and Models:</h3>
+            <h3>
+                Select Approaches and Models:
+                <button type="button" class="help-btn" data-modal="approaches-help">
+                    <span class="help-icon">?</span>
+                </button>
+            </h3>
             <table id="approach-model-table" class="option-table">
                 <tr>
                     {% for approach_id, approach in approaches.items() %}
-                    <th>{{ approach.display_name }}</th>
+                    <th>
+                        {{ approach.display_name }}
+                        <button type="button" class="help-btn-small" data-modal="{{ approach_id }}-help">?</button>
+                    </th>
                     {% endfor %}
                 </tr>
                 <tr>
@@ -87,6 +104,7 @@
                         <label>
                             <input type="checkbox" name="models" value="{{ approach_id }}:{{ model_name }}" checked>
                             {{ models[model_name].display_name }}
+                            <!--{#<button type="button" class="help-btn-tiny" data-modal="{{ model_name }}-help">?</button>#}-->
                         </label><br>
                         {% endfor %}
                         {% if approach_id == 'approach3' %}
@@ -99,12 +117,26 @@
         </div>
 
         <div class="form-section">
-            <h3>Select Preprocessing Options:</h3>
+            <h3>
+                Select Preprocessing Options:
+                <button type="button" class="help-btn" data-modal="preprocessing-help">
+                    <span class="help-icon">?</span>
+                </button>
+            </h3>
             <table id="preprocessing-options" class="option-table">
                 <tr>
-                    <th>Normalization</th>
-                    <th>Scaling</th>
-                    <th>Interpolation</th>
+                    <th>
+                        Normalization
+                        <button type="button" class="help-btn-small" data-modal="normalization-help">?</button>
+                    </th>
+                    <th>
+                        Scaling
+                        <button type="button" class="help-btn-small" data-modal="scaling-help">?</button>
+                    </th>
+                    <th>
+                        Interpolation
+                        <button type="button" class="help-btn-small" data-modal="interpolation-help">?</button>
+                    </th>
                 </tr>
                 <tr>
                     <td>
@@ -136,7 +168,12 @@
         </div>
 
         <div class="form-section">
-            <h3>Select Metrics:</h3>
+            <h3>
+                Select Metrics:
+                <button type="button" class="help-btn" data-modal="metrics-help">
+                    <span class="help-icon">?</span>
+                </button>
+            </h3>
             <div class="checkbox-grid">
                 {% for metric_name, metric_info in metrics.items() %}
                 <label class="checkbox-item">
@@ -152,6 +189,166 @@
         </div>
     </form>
     </main>
+
+    <!-- Modal Structure -->
+    <div id="help-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 id="modal-title">Help</h4>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="modal-text">
+                    <!-- Content will be loaded here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="modal-close-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Content Definitions -->
+    <div id="modal-content-definitions" style="display: none;">
+        
+        <!-- Data Section Help -->
+        <div id="data-help-content">
+            <h4>Data Upload</h4>
+            <p>This section allows you to upload datasets for IVIVC analysis:</p>
+            <ul>
+                <li><strong>Fitting Dataset:</strong> Required dataset containing in vitro and in vivo data for model fitting</li>
+                <li><strong>Prediction Dataset:</strong> Optional dataset for making predictions using fitted models</li>
+            </ul>
+            <p>Supported formats: CSV, Excel (.xlsx, .xls)</p>
+        </div>
+
+        <div id="fitting-data-help-content">
+            <h4>Dataset for Fitting</h4>
+            <p>Upload a file containing your in vitro and in vivo data for model fitting.</p>
+            <p><strong>Required format:</strong></p>
+            <ul>
+                <li>4 columns: Time1, Value1, Time2, Value2</li>
+                <li>Time1/Value1: In vitro data</li>
+                <li>Time2/Value2: In vivo data</li>
+            </ul>
+            <p>This data will be used to establish the correlation between in vitro and in vivo measurements.</p>
+        </div>
+
+        <div id="prediction-data-help-content">
+            <h4>Dataset for Prediction</h4>
+            <p>Optional: Upload a file containing new in vitro data for prediction.</p>
+            <p><strong>Format:</strong></p>
+            <ul>
+                <li>2 columns: Time, Value</li>
+                <li>Contains in vitro data for which you want to predict in vivo outcomes</li>
+            </ul>
+            <p>The fitted models will be applied to this data to generate in vivo predictions.</p>
+        </div>
+
+        <!-- Approaches Help -->
+        <div id="approaches-help-content">
+            <h4>Analysis Approaches</h4>
+            <p>Choose from different mathematical approaches for establishing IVIVC:</p>
+            <ul>
+                <li><strong>Approach 1:</strong> Direct time correlation between datasets</li>
+                <li><strong>Approach 2:</strong> Independent rate equation-like model fitting</li>
+                <li><strong>Approach 3:</strong> Direct mapping analysis</li>
+            </ul>
+            <p>Each approach uses different mathematical methods and assumptions. Approaches 1 and 2 use cross-validation to validate the models.</p>
+        </div>
+
+        <div id="approach1-help-content">
+            <h4>Approach 1: Direct Correlation</h4>
+            <p>Establishes a direct mathematical relationship between in vitro and in vivo data points.</p>
+            <p><strong>Method:</strong></p>
+            <ul>
+                <li>Fits models directly in vitro vs. in vivo time</li>
+                <li>Predicts in vivo time as a function of in vitro time</li>
+                <li>Requires matched time points or the use of interpolation</li>
+            </ul>
+            <p><strong>Best for:</strong> When you have well-matched time points between datasets or use interpolation.</p>
+        </div>
+
+        <div id="approach2-help-content">
+            <h4>Approach 2: Independent Model Fitting</h4>
+            <p>Fits separate models to in vitro and in vivo data, then uses their ratio for predictions.</p>
+            <p><strong>Method:</strong></p>
+            <ul>
+                <li>Fits rate equation-like (e.g., exponential decay) models independently to each dataset</li>
+                <li>Calculates predictions using model ratios</li>
+                <li>Provides effective time constants for in vitro and in vivo</li>
+            </ul>
+            <p><strong>Best for:</strong> When datasets have different time scales or sampling patterns, or when you want to fit a particular rate equation to the datasets.</p>
+        </div>
+
+        <div id="approach3-help-content">
+            <h4>Approach 3: Direct Mapping</h4>
+            <p>Creates direct mappings between interpolated datasets without model fitting.</p>
+            <p><strong>Method:</strong></p>
+            <ul>
+                <li>Uses interpolated data for direct comparison</li>
+                <li>Provides two scaling options for predictions</li>
+                <li>No parametric model assumptions</li>
+                <li>Requires matched time points or the use of interpolation</li>
+            </ul>
+            <p><strong>Best for:</strong> Exploratory analysis or when model assumptions may not hold.</p>
+        </div>
+
+        <!-- Preprocessing Help -->
+        <div id="preprocessing-help-content">
+            <h4>Data Preprocessing</h4>
+            <p>Transform your data before analysis to improve model fitting and comparability:</p>
+            <ul>
+                <li><strong>Normalization:</strong> Scale data to standard ranges</li>
+                <li><strong>Scaling:</strong> Apply mathematical transformations</li>
+                <li><strong>Interpolation:</strong> Create evenly spaced data points</li>
+            </ul>
+            <p>These steps can significantly improve analysis quality and model performance.</p>
+        </div>
+
+        <div id="normalization-help-content">
+            <h4>Normalization Options</h4>
+            <p>Scale your data to improve model fitting:</p>
+            <ul>
+                <li><strong>Min-Max:</strong> Scale to 0-1 range</li>
+                <li><strong>Z-Score:</strong> Standardize to mean=0, std=1</li>
+            </ul>
+            <p>Normalization helps when datasets have very different scales.</p>
+        </div>
+
+        <div id="scaling-help-content">
+            <h4>Scaling Options</h4>
+            <p>Apply mathematical transformations to your data:</p>
+            <ul>
+                <li><strong>Log X:</strong> Apply base-10 logarithm to time values</li>
+                <li><strong>Log Y:</strong> Apply base-10 logarithm to measurement values</li>
+            </ul>
+            <p>Scaling can linearize relationships and improve model fits.</p>
+        </div>
+
+        <div id="interpolation-help-content">
+            <h4>Interpolation Options</h4>
+            <p>Create evenly spaced data points for better analysis:</p>
+            <ul>
+                <li><strong>Default:</strong> Recommended interpolation method</li>
+            </ul>
+            <p>Interpolation ensures datasets have identical time points, which is necessary for some Approaches.</p>
+        </div>
+
+        <!-- Metrics Help -->
+        <div id="metrics-help-content">
+            <h4>Performance Metrics</h4>
+            <p>Choose metrics to evaluate model performance:</p>
+            <ul>
+                <li><strong>R²:</strong> Coefficient of determination</li>
+                <li><strong>MSE:</strong> Mean squared error</li>
+                <li><strong>RMSE:</strong> Root mean square error</li>
+                <li><strong>NRMSE:</strong> RMSE normalized by standard deviation</li>
+            </ul>
+            <p>Multiple metrics provide comprehensive model evaluation.</p>
+            <p>Additionally, the Kolmogorov-Smirnov test is used for a pair-wise comparison of model predictions in Approches 1 and 2. In conjunction with the performance metrics, this can be used to identify parsimonious models.</p>
+        </div>
+    </div>
 </body>
 </html>
 
