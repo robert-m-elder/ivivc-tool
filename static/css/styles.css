@@ -66,7 +66,7 @@ main {
 /*-------------------------------------*/
 .analysis-form {
     /*max-width: 800px;*/
-    width: 80%;
+    width: 90%;
     margin: 0 auto;
     font-family: Arial, sans-serif;
 }
@@ -103,6 +103,7 @@ main {
 .form-group select {
     width: 100%;
     padding: 8px;
+    margin-right: 1em;
     border: 1px solid #ccc;
     border-radius: 4px;
 }
@@ -191,7 +192,7 @@ input[type="checkbox"]:hover {
 
 #vertical-tabs {
     display: flex;
-    width: 80%;
+    width: 90%;
     max-width: 1800px;
     height: calc(100vh - 110px); /* Subtract the height of the h1 and some padding */
     /*margin: 20px auto;*/
@@ -484,11 +485,16 @@ a.dt-button2:active {
     background-color: #dadada;
     background-image: linear-gradient(to bottom, #f3f3f3 0%, #dadada 100%);
     box-shadow: inset 1px 1px 3px #666;
-}*/
+}
+*/
 
 /* Styles for submit button, DataTables buttons, and custom dt-button2 */
 .submit-button,
 .dt-button,
+.clear-file-btn,
+.show-data-btn,
+input[type="file"]::-webkit-file-upload-button,
+input[type="file"]::file-selector-button,
 a.dt-button2 {
     background-color: #007cba;
     color: white;
@@ -506,6 +512,8 @@ a.dt-button2 {
 /* Hover effect for all button types */
 .submit-button:hover,
 .dt-button:hover,
+.clear-file-btn:hover,
+.show-data-btn:hover,
 a.dt-button2:hover {
     background-color: #222c67;
 }
@@ -513,6 +521,8 @@ a.dt-button2:hover {
 /* Active state for buttons */
 .submit-button:active,
 .dt-button:active,
+.clear-file-btn:active,
+.show-data-btn:active,
 a.dt-button2:active {
     background-color: #1a2150; /* Slightly darker shade for pressed state */
 }
@@ -520,6 +530,8 @@ a.dt-button2:active {
 /* Focus state for accessibility */
 .submit-button:focus,
 .dt-button:focus,
+.clear-file-btn:focus,
+.show-data-btn:focus,
 a.dt-button2:focus {
     outline: 2px solid #4a90e2;
     outline-offset: 2px;
@@ -547,5 +559,68 @@ a.dt-button2:focus {
     display: flex;
     /*justify-content: flex-end;*/
     margin-top: 10px;  /* Adjust as needed to match spacing with DataTables buttons */
+}
+
+.data-table-container {
+    margin-top: 15px;
+    margin-bottom: 20px;
+}
+
+.data-table-container table {
+    font-size: 10px;
+}
+
+.data-table-container tbody tr {
+    line-height: 0.0;
+}
+
+.data-table-container .dataTables_wrapper {
+    margin-top: 10px;
+}
+
+/* Complete pagination styling matching your button theme */
+.dt-paging {
+    margin: 5px 0 !important;
+    text-align: left;
+}
+
+.dt-paging .dt-paging-button {
+    padding: 3px 6px !important;
+    margin: 0 1px !important;
+    font-size: 11px !important;
+    line-height: 1.2 !important;
+    min-width: auto !important;
+    border: 1px solid #ced4da !important;
+    border-radius: 3px !important;
+    background-color: white !important;
+    color: #495057 !important;
+    transition: all 0.15s ease-in-out !important;
+}
+
+.dt-paging .dt-paging-button:hover:not(.disabled) {
+    background-color: #007cba !important;
+    color: white !important;
+    border-color: #007cba !important;
+}
+
+.dt-paging .dt-paging-button.current {
+    background-color: #007cba !important;
+    color: white !important;
+    border-color: #007cba !important;
+}
+
+.dt-paging .dt-paging-button.disabled {
+    background-color: #f8f9fa !important;
+    color: #6c757d !important;
+    border-color: #dee2e6 !important;
+    cursor: not-allowed !important;
+    opacity: 0.65 !important;
+}
+
+.dt-paging .ellipsis {
+    padding: 3px 6px !important;
+    font-size: 11px !important;
+    margin: 0 1px !important;
+    color: #6c757d !important;
 }
 

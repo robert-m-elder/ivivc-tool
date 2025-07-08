@@ -4,7 +4,7 @@ $(function() {
 });
 
 // DataTables
-$.extend(true, $.fn.dataTable.defaults, {
+/*$.extend(true, $.fn.dataTable.defaults, {
     paging: false,
     searching: false,
     info: false,
@@ -26,7 +26,108 @@ $.extend(true, $.fn.dataTable.defaults, {
 
 $(document).ready(function() {
     $('.dataframe').DataTable();
+});*/
+
+// DataTables default configuration
+$.extend(true, $.fn.dataTable.defaults, {
+    paging: true,
+    pageLength: 10,
+    searching: false,
+    info: false,
+    ordering: true,
+    order: [],
+    responsive: true,
+    dom: 'frtip<"custom-button-container"B>',
+    buttons: [
+        {
+            extend: 'excel',
+            text: 'Download Data'
+        }
+    ],
+    layout: {
+        bottomStart: {
+            buttons: ['excel']
+        }
+    },
 });
+
+$(document).ready(function() {
+    // Initialize existing visible DataTables
+    $('.dataframe').DataTable();
+
+    // Handle show/hide data table buttons for plot data tables
+    $('.show-data-btn').on('click', function() {
+        var targetTable = $(this).data('target');
+        var container = $('#' + targetTable + '-container');
+        var button = $(this);
+
+        if (container.is(':visible')) {
+            // Hide table
+            container.hide();
+            button.find('span').text('Show Data Table');
+
+            // Destroy DataTable if it exists
+            var table = container.find('table.display');
+            if ($.fn.DataTable.isDataTable(table)) {
+                table.DataTable().destroy();
+            }
+        } else {
+            // Show table and initialize DataTable
+            container.show();
+            button.find('span').text('Hide Data Table');
+
+            // Find the table within the container and initialize DataTable
+            var table = container.find('table.display');
+            if (table.length > 0) {
+                // Initialize with the same configuration as existing tables
+                // but with additional export buttons for plot data
+                table.DataTable({
+                    paging: false,
+                    searching: false,
+                    info: false,
+                    ordering: true,
+                    order: [],
+                    responsive: true,
+                    dom: 'frtip<"custom-button-container"B>',
+                    buttons: [
+                        {
+                            extend: 'copy',
+                            text: 'Copy'
+                        },
+                        {
+                            extend: 'csv',
+                            text: 'CSV'
+                        },
+                        {
+                            extend: 'excel',
+                            text: 'Excel'
+                        },
+                        {
+                            extend: 'pdf',
+                            text: 'PDF'
+                        },
+                        {
+                            extend: 'print',
+                            text: 'Print'
+                        }
+                    ],
+                    layout: {
+                        bottomStart: {
+                            buttons: ['copy', 'csv', 'excel', 'pdf', 'print']
+                        }
+                    },
+                    columnDefs: [
+                        {
+                            targets: '_all',
+                            className: 'dt-center'
+                        }
+                    ]
+                });
+            }
+        }
+    });
+});
+
 
 /*function sortColumns(dt, rowIndex) {
     var table = dt.table();

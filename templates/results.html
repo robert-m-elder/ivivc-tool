@@ -46,9 +46,16 @@
         <ul>
             <li><a href="#processing">Data Processing</a></li>
             {% for approach_id in selected_approaches %}
-                <li><a href="#{{ approach_id }}">{{ approaches[approach_id].display_name }}</a></li>
+                <li><a href="#{{ approach_id }}">Fitting: {{ approaches[approach_id].display_name }}</a></li>
             {% endfor %}
             <li><a href="#comparison">Model Comparison</a></li>
+            {% if prediction_results and prediction_results != {} and 'error' not in prediction_results %}
+                {% for approach_id in selected_approaches %}
+                    {% if approach_id in prediction_results and prediction_results[approach_id] %}
+                        <li><a href="#prediction-{{ approach_id }}">Prediction: {{ approaches[approach_id].display_name }}</a></li>
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
         </ul>
 
         <div id="processing">
@@ -76,11 +83,20 @@
             <div class="plot-container">
                 {{ interpolation_info['plot'] | safe }}
             </div>
-            <div class="custom-button-container"><a href="/download/{{ interpolation_info['filename'] }}"  class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none;"><span>Download Data</span></a></div>
-            <!--{#<a href="/download/{{ interpolation_info['filename'] }}" class="btn btn-primary">Download Data</a>#}-->
+            <div class="custom-button-container">
+                <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="interpolation-table" style="text-decoration: none;">
+                    <span>Show Data Table</span>
+                </button>
+            </div>
+            <div id="interpolation-table-container" class="data-table-container" style="display: none;">
+                {{ interpolation_info['table_html'] | safe }}
+            </div>
+            <!--{#<div class="custom-button-container"><a href="/download/{{ interpolation_info['filename'] }}"  class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none;"><span>Download Data</span></a></div>
+            <a href="/download/{{ interpolation_info['filename'] }}" class="btn btn-primary">Download Data</a>#}-->
             <!--<a href="{{ url_for('download_excel', filename=interpolation_info['filename']) }}" class="btn btn-primary">Download Data</a>-->
         </div>
         
+        <!-- Comparison Section -->
         <div id="comparison">
             <h2>Model Comparison</h2>
             <!--<img src="data:image/png;base64,{ { comparison.plot } }" alt="Model Comparison Plot">--!>
@@ -102,6 +118,7 @@
             {% endif %}
         </div> 
 
+        <!-- Individual Model Results Section -->
         {% for approach_id in selected_approaches %}
             <div id="{{ approach_id }}">
                 <h2>{{ approaches[approach_id].display_name }}</h2>
@@ -119,7 +136,15 @@
                                     <div class="plot-container">
                                         {{ model_results['plot']['plot'] | safe }}
                                     </div>
-                                    <div class="custom-button-container"><a href="/download/{{ model_results['plot']['filename'] }}"  class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none;"><span>Download Data</span></a></div>
+                                    <div class="custom-button-container">
+                                        <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach1-{{ model_name }}-table" style="text-decoration: none;">
+                                            <span>Show Data Table</span>
+                                        </button>
+                                    </div>
+                                    <div id="approach1-{{ model_name }}-table-container" class="data-table-container" style="display: none;">
+                                        {{ model_results['plot']['table_html'] | safe }}
+                                    </div>
+                                    <!--{#<div class="custom-button-container"><a href="/download/{{ model_results['plot']['filename'] }}"  class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none;"><span>Download Data</span></a></div>#}-->
                                     <!--{#<a href="/download/{{ model_results['plot']['filename'] }}" class="btn btn-primary">Download Data</a>#}-->
                                     <h4>Function</h4>
                                     <p>\[{{ model_results.function }}\]</p>
@@ -143,7 +168,15 @@
                                     <div class="plot-container">
                                         {{ model_results['plot']['plot'] | safe }}
                                     </div>
-                                    <div class="custom-button-container"><a href="/download/{{ model_results['plot']['filename'] }}"  class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none;"><span>Download Data</span></a></div>
+                                    <div class="custom-button-container">
+                                        <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach2-{{ model_name }}-table" style="text-decoration: none;">
+                                            <span>Show Data Table</span>
+                                        </button>
+                                    </div>
+                                    <div id="approach2-{{ model_name }}-table-container" class="data-table-container" style="display: none;">
+                                        {{ model_results['plot']['table_html'] | safe }}
+                                    </div>
+                                    <!--{#<div class="custom-button-container"><a href="/download/{{ model_results['plot']['filename'] }}"  class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none;"><span>Download Data</span></a></div>#}-->
                                     <h4>Function</h4>
                                     <p>\[{{ model_results.function }}\]</p>
                                     <h4>Dataset 1</h4>
@@ -186,18 +219,150 @@
                                 <div class="plot-container">
                                     {{ model_results['plot_v']['plot'] | safe }}
                                 </div>
-                                <div class="custom-button-container"><a href="/download/{{ model_results['plot_v']['filename'] }}"  class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none;"><span>Download Data</span></a></div>
+                                <div class="custom-button-container">
+                                    <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach3-table-1" style="text-decoration: none;">
+                                        <span>Show Data Table</span>
+                                    </button>
+                                </div>
+                                <div id="approach3-table-1-container" class="data-table-container" style="display: none;">
+                                    {{ model_results['plot_v']['table_html'] | safe }}
+                                </div>
+                                <!--{#<div class="custom-button-container"><a href="/download/{{ model_results['plot_v']['filename'] }}"  class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none;"><span>Download Data</span></a></div>#}-->
                                 <p></p>
                                 <div class="plot-container">
                                     {{ model_results['plot_t']['plot'] | safe }}
                                 </div>
-                                <div class="custom-button-container"><a href="/download/{{ model_results['plot_t']['filename'] }}"  class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none;"><span>Download Data</span></a></div>
+                                <div class="custom-button-container">
+                                    <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach3-table-2" style="text-decoration: none;">
+                                        <span>Show Data Table</span>
+                                    </button>
+                                </div>
+                                <div id="approach3-table-2-container" class="data-table-container" style="display: none;">
+                                    {{ model_results['plot_t']['table_html'] | safe }}
+                                </div>
+                                <!--<div class="custom-button-container"><a href="/download/{{ model_results['plot_t']['filename'] }}"  class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none;"><span>Download Data</span></a></div>#}-->
                             </div>
                         {% endif %}
                     {% endif %}
                 {% endfor %}
             </div>
         {% endfor %}
+
+        <!-- Prediction Results Sections -->
+        {% if prediction_results and prediction_results != {} and 'error' not in prediction_results %}
+            {% for approach_id in selected_approaches %}
+                {% if approach_id in prediction_results and prediction_results[approach_id] %}
+                    <div id="prediction-{{ approach_id }}">
+                        <h2>Prediction: {{ approaches[approach_id].display_name }}</h2>
+                        
+                        {% for model_name, pred_result in prediction_results[approach_id].items() %}
+                            {% if 'error' in pred_result %}
+                                <div class="model-result has-error">
+                                    <h3>{{ models[model_name].display_name if model_name in models else model_name }}</h3>
+                                    <p class="error">Error: {{ pred_result.error }}</p>
+                                </div>
+                            {% else %}
+                                {% if approach_id == "approach1" %}
+                                    <div class="model-result">
+                                        <h3>{{ models[model_name].display_name }}</h3>
+                                        {% if 'plot' in pred_result %}
+                                            <div class="plot-container">
+                                                {{ pred_result.plot.plot | safe }}
+                                            </div>
+                                            <!--{#{% if 'filename' in pred_result.plot %}
+                                                <div class="custom-button-container">
+                                                    <a href="/download/{{ pred_result.plot.filename }}" class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none;">
+                                                        <span>Download Data</span>
+                                                    </a>
+                                                </div>
+                                            {% endif %}#}-->
+                                            <div class="custom-button-container">
+                                                <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" 
+                                                    data-target="approach1-{{ model_name }}-table-pred" style="text-decoration: none;">
+                                                    <span>Show Data Table</span>
+                                                </button>
+                                            </div>
+                                            <div id="approach1-{{ model_name }}-table-pred-container" class="data-table-container" style="display: none;">
+                                                {{ pred_result['plot']['table_html'] | safe }}
+                                            </div>
+                                        {% endif %}
+                                        <!--{#{% if 'predictions' in pred_result %}
+                                            <h4>Prediction Summary</h4>
+                                            <p>Generated {{ pred_result.predictions|length }} predictions using fitted {{ models[model_name].display_name }} model.</p>
+                                        {% endif %}#}-->
+                                    </div>
+                                {% endif %}
+                                
+                                {% if approach_id == "approach2" %}
+                                    <div class="model-result">
+                                        <h3>Model: {{ models[model_name].display_name }}</h3>
+                                        {% if 'plot' in pred_result %}
+                                            <div class="plot-container">
+                                                {{ pred_result.plot.plot | safe }}
+                                            </div>
+                                            <div class="custom-button-container">
+                                                <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" 
+                                                    data-target="approach2-{{ model_name }}-table-pred" style="text-decoration: none;">
+                                                    <span>Show Data Table</span>
+                                                </button>
+                                            </div>
+                                            <div id="approach2-{{ model_name }}-table-pred-container" class="data-table-container" style="display: none;">
+                                                {{ pred_result['plot']['table_html'] | safe }}
+                                            </div>
+                                            <!--{#{% if 'filename' in pred_result.plot %}
+                                                <div class="custom-button-container">
+                                                    <a href="/download/{{ pred_result.plot.filename }}" class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none;">
+                                                        <span>Download Data</span>
+                                                    </a>
+                                                </div>
+                                            {% endif %}#}-->
+                                        {% endif %}
+                                        <!--{#{% if 'predictions' in pred_result %}
+                                            <h4>Prediction Summary</h4>
+                                            <p>Generated {{ pred_result.predictions[0]|length }} predictions using Dataset 1 parameters and {{ pred_result.predictions[1]|length }} predictions using Dataset 2 parameters.</p>
+                                        {% endif %}#}-->
+                                    </div>
+                                {% endif %}
+                                
+                                {% if approach_id == "approach3" %}
+                                    <div class="model-result">
+                                        <h3>Direct Mapping Predictions</h3>
+                                        {% if 'plot' in pred_result %}
+                                            <div class="plot-container">
+                                                {{ pred_result.plot.plot | safe }}
+                                            </div>
+                                            <div class="custom-button-container">
+                                                <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" 
+                                                    data-target="approach3-{{ model_name }}-pred" style="text-decoration: none;">
+                                                    <span>Show Data Table</span>
+                                                </button>
+                                            </div>
+                                            <div id="approach3-{{ model_name }}-pred-container" class="data-table-container" style="display: none;">
+                                                {{ pred_result.plot.table_html | safe }}
+                                            </div>
+                                            <!--{#{% if 'filename' in pred_result.plot %}
+                                                <div class="custom-button-container">
+                                                    <a href="/download/{{ pred_result.plot.filename }}" class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none;">
+                                                        <span>Download Data</span>
+                                                    </a>
+                                                </div>
+                                            {% endif %}#}-->
+                                        {% endif %}
+                                    </div>
+                                {% endif %}
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endfor %}
+        {% elif prediction_results and 'error' in prediction_results %}
+            <div id="prediction-error">
+                <h2>Prediction Error</h2>
+                <div class="model-result has-error">
+                    <p class="error">Error processing prediction file: {{ prediction_results.error }}</p>
+                </div>
+            </div>
+        {% endif %}
     </div>
 </body>
 </html>
