@@ -15,8 +15,8 @@ from joblib import Parallel, delayed
 import multiprocessing
 
 cross_validation_schemes = {
-                            'approach1':sklearn.model_selection.ShuffleSplit(n_splits=50, test_size=0.2, random_state=12345),
-                            'approach2':sklearn.model_selection.ShuffleSplit(n_splits=50, test_size=0.2, random_state=12345),
+                            'approach1':sklearn.model_selection.ShuffleSplit(n_splits=10, test_size=0.2, random_state=12345),
+                            'approach2':sklearn.model_selection.ShuffleSplit(n_splits=10, test_size=0.2, random_state=12345),
                             #'approach2':sklearn.model_selection.TimeSeriesSplit(n_splits=5)
                            }
 
@@ -61,7 +61,14 @@ def auto_grid_search(func, x, y, param_min=1e-6, param_max=1e6, num_points=100, 
     def objective(params):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
-            return np.sum((y - func(x, *params))**2)
+            #return np.sum((y - func(x, *params))**2)
+            try:
+                pred = func(x, *params)
+                if np.any(np.isnan(pred)) or np.any(np.isinf(pred)):
+                    return np.inf
+                return np.sum((y - pred)**2)
+            except:
+                return np.inf
     
     # Generate random starting points (log-uniform distribution)
     log_min, log_max = np.log10(param_min), np.log10(param_max) 
@@ -74,6 +81,7 @@ def auto_grid_search(func, x, y, param_min=1e-6, param_max=1e6, num_points=100, 
     def minimize_wrapper(x0):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
+            #return sp.optimize.minimize(objective, x0, method='BFGS', tol=1e-4)
             return sp.optimize.minimize(objective, x0, method='Nelder-Mead')
 
     # Parallel optimization with warning filter
@@ -165,7 +173,7 @@ def calculate_tau(model_function, params):
     tau = integral / f_0
     return tau
 
-def calculate_tau_with_uncertainty(model_function, params, pcov, num_samples=1000):
+def calculate_tau_with_uncertainty(model_function, params, pcov, num_samples=50):
     # Generate samples from the multivariate normal distribution
     param_samples = np.random.multivariate_normal(params, pcov, num_samples)
     tau_samples = []

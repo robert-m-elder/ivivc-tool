@@ -198,9 +198,9 @@ function resizePlots(forceResize = false) {
 function ensureResizePlots(forceResize = false) {
     resizePlots(forceResize);
     // Add a slight delay to catch any plots that might render late
-    setTimeout(function() { resizePlots(forceResize); }, 10);
+    //setTimeout(function() { resizePlots(forceResize); }, 10);
     // Add another check after a longer delay
-    setTimeout(function() { resizePlots(forceResize); }, 50);
+    //setTimeout(function() { resizePlots(forceResize); }, 50);
 }
 
 function debounce(func, wait) {

@@ -3,7 +3,7 @@
 import numpy as np
 import pandas as pd
 
-def interpolate(t1,m1,t2,m2,N_interp=10):
+def interpolate(t1,m1,t2,m2,N_interp=5):
     ## set zero to small value to avoid division errors
     #t1[t1==0] = 1e-2; t2[t2==0] = 1e-2
     # remove missing values due to unequal number of points in spreadsheet

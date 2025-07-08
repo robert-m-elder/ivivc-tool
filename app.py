@@ -53,6 +53,9 @@ else:
     app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MiB
     num_cores_for_grid_search = None
     num_points_for_grid_search = 100
+    ## profiling
+    from werkzeug.middleware.profiler import ProfilerMiddleware
+    app.wsgi_app = ProfilerMiddleware(app.wsgi_app, restrictions=[lambda info: __file__.replace('.py', '') in info[0], 30], sort_by=('cumulative',)) #profile_dir='.', 
 
 default_interpolation = 'default_interpolation'
 
@@ -224,7 +227,7 @@ def preprocess_data(t1, m1, t2, m2, selected_interpolation=None, selected_scalin
 
     # Apply interpolation
     for interp in selected_interpolation:
-        data = preprocessing_options['interpolation'][interp](t1, m1, t2, m2, N_interp=10)
+        data = preprocessing_options['interpolation'][interp](t1, m1, t2, m2, N_interp=5)
 
     return data
 
