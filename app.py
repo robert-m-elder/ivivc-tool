@@ -512,7 +512,8 @@ def create_comparison(results, approach):
                         tmp_comparison_data = {'Model': models[model_name]['display_name']}
                         for k,v in model_results['stats'].iloc[0].items():
                             if k.startswith('CV '):
-                                metric = k[3:]
+                                continue
+                                #metric = k[3:]
                             else:
                                 metric = k
                             tmp_comparison_data.update({f'{metrics[metric]["display_name"]}':v})
@@ -522,7 +523,8 @@ def create_comparison(results, approach):
                             tmp_comparison_data = {'Model': models[model_name]['display_name'], 'Dataset':('In Vitro' if i == 1 else 'In Vivo')}
                             for k,v in model_results['stats'][i-1].iloc[0].items():
                                 if k.startswith('CV '):
-                                    metric = k[3:]
+                                    continue
+                                    #metric = k[3:]
                                 else:
                                     metric = k
                                 tmp_comparison_data.update({f'{metrics[metric]["display_name"]}':v})
