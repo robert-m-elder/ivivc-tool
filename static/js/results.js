@@ -241,3 +241,75 @@ var observer = new MutationObserver(debounce(function() { ensureResizePlots(fals
 // Start observing the document with the configured parameters
 observer.observe(document.body, { childList: true, subtree: true });
 
+// Modal functionality for results page
+$(document).ready(function() {
+    // Modal content mapping
+    const modalContent = {
+        'data-processing-help': 'data-processing-help-content',
+        'model-comparison-help': 'model-comparison-help-content',
+        'approach1-results-help': 'approach1-results-help-content',
+        'approach2-results-help': 'approach2-results-help-content',
+        'approach3-results-help': 'approach3-results-help-content',
+        'prediction-approach1-help': 'prediction-approach1-help-content',
+        'prediction-approach2-help': 'prediction-approach2-help-content',
+        'prediction-approach3-help': 'prediction-approach3-help-content'
+    };
+
+    // Open modal when help button is clicked
+    $('.help-btn').on('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const modalId = $(this).data('modal');
+        const contentId = modalContent[modalId];
+
+        if (contentId) {
+            const content = $('#' + contentId).html();
+            if (content) {
+                $('#modal-text').html(content);
+                $('#help-modal').fadeIn(300);
+                $('body').addClass('modal-open');
+            } else {
+                // Fallback content
+                $('#modal-text').html('<h4>Help</h4><p>Help information for this section is coming soon.</p>');
+                $('#help-modal').fadeIn(300);
+                $('body').addClass('modal-open');
+            }
+        }
+    });
+
+    // Close modal when X is clicked
+    $('.close').on('click', function() {
+        closeModal();
+    });
+
+    // Close modal when close button is clicked
+    $('.modal-close-btn').on('click', function() {
+        closeModal();
+    });
+
+    // Close modal when clicking outside of it
+    $('#help-modal').on('click', function(e) {
+        if (e.target === this) {
+            closeModal();
+        }
+    });
+
+    // Close modal with Escape key
+    $(document).on('keydown', function(e) {
+        if (e.key === 'Escape' && $('#help-modal').is(':visible')) {
+            closeModal();
+        }
+    });
+
+    function closeModal() {
+        $('#help-modal').fadeOut(300);
+        $('body').removeClass('modal-open');
+    }
+
+    // Prevent modal from closing when clicking inside modal content
+    $('.modal-content').on('click', function(e) {
+        e.stopPropagation();
+    });
+});
+

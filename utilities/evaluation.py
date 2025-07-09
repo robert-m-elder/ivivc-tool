@@ -9,7 +9,7 @@ import scipy as sp
 import scipy.optimize
 import inspect
 from itertools import product
-from metrics import metrics
+from metrics import metrics, calculate_metric
 
 from joblib import Parallel, delayed
 import multiprocessing
@@ -146,6 +146,7 @@ def auto_grid_search_old(func, x, y, param_min=1e-6, param_max=1e6, num_points=2
     return best_params
 
 def cross_validation_curve_fit(x_data, y_data, model_function, cv, selected_metrics, p0=None, kwargs={}):
+    num_params = len(inspect.signature(model_function).parameters) - 1  # subtract 1 for 'x'
     scores = {metric: [] for metric in selected_metrics}
     #scores = {metric: metrics[metric]['function'](y2, y_pred2) for metric in selected_metrics}
     #scores = {k:[] for k in evaluate_goodness_of_fit([0],[0])}
@@ -156,7 +157,8 @@ def cross_validation_curve_fit(x_data, y_data, model_function, cv, selected_metr
             warnings.simplefilter('ignore', category=RuntimeWarning)
             popt, pcov = sp.optimize.curve_fit(model_function, x_train, y_train, p0, **kwargs)
         y_pred = model_function(x_test, *popt)
-        tmp_scores = {metric: metrics[metric]['function'](y_test, y_pred) for metric in selected_metrics}
+        tmp_scores = {metric: calculate_metric(metric, y_test, y_pred, num_params) for metric in selected_metrics}
+        #tmp_scores = {metric: metrics[metric]['function'](y_test, y_pred) for metric in selected_metrics}
         #tmp_scores = evaluate_goodness_of_fit(y_test, y_pred)
         for k,v in tmp_scores.items():
             scores[k].append(v)

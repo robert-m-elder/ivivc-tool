@@ -38,7 +38,10 @@
                 <!--<small class="form-text text-muted">Upload a CSV or Excel file with two sets of time vs. value data for fitting models.</small>-->
             </div>
             <div id="sheet-selection" class="form-group" style="display: none;">
-                <label for="sheet">Select Worksheet:</label>
+                <label for="sheet">
+                    Select Worksheet:
+                    <button type="button" class="help-btn-small" data-modal="fitting-sheet-help"><span class="help-icon">?</span></button>
+                </label>
                 <select name="sheet" id="sheet">
                     <option value="">Select a sheet...</option>
                 </select>
@@ -57,7 +60,10 @@
             <div id="sheet-selection2" class="form-group" style="display: none;">
                 <label for="sheet2">Select Worksheet:</label>
                 <select name="prediction_sheet" id="sheet2">
-                    <option value="">Select a sheet...</option>
+                    <option value="">
+                        Select a sheet...
+                        <button type="button" class="help-btn-small" data-modal="prediction-sheet-help"><span class="help-icon">?</span></button>
+                    </option>
                 </select>
             </div>
             <!--{#<div class="form-group">
@@ -234,6 +240,10 @@
             <p>This data will be used to establish the correlation between in vitro and in vivo measurements.</p>
         </div>
 
+        <div id="fitting-sheet-help-content">
+            <p>If your file for model fitting contains multiple sheets, select the sheet you want to use.</p>
+        </div>
+
         <div id="prediction-data-help-content">
             <h4>Dataset for Prediction</h4>
             <p>Optional: Upload a file containing new in vitro data for prediction.</p>
@@ -243,6 +253,10 @@
                 <li>Contains in vitro data for which you want to predict in vivo outcomes</li>
             </ul>
             <p>The fitted models will be applied to this data to generate in vivo predictions.</p>
+        </div>
+
+        <div id="prediction-sheet-help-content">
+            <p>If your file for prediction contains multiple sheets, select the sheet you want to use.</p>
         </div>
 
         <!-- Approaches Help -->
@@ -344,6 +358,7 @@
                 <li><strong>MSE:</strong> Mean squared error</li>
                 <li><strong>RMSE:</strong> Root mean square error</li>
                 <li><strong>NRMSE:</strong> RMSE normalized by standard deviation</li>
+                <li><strong>AIC/BIC:</strong> Akaike and Bayesian Information Criteria for model selection</li>
             </ul>
             <p>Multiple metrics provide comprehensive model evaluation.</p>
             <p>Additionally, the Kolmogorov-Smirnov test is used for a pair-wise comparison of model predictions in Approches 1 and 2. In conjunction with the performance metrics, this can be used to identify parsimonious models.</p>

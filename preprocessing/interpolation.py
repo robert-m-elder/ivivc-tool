@@ -4,15 +4,6 @@ import numpy as np
 import pandas as pd
 
 def interpolate(t1,m1,t2,m2,N_interp=5):
-    ## set zero to small value to avoid division errors
-    #t1[t1==0] = 1e-2; t2[t2==0] = 1e-2
-    # remove missing values due to unequal number of points in spreadsheet
-    #mask = ~pd.isna(m2); t2,m2 = t2[mask], m2[mask]
-    #mask = ~pd.isna(m1); t1,m1 = t1[mask], m1[mask]
-    ## interpolate values onto same timepoints
-    # constant N for whole range
-    #tt = np.linspace(np.min(np.concatenate([t1,t2])), np.max(np.concatenate([t1,t2])), N_interp) # t-basis
-    #mm = np.linspace(np.max(np.concatenate([m1,m2])), np.min(np.concatenate([m1,m2])), N_interp) # m-basis
     # (at least) N between subsequent points
     plist1 = []
     for i in range(len(m1)-1):
@@ -35,7 +26,48 @@ def interpolate(t1,m1,t2,m2,N_interp=5):
     mi2 = np.interp(tt,t2,m2, left=np.nan, right=np.nan)
     return t1,m1,t2,m2,mm,tt,ti1,ti2,mi1,mi2
 
+def interpolate_on_union(t1, m1, t2, m2):
+    """
+    Simplified version: interpolate only onto the exact union of original time points
+
+    Parameters:
+    -----------
+    t1, m1 : array-like
+    Dataset 1 (time, values)
+    t2, m2 : array-like
+    Dataset 2 (time, values)
+
+    Returns:
+    --------
+    tuple
+    (t1, m1, t2, m2, mm, tt, ti1, ti2, mi1, mi2)
+    where tt contains only the union of original time points
+    """
+
+    # Convert to numpy arrays
+    t1, m1 = np.array(t1), np.array(m1)
+    t2, m2 = np.array(t2), np.array(m2)
+
+    # Create union of original time points only
+    time_union = set(t1).union(set(t2))
+    tt = np.array(sorted(time_union))
+
+    # Create union of original value points only
+    value_union = set(m1).union(set(m2))
+    mm = np.array(sorted(value_union, reverse=True)) # Descending order like your original
+
+    # Interpolate onto the union grids
+    mi1 = np.interp(tt, t1, m1, left=np.nan, right=np.nan)
+    mi2 = np.interp(tt, t2, m2, left=np.nan, right=np.nan)
+
+    ti1 = np.interp(mm, m1[::-1], t1[::-1], left=np.nan, right=np.nan)
+    ti2 = np.interp(mm, m2[::-1], t2[::-1], left=np.nan, right=np.nan)
+
+    return t1, m1, t2, m2, mm, tt, ti1, ti2, mi1, mi2
+
+
 interpolations = {
     'default_interpolation': interpolate,
+    'union_interpolation': interpolate_on_union,
 }
 

@@ -25,7 +25,7 @@ from models import models, approaches
 from preprocessing import preprocessing_options
 from utilities.evaluation import evaluate_goodness_of_fit, cross_validation_curve_fit, cross_validation_schemes, auto_grid_search, calculate_tau, calculate_tau_with_uncertainty
 from utilities.model_display import get_human_readable_function
-from metrics import metrics
+from metrics import metrics, calculate_metric
 
 import plotly.utils
 import plotly.graph_objects as go
@@ -54,8 +54,8 @@ else:
     num_cores_for_grid_search = None
     num_points_for_grid_search = 100
     ## profiling
-    from werkzeug.middleware.profiler import ProfilerMiddleware
-    app.wsgi_app = ProfilerMiddleware(app.wsgi_app, restrictions=[lambda info: __file__.replace('.py', '') in info[0], 30], sort_by=('cumulative',)) #profile_dir='.', 
+    #from werkzeug.middleware.profiler import ProfilerMiddleware
+    #app.wsgi_app = ProfilerMiddleware(app.wsgi_app, restrictions=[lambda info: __file__.replace('.py', '') in info[0], 30], sort_by=('cumulative',)) #profile_dir='.', 
 
 default_interpolation = 'default_interpolation'
 
@@ -132,7 +132,7 @@ def index():
             comparisons[approach], ks_tables[approach] = create_comparison(results, approach)
 
         # Process predictions if prediction file is provided
-        prediction_results = {}
+        prediction_results, prediction_interpolation_info = {}, {}
         if prediction_file and prediction_file.filename:
             try:
                 # Read prediction data
@@ -148,26 +148,14 @@ def index():
                     pred_df = pd.read_excel(prediction_file, sheet_name=pred_sheet_name)
                 
                 # Assuming prediction file has 2 columns: time, value
-                ## XXX KLUDGE
                 t_pred, m_pred = pred_df.values.T[:2]
                 
-                # Apply same preprocessing to prediction data
-                # NOTE: You may want to modify this based on your specific needs
-                mask = ~pd.isna(m_pred)
-                t_pred, m_pred = t_pred[mask], m_pred[mask]
-                t_pred[t_pred==0] = 1e-2
-                
-                # Apply normalizations and scalings
-                for norm in selected_normalizations:
-                    m_pred = preprocessing_options['normalization'][norm](m_pred)
-                for scale in selected_scalings:
-                    if scale == 'log_x':
-                        t_pred = preprocessing_options['scaling'][scale](t_pred)
-                    elif scale == 'log_y':
-                        m_pred = preprocessing_options['scaling'][scale](m_pred)
-                
-                prediction_data = (t_pred, m_pred)
-                prediction_results = process_predictions(prediction_data, results, selected_approaches, interpolated_data=data)
+                prediction_data = preprocess_data(t_pred, m_pred, None, None, selected_interpolation=selected_interpolation, selected_scalings=selected_scalings, selected_normalizations=selected_normalizations)
+
+                ## TODO add before/after scaling/normalization plot
+                prediction_interpolation_info = create_prediction_interpolation_plotly(*prediction_data)
+
+                prediction_results = process_predictions(data, prediction_data, results, selected_approaches, interpolated_data=data)
 
             except Exception as e:
                 print(f"Error processing prediction file: {e}")
@@ -175,7 +163,7 @@ def index():
 
         #print(prediction_results)
 
-        return render_template('results.html', results=results, models=models, interpolation_info=interpolation_info, comparisons=comparisons, ks_tables=ks_tables, 
+        return render_template('results.html', results=results, models=models, interpolation_info=interpolation_info, prediction_interpolation_info=prediction_interpolation_info, comparisons=comparisons, ks_tables=ks_tables, 
                                approaches=approaches, selected_approaches=selected_approaches, 
                                selected_scalings=selected_scalings, selected_normalizations=selected_normalizations, selected_interpolation=selected_interpolation,
                                metrics=metrics, selected_metrics=selected_metrics, prediction_results=prediction_results)
@@ -204,30 +192,43 @@ def download_excel(filename):
     return send_file(full_path, as_attachment=True)
 
 def preprocess_data(t1, m1, t2, m2, selected_interpolation=None, selected_scalings=None, selected_normalizations=None):
+    if (t2 is not None) and (m2 is not None):
+        two_datasets = True
+    else:
+        two_datasets = False
     # Apply basic data cleaning
     # set zero to small value to avoid division errors
-    t1[t1==0] = 1e-2; t2[t2==0] = 1e-2
+    t1[t1==0] = 1e-2; 
+    if two_datasets:
+        t2[t2==0] = 1e-2
     # remove missing values due to unequal number of points in spreadsheet
-    mask = ~pd.isna(m2); t2,m2 = t2[mask], m2[mask]
     mask = ~pd.isna(m1); t1,m1 = t1[mask], m1[mask]
+    if two_datasets:
+        mask = ~pd.isna(m2); t2,m2 = t2[mask], m2[mask]
 
     # Apply normalizations
     for norm in selected_normalizations:
         m1 = preprocessing_options['normalization'][norm](m1)
-        m2 = preprocessing_options['normalization'][norm](m2)
+        if two_datasets:
+            m2 = preprocessing_options['normalization'][norm](m2)
 
     # Apply scalings
     for scale in selected_scalings:
         if scale == 'log_x':
             t1 = preprocessing_options['scaling'][scale](t1)
-            t2 = preprocessing_options['scaling'][scale](t2)
+            if two_datasets:
+                t2 = preprocessing_options['scaling'][scale](t2)
         elif scale == 'log_y':
             m1 = preprocessing_options['scaling'][scale](m1)
-            m2 = preprocessing_options['scaling'][scale](m2)
+            if two_datasets:
+                m2 = preprocessing_options['scaling'][scale](m2)
 
     # Apply interpolation
-    for interp in selected_interpolation:
-        data = preprocessing_options['interpolation'][interp](t1, m1, t2, m2, N_interp=5)
+    if two_datasets:
+        for interp in selected_interpolation:
+            data = preprocessing_options['interpolation'][interp](t1, m1, t2, m2)
+    else:
+        data = [t1, m1]
 
     return data
 
@@ -261,10 +262,14 @@ def process_data(data, selected_models, selected_approaches, selected_metrics):
                 y_pred = model_result['predict'](x)
                 # Evaluate goodness of fit
                 #gof = evaluate_goodness_of_fit(y, y_pred)
-                gof = {metric: metrics[metric]['function'](y, y_pred) for metric in selected_metrics}
+                #gof = {metric: metrics[metric]['function'](y, y_pred) for metric in selected_metrics}
+                gof = {metric: calculate_metric(metric, y, y_pred, len(p0)) for metric in selected_metrics}
                 stats = pd.concat([pd.DataFrame(gof, index=[0]), pd.DataFrame({'CV '+metric:v for metric,v in cvs_mean.items()}, index=[0])], axis=1)
                 stats_table = pd.concat([pd.DataFrame({metrics[metric]['display_name']:v for metric,v in gof.items()}, index=['Final model']), pd.DataFrame({metrics[metric]['display_name']:v for metric,v in cvs_mean.items()}, index=['Cross-validation'])], axis=0)
                 #stats_table = pd.concat([pd.DataFrame({metrics[metric]['display_name']:v for metric,v in gof.items()}, index=[0]), pd.DataFrame({'CV '+metrics[metric]['display_name']:v for metric,v in cvs_mean.items()}, index=[0])], axis=1)
+                popt, pcov = list(model_result['params'].values()), model_result['pcov']
+                upopt = unc.correlated_values(popt, pcov)
+                upopt = dict(zip(model_result['params'].keys(),upopt))
                 # outputs
                 plot_image = create_plotly_a1(x, y, {
                     'model_name': models[model_name]['display_name'],
@@ -274,6 +279,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics):
                 })
                 results[model_key] = {
                     'params': model_result['params'],
+                    'uparams': upopt,
                     'stats': stats,
                     'predictions': y_pred,
                     'stats_table': stats_table.to_html(classes='table table-striped', index=True, float_format=lambda x: f'{x:.4f}'),
@@ -299,7 +305,8 @@ def process_data(data, selected_models, selected_approaches, selected_metrics):
                 model_result1 = models[model_name]['fit_model'](x1, y1, p0=p0)
                 y_pred1 = model_result1['predict'](x1)
                 # Evaluate goodness of fit
-                gof1 = {metric: metrics[metric]['function'](y1, y_pred1) for metric in selected_metrics}
+                #gof1 = {metric: metrics[metric]['function'](y1, y_pred1) for metric in selected_metrics}
+                gof1 = {metric: calculate_metric(metric, y1, y_pred1, len(p0)) for metric in selected_metrics}
                 stats1 = pd.concat([pd.DataFrame(gof1, index=[0]), pd.DataFrame({'CV '+metric:v for metric,v in cvs1_mean.items()}, index=[0])], axis=1)
                 stats_table1 = pd.concat([pd.DataFrame({metrics[metric]['display_name']:v for metric,v in gof1.items()}, index=['Final model']), pd.DataFrame({metrics[metric]['display_name']:v for metric,v in cvs1_mean.items()}, index=['Cross-validation'])], axis=0)
                 #stats_table1 = pd.concat([pd.DataFrame({metrics[metric]['display_name']:v for metric,v in gof1.items()}, index=[0]), pd.DataFrame({'CV '+metrics[metric]['display_name']:v for metric,v in cvs1_mean.items()}, index=[0])], axis=1)
@@ -327,7 +334,8 @@ def process_data(data, selected_models, selected_approaches, selected_metrics):
                 model_result2 = models[model_name]['fit_model'](x2, y2, p0=p0)
                 y_pred2 = model_result2['predict'](x2)
                 # Evaluate goodness of fit
-                gof2 = {metric: metrics[metric]['function'](y2, y_pred2) for metric in selected_metrics}
+                #gof2 = {metric: metrics[metric]['function'](y2, y_pred2) for metric in selected_metrics}
+                gof2 = {metric: calculate_metric(metric, y2, y_pred2, len(p0)) for metric in selected_metrics}
                 stats2 = pd.concat([pd.DataFrame(gof2, index=[0]), pd.DataFrame({'CV '+metric:v for metric,v in cvs2_mean.items()}, index=[0])], axis=1)
                 stats_table2 = pd.concat([pd.DataFrame({metrics[metric]['display_name']:v for metric,v in gof2.items()}, index=['Final model']), pd.DataFrame({metrics[metric]['display_name']:v for metric,v in cvs2_mean.items()}, index=['Cross-validation'])], axis=0)
                 #stats_table2 = pd.concat([pd.DataFrame({metrics[metric]['display_name']:v for metric,v in gof2.items()}, index=[0]), pd.DataFrame({'CV '+metrics[metric]['display_name']:v for metric,v in cvs2_mean.items()}, index=[0])], axis=1)
@@ -361,8 +369,6 @@ def process_data(data, selected_models, selected_approaches, selected_metrics):
                     'plot': plot_image
                 }
             elif approach_id == 'approach3':
-                #plot_image_v = create_plot_a3(tt,mi1,mi2,ptype='v')
-                #plot_image_t = create_plot_a3(mm,ti1,ti2,ptype='t')
                 plot_image_v = create_plotly_a3(tt,mi1,mi2,ptype='v')
                 plot_image_t = create_plotly_a3(mm,ti1,ti2,ptype='t')
                 results[model_key] = {'plot_v': plot_image_v, 'plot_t': plot_image_t}
@@ -373,8 +379,9 @@ def process_data(data, selected_models, selected_approaches, selected_metrics):
     
     return results
 
-def process_predictions(prediction_data, results, selected_approaches, interpolated_data=None):
+def process_predictions(data, prediction_data, results, selected_approaches, interpolated_data=None):
     """Process predictions using fitted models on new dataset"""
+    t1,m1,t2,m2,mm,tt,ti1,ti2,mi1,mi2 = data
     t_pred, m_pred = prediction_data
     prediction_results = {}
     
@@ -396,7 +403,7 @@ def process_predictions(prediction_data, results, selected_approaches, interpola
                         t_pred_vivo = models[model_name]['model_function'](t_pred, **params)
                         
                         # Create prediction plot
-                        plot_image = create_prediction_plot_a1(t_pred, m_pred, t_pred_vivo, {
+                        plot_image = create_prediction_plot_a1(data, t_pred, m_pred, t_pred_vivo, {
                             'model_name': models[model_name]['display_name'],
                             'approach': approaches[approach_id]['display_name']
                         })
@@ -420,7 +427,7 @@ def process_predictions(prediction_data, results, selected_approaches, interpola
                         m_pred_vivo = m_pred * ratio
                         
                         # Create prediction plot
-                        plot_image = create_prediction_plot_a2(t_pred, m_pred, m_pred_vivo, model1_pred, model2_pred, {
+                        plot_image = create_prediction_plot_a2(data, t_pred, m_pred, m_pred_vivo, model1_pred, model2_pred, {
                             'model_name': models[model_name]['display_name'],
                             'approach': approaches[approach_id]['display_name']
                         })
@@ -441,16 +448,17 @@ def process_predictions(prediction_data, results, selected_approaches, interpola
                         
                         # Method 1: Scale prediction values by (dataset2_value / dataset1_value)
                         # Interpolate scaling factors at prediction times
-                        value_ratio = np.interp(t_pred, tt, mi2/mi1)  # dataset2_value / dataset1_value
+                        value_ratio = np.interp(t_pred, tt, mi2/mi1, left=np.nan, right=np.nan)  # dataset2_value / dataset1_value
                         m_pred_scaled = m_pred * value_ratio
                         
                         # Method 2: Scale prediction times by (dataset2_time / dataset1_time)
-                        time_ratio = np.interp(m_pred, mm, ti2/ti1)  # dataset2_time / dataset1_time
+                        mask = np.argsort(mm)
+                        time_ratio = np.interp(m_pred, mm[mask], (ti2/ti1)[mask], left=np.nan, right=np.nan)  # dataset2_time / dataset1_time
                         t_pred_scaled = t_pred * time_ratio
                         
                         # Create plots for both methods
-                        plot_method1 = create_prediction_plot_a3(t_pred, m_pred, m_pred_scaled, ptype='v')
-                        plot_method2 = create_prediction_plot_a3(t_pred, m_pred, t_pred_scaled, ptype='t')
+                        plot_method1 = create_prediction_plot_a3(data, t_pred, m_pred, m_pred_scaled, ptype='v')
+                        plot_method2 = create_prediction_plot_a3(data, t_pred, m_pred, t_pred_scaled, ptype='t')
                         
                         approach_predictions['method1_value_scaling'] = {
                             'predictions': {
@@ -511,7 +519,7 @@ def create_comparison(results, approach):
                         comparison_data.append(tmp_comparison_data)
                     if approach == 'approach2':
                         for i in [1,2]:
-                            tmp_comparison_data = {'Model': models[model_name]['display_name'], 'Dataset':f'Dataset{i}'}
+                            tmp_comparison_data = {'Model': models[model_name]['display_name'], 'Dataset':('In Vitro' if i == 1 else 'In Vivo')}
                             for k,v in model_results['stats'][i-1].iloc[0].items():
                                 if k.startswith('CV '):
                                     metric = k[3:]
@@ -530,7 +538,11 @@ def create_comparison(results, approach):
         np.fill_diagonal(ks_matrix, 1)
         for i in range(n_models):
             for j in range(i+1, n_models):
-                _, p_value = sp.stats.ks_2samp(results[model_keys[i]]['predictions'], results[model_keys[j]]['predictions'])
+                try:
+                    _, p_value = sp.stats.ks_2samp(results[model_keys[i]]['predictions'], results[model_keys[j]]['predictions'])
+                except Exception as e:
+                    print(f"Error processing prediction: {e}")
+                    p_value = np.nan
                 ks_matrix[i, j] = ks_matrix[j, i] = p_value
         df_ks = pd.DataFrame(ks_matrix, index=model_display_names, columns=model_display_names)
         ks_table = df_ks.to_html(classes='table table-striped', float_format=lambda x: f'{x:.4f}')
@@ -542,7 +554,11 @@ def create_comparison(results, approach):
             np.fill_diagonal(ks_matrix, 1)
             for i in range(n_models):
                 for j in range(i+1, n_models):
-                    _, p_value = sp.stats.ks_2samp(results[model_keys[i]]['predictions'][r-1], results[model_keys[j]]['predictions'][r-1])
+                    try:
+                        _, p_value = sp.stats.ks_2samp(results[model_keys[i]]['predictions'][r-1], results[model_keys[j]]['predictions'][r-1])
+                    except Exception as e:
+                        print(f"Error processing prediction: {e}")
+                        p_value = np.nan
                     ks_matrix[i, j] = ks_matrix[j, i] = p_value
             df_ks = pd.DataFrame(ks_matrix, index=model_display_names, columns=model_display_names)
             ks_table = df_ks.to_html(classes='table table-striped', float_format=lambda x: f'{x:.4f}')
@@ -583,51 +599,34 @@ def create_plotly_table(df):
     )
     return json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
 
-def create_interpolation_plot(t1,m1,t2,m2,tt,mi1,mi2):
-    plt.figure(figsize=(6, 3.6))
-    plt.plot(t1,m1,'ro',ms=15,mew=1,mec='k',label='Dataset 1 (actual)')
-    plt.plot(tt,mi1,'ro',ms=8,mew=1,mec='k',mfc='r',label='Dataset 1 (interpolated)')
-    plt.plot(t2,m2,'bo',ms=15,mew=1,mec='k',label='Dataset 2 (actual)')
-    plt.plot(tt,mi2,'bo',ms=8,mew=1,mec='k',mfc='b',label='Dataset 2 (interpolated)')
-    plt.xlabel('Time')
-    plt.ylabel('Value')
-    plt.legend(fontsize=12)
-    plt.tight_layout()
-    buffer = io.BytesIO()
-    plt.savefig(buffer, format='png', dpi=300)
-    buffer.seek(0)
-    interpolation_plot = base64.b64encode(buffer.getvalue()).decode()
-    plt.close()
-    return interpolation_plot
-
 def create_interpolation_plotly(t1, m1, t2, m2, tt, mi1, mi2):
     fig = go.Figure()
-    # Dataset 1 (actual)
+    # In Vitro Data (actual)
     fig.add_trace(go.Scatter(
         x=t1, y=m1,
         mode='markers',
-        name='Dataset 1 (actual)',
+        name='In Vitro Data (actual)',
         marker=dict(color='red', size=15, line=dict(color='black', width=1))
     ))
-    # Dataset 1 (interpolated)
+    # In Vitro Data (interpolated)
     fig.add_trace(go.Scatter(
         x=tt, y=mi1,
         mode='markers',
-        name='Dataset 1 (interpolated)',
+        name='In Vitro Data (interpolated)',
         marker=dict(color='red', size=8, line=dict(color='black', width=1))
     ))
-    # Dataset 2 (actual)
+    # In Vivo Data (actual)
     fig.add_trace(go.Scatter(
         x=t2, y=m2,
         mode='markers',
-        name='Dataset 2 (actual)',
+        name='In Vivo Data (actual)',
         marker=dict(color='blue', size=15, line=dict(color='black', width=1))
     ))
-    # Dataset 2 (interpolated)
+    # In Vivo Data (interpolated)
     fig.add_trace(go.Scatter(
         x=tt, y=mi2,
         mode='markers',
-        name='Dataset 2 (interpolated)',
+        name='In Vivo Data (interpolated)',
         marker=dict(color='blue', size=8, line=dict(color='black', width=1))
     ))
     fig.update_layout(
@@ -667,6 +666,61 @@ def create_interpolation_plotly(t1, m1, t2, m2, tt, mi1, mi2):
     # Write data to Excel file
     #output_filename = 'data_interpolation.xlsx'
     #output_path = write_plotly_data_to_excel(fig, output_filename, output_directory)
+    # Extract data as HTML table
+    table_html = extract_plotly_data_for_table(fig)
+
+    # Configure the plot for download options
+    config = {
+        'responsive': True,
+        'displaylogo': False,
+    }
+    # Convert the figure to HTML
+    plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
+    return {'plot':plot_html, 'table_html': table_html}
+
+def create_prediction_interpolation_plotly(t1, m1):
+    fig = go.Figure()
+    # In Vitro Data (actual)
+    fig.add_trace(go.Scatter(
+        x=t1, y=m1,
+        mode='markers',
+        name='In Vitro Data (input)',
+        marker=dict(color='green', size=15, line=dict(color='black', width=1))
+    ))
+    fig.update_layout(
+        template='plotly_white',
+        autosize=True, 
+        xaxis_title='Time',
+        yaxis_title='Value',
+        legend=dict(font=dict(size=18)),  # Slightly smaller than base font
+        margin=dict(l=30, r=30, t=30, b=30),
+        font=dict(
+            family="Arial, sans-serif",
+            size=14,  # Base font size
+            color="black"
+        ),
+        xaxis=dict(
+            showline=True,
+            linewidth=2,
+            linecolor='#EBF0F8',
+            mirror=True
+        ),
+        yaxis=dict(
+            showline=True,
+            linewidth=2,
+            linecolor='#EBF0F8',
+            mirror=True
+        )
+    )
+    # Update axes with relative font sizes
+    fig.update_xaxes(
+        title_font=dict(size=20),  # Slightly larger than base font
+        tickfont=dict(size=18)
+    )
+    fig.update_yaxes(
+        title_font=dict(size=20),  # Slightly larger than base font
+        tickfont=dict(size=18)
+    )
     # Extract data as HTML table
     table_html = extract_plotly_data_for_table(fig)
 
@@ -787,7 +841,7 @@ def extract_plotly_data_for_table(fig):
 
 def create_plotly_a1(x, y, model_info):
     # Create the scatter plot for the data
-    trace_data = go.Scatter(x=x, y=y, mode='markers', name='Data', marker=dict(color='white', size=10, line=dict(color='gray', width=1)))
+    trace_data = go.Scatter(x=x, y=y, mode='markers', name='Data', marker=dict(color='white', size=15, line=dict(color='gray', width=2)))
 
     # Create the smooth line for the model fit
     x_smooth = np.linspace(min(x), max(x), max(len(x),10))
@@ -802,8 +856,8 @@ def create_plotly_a1(x, y, model_info):
         template='plotly_white',
         autosize=True, 
         title=f"Time Series Data with {model_info['model_name']} Fit",
-        xaxis_title='Time (Dataset 1)',
-        yaxis_title='Time (Dataset 2)',
+        xaxis_title='Time (In Vitro Data)',
+        yaxis_title='Time (In Vivo Data)',
         legend=dict(font=dict(size=18)),  # Slightly smaller than base font
         margin=dict(l=30, r=30, t=30, b=30),
         #width=600,
@@ -849,69 +903,18 @@ def create_plotly_a1(x, y, model_info):
     plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
     return {'plot':plot_html, 'table_html': table_html}
 
-def create_plot_a1(x, y, model_info):
-    plt.figure(figsize=(6, 3.6))
-    plt.plot(x, y, 'ko', mec='0.5', mew=1, mfc='w', ms=10, label='Data')
-
-    x_smooth = np.linspace(min(x), max(x), 200)
-    y_smooth = model_info['model_function'](x_smooth, **model_info['params'])
-    plt.plot(x_smooth, y_smooth, 'k--', lw=3, label=f"{model_info['model_name']} Fit")
-
-    plt.title(f"Time Series Data with {model_info['model_name']} Fit")
-    plt.xlabel('Time (Dataset 1)')
-    plt.ylabel('Time (Dataset 2)')
-    plt.legend()
-
-    # Save plot to a bytes buffer
-    buffer = io.BytesIO()
-    plt.savefig(buffer, format='png', dpi=300)
-    buffer.seek(0)
-
-    # Encode the image to base64
-    plot_base64 = base64.b64encode(buffer.getvalue()).decode()
-
-    plt.close()  # Close the plot to free up memory
-
-    return plot_base64
-
-def create_plot_a2(x1, y1, x2, y2, model_info):
-    plt.figure(figsize=(6, 3.6))
-    plt.plot(x1, y1, 'bo', mec=(0.5,0.5,1.0), mew=1, mfc='w', ms=10, label='Dataset 1')
-    plt.plot(x2, y2, 'ro', mec=(1.0,0.5,0.5), mew=1, mfc='w', ms=10, label='Dataset 2')
-    x_smooth = np.linspace(min(np.concatenate([x1,x2])), max(np.concatenate([x1,x2])), 200)
-    y_smooth1 = model_info['model_function'](x_smooth, **model_info['params1'])
-    y_smooth2 = model_info['model_function'](x_smooth, **model_info['params2'])
-    plt.plot(x_smooth, y_smooth1, 'b--', lw=3, label=f"{model_info['model_name']} Fit")
-    plt.plot(x_smooth, y_smooth2, 'r--', lw=3, label=f"{model_info['model_name']} Fit")
-    plt.title(f"Time Series Data with {model_info['model_name']} Fit")
-    plt.xlabel('Time')
-    plt.ylabel('Value')
-    plt.legend()
-
-    # Save plot to a bytes buffer
-    buffer = io.BytesIO()
-    plt.savefig(buffer, format='png', dpi=300)
-    buffer.seek(0)
-
-    # Encode the image to base64
-    plot_base64 = base64.b64encode(buffer.getvalue()).decode()
-
-    plt.close()  # Close the plot to free up memory
-
-    return plot_base64
-
 def create_plotly_a2(x1, y1, x2, y2, model_info):
     # Create traces for the datasets
     trace1 = go.Scatter(
         x=x1, y=y1,
         mode='markers',
-        name='Dataset 1',
+        name='In Vitro Data',
         marker=dict(
             color='white',
-            size=10,
+            size=15,
             line=dict(
                 color='rgba(0.5,0.5,1.0,1)',
-                width=1
+                width=2
             ),
             symbol='circle'
         )
@@ -920,13 +923,13 @@ def create_plotly_a2(x1, y1, x2, y2, model_info):
     trace2 = go.Scatter(
         x=x2, y=y2,
         mode='markers',
-        name='Dataset 2',
+        name='In Vivo Data',
         marker=dict(
             color='white',
-            size=10,
+            size=15,
             line=dict(
                 color='rgba(1.0,0.5,0.5,1)',
-                width=1
+                width=2
             ),
             symbol='circle'
         )
@@ -940,14 +943,14 @@ def create_plotly_a2(x1, y1, x2, y2, model_info):
     trace3 = go.Scatter(
         x=x_smooth, y=y_smooth1,
         mode='lines',
-        name=f"{model_info['model_name']} Fit (Dataset 1)",
+        name=f"{model_info['model_name']} Fit (In Vitro Data)",
         line=dict(color='blue', dash='dash', width=3)
     )
 
     trace4 = go.Scatter(
         x=x_smooth, y=y_smooth2,
         mode='lines',
-        name=f"{model_info['model_name']} Fit (Dataset 2)",
+        name=f"{model_info['model_name']} Fit (In Vivo Data)",
         line=dict(color='red', dash='dash', width=3)
     )
 
@@ -1007,37 +1010,16 @@ def create_plotly_a2(x1, y1, x2, y2, model_info):
     plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
     return {'plot':plot_html, 'table_html': table_html}
 
-def create_plot_a3(x,y1,y2,ptype='v'):
-    #def create_plot_a3(tt,mi1,mi2,ptype='v'):
-    plt.figure(figsize=(6, 3.6))
-    #plt.plot(tt,(mi1-mi2),'ko',mec='k',mew=1,mfc='w',ms=10); 
-    if ptype == 'v':
-        plt.plot(x,(y1-y2),'ko',mec='k',mew=1,mfc='w',ms=10); 
-        plt.xlabel('Time')
-        plt.ylabel('Dataset 1 Value - Dataset 2 Value')
-    elif ptype == 't':
-        plt.plot(x,(y1/y2),'ko',mec='k',mew=1,mfc='w',ms=10); 
-        plt.xlabel('Value')
-        plt.ylabel('Dataset 1 Time / Dataset 2 Time')
-    #plt.legend(fontsize=12)
-    plt.tight_layout()
-    buffer = io.BytesIO()
-    plt.savefig(buffer, format='png', dpi=300)
-    buffer.seek(0)
-    plot_base64 = base64.b64encode(buffer.getvalue()).decode()
-    plt.close()
-    return plot_base64
-
 def create_plotly_a3(x, y1, y2, ptype='v'):
     if ptype == 'v':
-        y = y1 - y2
+        y = y1 / y2
         x_label = 'Time'
-        y_label = 'Dataset 1 Value - Dataset 2 Value'
+        y_label = 'In Vitro Value / In Vivo Value'
         plot_name = 'Value vs. time'
     elif ptype == 't':
         y = y1 / y2
         x_label = 'Value'
-        y_label = 'Dataset 1 Time / Dataset 2 Time'
+        y_label = 'In Vitro Time / In Vivo Time'
         plot_name = 'Time vs. value'
     else:
         raise ValueError("ptype must be 'v' or 't'")
@@ -1050,10 +1032,10 @@ def create_plotly_a3(x, y1, y2, ptype='v'):
         name=plot_name,
         marker=dict(
             color='white',
-            size=10,
+            size=15,
             line=dict(
-                color='black',
-                width=1
+                color='gray',
+                width=2
             ),
             symbol='circle'
         )
@@ -1115,24 +1097,41 @@ def create_plotly_a3(x, y1, y2, ptype='v'):
     plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
     return {'plot':plot_html, 'table_html': table_html}
 
-def create_prediction_plot_a1(t_pred, m_pred, t_pred_vivo, model_info):
+def create_prediction_plot_a1(data, t_pred, m_pred, t_pred_vivo, model_info):
     """Create prediction plot for approach 1 - time scaling"""
+    t1,m1,t2,m2,mm,tt,ti1,ti2,mi1,mi2 = data
     fig = go.Figure()
+
+#    # Fitting in vitro data
+#    fig.add_trace(go.Scatter(
+#        x=t1, y=m1,
+#        mode='markers',
+#        name='In Vitro Data (Fitting)',
+#        marker=dict(color='blue', size=15, line=dict(color='black', width=2))
+#    ))
+#
+#    # Fitting in vivo timeline
+#    fig.add_trace(go.Scatter(
+#        x=t2, y=m2,
+#        mode='markers',
+#        name='In Vivo Data (Fitting)',
+#        marker=dict(color='red', size=15, line=dict(color='black', width=2))
+#    ))
 
     # Original in vitro data
     fig.add_trace(go.Scatter(
         x=t_pred, y=m_pred,
         mode='markers',
-        name='In Vitro Data (Input)',
-        marker=dict(color='blue', size=10, line=dict(color='black', width=1))
+        name='In Vitro (Input)',
+        marker=dict(color='green', size=15, line=dict(color='black', width=2))
     ))
 
     # Predicted in vivo timeline
     fig.add_trace(go.Scatter(
         x=t_pred_vivo, y=m_pred,
         mode='markers',
-        name='Predicted In Vivo Timeline',
-        marker=dict(color='red', size=10, line=dict(color='black', width=1))
+        name='In Vivo (Predicted)',
+        marker=dict(color='orange', size=15, line=dict(color='black', width=2))
     ))
 
     # Connection lines to show time scaling
@@ -1141,7 +1140,7 @@ def create_prediction_plot_a1(t_pred, m_pred, t_pred_vivo, model_info):
             x=[t_pred[i], t_pred_vivo[i]],
             y=[m_pred[i], m_pred[i]],
             mode='lines',
-            line=dict(color='gray', width=1, dash='dot'),
+            line=dict(color='gray', width=2, dash='dot'),
             showlegend=False,
             hoverinfo='skip'
         ))
@@ -1149,7 +1148,7 @@ def create_prediction_plot_a1(t_pred, m_pred, t_pred_vivo, model_info):
     fig.update_layout(
         template='plotly_white',
         autosize=True,
-        title=f"In Vitro to In Vivo Time Prediction using {model_info['model_name']}",
+        title=f"In Vitro to In Vivo Time Prediction using {model_info['model_name']} Fit",
         xaxis_title='Time',
         yaxis_title='Value',
         legend=dict(font=dict(size=18)),
@@ -1174,38 +1173,50 @@ def create_prediction_plot_a1(t_pred, m_pred, t_pred_vivo, model_info):
 
     return {'plot': plot_html, 'table_html': table_html}
 
-def create_prediction_plot_a2(t_pred, m_pred, m_pred_vivo, model1_pred, model2_pred, model_info):
+def create_prediction_plot_a2(data, t_pred, m_pred, m_pred_vivo, model1_pred, model2_pred, model_info):
     """Create prediction plot for approach 2 - value scaling using model ratio"""
+    t1,m1,t2,m2,mm,tt,ti1,ti2,mi1,mi2 = data
     fig = go.Figure()
 
     # Original in vitro data
     fig.add_trace(go.Scatter(
         x=t_pred, y=m_pred,
         mode='markers',
-        name='In Vitro Data (Input)',
-        marker=dict(color='blue', size=10, line=dict(color='black', width=1))
+        name='In Vitro (Input)',
+        marker=dict(color='green', size=15, line=dict(color='black', width=2))
     ))
 
     # Predicted in vivo values
     fig.add_trace(go.Scatter(
         x=t_pred, y=m_pred_vivo,
         mode='markers',
-        name='Predicted In Vivo Values',
-        marker=dict(color='red', size=10, line=dict(color='black', width=1))
+        name='In Vivo (Predicted)',
+        marker=dict(color='orange', size=15, line=dict(color='black', width=2))
     ))
+
+    # Connection lines to show time scaling
+    for i in range(len(t_pred)):
+        fig.add_trace(go.Scatter(
+            x=[t_pred[i], t_pred[i]],
+            y=[m_pred[i], m_pred_vivo[i]],
+            mode='lines',
+            line=dict(color='gray', width=2, dash='dot'),
+            showlegend=False,
+            hoverinfo='skip'
+        ))
 
     # Model predictions for reference
     fig.add_trace(go.Scatter(
         x=t_pred, y=model1_pred,
         mode='lines',
-        name='In Vitro Model',
+        name='In Vitro (Fitted Model)',
         line=dict(color='blue', dash='dash', width=2)
     ))
 
     fig.add_trace(go.Scatter(
         x=t_pred, y=model2_pred,
         mode='lines',
-        name='In Vivo Model',
+        name='In Vivo (Fitted Model)',
         line=dict(color='red', dash='dash', width=2)
     ))
 
@@ -1236,8 +1247,9 @@ def create_prediction_plot_a2(t_pred, m_pred, m_pred_vivo, model1_pred, model2_p
 
     return {'plot': plot_html, 'table_html': table_html}
 
-def create_prediction_plot_a3(t_pred, m_pred, var_pred_scaled, ptype='v'):
+def create_prediction_plot_a3(data, t_pred, m_pred, var_pred_scaled, ptype='v'):
     """Create prediction plot for approach 3 - direct mapping"""
+    t1,m1,t2,m2,mm,tt,ti1,ti2,mi1,mi2 = data
     if ptype == 'v':
         plot_string = 'scaled by value'
         fig = go.Figure()
@@ -1246,16 +1258,27 @@ def create_prediction_plot_a3(t_pred, m_pred, var_pred_scaled, ptype='v'):
         fig.add_trace(go.Scatter(
             x=t_pred, y=m_pred,
             mode='markers',
-            name='In Vitro Data',
-            marker=dict(color='blue', size=10, line=dict(color='black', width=1))
+            name='In Vitro (Input)',
+            marker=dict(color='green', size=15, line=dict(color='black', width=2))
         ))
 
         fig.add_trace(go.Scatter(
             x=t_pred, y=var_pred_scaled,
             mode='markers',
-            name='Predicted In Vivo Data',
-            marker=dict(color='red', size=10, line=dict(color='black', width=1))
+            name='In Vivo (Predicted)',
+            marker=dict(color='orange', size=15, line=dict(color='black', width=2))
         ))
+
+        # Connection lines to show time scaling
+        for i in range(len(t_pred)):
+            fig.add_trace(go.Scatter(
+                x=[t_pred[i], t_pred[i]],
+                y=[m_pred[i], var_pred_scaled[i]],
+                mode='lines',
+                line=dict(color='gray', width=2, dash='dot'),
+                showlegend=False,
+                hoverinfo='skip'
+            ))
 
         fig.update_layout(
             template='plotly_white',
@@ -1277,16 +1300,27 @@ def create_prediction_plot_a3(t_pred, m_pred, var_pred_scaled, ptype='v'):
         fig.add_trace(go.Scatter(
             x=t_pred, y=m_pred, 
             mode='markers',
-            name='In Vitro Data',
-            marker=dict(color='blue', size=10, line=dict(color='black', width=1))
+            name='In Vitro (Input)',
+            marker=dict(color='green', size=15, line=dict(color='black', width=2))
         ))
 
         fig.add_trace(go.Scatter(
             x=var_pred_scaled, y=m_pred, 
             mode='markers',
-            name='Predicted In Vivo Data',
-            marker=dict(color='red', size=10, line=dict(color='black', width=1))
+            name='In Vivo (Predicted)',
+            marker=dict(color='orange', size=15, line=dict(color='black', width=2))
         ))
+
+        # Connection lines to show time scaling
+        for i in range(len(t_pred)):
+            fig.add_trace(go.Scatter(
+                x=[t_pred[i], var_pred_scaled[i]],
+                y=[m_pred[i], m_pred[i]],
+                mode='lines',
+                line=dict(color='gray', width=2, dash='dot'),
+                showlegend=False,
+                hoverinfo='skip'
+            ))
 
         fig.update_layout(
             template='plotly_white',

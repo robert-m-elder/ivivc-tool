@@ -59,27 +59,33 @@
         </ul>
 
         <div id="processing">
-            <h2>Data Processing</h2>
+            <h2>
+                Data Processing
+                <button type="button" class="help-btn" data-modal="data-processing-help">
+                    <span class="help-icon">?</span>
+                </button>
+            </h2>
             <h3>Preprocessing Applied:</h3>
-                <h4>Normalization:</h4>
-                <ul>
-                    {% for norm in selected_normalizations %}
-                    <li>{{ norm }}</li>
-                    {% endfor %}
-                </ul>
-                <h4>Scaling:</h4>
-                <ul>
-                    {% for scale in selected_scalings %}
-                    <li>{{ scale }}</li>
-                    {% endfor %}
-                </ul>
-                <h4>Interpolation:</h4>
-                <ul>
-                    {% for interp in selected_interpolation %}
-                    <li>{{ interp }}</li>
-                    {% endfor %}
-                </ul>
+            <h4>Normalization:</h4>
+            <ul>
+                {% for norm in selected_normalizations %}
+                <li>{{ norm }}</li>
+                {% endfor %}
+            </ul>
+            <h4>Scaling:</h4>
+            <ul>
+                {% for scale in selected_scalings %}
+                <li>{{ scale }}</li>
+                {% endfor %}
+            </ul>
+            <h4>Interpolation:</h4>
+            <ul>
+                {% for interp in selected_interpolation %}
+                <li>{{ interp }}</li>
+                {% endfor %}
+            </ul>
             <!--<img src="data:image/png;base64,{{ interpolation }}" alt="Data Processing Plot">-->
+            <h4>Fitting Data:</h4>
             <div class="plot-container">
                 {{ interpolation_info['plot'] | safe }}
             </div>
@@ -94,11 +100,30 @@
             <!--{#<div class="custom-button-container"><a href="/download/{{ interpolation_info['filename'] }}"  class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none;"><span>Download Data</span></a></div>
             <a href="/download/{{ interpolation_info['filename'] }}" class="btn btn-primary">Download Data</a>#}-->
             <!--<a href="{{ url_for('download_excel', filename=interpolation_info['filename']) }}" class="btn btn-primary">Download Data</a>-->
+            {% if 'plot' in prediction_interpolation_info %}
+                <h4>Prediction Data:</h4>
+                <div class="plot-container">
+                    {{ prediction_interpolation_info['plot'] | safe }}
+                </div>
+                <div class="custom-button-container">
+                    <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="prediction-interpolation-table" style="text-decoration: none;">
+                        <span>Show Data Table</span>
+                    </button>
+                </div>
+                <div id="prediction-interpolation-table-container" class="data-table-container" style="display: none;">
+                    {{ prediction_interpolation_info['table_html'] | safe }}
+                </div>
+            {% endif %}
         </div>
         
         <!-- Comparison Section -->
         <div id="comparison">
-            <h2>Model Comparison</h2>
+            <h2>
+                Model Comparison
+                <button type="button" class="help-btn" data-modal="model-comparison-help">
+                    <span class="help-icon">?</span>
+                </button>
+            </h2>
             <!--<img src="data:image/png;base64,{ { comparison.plot } }" alt="Model Comparison Plot">--!>
             {% if "approach1" in selected_approaches %}
                 <h3>{{ approaches["approach1"].display_name }}</h3>
@@ -111,9 +136,9 @@
                 <h3>{{ approaches["approach2"].display_name }}</h3>
                 <h4>Performance Metrics</h4>
                 {{ comparisons["approach2"] | safe }}
-                <h4>Pairwise Model Comparison (Kolmogorov-Smirnov Test p-values), Dataset 1</h4>
+                <h4>Pairwise Model Comparison (Kolmogorov-Smirnov Test p-values), In Vitro Data</h4>
                 {{ ks_tables["approach2"][0] | safe}}
-                <h4>Pairwise Model Comparison (Kolmogorov-Smirnov Test p-values), Dataset 2</h4>
+                <h4>Pairwise Model Comparison (Kolmogorov-Smirnov Test p-values), In Vivo Data</h4>
                 {{ ks_tables["approach2"][1] | safe}}
             {% endif %}
         </div> 
@@ -121,7 +146,12 @@
         <!-- Individual Model Results Section -->
         {% for approach_id in selected_approaches %}
             <div id="{{ approach_id }}">
-                <h2>{{ approaches[approach_id].display_name }}</h2>
+                <h2>
+                    {{ approaches[approach_id].display_name }}
+                    <button type="button" class="help-btn" data-modal="{{ approach_id }}-results-help">
+                        <span class="help-icon">?</span>
+                    </button>
+                </h2>
                 <!--{# <p><strong>Preprocessing:</strong> {{ approaches[approach_id].preprocess.__name__ if approaches[approach_id].preprocess else 'None' }}</p> #}--!>
                 {% for model_key, model_results in results.items() %}
                     {% if model_key.startswith(approach_id) %}
@@ -149,8 +179,11 @@
                                     <h4>Function</h4>
                                     <p>\[{{ model_results.function }}\]</p>
                                     <h4>Final model parameters</h4>
-                                    {% for param, value in model_results.params.items() %}
+                                    <!--{#{% for param, value in model_results.params.items() %}
                                     <p>{{ param }}: {{ value | round(4) }}</p>
+                                    {% endfor %}#}-->
+                                    {% for param, value in model_results.uparams.items() %}
+                                    <p>{{ param }}: {{ value.n | round(4) }} &plusmn; {{ value.s | round(4) }}</p>
                                     {% endfor %}
                                     <h4>Goodness of fit</h4>
                                     {{ model_results.stats_table | safe }}
@@ -179,7 +212,7 @@
                                     <!--{#<div class="custom-button-container"><a href="/download/{{ model_results['plot']['filename'] }}"  class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none;"><span>Download Data</span></a></div>#}-->
                                     <h4>Function</h4>
                                     <p>\[{{ model_results.function }}\]</p>
-                                    <h4>Dataset 1</h4>
+                                    <h4>In Vitro Data</h4>
                                     <h4>Final model parameters</h4>
                                     <!--{# {% for param, value in model_results.params[0].items() %}
                                     <p>{{ param }}: {{ value | round(4) }}</p> #}-->
@@ -194,7 +227,7 @@
                                     {% endif %}
                                     <h4>Goodness of Fit</h4>
                                     {{ model_results.stats_table[0] | safe }}
-                                    <h4>Dataset 2</h4>
+                                    <h4>In Vivo Data</h4>
                                     <h4>Final model parameters</h4>
                                     <!--{# {% for param, value in model_results.params[1].items() %}
                                     <p>{{ param }}: {{ value | round(4) }}</p> #}-->
@@ -253,8 +286,12 @@
             {% for approach_id in selected_approaches %}
                 {% if approach_id in prediction_results and prediction_results[approach_id] %}
                     <div id="prediction-{{ approach_id }}">
-                        <h2>Prediction: {{ approaches[approach_id].display_name }}</h2>
-                        
+                        <h2>
+                            Prediction: {{ approaches[approach_id].display_name }}
+                            <button type="button" class="help-btn" data-modal="prediction-{{ approach_id }}-help">
+                                <span class="help-icon">?</span>
+                            </button>
+                        </h2>
                         {% for model_name, pred_result in prediction_results[approach_id].items() %}
                             {% if 'error' in pred_result %}
                                 <div class="model-result has-error">
@@ -319,7 +356,7 @@
                                         {% endif %}
                                         <!--{#{% if 'predictions' in pred_result %}
                                             <h4>Prediction Summary</h4>
-                                            <p>Generated {{ pred_result.predictions[0]|length }} predictions using Dataset 1 parameters and {{ pred_result.predictions[1]|length }} predictions using Dataset 2 parameters.</p>
+                                            <p>Generated {{ pred_result.predictions[0]|length }} predictions using In Vitro Data parameters and {{ pred_result.predictions[1]|length }} predictions using In Vivo Data parameters.</p>
                                         {% endif %}#}-->
                                     </div>
                                 {% endif %}
@@ -364,6 +401,175 @@
             </div>
         {% endif %}
     </div>
+
+    <!-- Modal Structure -->
+    <div id="help-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 id="modal-title">Help</h4>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="modal-text">
+                    <!-- Content will be loaded here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="modal-close-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Content Definitions -->
+    <div id="modal-content-definitions" style="display: none;">
+        
+        <!-- Data Processing Help -->
+        <div id="data-processing-help-content">
+            <h4>Data Processing</h4>
+            <p>This section shows how your data was preprocessed before model fitting:</p>
+            <ul>
+                <li><strong>Normalization:</strong> Applied scaling methods to standardize data ranges</li>
+                <li><strong>Scaling:</strong> Mathematical transformations applied to improve model fitting</li>
+                <li><strong>Interpolation:</strong> Methods used to create evenly spaced data points</li>
+            </ul>
+            <p><strong>For Model Selection:</strong> Review the plot to ensure data quality. For example, poor interpolation may indicate the need for different preprocessing options.</p>
+        </div>
+
+        <!-- Model Comparison Help -->
+        <div id="model-comparison-help-content">
+            <h4>Model Comparison</h4>
+            <p>This section provides statistical comparisons between different models:</p>
+            <ul>
+                <li><strong>Performance Metrics:</strong> Quantitative measures of how well each model fits the data</li>
+                <li><strong>Kolmogorov-Smirnov Test:</strong> Statistical test comparing model predictions (p-values shown)</li>
+            </ul>
+            <p><strong>For Model Selection:</strong></p>
+            <ul>
+                <li>Look for models with <strong>lower error metrics</strong> (e.g., RMSE)</li>
+                <li>Prefer models with <strong>higher R²</strong> values (closer to 1.0)</li>
+                <li>Use K-S test p-values to identify significantly different models. A p-value of 1.0 indicates identical models, 
+                    so the diagonal values are all 1.0. A p-value &lt; 0.05 implies a significant difference between models.</li>
+                <li>Consider the <strong>Information Criteria (AIC/BIC)</strong> - lower values indicate better model fit with appropriate complexity
+                    <ul>
+                        <li><strong>AIC (Akaike Information Criterion):</strong> Balances model fit with complexity. Lower values are better.</li>
+                        <li><strong>BIC (Bayesian Information Criterion):</strong> More conservative than AIC, penalizes complexity more heavily. Lower values are better.</li>
+                        <li><strong>Interpretation:</strong> Differences &lt; 2 indicate equivalent models; differences &gt; 6 show strong evidence for the lower-value model.</li>
+                        <li><strong>When they disagree:</strong> AIC favors prediction accuracy; BIC favors simpler, more interpretable models.</li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Approach 1 Results Help -->
+        <div id="approach1-results-help-content">
+            <h4>Approach 1: Direct Correlation Results</h4>
+            <p>Shows results from direct correlation between in vitro and in vivo data:</p>
+            <ul>
+                <li><strong>Plot:</strong> Scatter plot with fitted model overlay</li>
+                <li><strong>Function:</strong> Mathematical equation of the fitted model</li>
+                <li><strong>Parameters:</strong> Coefficients with uncertainty estimates (± std. err.)</li>
+                <li><strong>Goodness of Fit:</strong> Statistical measures and cross-validation results</li>
+            </ul>
+            <p><strong>For Model Selection:</strong></p>
+            <ul>
+                <li>Look for <strong>high R² values</strong> and <strong>lower error metrics</strong> (e.g., RMSE)</li>
+                <li>Use <strong>Information Criteria (AIC/BIC)</strong> to balance model fit with complexity - lower values indicate better models that avoid overfitting</li>
+                <li>Consider <strong>parameter uncertainty</strong> - smaller ± values indicate more reliable estimates</li>
+                <li>Compare <strong>cross-validation results</strong> to final model performance - similar values of correlation coefficients and error metrics indicate good generalization</li>
+            </ul>
+        </div>
+
+        <!-- Approach 2 Results Help -->
+        <div id="approach2-results-help-content">
+            <h4>Approach 2: Independent Model Fitting Results</h4>
+            <p>Shows results from independent fitting to each dataset:</p>
+            <ul>
+                <li><strong>Plot:</strong> Both datasets with separate fitted models</li>
+                <li><strong>Function:</strong> Mathematical equation of the fitted model</li>
+                <li><strong>Parameters:</strong> Coefficients with uncertainty estimates (± std. err.)</li>
+                <li><strong>Time Constant (Tau):</strong> Characteristic time scale of the process</li>
+                <li><strong>Separate Statistics:</strong> Goodness of fit for each dataset</li>
+            </ul>
+            <p><strong>For Model Selection:</strong></p>
+            <ul>
+                <li>Look for <strong>high R² values</strong> and <strong>lower error metrics</strong> (e.g., RMSE) for both datasets</li>
+                <li>Use <strong>Information Criteria (AIC/BIC)</strong> to balance model fit with complexity - lower values indicate better models that avoid overfitting</li>
+                <li>Consider <strong>parameter uncertainty</strong> - smaller ± values indicate more reliable estimates</li>
+                <li>Compare <strong>time constants</strong> between datasets for consistency with your expectations</li>
+                <li>Compare <strong>cross-validation results</strong> to final model performance - similar values of correlation coefficients and error metrics indicate good generalization</li>
+            </ul>
+        </div>
+
+        <!-- Approach 3 Results Help -->
+        <div id="approach3-results-help-content">
+            <h4>Approach 3: Direct Mapping Results</h4>
+            <p>Shows direct comparison between interpolated datasets:</p>
+            <ul>
+                <li><strong>Value vs. Time Plot:</strong> Difference between dataset values over time</li>
+                <li><strong>Time vs. Value Plot:</strong> Ratio of dataset times across value ranges</li>
+            </ul>
+            <p><strong>For Model Selection:</strong></p>
+            <ul>
+                <!--<li>Look for <strong>systematic patterns</strong> rather than random scatter</li>-->
+                <li>Identify <strong>trends or patterns</strong> that could inform model-based correlation strategies</li>
+                <!--<li>Use these plots to <strong>validate assumptions</strong> made by parametric models</li>-->
+                <li>Consider this approach when <strong>model-based methods fail</strong> or show poor fits</li>
+            </ul>
+        </div>
+
+        <!-- Prediction Results Help -->
+        <div id="prediction-approach1-help-content">
+            <h4>Approach 1: Prediction Results</h4>
+            <p>Shows predictions made using the in vitro to in vivo time correlation models:</p>
+            <ul>
+                <li><strong>Input Data:</strong> Your in vitro prediction dataset</li>
+                <li><strong>Predicted Data:</strong> Corresponding in vivo time points calculated using fitted correlation</li>
+                <li><strong>Connection Lines:</strong> Show the time scaling transformation</li>
+            </ul>
+            <!--<p><strong>For Model Selection:</strong></p>
+            <ul>
+                <li>Verify that <strong>predictions are consistent with your expectations</strong></li>
+                <li>Check for <strong>reasonable time scaling</strong> - extreme compressions or extensions may indicate poor model choice</li>
+                <li>Compare predictions from different models to assess <strong>consistency</strong></li>
+            </ul>-->
+        </div>
+
+        <div id="prediction-approach2-help-content">
+            <h4>Approach 2: Prediction Results</h4>
+            <p>Shows predictions using independent model ratios:</p>
+            <ul>
+                <li><strong>Input Data:</strong> Your in vitro prediction dataset</li>
+                <li><strong>Predicted Data:</strong> In vivo predictions based on scaling by in vivo/in vitro ratio of values from fitted models</li>
+                <li><strong>Fitted Models:</strong> Both in vitro and in vivo model curves</li>
+                <li><strong>Connection Lines:</strong> Show the time scaling transformation</li>
+            </ul>
+            <!--<p><strong>For Model Selection:</strong></p>
+            <ul>
+                <li>Look for <strong>smooth, realistic prediction curves</strong></li>
+                <li>Verify that the <strong>predictions are consistent with your expectations</strong></li>
+                <li>Choose models where both <strong>individual fits are good</strong> and the <strong>ratio is stable</strong></li>
+            </ul>-->
+        </div>
+
+        <div id="prediction-approach3-help-content">
+            <h4>Approach 3: Prediction Results</h4>
+            <p>Shows direct mapping predictions:</p>
+            <ul>
+                <li><strong>Input Data:</strong> Your in vitro prediction dataset</li>
+                <li><strong>Predicted Data:</strong> In vivo predictions based on scaling by ratio of in vivo/in vitro values or times directly interpolated between the actual data </li>
+                <li><strong>Connection Lines:</strong> Show the time scaling transformation</li>
+            <p>Points in the in vitro prediction dataset that are outside the range of the fitting datasets (time range when scaling by value, or value range when scaling by time) are excluded.</p>
+            </ul>
+            <!--<p><strong>For Model Selection:</strong></p>
+            <ul>
+                <li>Compare <strong>different scaling approaches</strong> to see which produces more reasonable results</li>
+                <li>Use this as a <strong>validation tool</strong> for parametric model predictions</li>
+                <li>Consider if these <strong>model-free approaches</strong> may be more appropriate than parametric models</li>
+            </ul>-->
+        </div>
+
+    </div>
+
 </body>
 </html>
 

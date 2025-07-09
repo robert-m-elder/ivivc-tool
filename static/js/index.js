@@ -332,6 +332,8 @@ $(document).ready(function() {
         'data-help': 'data-help-content',
         'fitting-data-help': 'fitting-data-help-content',
         'prediction-data-help': 'prediction-data-help-content',
+        'fitting-sheet-help': 'fitting-sheet-help-content',
+        'prediction-sheet-help': 'prediction-sheet-help-content',
         'approaches-help': 'approaches-help-content',
         'approach1-help': 'approach1-help-content',
         'approach2-help': 'approach2-help-content',
