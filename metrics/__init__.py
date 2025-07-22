@@ -21,7 +21,8 @@ for filename in os.listdir(current_dir):
                 'function': module.metric_function,
                 'display_name': module.display_name,
                 'accepts_n_params': accepts_n_params,
-                'sort_order': getattr(module, 'sort_order', float('inf'))  # Use infinity if sort_order is not specified
+                'sort_order': getattr(module, 'sort_order', float('inf')),  # Use infinity if sort_order is not specified
+                'better_direction': getattr(module, 'better_direction', 'lower')  # 'lower' or 'higher'
             }
 
 # Sort metrics by sort_order first, then by display_name

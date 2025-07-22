@@ -2,6 +2,7 @@ import numpy as np
 
 display_name = "AIC"
 sort_order = 5
+better_direction = 'lower'
 
 def metric_function(y_true, y_pred, n_params=None):
     """

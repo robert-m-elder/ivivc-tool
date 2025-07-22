@@ -65,6 +65,8 @@ def ast_to_latex(node):
                 return f"e^{{{ast_to_latex(node.args[0])}}}"
             elif node.func.id in ['sin', 'cos', 'tan', 'log', 'sqrt']:
                 return f"\\{node.func.id}({ast_to_latex(node.args[0])})"
+            elif node.func.id in ['sign', 'abs']:
+                return '\\mathrm{'+ f"{node.func.id}"+'}'+f"({ast_to_latex(node.args[0])})"
     elif isinstance(node, ast.Name):
         return node.id
     elif isinstance(node, ast.Num):

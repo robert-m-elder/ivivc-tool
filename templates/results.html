@@ -141,13 +141,19 @@
                 <h4>Pairwise Model Comparison (Kolmogorov-Smirnov Test p-values), In Vivo Data</h4>
                 {{ ks_tables["approach2"][1] | safe}}
             {% endif %}
+            <!-- Automatic Model Selection Results -->
+            {% if selection_report is not none %}
+                <div class="model-selection-section">
+                    {{ selection_report | safe }}
+                </div>
+            {% endif %}
         </div> 
 
         <!-- Individual Model Results Section -->
         {% for approach_id in selected_approaches %}
             <div id="{{ approach_id }}">
                 <h2>
-                    {{ approaches[approach_id].display_name }}
+                    Fitting: {{ approaches[approach_id].display_name }}
                     <button type="button" class="help-btn" data-modal="{{ approach_id }}-results-help">
                         <span class="help-icon">?</span>
                     </button>
@@ -334,6 +340,7 @@
                                     <div class="model-result">
                                         <h3>Model: {{ models[model_name].display_name }}</h3>
                                         {% if 'plot' in pred_result %}
+                                            <h4>Time ratio rescaling</h4>
                                             <div class="plot-container">
                                                 {{ pred_result.plot.plot | safe }}
                                             </div>
@@ -353,6 +360,21 @@
                                                     </a>
                                                 </div>
                                             {% endif %}#}-->
+                                        {% endif %}
+                                        {% if 'plot_tau' in pred_result and pred_result['plot_tau'] is not none %}
+                                            <h4>Time constant ratio rescaling</h4>
+                                            <div class="plot-container">
+                                                {{ pred_result.plot_tau.plot | safe }}
+                                            </div>
+                                            <div class="custom-button-container">
+                                                <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" 
+                                                    data-target="approach2-{{ model_name }}-table-pred-tau" style="text-decoration: none;">
+                                                    <span>Show Data Table</span>
+                                                </button>
+                                            </div>
+                                            <div id="approach2-{{ model_name }}-table-pred-tau-container" class="data-table-container" style="display: none;">
+                                                {{ pred_result['plot_tau']['table_html'] | safe }}
+                                            </div>
                                         {% endif %}
                                         <!--{#{% if 'predictions' in pred_result %}
                                             <h4>Prediction Summary</h4>
@@ -523,8 +545,8 @@
             <p>Shows predictions made using the in vitro to in vivo time correlation models:</p>
             <ul>
                 <li><strong>Input Data:</strong> Your in vitro prediction dataset</li>
-                <li><strong>Predicted Data:</strong> Corresponding in vivo time points calculated using fitted correlation</li>
-                <li><strong>Connection Lines:</strong> Show the time scaling transformation</li>
+                <li><strong>Predicted Data:</strong> Corresponding in vivo time points calculated using fitted correlation between in vitro and in vivo time</li>
+                <!--<li><strong>Connection Lines:</strong> Show the time scaling transformation</li>-->
             </ul>
             <!--<p><strong>For Model Selection:</strong></p>
             <ul>
@@ -539,9 +561,14 @@
             <p>Shows predictions using independent model ratios:</p>
             <ul>
                 <li><strong>Input Data:</strong> Your in vitro prediction dataset</li>
-                <li><strong>Predicted Data:</strong> In vivo predictions based on scaling by in vivo/in vitro ratio of values from fitted models</li>
+                <li><strong>Predicted Data:</strong> In vivo predictions where the in vitro time in the prediction dataset has been scaled using either:
+                    <ul>
+                        <li>the ratio of the in vivo/in vitro times from the fitted models that correspond to the in vitro prediction values; or</li>
+                        <li>the ratio of the time constants, if available.</li>
+                    </ul>
+                </li>
                 <li><strong>Fitted Models:</strong> Both in vitro and in vivo model curves</li>
-                <li><strong>Connection Lines:</strong> Show the time scaling transformation</li>
+                <!--<li><strong>Connection Lines:</strong> Show the time scaling transformation</li>-->
             </ul>
             <!--<p><strong>For Model Selection:</strong></p>
             <ul>
@@ -556,7 +583,7 @@
             <p>Shows direct mapping predictions:</p>
             <ul>
                 <li><strong>Input Data:</strong> Your in vitro prediction dataset</li>
-                <li><strong>Predicted Data:</strong> In vivo predictions based on scaling by ratio of in vivo/in vitro values or times directly interpolated between the actual data </li>
+                <li><strong>Predicted Data:</strong> In vivo predictions where the in vitro time in the prediction dataset has been directly scaled by the ratio of in vivo/in vitro times in the fitting datasets</li>
                 <li><strong>Connection Lines:</strong> Show the time scaling transformation</li>
             <p>Points in the in vitro prediction dataset that are outside the range of the fitting datasets (time range when scaling by value, or value range when scaling by time) are excluded.</p>
             </ul>

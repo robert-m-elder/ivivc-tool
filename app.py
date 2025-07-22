@@ -1,3 +1,4 @@
+from pprint import pprint
 import io,re,os
 import base64
 
@@ -23,8 +24,10 @@ from sklearn.exceptions import UndefinedMetricWarning
 
 from models import models, approaches
 from preprocessing import preprocessing_options
-from utilities.evaluation import evaluate_goodness_of_fit, cross_validation_curve_fit, cross_validation_schemes, auto_grid_search, calculate_tau, calculate_tau_with_uncertainty
+from utilities.evaluation import evaluate_goodness_of_fit, cross_validation_curve_fit, cross_validation_schemes, auto_grid_search, calculate_tau_with_uncertainty, generate_prediction_bands
+from utilities.selection import create_model_selector_from_metrics, select_best_models
 from utilities.model_display import get_human_readable_function
+from utilities.misc import hex_to_rgba
 from metrics import metrics, calculate_metric
 
 import plotly.utils
@@ -56,6 +59,13 @@ else:
     ## profiling
     #from werkzeug.middleware.profiler import ProfilerMiddleware
     #app.wsgi_app = ProfilerMiddleware(app.wsgi_app, restrictions=[lambda info: __file__.replace('.py', '') in info[0], 30], sort_by=('cumulative',)) #profile_dir='.', 
+
+colors = {
+    'in_vitro': '#4A9FD1',      # Blue
+    'in_vivo': '#B85A9B',       # Purple-red
+    'in_vitro_2': '#6BB26E',  # Light sage green
+    'in_vivo_2':'#E8956A'   # Light peach-orange
+    }
 
 default_interpolation = 'default_interpolation'
 
@@ -110,9 +120,12 @@ def index():
         # Apply preprocessing
         data = preprocess_data(t1, m1, t2, m2, selected_interpolation=selected_interpolation, selected_scalings=selected_scalings, selected_normalizations=selected_normalizations)
         t1_scale,m1_scale,t2_scale,m2_scale,mm,tt,ti1,ti2,mi1,mi2 = data
+        #for aaa,bbb in zip(['t1_scale','m1_scale','t2_scale','m2_scale','mm','tt','ti1','ti2','mi1','mi2'], data):
+        #    print(aaa,bbb)
 
         ## TODO add before/after scaling/normalization plot
         interpolation_info = create_interpolation_plotly(t1_scale, m1_scale, t2_scale, m2_scale, tt, mi1, mi2)
+        #interpolation_info = create_interpolation_plotly_new(t1_scale, m1_scale, t2_scale, m2_scale, mm, ti1, ti2)
 
         # Apply models
         with warnings.catch_warnings():
@@ -127,9 +140,13 @@ def index():
                 model_name = model_key.split(':')[-1]
                 results[model_key]['function'] = human_readable_functions[model_name]
 
+        # Compare model performance
         comparisons, ks_tables = {}, {}
         for approach in selected_approaches:
             comparisons[approach], ks_tables[approach] = create_comparison(results, approach)
+        # Add automatic model selection
+        #best_models, selection_report = select_best_models(results, selected_metrics, approaches, metrics)
+        best_models, selection_report = None, None
 
         # Process predictions if prediction file is provided
         prediction_results, prediction_interpolation_info = {}, {}
@@ -166,7 +183,8 @@ def index():
         return render_template('results.html', results=results, models=models, interpolation_info=interpolation_info, prediction_interpolation_info=prediction_interpolation_info, comparisons=comparisons, ks_tables=ks_tables, 
                                approaches=approaches, selected_approaches=selected_approaches, 
                                selected_scalings=selected_scalings, selected_normalizations=selected_normalizations, selected_interpolation=selected_interpolation,
-                               metrics=metrics, selected_metrics=selected_metrics, prediction_results=prediction_results)
+                               metrics=metrics, selected_metrics=selected_metrics, prediction_results=prediction_results,
+                               best_models=best_models, selection_report=selection_report)
     return render_template('index.html', models=models, approaches=approaches, preprocessing_options=preprocessing_options, 
                            default_interpolation=default_interpolation, metrics=metrics)
 
@@ -256,7 +274,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics):
                                           num_points=num_points_for_grid_search, num_cores=num_cores_for_grid_search)
                 # cross-validation
                 cvs = cross_validation_curve_fit(x, y, models[model_name]['model_function'], cv, selected_metrics, p0=p0, kwargs=models[model_name]['fit_kwargs'])
-                cvs_mean = {f'{metric}':values.mean() for metric,values in cvs.items()}
+                cvs_mean = {f'{metric}':np.nanmean(values[np.isfinite(values)]) for metric,values in cvs.items()}
                 # fit final model
                 model_result = models[model_name]['fit_model'](x, y, p0=p0)
                 y_pred = model_result['predict'](x)
@@ -275,11 +293,15 @@ def process_data(data, selected_models, selected_approaches, selected_metrics):
                     'model_name': models[model_name]['display_name'],
                     'model_function': models[model_name]['model_function'],
                     'params': model_result['params'],
+                    'pcov': model_result['pcov'],  # Add this line
+                    'residuals': y-y_pred,
                     'approach': approaches[approach_id]['display_name']
                 })
                 results[model_key] = {
                     'params': model_result['params'],
                     'uparams': upopt,
+                    'pcov': model_result['pcov'],  # Add this line
+                    'residuals': y-y_pred,
                     'stats': stats,
                     'predictions': y_pred,
                     'stats_table': stats_table.to_html(classes='table table-striped', index=True, float_format=lambda x: f'{x:.4f}'),
@@ -288,10 +310,17 @@ def process_data(data, selected_models, selected_approaches, selected_metrics):
             elif approach_id == 'approach2':
                 cv = cross_validation_schemes[approach_id]
                 # process data for this approach
-                m = ~np.isnan(ti1)
-                x1,y1 = ti1[m], mm[m]
-                m = ~np.isnan(ti2)
-                x2,y2 = ti2[m], mm[m]
+                ## XXX
+                if 0:
+                    m = ~np.isnan(ti1)
+                    x1,y1 = ti1[m], mm[m]
+                    m = ~np.isnan(ti2)
+                    x2,y2 = ti2[m], mm[m]
+                if 1:
+                    m = ~np.isnan(mi1)
+                    x1,y1 = tt[m], mi1[m]
+                    m = ~np.isnan(mi2)
+                    x2,y2 = tt[m], mi2[m]
                 ## dataset 1
                 # get rough initial estimate of parameters
                 with warnings.catch_warnings():
@@ -300,7 +329,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics):
                                           num_points=num_points_for_grid_search, num_cores=num_cores_for_grid_search)
                 # cross-validation
                 cvs1 = cross_validation_curve_fit(x1, y1, models[model_name]['model_function'], cv, selected_metrics, p0=p0, kwargs=models[model_name]['fit_kwargs'])
-                cvs1_mean = {f'{metric}':v.mean() for metric,v in cvs1.items()}
+                cvs1_mean = {f'{metric}':np.nanmean(v[np.isfinite(v)]) for metric,v in cvs1.items()}
                 # fit final model
                 model_result1 = models[model_name]['fit_model'](x1, y1, p0=p0)
                 y_pred1 = model_result1['predict'](x1)
@@ -317,7 +346,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics):
                 upopt1 = dict(zip(model_result1['params'].keys(),upopt1))
                 tau1 = calculate_tau_with_uncertainty(models[model_name]['model_function'], popt1, pcov1)
                 # deal with integration failure
-                if tau1[0]>0:
+                if tau1[0]>0 and np.isfinite(tau1[0]):
                     tau1 = unc.ufloat(*tau1)
                 else:
                     tau1 = unc.ufloat(0,1)
@@ -329,7 +358,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics):
                                           num_points=num_points_for_grid_search, num_cores=num_cores_for_grid_search)
                 # cross-validation
                 cvs2 = cross_validation_curve_fit(x2, y2, models[model_name]['model_function'], cv, selected_metrics, p0=p0, kwargs=models[model_name]['fit_kwargs'])
-                cvs2_mean = {f'{metric}':v.mean() for metric,v in cvs2.items()}
+                cvs2_mean = {f'{metric}':np.nanmean(v[np.isfinite(v)]) for metric,v in cvs2.items()}
                 # fit final model
                 model_result2 = models[model_name]['fit_model'](x2, y2, p0=p0)
                 y_pred2 = model_result2['predict'](x2)
@@ -346,7 +375,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics):
                 upopt2 = dict(zip(model_result2['params'].keys(),upopt2))
                 tau2 = calculate_tau_with_uncertainty(models[model_name]['model_function'], popt2, pcov2)
                 # deal with integration failure
-                if tau2[0]>0:
+                if tau2[0]>0 and np.isfinite(tau2[0]):
                     tau2 = unc.ufloat(*tau2)
                 else:
                     tau2 = unc.ufloat(0,1)
@@ -356,6 +385,10 @@ def process_data(data, selected_models, selected_approaches, selected_metrics):
                     'model_function': models[model_name]['model_function'],
                     'params1': model_result1['params'],
                     'params2': model_result2['params'],
+                    'pcov1': model_result1['pcov'],  # Add this line
+                    'pcov2': model_result2['pcov'],  # Add this line
+                    'residuals1': y1-y_pred1,
+                    'residuals2': y2-y_pred2,
                     'approach': approaches[approach_id]['display_name']
                 })
                 results[model_key] = {
@@ -364,6 +397,8 @@ def process_data(data, selected_models, selected_approaches, selected_metrics):
                     'tau': [tau1,tau2],
                     'stats': [stats1,stats2],
                     'predictions': [y_pred1,y_pred2],
+                    'pcov': [pcov1,pcov2],
+                    'residuals': [y1-y_pred1,y2-y_pred2],
                     'stats_table': [stats_table1.to_html(classes='table table-striped', index=True, float_format=lambda x: f'{x:.4f}'), 
                                     stats_table2.to_html(classes='table table-striped', index=True, float_format=lambda x: f'{x:.4f}')],
                     'plot': plot_image
@@ -378,6 +413,52 @@ def process_data(data, selected_models, selected_approaches, selected_metrics):
             traceback.print_exc()
     
     return results
+
+def invert_with_monte_carlo_parameters(func, params, param_cov, y_values, n_samples=1000, x_guess=None, full_output=False):
+    """
+    Use Monte Carlo sampling of parameters for error propagation
+    """
+    params = np.asarray(params)
+    param_cov = np.asarray(param_cov)
+    y_values = np.asarray(y_values)
+    if x_guess is None:
+        x_guess = np.ones_like(y_values)
+    # Sample parameters from multivariate normal distribution
+    param_samples = np.random.multivariate_normal(params, param_cov, n_samples)
+    x_inverted = np.zeros_like(y_values)
+    x_errors = np.zeros_like(y_values)
+    if full_output:
+        all_valid_samples = []
+    for i, (y_val, x_init) in enumerate(zip(y_values, x_guess)):
+        x_samples = np.zeros(n_samples)
+        for j, param_sample in enumerate(param_samples):
+            def equation(x):
+                return func(x, *param_sample) - y_val
+            try:
+                x_samples[j] = sp.optimize.fsolve(equation, x_init)[0]
+            except:
+                x_samples[j] = np.nan
+        # Remove failed inversions
+        valid_samples = x_samples[~np.isnan(x_samples)]
+        if len(valid_samples) > 0:
+            #x_inverted[i] = np.mean(valid_samples)
+            x_errors[i] = np.std(valid_samples)
+        else:
+            #x_inverted[i] = np.nan
+            x_errors[i] = np.nan
+        if full_output:
+            all_valid_samples.append(valid_samples)
+        # Get true inverted value rather than sampling
+        def equation(x):
+            return func(x, *params) - y_val
+        try:
+            x_inverted[i] = sp.optimize.fsolve(equation, x_init)[0]
+        except:
+            x_inverted[i] = np.nan
+    if full_output:
+        return x_inverted, x_errors, all_valid_samples
+    else:
+        return x_inverted, x_errors
 
 def process_predictions(data, prediction_data, results, selected_approaches, interpolated_data=None):
     """Process predictions using fitted models on new dataset"""
@@ -405,7 +486,12 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                         # Create prediction plot
                         plot_image = create_prediction_plot_a1(data, t_pred, m_pred, t_pred_vivo, {
                             'model_name': models[model_name]['display_name'],
-                            'approach': approaches[approach_id]['display_name']
+                            'approach': approaches[approach_id]['display_name'],
+                            'model_function': models[model_name]['model_function'],
+                            'params': model_results['params'],
+                            'pcov': model_results['pcov'],
+                            'residuals': model_results['residuals']
+
                         })
                         
                         approach_predictions[model_name] = {
@@ -418,28 +504,107 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                         # Predicted in vivo value = prediction in vitro value * (dataset2_model / dataset1_model)
                         params1, params2 = model_results['params']  # params1: in vitro, params2: in vivo
                         
-                        # Calculate model predictions at prediction times
-                        model1_pred = models[model_name]['model_function'](t_pred, **params1)  # in vitro model
-                        model2_pred = models[model_name]['model_function'](t_pred, **params2)  # in vivo model
-                        
-                        # Calculate ratio and apply to prediction values
-                        ratio = model2_pred / model1_pred
-                        m_pred_vivo = m_pred * ratio
-                        
-                        # Create prediction plot
-                        plot_image = create_prediction_plot_a2(data, t_pred, m_pred, m_pred_vivo, model1_pred, model2_pred, {
-                            'model_name': models[model_name]['display_name'],
-                            'approach': approaches[approach_id]['display_name']
-                        })
-                        
+                        if 0:
+                            ## Rescale value by value ratio -- can produce some odd results, such as when both values are near zero
+                            # Calculate model predictions at prediction times
+                            model1_pred = models[model_name]['model_function'](t_pred, **params1)  # in vitro model
+                            model2_pred = models[model_name]['model_function'](t_pred, **params2)  # in vivo model
+
+                            # Calculate model predictions for plotting
+                            t_pred_plot = np.linspace(min(t_pred), max(t_pred), max(len(t_pred),50))
+                            model1_pred_plot = models[model_name]['model_function'](t_pred_plot, **params1)  # in vitro model
+                            model2_pred_plot = models[model_name]['model_function'](t_pred_plot, **params2)  # in vitro model
+                            
+                            # Calculate ratio and apply to prediction values
+                            ratio = model2_pred / model1_pred
+                            m_pred_vivo = m_pred * ratio
+                            
+                            # Create prediction plot
+#                            plot_image = create_prediction_plot_a2(data, t_pred, m_pred, m_pred_vivo, t_pred_plot, model1_pred_plot, model2_pred_plot, {
+#                                'model_name': models[model_name]['display_name'],
+#                                'approach': approaches[approach_id]['display_name']
+#                            })
+                            # Create prediction plot
+                            plot_image = create_prediction_plot_a2(data, t_pred, m_pred, m_pred_vivo, t_pred_plot, model1_pred_plot, model2_pred_plot, {
+                                'model_name': models[model_name]['display_name'],
+                                'approach': approaches[approach_id]['display_name'],
+                                'model_function': models[model_name]['model_function'],
+                                'params': model_results['params'],
+                                'pcov': model_results['pcov'],
+                                'residuals': model_results['residuals']
+                            })
+
+                        if 1:
+                            ## Rescale time by the ratio of times implied by each value, i.e., numerically solve for the time at each value
+                            # Calculate model predictions for plotting
+                            t_pred_plot = np.linspace(min(t_pred), max(t_pred), max(len(t_pred),50))
+                            model1_pred_plot = models[model_name]['model_function'](t_pred_plot, **params1)  # in vitro model
+                            model2_pred_plot = models[model_name]['model_function'](t_pred_plot, **params2)  # in vitro model
+                            
+                            # Determine times implied by values, including error propagation
+                            t_pred_implied_vitro, t_pred_implied_vitro_err, all_valid_samples_vitro = invert_with_monte_carlo_parameters(models[model_name]['model_function'], np.array(list(params1.values())), 
+                                                                                                                                         model_results['pcov'][0], m_pred, n_samples=1000, x_guess=None, full_output=True)
+                            t_pred_implied_vivo, t_pred_implied_vivo_err, all_valid_samples_vivo = invert_with_monte_carlo_parameters(models[model_name]['model_function'], np.array(list(params2.values())), 
+                                                                                                                                      model_results['pcov'][1], m_pred, n_samples=1000, x_guess=None, full_output=True)
+                            ## XXX alternative error propagation through ratio...
+#                            for sample_vitro, sample_vivo in zip(all_valid_samples_vitro, all_valid_samples_vivo):
+#                                ratios = np.random.choice(sample_vivo,10000) / np.random.choice(sample_vitro,10000)
+#                                ratios = ratios[np.isfinite(ratios)]
+#                                print(np.nanmean(ratios), np.nanquantile(ratios, [0.05,0.95]))
+
+                            # Calculate the time scaling ratio
+                            time_ratio = t_pred_implied_vivo / t_pred_implied_vitro
+                            time_ratio_err = ((t_pred_implied_vitro_err/t_pred_implied_vitro)**2 + (t_pred_implied_vivo_err/t_pred_implied_vivo)**2)**0.5 # relative error
+
+#                            print('XXXXXX', model_name)
+#                            print(m_pred)
+#                            print(t_pred_implied_vitro, t_pred_implied_vivo, time_ratio)
+
+                            # Apply time scaling to get predicted in vivo times
+                            t_pred_vivo = t_pred * time_ratio
+                            t_pred_vivo_err = t_pred_vivo * time_ratio_err
+
+                            # Create prediction plot
+                            plot_image = create_prediction_plot_a2(data, t_pred, m_pred, t_pred_vivo, t_pred_plot, model1_pred_plot, model2_pred_plot, t_pred_vivo_err, {
+                                'model_name': models[model_name]['display_name'],
+                                'approach': approaches[approach_id]['display_name'],
+                                'model_function': models[model_name]['model_function'],
+                                'params': model_results['params'],
+                                'pcov': model_results['pcov'],
+                                'residuals': model_results['residuals']
+                            })
+
+                            ## Rescale by tau ratio, if available
+                            try:
+                                tau1,tau2 = model_results['tau']
+                                time_ratio = tau2/tau1
+                                t_pred_vivo_tau_unc = t_pred * time_ratio
+                                t_pred_vivo_tau = np.array([t.n for t in t_pred_vivo_tau_unc])
+                                t_pred_vivo_err_tau = np.array([t.s for t in t_pred_vivo_tau_unc])
+                                ### XXX convert to error bar....
+                                dof = len(tt) - len(model_results['params'])
+                                t_value = sp.stats.t.ppf(1-0.05/2, dof) if dof > 0 else 1.96
+                                t_pred_vivo_err_tau = t_value * t_pred_vivo_err_tau
+                                #print(model_name,tau1,tau2,time_ratio,t_pred_vivo_tau,t_pred_vivo_err_tau)
+                                # Create prediction plot
+                                plot_image_tau = create_prediction_plot_a2(data, t_pred, m_pred, t_pred_vivo_tau, t_pred_plot, model1_pred_plot, model2_pred_plot, t_pred_vivo_err_tau, {
+                                    'model_name': models[model_name]['display_name'],
+                                    'approach': approaches[approach_id]['display_name'],
+                                    'model_function': models[model_name]['model_function'],
+                                })
+                            except:
+                                t_pred_vivo_tau = None
+                                plot_image_tau = None
+
                         approach_predictions[model_name] = {
                             'predictions': {
                                 'in_vitro_time': t_pred, 
                                 'in_vitro_value': m_pred, 
-                                'predicted_in_vivo_value': m_pred_vivo,
-                                'model_ratio': ratio
+                                'predicted_in_vivo_time': t_pred_vivo,
+                                'predicted_in_vivo_time_tau': t_pred_vivo_tau
                             },
-                            'plot': plot_image
+                            'plot': plot_image,
+                            'plot_tau': plot_image_tau
                         }
                         
                     elif approach == 'approach3' and interpolated_data is not None:
@@ -448,8 +613,8 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                         
                         # Method 1: Scale prediction values by (dataset2_value / dataset1_value)
                         # Interpolate scaling factors at prediction times
-                        value_ratio = np.interp(t_pred, tt, mi2/mi1, left=np.nan, right=np.nan)  # dataset2_value / dataset1_value
-                        m_pred_scaled = m_pred * value_ratio
+                        #value_ratio = np.interp(t_pred, tt, mi2/mi1, left=np.nan, right=np.nan)  # dataset2_value / dataset1_value
+                        #m_pred_scaled = m_pred * value_ratio
                         
                         # Method 2: Scale prediction times by (dataset2_time / dataset1_time)
                         mask = np.argsort(mm)
@@ -457,29 +622,29 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                         t_pred_scaled = t_pred * time_ratio
                         
                         # Create plots for both methods
-                        plot_method1 = create_prediction_plot_a3(data, t_pred, m_pred, m_pred_scaled, ptype='v')
+                        #plot_method1 = create_prediction_plot_a3(data, t_pred, m_pred, m_pred_scaled, ptype='v')
                         plot_method2 = create_prediction_plot_a3(data, t_pred, m_pred, t_pred_scaled, ptype='t')
                         
-                        approach_predictions['method1_value_scaling'] = {
-                            'predictions': {
-                                'in_vitro_time': t_pred, 
-                                'in_vitro_value': m_pred, 
-                                'predicted_in_vivo_value': m_pred_scaled,
-                                'scaling_factor': time_ratio
-                            },
-                            'plot': plot_method1,
-                            'description': 'Scale prediction values by (dataset2_time / dataset1_time)'
-                        }
+#                        approach_predictions['method1_value_scaling'] = {
+#                            'predictions': {
+#                                'in_vitro_time': t_pred, 
+#                                'in_vitro_value': m_pred, 
+#                                'predicted_in_vivo_value': m_pred_scaled,
+#                                'scaling_factor': value_ratio
+#                            },
+#                            'plot': plot_method1,
+#                            'description': 'Scale prediction values by (dataset2_value / dataset1_value)'
+#                        }
                         
                         approach_predictions['method2_time_scaling'] = {
                             'predictions': {
                                 'in_vitro_time': t_pred, 
                                 'in_vitro_value': m_pred, 
                                 'predicted_in_vivo_time': t_pred_scaled,
-                                'scaling_factor': value_ratio
+                                'scaling_factor': time_ratio
                             },
                             'plot': plot_method2,
-                            'description': 'Scale prediction times by (dataset2_value / dataset1_value)'
+                            'description': 'Scale prediction times by (dataset2_time / dataset1_time)'
                         }
                     
                     prediction_results[approach] = approach_predictions 
@@ -569,6 +734,7 @@ def create_comparison(results, approach):
         ks_tables = [None]
 
     return metrics_table, ks_tables
+
     
 def create_plotly_table(df):
     numeric_cols = df.select_dtypes(include='number').columns
@@ -608,28 +774,100 @@ def create_interpolation_plotly(t1, m1, t2, m2, tt, mi1, mi2):
         x=t1, y=m1,
         mode='markers',
         name='In Vitro Data (actual)',
-        marker=dict(color='red', size=15, line=dict(color='black', width=1))
+        marker=dict(color=colors['in_vitro'], size=24, line=dict(color='white', width=2))
     ))
     # In Vitro Data (interpolated)
     fig.add_trace(go.Scatter(
         x=tt, y=mi1,
         mode='markers',
         name='In Vitro Data (interpolated)',
-        marker=dict(color='red', size=8, line=dict(color='black', width=1))
+        marker=dict(color=colors['in_vitro'], size=12, symbol='square', line=dict(color='white', width=2))
     ))
     # In Vivo Data (actual)
     fig.add_trace(go.Scatter(
         x=t2, y=m2,
         mode='markers',
         name='In Vivo Data (actual)',
-        marker=dict(color='blue', size=15, line=dict(color='black', width=1))
+        marker=dict(color=colors['in_vivo'], size=24, line=dict(color='white', width=2))
     ))
     # In Vivo Data (interpolated)
     fig.add_trace(go.Scatter(
         x=tt, y=mi2,
         mode='markers',
         name='In Vivo Data (interpolated)',
-        marker=dict(color='blue', size=8, line=dict(color='black', width=1))
+        marker=dict(color=colors['in_vivo'], size=12, symbol='square', line=dict(color='white', width=2))
+    ))
+    fig.update_layout(
+        template='plotly_white',
+        autosize=True, 
+        xaxis_title='Time',
+        yaxis_title='Value',
+        legend=dict(font=dict(size=18)),  # Slightly smaller than base font
+        margin=dict(l=30, r=30, t=30, b=30),
+        font=dict(
+            family="Arial, sans-serif",
+            size=14,  # Base font size
+            color="black"
+        ),
+        xaxis=dict(
+            showline=True,
+            linewidth=2,
+            linecolor='#EBF0F8',
+            mirror=True
+        ),
+        yaxis=dict(
+            showline=True,
+            linewidth=2,
+            linecolor='#EBF0F8',
+            mirror=True
+        )
+    )
+    # Update axes with relative font sizes
+    fig.update_xaxes(
+        title_font=dict(size=20),  # Slightly larger than base font
+        tickfont=dict(size=18)
+    )
+    fig.update_yaxes(
+        title_font=dict(size=20),  # Slightly larger than base font
+        tickfont=dict(size=18)
+    )
+    # Extract data as HTML table
+    table_html = extract_plotly_data_for_table(fig)
+    # Configure the plot for download options
+    config = {'responsive': True,'displaylogo': False}
+    # Convert the figure to HTML
+    plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
+    return {'plot':plot_html, 'table_html': table_html}
+
+def create_interpolation_plotly_new(t1, m1, t2, m2, mm, ti1, ti2):
+    fig = go.Figure()
+    # In Vitro Data (actual)
+    fig.add_trace(go.Scatter(
+        x=t1, y=m1,
+        mode='markers',
+        name='In Vitro Data (actual)',
+        marker=dict(color=colors['in_vitro'], size=15, line=dict(color='black', width=1))
+    ))
+    # In Vitro Data (interpolated)
+    fig.add_trace(go.Scatter(
+        x=ti1, y=mm,
+        mode='markers',
+        name='In Vitro Data (interpolated)',
+        marker=dict(color=colors['in_vitro'], size=8, line=dict(color='black', width=1))
+    ))
+    # In Vivo Data (actual)
+    fig.add_trace(go.Scatter(
+        x=t2, y=m2,
+        mode='markers',
+        name='In Vivo Data (actual)',
+        marker=dict(color=colors['in_vivo'], size=15, line=dict(color='black', width=1))
+    ))
+    # In Vivo Data (interpolated)
+    fig.add_trace(go.Scatter(
+        x=ti2, y=mm,
+        mode='markers',
+        name='In Vivo Data (interpolated)',
+        marker=dict(color=colors['in_vivo'], size=8, line=dict(color='black', width=1))
     ))
     fig.update_layout(
         template='plotly_white',
@@ -687,7 +925,7 @@ def create_prediction_interpolation_plotly(t1, m1):
         x=t1, y=m1,
         mode='markers',
         name='In Vitro Data (input)',
-        marker=dict(color='green', size=15, line=dict(color='black', width=1))
+        marker=dict(color=colors['in_vitro_2'], size=15, line=dict(color='white', width=2))
     ))
     fig.update_layout(
         template='plotly_white',
@@ -841,17 +1079,66 @@ def extract_plotly_data_for_table(fig):
     return table_html
 
 
-def create_plotly_a1(x, y, model_info):
+def create_plotly_a1(x, y, model_info, include_bands=True):
     # Create the scatter plot for the data
-    trace_data = go.Scatter(x=x, y=y, mode='markers', name='Data', marker=dict(color='white', size=15, line=dict(color='gray', width=2)))
+    trace_data = go.Scatter(x=x, y=y, mode='markers', name='Data', marker=dict(color='black', size=15, line=dict(color='white', width=2)), zorder=10)
 
     # Create the smooth line for the model fit
     x_smooth = np.linspace(min(x), max(x), max(len(x),10))
     y_smooth = model_info['model_function'](x_smooth, **model_info['params'])
-    trace_fit = go.Scatter(x=x_smooth, y=y_smooth, mode='lines', name=f"{model_info['model_name']} Fit", line=dict(color='black', dash='dash', width=3))
+    trace_fit = go.Scatter(x=x_smooth, y=y_smooth, mode='lines', name=f"{model_info['model_name']} Fit", line=dict(color='black', dash='dash', width=3), zorder=9)
+
+    traces = [trace_data, trace_fit]
+
+    # manual axis range
+    x_range_data = [min(np.concatenate([x, x_smooth])), max(np.concatenate([x, x_smooth]))]
+    y_range_data = [min(np.concatenate([y, y_smooth])), max(np.concatenate([y, y_smooth]))]
+    # Add some padding (5% on each side)
+    x_padding = (x_range_data[1] - x_range_data[0]) * 0.1
+    y_padding = (y_range_data[1] - y_range_data[0]) * 0.1
+    x_range = [x_range_data[0] - x_padding, x_range_data[1] + x_padding]
+    y_range = [y_range_data[0] - y_padding, y_range_data[1] + y_padding]
+    
+    # Add prediction bands if requested and covariance matrix is available
+    if include_bands and 'pcov' in model_info and model_info['pcov'] is not None:
+        try:
+            bands = generate_prediction_bands(
+                model_info['model_function'], 
+                x_smooth, 
+                model_info['params'], 
+                model_info['pcov'],
+                model_info['residuals']
+            )
+            
+            # Add confidence band
+            trace_upper = go.Scatter(
+                x=x_smooth, y=bands['upper'],
+                mode='lines',
+                line=dict(width=0),
+                showlegend=False,
+                hoverinfo='skip',
+                zorder=0
+            )
+            
+            trace_lower = go.Scatter(
+                x=x_smooth, y=bands['lower'],
+                mode='lines',
+                fill='tonexty',
+                fillcolor='rgba(128,128,128,0.3)',
+                line=dict(width=0),
+                name='95% Prediction Band',
+                hoverinfo='skip',
+                zorder=0
+            )
+            
+            # Insert bands before the fit line for proper layering
+            traces = [trace_data, trace_upper, trace_lower, trace_fit]
+            
+        except Exception as e:
+            print(f"Warning: Could not generate prediction bands: {e}")
 
     # Create the figure and add the traces
-    fig = go.Figure(data=[trace_data, trace_fit])
+    fig = go.Figure(data=traces)
 
     # Create the layout
     fig.update_layout(
@@ -870,12 +1157,14 @@ def create_plotly_a1(x, y, model_info):
             color="black"
         ),
         xaxis=dict(
+            range=x_range,  # Manual range
             showline=True,
             linewidth=2,
             linecolor='#EBF0F8',
             mirror=True
         ),
         yaxis=dict(
+            range=y_range,  # Manual range
             showline=True,
             linewidth=2,
             linecolor='#EBF0F8',
@@ -905,21 +1194,22 @@ def create_plotly_a1(x, y, model_info):
     plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
     return {'plot':plot_html, 'table_html': table_html}
 
-def create_plotly_a2(x1, y1, x2, y2, model_info):
+def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
     # Create traces for the datasets
     trace1 = go.Scatter(
         x=x1, y=y1,
         mode='markers',
         name='In Vitro Data',
         marker=dict(
-            color='white',
+            color=colors['in_vitro'],
             size=15,
             line=dict(
-                color='rgba(0.5,0.5,1.0,1)',
+                color='white',
                 width=2
             ),
             symbol='circle'
-        )
+        ),
+        zorder=10
     )
 
     trace2 = go.Scatter(
@@ -927,14 +1217,15 @@ def create_plotly_a2(x1, y1, x2, y2, model_info):
         mode='markers',
         name='In Vivo Data',
         marker=dict(
-            color='white',
+            color=colors['in_vivo'],
             size=15,
             line=dict(
-                color='rgba(1.0,0.5,0.5,1)',
+                color='white',
                 width=2
             ),
             symbol='circle'
-        )
+        ),
+        zorder=10
     )
 
     # Create smooth lines for model fits
@@ -942,19 +1233,110 @@ def create_plotly_a2(x1, y1, x2, y2, model_info):
     y_smooth1 = model_info['model_function'](x_smooth, **model_info['params1'])
     y_smooth2 = model_info['model_function'](x_smooth, **model_info['params2'])
 
+    # manual axis range
+    x_range_data = [min(np.concatenate([x1, x2, x_smooth])), max(np.concatenate([x1, x2, x_smooth]))]
+    y_range_data = [min(np.concatenate([y1, y2, y_smooth1, y_smooth2])), max(np.concatenate([y1, y2, y_smooth1, y_smooth2]))]
+    # Add some padding (5% on each side)
+    x_padding = (x_range_data[1] - x_range_data[0]) * 0.1
+    y_padding = (y_range_data[1] - y_range_data[0]) * 0.1
+    x_range = [x_range_data[0] - x_padding, x_range_data[1] + x_padding]
+    y_range = [y_range_data[0] - y_padding, y_range_data[1] + y_padding]
+
+    traces = [trace1, trace2]
+    
+    # Add prediction bands for dataset 1 (In Vitro) if requested and covariance matrix is available
+    if include_bands and 'pcov1' in model_info and model_info['pcov1'] is not None:
+        try:
+            bands1 = generate_prediction_bands(
+                model_info['model_function'], 
+                x_smooth, 
+                model_info['params1'], 
+                model_info['pcov1'],
+                model_info['residuals1']
+            )
+            
+            # Add confidence band for dataset 1
+            trace1_upper = go.Scatter(
+                x=x_smooth, y=bands1['upper'],
+                mode='lines',
+                line=dict(width=0),
+                showlegend=False,
+                hoverinfo='skip',
+                zorder=0
+            )
+            
+            trace1_lower = go.Scatter(
+                x=x_smooth, y=bands1['lower'],
+                mode='lines',
+                fill='tonexty',
+                fillcolor=hex_to_rgba(colors['in_vitro'],0.2),  # Blue with transparency
+                #fillcolor='rgba(0,0,255,0.2)',  # Blue with transparency
+                line=dict(width=0),
+                name='95% Prediction Band (In Vitro)',
+                hoverinfo='skip',
+                zorder=0
+            )
+            
+            traces.extend([trace1_upper, trace1_lower])
+            
+        except Exception as e:
+            print(f"Warning: Could not generate prediction bands for dataset 1: {e}")
+
+    # Add prediction bands for dataset 2 (In Vivo) if requested and covariance matrix is available
+    if include_bands and 'pcov2' in model_info and model_info['pcov2'] is not None:
+        try:
+            bands2 = generate_prediction_bands(
+                model_info['model_function'], 
+                x_smooth, 
+                model_info['params2'], 
+                model_info['pcov2'],
+                model_info['residuals2']
+            )
+            
+            # Add confidence band for dataset 2
+            trace2_upper = go.Scatter(
+                x=x_smooth, y=bands2['upper'],
+                mode='lines',
+                line=dict(width=0),
+                showlegend=False,
+                hoverinfo='skip',
+                zorder=0
+            )
+            
+            trace2_lower = go.Scatter(
+                x=x_smooth, y=bands2['lower'],
+                mode='lines',
+                fill='tonexty',
+                fillcolor=hex_to_rgba(colors['in_vivo'],0.2),  # Red with transparency
+                line=dict(width=0),
+                name='95% Prediction Band (In Vivo)',
+                hoverinfo='skip',
+                zorder=0
+            )
+            
+            traces.extend([trace2_upper, trace2_lower])
+            
+        except Exception as e:
+            print(f"Warning: Could not generate prediction bands for dataset 2: {e}")
+
+
     trace3 = go.Scatter(
         x=x_smooth, y=y_smooth1,
         mode='lines',
         name=f"{model_info['model_name']} Fit (In Vitro Data)",
-        line=dict(color='blue', dash='dash', width=3)
+        line=dict(color=colors['in_vitro'], dash='dash', width=3),
+        zorder=9
     )
 
     trace4 = go.Scatter(
         x=x_smooth, y=y_smooth2,
         mode='lines',
         name=f"{model_info['model_name']} Fit (In Vivo Data)",
-        line=dict(color='red', dash='dash', width=3)
+        line=dict(color=colors['in_vivo'], dash='dash', width=3),
+        zorder=9
     )
+
+    traces.extend([trace3, trace4])
 
     # Create the layout
     layout = dict(
@@ -973,12 +1355,14 @@ def create_plotly_a2(x1, y1, x2, y2, model_info):
             color="black"
         ),
         xaxis=dict(
+            range=x_range,  # Manual range
             showline=True,
             linewidth=2,
             linecolor='#EBF0F8',
             mirror=True
         ),
         yaxis=dict(
+            range=y_range,  # Manual range
             showline=True,
             linewidth=2,
             linecolor='#EBF0F8',
@@ -987,7 +1371,7 @@ def create_plotly_a2(x1, y1, x2, y2, model_info):
     )
 
     # Create the figure and add the traces
-    fig = go.Figure(data=[trace1, trace2, trace3, trace4], layout=layout)
+    fig = go.Figure(data=traces, layout=layout)
 
     # Update axes with relative font sizes
     fig.update_xaxes(
@@ -1014,14 +1398,14 @@ def create_plotly_a2(x1, y1, x2, y2, model_info):
 
 def create_plotly_a3(x, y1, y2, ptype='v'):
     if ptype == 'v':
-        y = y1 / y2
+        y = y2 / y1
         x_label = 'Time'
-        y_label = 'In Vitro Value / In Vivo Value'
+        y_label = 'In Vivo Value / In Vitro Value'
         plot_name = 'Value vs. time'
     elif ptype == 't':
-        y = y1 / y2
+        y = y2 / y1
         x_label = 'Value'
-        y_label = 'In Vitro Time / In Vivo Time'
+        y_label = 'In Vivo Time / In Vitro Time'
         plot_name = 'Time vs. value'
     else:
         raise ValueError("ptype must be 'v' or 't'")
@@ -1033,10 +1417,10 @@ def create_plotly_a3(x, y1, y2, ptype='v'):
         mode='markers',
         name=plot_name,
         marker=dict(
-            color='white',
+            color='black',
             size=15,
             line=dict(
-                color='gray',
+                color='white',
                 width=2
             ),
             symbol='circle'
@@ -1099,53 +1483,94 @@ def create_plotly_a3(x, y1, y2, ptype='v'):
     plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
     return {'plot':plot_html, 'table_html': table_html}
 
-def create_prediction_plot_a1(data, t_pred, m_pred, t_pred_vivo, model_info):
+def create_prediction_plot_a1(data, t_pred, m_pred, t_pred_vivo, model_info, include_bands=True):
     """Create prediction plot for approach 1 - time scaling"""
     t1,m1,t2,m2,mm,tt,ti1,ti2,mi1,mi2 = data
     fig = go.Figure()
 
-#    # Fitting in vitro data
-#    fig.add_trace(go.Scatter(
-#        x=t1, y=m1,
-#        mode='markers',
-#        name='In Vitro Data (Fitting)',
-#        marker=dict(color='blue', size=15, line=dict(color='black', width=2))
-#    ))
-#
-#    # Fitting in vivo timeline
-#    fig.add_trace(go.Scatter(
-#        x=t2, y=m2,
-#        mode='markers',
-#        name='In Vivo Data (Fitting)',
-#        marker=dict(color='red', size=15, line=dict(color='black', width=2))
-#    ))
+    # Fitting in vitro data
+    fig.add_trace(go.Scatter(
+        x=t1, y=m1,
+        mode='markers',
+        name='In Vitro Data (Fitting)',
+        marker=dict(color=colors['in_vitro'], size=20, line=dict(color='white', width=2))
+    ))
+
+    # Fitting in vivo timeline
+    fig.add_trace(go.Scatter(
+        x=t2, y=m2,
+        mode='markers',
+        name='In Vivo Data (Fitting)',
+        marker=dict(color=colors['in_vivo'], size=20, line=dict(color='white', width=2))
+    ))
 
     # Original in vitro data
     fig.add_trace(go.Scatter(
         x=t_pred, y=m_pred,
         mode='markers',
         name='In Vitro (Input)',
-        marker=dict(color='green', size=15, line=dict(color='black', width=2))
+        marker=dict(color=colors['in_vitro_2'], size=15, line=dict(color='white', width=2))
     ))
 
-    # Predicted in vivo timeline
-    fig.add_trace(go.Scatter(
-        x=t_pred_vivo, y=m_pred,
-        mode='markers',
-        name='In Vivo (Predicted)',
-        marker=dict(color='orange', size=15, line=dict(color='black', width=2))
-    ))
+    # Calculate prediction bands for the predicted in vivo times if available
+    error_x_lower = None
+    error_x_upper = None
+    
+    if include_bands and 'pcov' in model_info and model_info['pcov'] is not None and 'residuals' in model_info:
+        try:
+            # Generate prediction bands for the predicted times
+            bands = generate_prediction_bands(
+                model_info['model_function'], 
+                t_pred,  # Use the actual prediction times
+                model_info['params'], 
+                model_info['pcov'],
+                model_info['residuals']
+            )
+            
+            # Calculate error bar lengths (distance from mean to upper/lower bounds)
+            error_x_lower = bands['mean'] - bands['lower']  # Distance to lower bound
+            error_x_upper = bands['upper'] - bands['mean']  # Distance to upper bound
+            
+        except Exception as e:
+            print(f"Warning: Could not generate prediction bands for error bars: {e}")
+
+    # Predicted in vivo timeline with error bars
+    if error_x_lower is not None and error_x_upper is not None:
+        fig.add_trace(go.Scatter(
+            x=t_pred_vivo, y=m_pred,
+            mode='markers',
+            name='In Vivo (Predicted)',
+            marker=dict(color=colors['in_vivo_2'], size=15, line=dict(color='white', width=2)),
+            error_x=dict(
+                type='data',
+                symmetric=False,
+                array=error_x_upper,      # Upper error
+                arrayminus=error_x_lower, # Lower error
+                visible=True,
+                color=colors['in_vivo_2'],
+                thickness=2,
+                width=8
+            )
+        ))
+    else:
+        # Fallback: predicted points without error bars
+        fig.add_trace(go.Scatter(
+            x=t_pred_vivo, y=m_pred,
+            mode='markers',
+            name='In Vivo (Predicted)',
+            marker=dict(color=colors['in_vivo_2'], size=15, line=dict(color='white', width=2))
+        ))
 
     # Connection lines to show time scaling
-    for i in range(len(t_pred)):
-        fig.add_trace(go.Scatter(
-            x=[t_pred[i], t_pred_vivo[i]],
-            y=[m_pred[i], m_pred[i]],
-            mode='lines',
-            line=dict(color='gray', width=2, dash='dot'),
-            showlegend=False,
-            hoverinfo='skip'
-        ))
+#    for i in range(len(t_pred)):
+#        fig.add_trace(go.Scatter(
+#            x=[t_pred[i], t_pred_vivo[i]],
+#            y=[m_pred[i], m_pred[i]],
+#            mode='lines',
+#            line=dict(color='gray', width=2, dash='dot'),
+#            showlegend=False,
+#            hoverinfo='skip'
+#        ))
 
     fig.update_layout(
         template='plotly_white',
@@ -1175,51 +1600,178 @@ def create_prediction_plot_a1(data, t_pred, m_pred, t_pred_vivo, model_info):
 
     return {'plot': plot_html, 'table_html': table_html}
 
-def create_prediction_plot_a2(data, t_pred, m_pred, m_pred_vivo, model1_pred, model2_pred, model_info):
+def create_prediction_plot_a2(data, t_pred, m_pred, t_pred_vivo, t_pred_plot, model1_pred_plot, model2_pred_plot, t_pred_vivo_err, model_info, include_bands=True):
+#def create_prediction_plot_a2(data, t_pred, m_pred, m_pred_vivo, t_pred_plot, model1_pred_plot, model2_pred_plot, model_info, include_bands=True):
     """Create prediction plot for approach 2 - value scaling using model ratio"""
     t1,m1,t2,m2,mm,tt,ti1,ti2,mi1,mi2 = data
     fig = go.Figure()
+
+    # Fitting in vitro data
+    fig.add_trace(go.Scatter(
+        x=t1, y=m1,
+        mode='markers',
+        name='In Vitro Data (Fitting)',
+        marker=dict(color=colors['in_vitro'], size=20, line=dict(color='white', width=2))
+    ))
+
+    # Fitting in vivo timeline
+    fig.add_trace(go.Scatter(
+        x=t2, y=m2,
+        mode='markers',
+        name='In Vivo Data (Fitting)',
+        marker=dict(color=colors['in_vivo'], size=20, line=dict(color='white', width=2))
+    ))
 
     # Original in vitro data
     fig.add_trace(go.Scatter(
         x=t_pred, y=m_pred,
         mode='markers',
         name='In Vitro (Input)',
-        marker=dict(color='green', size=15, line=dict(color='black', width=2))
+        marker=dict(color=colors['in_vitro_2'], size=15, line=dict(color='white', width=2))
     ))
 
-    # Predicted in vivo values
-    fig.add_trace(go.Scatter(
-        x=t_pred, y=m_pred_vivo,
-        mode='markers',
-        name='In Vivo (Predicted)',
-        marker=dict(color='orange', size=15, line=dict(color='black', width=2))
-    ))
+    # Calculate prediction bands for the predicted in vivo times if available
+    error_x_lower = None
+    error_x_upper = None
+    
+    if 0:
+        ## MASS SCALING WITH ERROR BARS
+        if include_bands and 'pcov' in model_info and model_info['pcov'][0] is not None:
+            try:
+                # Generate prediction bands for the predicted times
+                bands1 = generate_prediction_bands(
+                    model_info['model_function'], 
+                    t_pred,  # Use the actual prediction times
+                    model_info['params'][0], 
+                    model_info['pcov'][0],
+                    model_info['residuals'][0]
+                )
+                bands2 = generate_prediction_bands(
+                    model_info['model_function'], 
+                    t_pred,  # Use the actual prediction times
+                    model_info['params'][1], 
+                    model_info['pcov'][1],
+                    model_info['residuals'][1]
+                )
 
-    # Connection lines to show time scaling
-    for i in range(len(t_pred)):
+                # XXX
+                # Estimate relative error in value ratio and multiply by time value to get estimate of absolute time error
+                relative_error = np.sqrt((bands1['std']/(bands1['mean'].max()-bands1['mean'].min()))**2 + (bands2['std']/(bands2['mean'].max()-bands2['mean'].min()))**2)
+                #relative_error = np.sqrt((bands1['std']/bands1['mean'][0])**2 + (bands2['std']/bands2['mean'][0])**2)
+                #error = relative_error * (np.max(t_pred_vivo)-np.min(t_pred_vivo))
+                error = m_pred_vivo * relative_error
+                # For confidence intervals, assume t-distribution (more conservative)
+                # Use the smaller degrees of freedom if available, otherwise use normal approximation
+                t_value = 1.96  # 95% CI for normal distribution
+                margin_of_error = t_value * error
+                
+                bands = {
+                    'mean': m_pred_vivo,
+                    'std': error,
+                    'lower': m_pred_vivo - margin_of_error,
+                    'upper': m_pred_vivo + margin_of_error
+                }
+                print(bands)
+                print(bands1)
+                print(bands2)
+                print(m_pred_vivo)
+                
+                # Calculate error bar lengths (distance from mean to upper/lower bounds)
+                error_x_lower = bands['mean'] - bands['lower']  # Distance to lower bound
+                error_x_upper = bands['upper'] - bands['mean']  # Distance to upper bound
+                
+            except Exception as e:
+                print(f"Warning: Could not generate prediction bands for error bars: {e}")
+
+        # Predicted in vivo timeline with error bars
+        if error_x_lower is not None and error_x_upper is not None:
+            fig.add_trace(go.Scatter(
+                x=t_pred, y=m_pred_vivo,
+                mode='markers',
+                name='In Vivo (Predicted)',
+                marker=dict(color=colors['in_vivo_2'], size=15, line=dict(color='white', width=2)),
+                error_x=dict(
+                    type='data',
+                    symmetric=False,
+                    array=error_x_upper,      # Upper error
+                    arrayminus=error_x_lower, # Lower error
+                    visible=True,
+                    color=colors['in_vivo_2'],
+                    thickness=2,
+                    width=8
+                )
+            ))
+        else:
+            # Fallback: predicted points without error bars
+            fig.add_trace(go.Scatter(
+                x=t_pred, y=m_pred_vivo,
+                mode='markers',
+                name='In Vivo (Predicted)',
+                marker=dict(color=colors['in_vivo_2'], size=15, line=dict(color='white', width=2))
+            ))
+
+    if 1:
+        ## TIME
+        # Predicted in vivo timeline with error bars
+        if t_pred_vivo_err is not None:
+            fig.add_trace(go.Scatter(
+                x=t_pred_vivo, y=m_pred,
+                mode='markers',
+                name='In Vivo (Predicted)',
+                marker=dict(color=colors['in_vivo_2'], size=15, line=dict(color='white', width=2)),
+                error_x=dict(
+                    type='data',
+                    symmetric=False,
+                    array=t_pred_vivo_err,      # Upper error
+                    arrayminus=t_pred_vivo_err, # Lower error
+                    visible=True,
+                    color=colors['in_vivo_2'],
+                    thickness=2,
+                    width=8
+                )
+            ))
+        else:
+            # Fallback: predicted points without error bars
+            fig.add_trace(go.Scatter(
+                x=t_pred_vivo, y=m_pred,
+                mode='markers',
+                name='In Vivo (Predicted)',
+                marker=dict(color=colors['in_vivo_2'], size=15, line=dict(color='white', width=2))
+            ))
+    if 0:
+        ## MASS, no error bars
+        # Predicted in vivo values
         fig.add_trace(go.Scatter(
-            x=[t_pred[i], t_pred[i]],
-            y=[m_pred[i], m_pred_vivo[i]],
-            mode='lines',
-            line=dict(color='gray', width=2, dash='dot'),
-            showlegend=False,
-            hoverinfo='skip'
+            x=t_pred_vivo, y=m_pred,
+            mode='markers',
+            name='In Vivo (Predicted)',
+            marker=dict(color=colors['in_vivo_2'], size=15, line=dict(color='white', width=2))
         ))
+
+        # Connection lines to show time scaling
+        for i in range(len(t_pred)):
+            fig.add_trace(go.Scatter(
+                x=[t_pred[i], t_pred_vivo[i]],
+                y=[m_pred[i], m_pred[i]],
+                mode='lines',
+                line=dict(color='gray', width=2, dash='dot'),
+                showlegend=False,
+                hoverinfo='skip'
+            ))
 
     # Model predictions for reference
     fig.add_trace(go.Scatter(
-        x=t_pred, y=model1_pred,
+        x=t_pred_plot, y=model1_pred_plot,
         mode='lines',
         name='In Vitro (Fitted Model)',
-        line=dict(color='blue', dash='dash', width=2)
+        line=dict(color=colors['in_vitro'], dash='dash', width=2)
     ))
 
     fig.add_trace(go.Scatter(
-        x=t_pred, y=model2_pred,
+        x=t_pred_plot, y=model2_pred_plot,
         mode='lines',
         name='In Vivo (Fitted Model)',
-        line=dict(color='red', dash='dash', width=2)
+        line=dict(color=colors['in_vivo'], dash='dash', width=2)
     ))
 
     fig.update_layout(
@@ -1253,22 +1805,38 @@ def create_prediction_plot_a3(data, t_pred, m_pred, var_pred_scaled, ptype='v'):
     """Create prediction plot for approach 3 - direct mapping"""
     t1,m1,t2,m2,mm,tt,ti1,ti2,mi1,mi2 = data
     if ptype == 'v':
-        plot_string = 'scaled by value'
+        plot_string = 'predicted value scaled by value ratio'
         fig = go.Figure()
+
+        # Fitting in vitro data
+        fig.add_trace(go.Scatter(
+            x=t1, y=m1,
+            mode='markers',
+            name='In Vitro Data (Fitting)',
+            marker=dict(color=colors['in_vitro'], size=20, line=dict(color='white', width=2))
+        ))
+
+        # Fitting in vivo timeline
+        fig.add_trace(go.Scatter(
+            x=t2, y=m2,
+            mode='markers',
+            name='In Vivo Data (Fitting)',
+            marker=dict(color=colors['in_vivo'], size=20, line=dict(color='white', width=2))
+        ))
 
         # Prediction data
         fig.add_trace(go.Scatter(
             x=t_pred, y=m_pred,
             mode='markers',
             name='In Vitro (Input)',
-            marker=dict(color='green', size=15, line=dict(color='black', width=2))
+            marker=dict(color=colors['in_vitro_2'], size=15, line=dict(color='white', width=2))
         ))
 
         fig.add_trace(go.Scatter(
             x=t_pred, y=var_pred_scaled,
             mode='markers',
             name='In Vivo (Predicted)',
-            marker=dict(color='orange', size=15, line=dict(color='black', width=2))
+            marker=dict(color=colors['in_vivo_2'], size=15, line=dict(color='white', width=2))
         ))
 
         # Connection lines to show time scaling
@@ -1295,22 +1863,38 @@ def create_prediction_plot_a3(data, t_pred, m_pred, var_pred_scaled, ptype='v'):
             yaxis=dict(showline=True, linewidth=2, linecolor='#EBF0F8', mirror=True)
         )
     elif ptype == 't':
-        plot_string = 'scaled by time'
+        plot_string = 'predicted time scaled by time ratio'
         fig = go.Figure()
+
+        # Fitting in vitro data
+        fig.add_trace(go.Scatter(
+            x=t1, y=m1,
+            mode='markers',
+            name='In Vitro Data (Fitting)',
+            marker=dict(color=colors['in_vitro'], size=20, line=dict(color='white', width=2))
+        ))
+
+        # Fitting in vivo timeline
+        fig.add_trace(go.Scatter(
+            x=t2, y=m2,
+            mode='markers',
+            name='In Vivo Data (Fitting)',
+            marker=dict(color=colors['in_vivo'], size=20, line=dict(color='white', width=2))
+        ))
 
         # Prediction data
         fig.add_trace(go.Scatter(
             x=t_pred, y=m_pred, 
             mode='markers',
             name='In Vitro (Input)',
-            marker=dict(color='green', size=15, line=dict(color='black', width=2))
+            marker=dict(color=colors['in_vitro_2'], size=15, line=dict(color='white', width=2))
         ))
 
         fig.add_trace(go.Scatter(
             x=var_pred_scaled, y=m_pred, 
             mode='markers',
             name='In Vivo (Predicted)',
-            marker=dict(color='orange', size=15, line=dict(color='black', width=2))
+            marker=dict(color=colors['in_vivo_2'], size=15, line=dict(color='white', width=2))
         ))
 
         # Connection lines to show time scaling

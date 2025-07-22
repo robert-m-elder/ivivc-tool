@@ -7,6 +7,7 @@ import sklearn.model_selection
 from sklearn.metrics import r2_score, mean_squared_error, root_mean_squared_error
 import scipy as sp
 import scipy.optimize
+import scipy.stats
 import inspect
 from itertools import product
 from metrics import metrics, calculate_metric
@@ -15,8 +16,12 @@ from joblib import Parallel, delayed
 import multiprocessing
 
 cross_validation_schemes = {
-                            'approach1':sklearn.model_selection.ShuffleSplit(n_splits=10, test_size=0.2, random_state=12345),
-                            'approach2':sklearn.model_selection.ShuffleSplit(n_splits=10, test_size=0.2, random_state=12345),
+                            #'approach1':sklearn.model_selection.KFold(n_splits=3, shuffle=True, random_state=12345),
+                            #'approach2':sklearn.model_selection.KFold(n_splits=3, shuffle=True, random_state=12345),
+                            #'approach1':sklearn.model_selection.LeaveOneOut(),
+                            #'approach2':sklearn.model_selection.LeaveOneOut(),
+                            'approach1':sklearn.model_selection.ShuffleSplit(n_splits=10, test_size=0.25, random_state=12345),
+                            'approach2':sklearn.model_selection.ShuffleSplit(n_splits=10, test_size=0.25, random_state=12345),
                             #'approach2':sklearn.model_selection.TimeSeriesSplit(n_splits=5)
                            }
 
@@ -130,7 +135,7 @@ def auto_grid_search_old(func, x, y, param_min=1e-6, param_max=1e6, num_points=2
     full_range = np.concatenate([-tmp_range[::-1], [0], tmp_range])
     allparams = np.array(list(product(*[full_range]*num_params)))
 
-    # Define the objective function for scipy.optimize.brute
+    # Define the objective function 
     def objective(params):
         # Convert params from log space, preserving signs
         #actual_params = np.sign(params) * 10**np.abs(params)
@@ -215,4 +220,156 @@ def get_tau(modelname,popt):
     else:
         tau = np.nan
     return tau
+
+def generate_confidence_bands(model_function, x_values, params, pcov, confidence_level=0.95, n_samples=1000):
+    """
+    Generate prediction bands using Monte Carlo sampling of parameter uncertainty
+
+    Parameters:
+    -----------
+    model_function : callable
+        The model function to evaluate
+    x_values : array-like
+        X values for prediction
+    params : dict
+        Best-fit parameters
+    pcov : array-like
+        Parameter covariance matrix
+    confidence_level : float
+        Confidence level (default 0.95 for 95% CI)
+    n_samples : int
+        Number of Monte Carlo samples
+
+    Returns:
+    --------
+    dict with 'lower', 'upper', 'mean' prediction bands
+    """
+    #import numpy as np
+    #from scipy.stats import multivariate_normal
+
+    # Convert params to array in consistent order
+    param_names = list(params.keys())
+    param_values = np.array([params[name] for name in param_names])
+
+    # Generate parameter samples from multivariate normal distribution
+    param_samples = sp.stats.multivariate_normal.rvs(mean=param_values, cov=pcov, size=n_samples)
+
+    # Ensure param_samples is 2D even for single parameter
+    if param_samples.ndim == 1:
+        param_samples = param_samples.reshape(-1, 1)
+
+    # Generate predictions for each parameter sample
+    predictions = []
+    for sample in param_samples:
+        sample_params = dict(zip(param_names, sample))
+        try:
+            y_pred = model_function(x_values, **sample_params)
+            predictions.append(y_pred)
+        except:
+            # Skip invalid parameter combinations
+            continue
+
+    predictions = np.array(predictions)
+
+    # Calculate confidence intervals
+    alpha = 1 - confidence_level
+    lower_percentile = (alpha/2) * 100
+    upper_percentile = (1 - alpha/2) * 100
+
+    return {
+        'lower': np.percentile(predictions, lower_percentile, axis=0),
+        'upper': np.percentile(predictions, upper_percentile, axis=0),
+        'mean': np.mean(predictions, axis=0)
+    }
+
+def generate_prediction_bands(model_function, x_values, params, pcov, residuals=None, confidence_level=0.95, n_samples=1000):
+    """
+    Generate prediction bands that include both parameter uncertainty and residual variance
+
+    Parameters:
+    -----------
+    model_function : callable
+        The model function to evaluate
+    x_values : array-like
+        X values for prediction
+    params : dict
+        Best-fit parameters
+    pcov : array-like
+        Parameter covariance matrix
+    residuals : array-like, optional
+        Residuals from the fit (y_true - y_pred). If None, will estimate from parameter uncertainty only
+    confidence_level : float
+        Confidence level (default 0.95 for 95% prediction interval)
+    n_samples : int
+        Number of Monte Carlo samples
+
+    Returns:
+    --------
+    dict with 'lower', 'upper', 'mean' prediction bands
+    """
+    #import numpy as np
+    #from scipy.stats import multivariate_normal, t
+
+    # Convert params to array in consistent order
+    param_names = list(params.keys())
+    param_values = np.array([params[name] for name in param_names])
+
+    # Generate parameter samples from multivariate normal distribution
+    param_samples = sp.stats.multivariate_normal.rvs(mean=param_values, cov=pcov, size=n_samples)
+
+    # Ensure param_samples is 2D even for single parameter
+    if param_samples.ndim == 1:
+        param_samples = param_samples.reshape(-1, 1)
+
+    # Generate predictions for each parameter sample
+    predictions = []
+    for sample in param_samples:
+        sample_params = dict(zip(param_names, sample))
+        try:
+            y_pred = model_function(x_values, **sample_params)
+            predictions.append(y_pred)
+        except:
+            # Skip invalid parameter combinations
+            continue
+
+    predictions = np.array(predictions)
+    mean_prediction = np.mean(predictions, axis=0)
+
+    # Estimate residual standard error
+    if residuals is not None:
+        # Use provided residuals
+        residual_std = np.std(residuals, ddof=len(param_values))
+    else:
+        # Estimate from parameter uncertainty (this is less accurate)
+        residual_std = np.std(predictions, axis=0).mean()
+        print("Warning: No residuals provided. Using parameter uncertainty to estimate residual variance.")
+
+    # For prediction intervals, we need to account for:
+    # 1. Parameter uncertainty (captured in the Monte Carlo samples)
+    # 2. Residual variance (the inherent scatter in the data)
+
+    # Calculate prediction variance = model uncertainty + residual variance
+    model_variance = np.var(predictions, axis=0)
+    total_variance = model_variance + residual_std**2
+    prediction_std = np.sqrt(total_variance)
+
+    # Use t-distribution for small sample sizes
+    # Degrees of freedom = number of data points - number of parameters
+    if residuals is not None:
+        dof = len(residuals) - len(param_values)
+    else:
+        dof = n_samples - len(param_values)  # Conservative estimate
+
+    # Calculate prediction intervals using t-distribution
+    alpha = 1 - confidence_level
+    t_value = sp.stats.t.ppf(1 - alpha/2, dof) if dof > 0 else 1.96  # Fall back to normal if dof <= 0
+
+    margin_of_error = t_value * prediction_std
+
+    return {
+        'lower': mean_prediction - margin_of_error,
+        'upper': mean_prediction + margin_of_error,
+        'mean': mean_prediction,
+        'std': prediction_std
+    }
 

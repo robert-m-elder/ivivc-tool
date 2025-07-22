@@ -1,8 +1,9 @@
 import numpy as np
 from sklearn.metrics import root_mean_squared_error
 
-display_name = "NRMSE"
+display_name = "NRMSE (std. dev.)"
 sort_order = 4
+better_direction = 'lower'
 
 def metric_function(y_true, y_pred):
     """

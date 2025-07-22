@@ -43,7 +43,7 @@ for filename in os.listdir(current_dir):
                 models[module_name].update({'fit_kwargs':{}})
             fit_model = lambda x, y, p0=None, model_function=module.model_function, kwargs=models[module_name]['fit_kwargs']: generic_fit_model(model_function, x, y, p0, kwargs)
             models[module_name].update({'fit_model': fit_model})
-            
+
             # Assign models to approaches
             for approach in getattr(module, 'approaches', []):
                 if approach in approaches:
