@@ -901,3 +901,42 @@ body.modal-open {
     position: relative;
 }
 
+
+/* Final model/report tab */
+.settings-table th {
+    width: 300px;
+}
+
+.final-report-selector {
+    margin: 20px 0;
+    padding: 15px;
+    background-color: #f9f9f9;
+    border-left: 4px solid #007cba;
+    border-radius: 4px;
+}
+
+.final-model-choice {
+    display: block;
+    margin: 8px 0;
+    cursor: pointer;
+}
+
+.final-report-content {
+    margin-top: 20px;
+    padding: 20px;
+    background-color: #ffffff;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+}
+
+.final-report-content h4 {
+    color: #2c3e50;
+    margin-top: 20px;
+}
+
+.report-disclaimer {
+    margin-top: 20px !important;
+    padding: 12px;
+    background-color: #f8f9fa;
+    border-left: 4px solid #6c757d;
+}

@@ -247,6 +247,7 @@ $(document).ready(function() {
     const modalContent = {
         'data-processing-help': 'data-processing-help-content',
         'model-comparison-help': 'model-comparison-help-content',
+        'final-model-report-help': 'final-model-report-help-content',
         'approach1-results-help': 'approach1-results-help-content',
         'approach2-results-help': 'approach2-results-help-content',
         'approach3-results-help': 'approach3-results-help-content',
@@ -313,3 +314,30 @@ $(document).ready(function() {
     });
 });
 
+
+// Final model/report selector
+$(document).ready(function() {
+    $('input[name="final_model_option"]').on('change', function() {
+        var selectedId = $(this).val();
+        $('.final-report-content').hide();
+        $('#' + selectedId + '-report').show();
+
+        if (window.MathJax && window.MathJax.typesetPromise) {
+            window.MathJax.typesetPromise([document.getElementById(selectedId + '-report')]);
+        }
+    });
+
+    $('#print-final-report').on('click', function() {
+        var reportHtml = $('.final-report-content:visible').html();
+        if (!reportHtml) {
+            return;
+        }
+        var printWindow = window.open('', '_blank');
+        printWindow.document.write('<html><head><title>IVIVC Final Model Report</title></head><body>');
+        printWindow.document.write(reportHtml);
+        printWindow.document.write('</body></html>');
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
+    });
+});

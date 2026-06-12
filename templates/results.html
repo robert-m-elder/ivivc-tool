@@ -50,6 +50,7 @@
                 <li><a href="#{{ approach_id }}">Fitting: {{ approaches[approach_id].display_name }}</a></li>
             {% endfor %}
             <li><a href="#comparison">Model Comparison</a></li>
+            <li><a href="#final-model-report">Final Model / Report</a></li>
             {% if prediction_results and prediction_results != {} and 'error' not in prediction_results %}
                 {% for approach_id in selected_approaches %}
                     {% if approach_id in prediction_results and prediction_results[approach_id] %}
@@ -76,6 +77,17 @@
             <p><strong>Interpolation:</strong>
                 {% if selected_interpolation %}{{ selected_interpolation | join('; ') }}{% else %}None{% endif %}
             </p>
+            <h3>Analysis Settings:</h3>
+            <table class="settings-table">
+                <tbody>
+                    {% for label, value in analysis_config_rows %}
+                    <tr>
+                        <th>{{ label }}</th>
+                        <td>{{ value }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
             <!--<img src="data:image/png;base64,{{ interpolation }}" alt="Data Processing Plot">-->
             <h4>Fitting Data:</h4>
             <div class="plot-container">
@@ -151,6 +163,116 @@
                 </div>
             {% endif %}
         </div> 
+
+        <!-- Final Model / Report Section -->
+        <div id="final-model-report">
+            <h2>
+                Final Model / Report
+                <button type="button" class="help-btn" data-modal="final-model-report-help">
+                    <span class="help-icon">?</span>
+                </button>
+            </h2>
+
+            {% if final_model_options %}
+                <p>Select the final model and prediction method to generate a report-ready summary. The suggested option is based on the composite model-selection score when available.</p>
+
+                <div class="final-report-selector">
+                    <h3>Choose Final Model / Method</h3>
+                    {% for option in final_model_options %}
+                        <label class="final-model-choice">
+                            <input type="radio" name="final_model_option" value="{{ option.id }}" {% if option.is_recommended %}checked{% endif %}>
+                            {{ option.label }}{% if option.is_recommended %} <strong>(suggested)</strong>{% endif %}
+                        </label>
+                    {% endfor %}
+                </div>
+
+                <div class="custom-button-container">
+                    <button type="button" id="print-final-report" class="dt-button2 show-data-btn">
+                        <span>Print Selected Report</span>
+                    </button>
+                </div>
+
+                {% for option in final_model_options %}
+                    {% set model_results = results[option.model_key] %}
+                    <div id="{{ option.id }}-report" class="final-report-content" style="display: {% if option.is_recommended %}block{% else %}none{% endif %};">
+                        <h3>Report Summary</h3>
+                        <p><strong>Final selection:</strong> {{ option.label }}</p>
+                        <p><strong>Approach:</strong> {{ option.approach_display }}</p>
+                        <p><strong>Prediction method:</strong> {{ option.method_display }}</p>
+
+                        <h4>Preprocessing</h4>
+                        <ul>
+                            <li><strong>Normalization:</strong> {% if selected_normalizations %}{{ selected_normalizations | join('; ') }}{% else %}None{% endif %}</li>
+                            <li><strong>Scaling:</strong> {% if selected_scalings %}{{ selected_scalings | join('; ') }}{% else %}None{% endif %}</li>
+                            <li><strong>Interpolation:</strong> {% if selected_interpolation %}{{ selected_interpolation | join('; ') }}{% else %}None{% endif %}</li>
+                        </ul>
+
+                        <h4>Analysis settings</h4>
+                        <table class="settings-table">
+                            <tbody>
+                                {% for label, value in analysis_config_rows %}
+                                <tr>
+                                    <th>{{ label }}</th>
+                                    <td>{{ value }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+
+                        <h4>Method description</h4>
+                        {{ option.method_html | safe }}
+
+                        {% if option.approach_id == 'approach1' %}
+                            <h4>Model equation</h4>
+                            <p>\[{{ model_results.function }}\]</p>
+                            <h4>Final model parameters</h4>
+                            {% for param, value in model_results.uparams.items() %}
+                                <p>{{ param }}: {{ value.n | round(4) }} &plusmn; {{ value.s | round(4) }}</p>
+                            {% endfor %}
+                            <h4>Goodness of fit and validation</h4>
+                            {{ model_results.stats_table | safe }}
+                        {% elif option.approach_id == 'approach2' %}
+                            <h4>Model equation</h4>
+                            <p>\[{{ model_results.function }}\]</p>
+                            <h4>In vitro model parameters</h4>
+                            {% for param, value in model_results.uparams[0].items() %}
+                                <p>{{ param }}: {{ value.n | round(4) }} &plusmn; {{ value.s | round(4) }}</p>
+                            {% endfor %}
+                            <h4>In vivo model parameters</h4>
+                            {% for param, value in model_results.uparams[1].items() %}
+                                <p>{{ param }}: {{ value.n | round(4) }} &plusmn; {{ value.s | round(4) }}</p>
+                            {% endfor %}
+                            <h4>Time constants</h4>
+                            {% if model_results.tau[0].n > 0 %}
+                                <p>In vitro tau: {{ model_results.tau[0].n | round(4) }} &plusmn; {{ model_results.tau[0].s | round(4) }}</p>
+                            {% else %}
+                                <p>In vitro tau: N/A</p>
+                            {% endif %}
+                            {% if model_results.tau[1].n > 0 %}
+                                <p>In vivo tau: {{ model_results.tau[1].n | round(4) }} &plusmn; {{ model_results.tau[1].s | round(4) }}</p>
+                            {% else %}
+                                <p>In vivo tau: N/A</p>
+                            {% endif %}
+                            <h4>Goodness of fit and validation</h4>
+                            <h5>In vitro data</h5>
+                            {{ model_results.stats_table[0] | safe }}
+                            <h5>In vivo data</h5>
+                            {{ model_results.stats_table[1] | safe }}
+                        {% elif option.approach_id == 'approach3' %}
+                            <h4>Model form</h4>
+                            <p>Direct interpolation-based mapping; no parametric model is fitted for this approach.</p>
+                        {% endif %}
+
+                        <h4>Error propagation and uncertainty</h4>
+                        {{ option.error_html | safe }}
+
+                        <p class="report-disclaimer"><strong>Report note:</strong> This report summarizes the app configuration and fitted model output. It should be reviewed alongside the plots, source data, residual behavior, and any domain-specific acceptance criteria before use in a validation package.</p>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p>No successful model results are available for final model selection.</p>
+            {% endif %}
+        </div>
 
         <!-- Individual Model Results Section -->
         {% for approach_id in selected_approaches %}
@@ -552,6 +674,8 @@
                 <li><strong>Predicted Data:</strong> Corresponding in vivo time points calculated using fitted correlation between in vitro and in vivo time</li>
                 <!--<li><strong>Connection Lines:</strong> Show the time scaling transformation</li>-->
             </ul>
+            <h4>Error propagation and uncertainty</h4>
+            {{ approach_descriptions['approach1']['prediction_error_html'] | safe }}
             <!--<p><strong>For Model Selection:</strong></p>
             <ul>
                 <li>Verify that <strong>predictions are consistent with your expectations</strong></li>
@@ -574,6 +698,8 @@
                 <li><strong>Fitted Models:</strong> Both in vitro and in vivo model curves</li>
                 <!--<li><strong>Connection Lines:</strong> Show the time scaling transformation</li>-->
             </ul>
+            <h4>Error propagation and uncertainty</h4>
+            {{ approach_descriptions['approach2']['prediction_error_html'] | safe }}
             <!--<p><strong>For Model Selection:</strong></p>
             <ul>
                 <li>Look for <strong>smooth, realistic prediction curves</strong></li>
@@ -591,12 +717,25 @@
                 <li><strong>Connection Lines:</strong> Show the time scaling transformation</li>
             <p>Points in the in vitro prediction dataset that are outside the range of the fitting datasets (time range when scaling by value, or value range when scaling by time) are excluded.</p>
             </ul>
+            <h4>Error propagation and uncertainty</h4>
+            {{ approach_descriptions['approach3']['prediction_error_html'] | safe }}
             <!--<p><strong>For Model Selection:</strong></p>
             <ul>
                 <li>Compare <strong>different scaling approaches</strong> to see which produces more reasonable results</li>
                 <li>Use this as a <strong>validation tool</strong> for parametric model predictions</li>
                 <li>Consider if these <strong>model-free approaches</strong> may be more appropriate than parametric models</li>
             </ul>-->
+        </div>
+
+        <!-- Final Model / Report Help -->
+        <div id="final-model-report-help-content">
+            <h4>Final Model / Report</h4>
+            <p>This tab lets you choose a final model and prediction method after reviewing model fits, comparison metrics, and prediction behavior.</p>
+            <ul>
+                <li><strong>Suggested option:</strong> selected from available model scores when automatic ranking succeeds. Treat this as a starting point, not a regulatory conclusion.</li>
+                <li><strong>Report summary:</strong> includes preprocessing choices, analysis settings, method description, parameter estimates, goodness-of-fit statistics, and uncertainty assumptions.</li>
+                <li><strong>Manual review:</strong> confirm that plots, residuals, parameter uncertainty, cross-validation behavior, and scientific expectations support the final choice.</li>
+            </ul>
         </div>
 
     </div>
