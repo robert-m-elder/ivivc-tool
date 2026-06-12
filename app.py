@@ -25,7 +25,16 @@ from sklearn.exceptions import UndefinedMetricWarning
 from models import models, approaches
 from preprocessing import preprocessing_options
 from utilities.evaluation import evaluate_goodness_of_fit, cross_validation_curve_fit, cross_validation_schemes, auto_grid_search, calculate_tau_with_uncertainty, generate_prediction_bands, generate_ratio_prediction_bands
-from utilities.descriptions import APPROACH_DESCRIPTIONS, format_analysis_config_rows
+from utilities.descriptions import (
+    APPROACH_DESCRIPTIONS,
+    GRID_SEARCH_DESCRIPTION_HTML,
+    METRIC_DESCRIPTIONS,
+    PREPROCESSING_DESCRIPTIONS,
+    format_analysis_config_rows,
+    format_metric_description_rows,
+    format_preprocessing_rows,
+    format_selected_preprocessing_summary,
+)
 from utilities.reporting import build_final_model_options
 from utilities.word_report import build_word_report, safe_report_filename, WORD_MIME_TYPE
 from utilities.model_display import get_human_readable_function
@@ -165,6 +174,17 @@ def index():
             comparisons[approach], ks_tables[approach] = create_comparison(results, approach)
 
         analysis_config_rows = format_analysis_config_rows(analysis_config)
+        preprocessing_rows = format_preprocessing_rows(
+            selected_normalizations,
+            selected_scalings,
+            selected_interpolation,
+        )
+        preprocessing_summary = format_selected_preprocessing_summary(
+            selected_normalizations,
+            selected_scalings,
+            selected_interpolation,
+        )
+        metric_description_rows = format_metric_description_rows(metrics, selected_metrics)
 
         # Process predictions if prediction file is provided
         prediction_results, prediction_interpolation_info = {}, {}
@@ -213,11 +233,16 @@ def index():
                                selected_scalings=selected_scalings, selected_normalizations=selected_normalizations, selected_interpolation=selected_interpolation,
                                metrics=metrics, selected_metrics=selected_metrics, prediction_results=prediction_results,
                                analysis_config=analysis_config,
-                               analysis_config_rows=analysis_config_rows, final_model_options=final_model_options,
+                               analysis_config_rows=analysis_config_rows, preprocessing_rows=preprocessing_rows,
+                               preprocessing_summary=preprocessing_summary, metric_description_rows=metric_description_rows,
+                               grid_search_description_html=GRID_SEARCH_DESCRIPTION_HTML, final_model_options=final_model_options,
                                include_prediction_methods=include_prediction_methods,
                                approach_descriptions=APPROACH_DESCRIPTIONS)
     return render_template('index.html', models=models, approaches=approaches, preprocessing_options=preprocessing_options, 
                            default_interpolation=default_interpolation, metrics=metrics,
+                           preprocessing_descriptions=PREPROCESSING_DESCRIPTIONS, metric_descriptions=METRIC_DESCRIPTIONS,
+                           metric_description_rows=format_metric_description_rows(metrics),
+                           grid_search_description_html=GRID_SEARCH_DESCRIPTION_HTML,
                            default_grid_search_num_points=(10 if IS_PRODUCTION else 200))
 
 @app.route('/get_sheets', methods=['POST'])

@@ -1,4 +1,4 @@
-"""Reusable explanatory text for IVIVC approaches, predictions, and reports."""
+"""Reusable explanatory text for IVIVC approaches, preprocessing, metrics, and reports."""
 
 APPROACH_DESCRIPTIONS = {
     'approach1': {
@@ -28,7 +28,7 @@ APPROACH_DESCRIPTIONS = {
         ''',
         'prediction_error_html': '''
             <p><strong>Value-ratio prediction error bars:</strong> uncertainty is propagated from both fitted models. The app samples each model's parameter covariance matrix, calculates the in vivo/in vitro response ratio for each sample, combines ratio variance with residual-based ratio uncertainty, and converts that uncertainty to a two-sided 95% interval. The plotted vertical error bars are scaled from the resulting ratio interval at each prediction time.</p>
-            <p><strong>Time-constant-ratio prediction error bars:</strong> when tau values are available, uncertainty in each tau is propagated through the tau ratio using uncertainty-aware arithmetic. The standard uncertainty of the scaled prediction time is multiplied by a t value, where available, and plotted as a symmetric horizontal error bar.</p>
+            <p><strong>Time-constant-ratio prediction error bars:</strong> when both tau values are valid, uncertainty in each tau is propagated through the tau ratio using uncertainty-aware arithmetic. The standard uncertainty of the scaled prediction time is multiplied by a t value, where available, and plotted as a symmetric horizontal error bar.</p>
             <p>Ratio-based uncertainty can become unstable when the denominator model prediction or denominator time constant is near zero. Predictions in those regions should be interpreted cautiously.</p>
         ''',
     },
@@ -48,6 +48,71 @@ APPROACH_DESCRIPTIONS = {
     },
 }
 
+PREPROCESSING_DESCRIPTIONS = {
+    'normalization': {
+        'min_max': {
+            'display_name': 'Min-max normalization',
+            'description': 'Scales response values to the 0-1 range using the observed minimum and maximum within each dataset.',
+        },
+        'initial_value': {
+            'display_name': 'Initial-value normalization',
+            'description': 'Divides response values by the first response value in the corresponding dataset.',
+        },
+    },
+    'scaling': {
+        'log_x': {
+            'display_name': 'Log10 time scaling',
+            'description': 'Applies a base-10 logarithm to time values before fitting or interpolation.',
+        },
+        'log_y': {
+            'display_name': 'Log10 response scaling',
+            'description': 'Applies a base-10 logarithm to response values before fitting or interpolation.',
+        },
+    },
+    'interpolation': {
+        'default': {
+            'display_name': 'Union-point linear interpolation',
+            'description': 'Interpolates both datasets onto the union of the original time points and the union of the original response values, using linear interpolation and marking out-of-range values as unavailable.',
+        },
+        'alternative': {
+            'display_name': 'Densified linear interpolation',
+            'description': 'Creates additional linearly spaced points between adjacent observations before interpolation; this can smooth displays but may add more interpolation-derived points.',
+        },
+    },
+}
+
+METRIC_DESCRIPTIONS = {
+    'r_squared': {
+        'description': 'Coefficient of determination. Higher values indicate that the model explains more variance in the observed response.',
+    },
+    'adjusted_r_squared': {
+        'description': 'R² adjusted for the number of fitted parameters. Higher values are better and can penalize unnecessary model complexity.',
+    },
+    'mse': {
+        'description': 'Mean squared error between observed and fitted values. Lower values indicate smaller average squared residuals.',
+    },
+    'rmse': {
+        'description': 'Root mean squared error, in the same response units as the fitted data. Lower values indicate smaller typical residuals.',
+    },
+    'nrmse': {
+        'description': 'RMSE normalized by the response standard deviation. Lower values indicate smaller error relative to response variability.',
+    },
+    'mnrmse': {
+        'description': 'RMSE normalized by the response mean. Lower values indicate smaller error relative to the response magnitude.',
+    },
+    'aic': {
+        'description': 'Akaike Information Criterion. Lower values indicate a better tradeoff between model fit and parameter count for the fitted dataset.',
+    },
+    'bic': {
+        'description': 'Bayesian Information Criterion. Lower values indicate a better fit-complexity tradeoff with a stronger penalty for additional parameters than AIC.',
+    },
+}
+
+GRID_SEARCH_DESCRIPTION_HTML = '''
+    <p>The grid-search setting controls the search for initial parameter values before nonlinear least-squares fitting. For each selected model, the app evaluates multiple candidate starting points over the configured parameter range and uses the best candidate as the starting point for the final curve fit.</p>
+    <p>This initialization step can improve convergence and reduce sensitivity to poor starting values. It is not itself the final fitting algorithm and does not guarantee that the final fitted parameters are the global optimum.</p>
+'''
+
 CV_SCHEME_LABELS = {
     'shuffle_split': 'Shuffle split',
     'kfold': 'K-fold',
@@ -65,6 +130,76 @@ ANALYSIS_CONFIG_LABELS = {
     'grid_search_param_min': 'Grid-search parameter minimum',
     'grid_search_param_max': 'Grid-search parameter maximum',
 }
+
+
+def _preprocessing_label(category, key):
+    return PREPROCESSING_DESCRIPTIONS.get(category, {}).get(key, {}).get('display_name', key)
+
+
+def _preprocessing_description(category, key):
+    return PREPROCESSING_DESCRIPTIONS.get(category, {}).get(key, {}).get('description', '')
+
+
+def format_preprocessing_rows(selected_normalizations=None, selected_scalings=None, selected_interpolation=None):
+    """Return display-ready preprocessing rows for templates and reports."""
+    selections = [
+        ('Normalization', 'normalization', selected_normalizations or []),
+        ('Scaling', 'scaling', selected_scalings or []),
+        ('Interpolation', 'interpolation', selected_interpolation or []),
+    ]
+    rows = []
+    for category_label, category_key, values in selections:
+        if values:
+            for value in values:
+                rows.append({
+                    'category': category_label,
+                    'name': _preprocessing_label(category_key, value),
+                    'description': _preprocessing_description(category_key, value),
+                })
+        else:
+            rows.append({
+                'category': category_label,
+                'name': 'None',
+                'description': 'No option selected for this preprocessing category.',
+            })
+    return rows
+
+
+def format_selected_preprocessing_summary(selected_normalizations=None, selected_scalings=None, selected_interpolation=None):
+    """Return short human-readable summaries by preprocessing category."""
+    return {
+        'normalization': '; '.join(_preprocessing_label('normalization', v) for v in (selected_normalizations or [])) or 'None',
+        'scaling': '; '.join(_preprocessing_label('scaling', v) for v in (selected_scalings or [])) or 'None',
+        'interpolation': '; '.join(_preprocessing_label('interpolation', v) for v in (selected_interpolation or [])) or 'None',
+    }
+
+
+def format_metric_description_rows(metrics, selected_metrics=None):
+    """Return display-ready metric description rows.
+
+    The metrics registry supplies display names and better/worse direction. This
+    module supplies the explanatory text so the same language can be reused in
+    help modals and reports.
+    """
+    selected_metrics = selected_metrics or list(metrics.keys())
+    rows = []
+    for metric_key in selected_metrics:
+        metric_info = metrics.get(metric_key, {})
+        description = METRIC_DESCRIPTIONS.get(metric_key, {}).get('description', '')
+        better_direction = metric_info.get('better_direction', '')
+        if better_direction == 'higher':
+            direction = 'Higher is generally better'
+        elif better_direction == 'lower':
+            direction = 'Lower is generally better'
+        else:
+            direction = ''
+        rows.append({
+            'key': metric_key,
+            'name': metric_info.get('display_name', metric_key),
+            'direction': direction,
+            'description': description,
+        })
+    return rows
 
 
 def format_analysis_config_rows(config):

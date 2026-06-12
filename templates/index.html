@@ -148,25 +148,28 @@
                 <tr>
                     <td>
                         {% for norm_name, norm_func in preprocessing_options['normalization'].items() %}
+                        {% set norm_meta = preprocessing_descriptions['normalization'].get(norm_name, {}) %}
                         <label>
                             <input type="checkbox" name="normalizations" value="{{ norm_name }}">
-                            {{ norm_name }}
+                            {{ norm_meta.get('display_name', norm_name) }}
                         </label><br>
                         {% endfor %}
                     </td>
                     <td>
                         {% for scale_name, scale_func in preprocessing_options['scaling'].items() %}
+                        {% set scale_meta = preprocessing_descriptions['scaling'].get(scale_name, {}) %}
                         <label>
                             <input type="checkbox" name="scalings" value="{{ scale_name }}">
-                            {{ scale_name }}
+                            {{ scale_meta.get('display_name', scale_name) }}
                         </label><br>
                         {% endfor %}
                     </td>
                     <td>
                         {% for interp_name, interp_func in preprocessing_options['interpolation'].items() %}
+                        {% set interp_meta = preprocessing_descriptions['interpolation'].get(interp_name, {}) %}
                         <label>
-                            <input type="checkbox" name="interpolation" value="{{ interp_name }}" {% if interp_name == "default_interpolation" %}checked{% endif %} >
-                            {{ interp_name }}
+                            <input type="checkbox" name="interpolation" value="{{ interp_name }}" {% if interp_name == "default" %}checked{% endif %}>
+                            {{ interp_meta.get('display_name', interp_name) }}
                         </label><br>
                         {% endfor %}
                     </td>
@@ -347,42 +350,42 @@
         <!-- Preprocessing Help -->
         <div id="preprocessing-help-content">
             <h4>Data Preprocessing</h4>
-            <p>Transform your data before analysis to improve model fitting and comparability:</p>
+            <p>Transform your data before analysis to improve model fitting and comparability. The selected preprocessing choices are included in the results and downloadable Word report.</p>
             <ul>
-                <li><strong>Normalization:</strong> Scale data to standard ranges</li>
-                <li><strong>Scaling:</strong> Apply mathematical transformations</li>
-                <li><strong>Interpolation:</strong> Create evenly spaced data points</li>
+                <li><strong>Normalization:</strong> optional transformations applied to response values.</li>
+                <li><strong>Scaling:</strong> optional mathematical transformations applied to time or response values.</li>
+                <li><strong>Interpolation:</strong> methods used to create matched time and response grids for fitting or direct mapping.</li>
             </ul>
-            <p>These steps can significantly improve analysis quality and model performance.</p>
         </div>
 
         <div id="normalization-help-content">
             <h4>Normalization Options</h4>
-            <p>Scale your data to improve model fitting:</p>
+            <p>Scale response values before fitting:</p>
             <ul>
-                <li><strong>Min-Max:</strong> Scale to 0-1 range</li>
-                <li><strong>Initial value:</strong> Normalize by initial value</li>
+                {% for option_key, option_info in preprocessing_descriptions['normalization'].items() %}
+                <li><strong>{{ option_info.display_name }}:</strong> {{ option_info.description }}</li>
+                {% endfor %}
             </ul>
-            <p>Normalization helps when datasets have very different scales.</p>
         </div>
 
         <div id="scaling-help-content">
             <h4>Scaling Options</h4>
-            <p>Apply mathematical transformations to your data:</p>
+            <p>Apply mathematical transformations before fitting:</p>
             <ul>
-                <li><strong>Log X:</strong> Apply base-10 logarithm to time values</li>
-                <li><strong>Log Y:</strong> Apply base-10 logarithm to measurement values</li>
+                {% for option_key, option_info in preprocessing_descriptions['scaling'].items() %}
+                <li><strong>{{ option_info.display_name }}:</strong> {{ option_info.description }}</li>
+                {% endfor %}
             </ul>
-            <p>Scaling can linearize relationships and improve model fits.</p>
         </div>
 
         <div id="interpolation-help-content">
             <h4>Interpolation Options</h4>
-            <p>Create evenly spaced data points for better analysis:</p>
+            <p>Create matched time and response grids for fitting, comparison, and direct mapping:</p>
             <ul>
-                <li><strong>Default:</strong> Recommended interpolation method</li>
+                {% for option_key, option_info in preprocessing_descriptions['interpolation'].items() %}
+                <li><strong>{{ option_info.display_name }}:</strong> {{ option_info.description }}</li>
+                {% endfor %}
             </ul>
-            <p>Interpolation ensures datasets have identical time points, which is necessary for some Approaches.</p>
         </div>
 
 
@@ -397,21 +400,20 @@
                 <li><strong>CV random seed:</strong> seed used for reproducible randomized validation splits.</li>
                 <li><strong>Grid-search random starts:</strong> number of starting points sampled before final curve fitting. Higher values are more robust but slower.</li>
             </ul>
+            <h4>Grid-search initialization</h4>
+            {{ grid_search_description_html | safe }}
         </div>
 
         <!-- Metrics Help -->
         <div id="metrics-help-content">
             <h4>Performance Metrics</h4>
-            <p>Choose metrics to evaluate model performance:</p>
+            <p>Choose metrics to evaluate model performance. The selected metric definitions are included in the report.</p>
             <ul>
-                <li><strong>R²:</strong> Coefficient of determination</li>
-                <li><strong>MSE:</strong> Mean squared error</li>
-                <li><strong>RMSE:</strong> Root mean square error</li>
-                <li><strong>NRMSE:</strong> RMSE normalized by standard deviation</li>
-                <li><strong>AIC/BIC:</strong> Akaike and Bayesian Information Criteria for model selection</li>
+                {% for metric in metric_description_rows %}
+                <li><strong>{{ metric.name }}:</strong> {{ metric.description }} {% if metric.direction %}<em>{{ metric.direction }}.</em>{% endif %}</li>
+                {% endfor %}
             </ul>
-            <p>Multiple metrics provide comprehensive model evaluation.</p>
-            <p>Additionally, the Kolmogorov-Smirnov test is used for a pair-wise comparison of model predictions in Approches 1 and 2. In conjunction with the performance metrics, this can be used to identify parsimonious models.</p>
+            <p>Additionally, the Kolmogorov-Smirnov test is used for pairwise comparison of model predictions in Approaches 1 and 2. In conjunction with the performance metrics, this can support user-driven model review.</p>
         </div>
     </div>
 </body>

@@ -22,6 +22,7 @@ from models import models, approaches
 from preprocessing import preprocessing_options
 from utilities.evaluation import evaluate_goodness_of_fit, cross_validation_curve_fit, make_cross_validator, auto_grid_search, calculate_tau_with_uncertainty, generate_prediction_bands, generate_ratio_prediction_bands
 from utilities.selection import create_model_selector_from_metrics, select_best_models
+from utilities.prediction_validity import describe_tau_prediction_skip_reason
 from utilities.model_display import get_human_readable_function
 from utilities.misc import hex_to_rgba
 from metrics import metrics, calculate_metric
@@ -386,26 +387,34 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                                 'residuals': model_results['residuals']
                             })
 
-                            ## Rescale by tau ratio, if available
-                            try:
-                                tau1,tau2 = model_results['tau']
-                                time_ratio = tau2/tau1 # uncertainties handles error propagation
-                                t_pred_vivo_tau_unc = t_pred * time_ratio
-                                t_pred_vivo_tau = np.array([t.n for t in t_pred_vivo_tau_unc])
-                                t_pred_vivo_err_tau = np.array([t.s for t in t_pred_vivo_tau_unc])
-                                ### Convert to error bar
-                                dof = len(tt) - len(model_results['params'])
-                                t_value = sp.stats.t.ppf(1-0.05/2, dof) if dof > 0 else 1.96
-                                t_pred_vivo_err_tau = t_value * t_pred_vivo_err_tau
-                                #print(model_name,tau1,tau2,time_ratio,t_pred_vivo_tau,t_pred_vivo_err_tau)
-                                # Create prediction plot
-                                plot_image_tau = create_prediction_plot_a2(data, t_pred, m_pred, t_pred_vivo_tau, t_pred_plot, model1_pred_plot, model2_pred_plot, {
-                                    'model_name': models[model_name]['display_name'],
-                                    'approach': approaches[approach_id]['display_name'],
-                                    'model_function': models[model_name]['model_function'],
-                                }, t_pred_vivo_err_tau)
-                            except Exception as e:
-                                print(e)
+                            ## Rescale by tau ratio, if both tau values are valid
+                            tau_skip_reason = describe_tau_prediction_skip_reason(model_results.get('tau'))
+                            model_results.setdefault('prediction_skip_reasons', {})['tau_ratio'] = tau_skip_reason
+                            if tau_skip_reason is None:
+                                try:
+                                    tau1,tau2 = model_results['tau']
+                                    time_ratio = tau2/tau1 # uncertainties handles error propagation
+                                    t_pred_vivo_tau_unc = t_pred * time_ratio
+                                    t_pred_vivo_tau = np.array([t.n for t in t_pred_vivo_tau_unc])
+                                    t_pred_vivo_err_tau = np.array([t.s for t in t_pred_vivo_tau_unc])
+                                    ### Convert to error bar
+                                    dof = len(tt) - len(model_results['params'])
+                                    t_value = sp.stats.t.ppf(1-0.05/2, dof) if dof > 0 else 1.96
+                                    t_pred_vivo_err_tau = t_value * t_pred_vivo_err_tau
+                                    #print(model_name,tau1,tau2,time_ratio,t_pred_vivo_tau,t_pred_vivo_err_tau)
+                                    # Create prediction plot
+                                    plot_image_tau = create_prediction_plot_a2(data, t_pred, m_pred, t_pred_vivo_tau, t_pred_plot, model1_pred_plot, model2_pred_plot, {
+                                        'model_name': models[model_name]['display_name'],
+                                        'approach': approaches[approach_id]['display_name'],
+                                        'model_function': models[model_name]['model_function'],
+                                    }, t_pred_vivo_err_tau)
+                                except Exception as e:
+                                    tau_skip_reason = f'Time-constant-ratio rescaling was not performed because plot generation failed: {e}'
+                                    model_results['prediction_skip_reasons']['tau_ratio'] = tau_skip_reason
+                                    print(e)
+                                    t_pred_vivo_tau = None
+                                    plot_image_tau = None
+                            else:
                                 t_pred_vivo_tau = None
                                 plot_image_tau = None
 
@@ -480,7 +489,8 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
 #                                'predicted_in_vivo_time_tau': t_pred_vivo_tau
 #                            },
                             'plot': plot_image,
-                            'plot_tau': plot_image_tau
+                            'plot_tau': plot_image_tau,
+                            'plot_tau_skip_reason': model_results.get('prediction_skip_reasons', {}).get('tau_ratio')
                         }
                         
                     elif approach == 'approach3' and interpolated_data is not None:

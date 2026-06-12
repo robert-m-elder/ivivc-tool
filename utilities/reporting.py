@@ -1,9 +1,9 @@
 """Helpers for the final model/report tab."""
 
-import math
 import re
 
 from utilities.descriptions import APPROACH_DESCRIPTIONS
+from utilities.prediction_validity import describe_tau_prediction_skip_reason
 
 
 def _model_label(models, model_name):
@@ -104,12 +104,7 @@ def build_final_model_options(results, models, approaches, include_prediction_me
                     prediction_plot_sources=[_plot_source(f"plot-prediction-{model_dom_id}-value", 'Value-ratio prediction plot')],
                 )
                 tau_values = model_results.get('tau', [])
-                has_tau = (
-                    len(tau_values) == 2
-                    and all(getattr(tau, 'n', 0) > 0 for tau in tau_values)
-                    and all(math.isfinite(getattr(tau, 'n', float('nan'))) for tau in tau_values)
-                )
-                if has_tau:
+                if describe_tau_prediction_skip_reason(tau_values) is None:
                     add_option(
                         model_key, approach_id, model_name,
                         method_id='tau_ratio',

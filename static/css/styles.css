@@ -1030,3 +1030,25 @@ button.dt-button2:disabled {
     cursor: not-allowed;
     opacity: 0.75;
 }
+
+.description-table th,
+.description-table td {
+    vertical-align: top;
+}
+
+.description-table th:first-child,
+.description-table td:first-child {
+    width: 160px;
+}
+
+.description-table th:nth-child(2),
+.description-table td:nth-child(2) {
+    width: 220px;
+}
+
+.prediction-skip-reason {
+    margin: 10px 0;
+    padding: 10px 12px;
+    background-color: #fff8e1;
+    border-left: 4px solid #f0ad4e;
+}

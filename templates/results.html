@@ -68,15 +68,24 @@
                 </button>
             </h2>
             <h3>Preprocessing Applied:</h3>
-            <p><strong>Normalization:</strong>
-                {% if selected_normalizations %}{{ selected_normalizations | join('; ') }}{% else %}None{% endif %}
-            </p>
-            <p><strong>Scaling:</strong>
-                {% if selected_scalings %}{{ selected_scalings | join('; ') }}{% else %}None{% endif %}
-            </p>
-            <p><strong>Interpolation:</strong>
-                {% if selected_interpolation %}{{ selected_interpolation | join('; ') }}{% else %}None{% endif %}
-            </p>
+            <table class="settings-table description-table">
+                <thead>
+                    <tr>
+                        <th>Category</th>
+                        <th>Selected option</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in preprocessing_rows %}
+                    <tr>
+                        <td>{{ row.category }}</td>
+                        <td>{{ row.name }}</td>
+                        <td>{{ row.description }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
             <h3>Analysis Settings:</h3>
             <table class="settings-table">
                 <tbody>
@@ -88,6 +97,8 @@
                     {% endfor %}
                 </tbody>
             </table>
+            <h4>Grid-search initialization</h4>
+            {{ grid_search_description_html | safe }}
             <!--<img src="data:image/png;base64,{{ interpolation }}" alt="Data Processing Plot">-->
             <h4>Fitting Data:</h4>
             <div id="plot-processing-raw-data" class="plot-container report-source-plot">
@@ -139,6 +150,25 @@
                     <span class="help-icon">?</span>
                 </button>
             </h2>
+            <h3>Selected metric descriptions</h3>
+            <table class="settings-table description-table">
+                <thead>
+                    <tr>
+                        <th>Metric</th>
+                        <th>Direction</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for metric in metric_description_rows %}
+                    <tr>
+                        <td>{{ metric.name }}</td>
+                        <td>{{ metric.direction }}</td>
+                        <td>{{ metric.description }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
             <!--<img src="data:image/png;base64,{ { comparison.plot } }" alt="Model Comparison Plot">--!>
             {% if "approach1" in selected_approaches %}
                 <h3>{{ approaches["approach1"].display_name }}</h3>
@@ -204,11 +234,24 @@
                         {% endif %}
 
                         <h4>Preprocessing</h4>
-                        <ul>
-                            <li><strong>Normalization:</strong> {% if selected_normalizations %}{{ selected_normalizations | join('; ') }}{% else %}None{% endif %}</li>
-                            <li><strong>Scaling:</strong> {% if selected_scalings %}{{ selected_scalings | join('; ') }}{% else %}None{% endif %}</li>
-                            <li><strong>Interpolation:</strong> {% if selected_interpolation %}{{ selected_interpolation | join('; ') }}{% else %}None{% endif %}</li>
-                        </ul>
+                        <table class="settings-table description-table">
+                            <thead>
+                                <tr>
+                                    <th>Category</th>
+                                    <th>Selected option</th>
+                                    <th>Description</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in preprocessing_rows %}
+                                <tr>
+                                    <td>{{ row.category }}</td>
+                                    <td>{{ row.name }}</td>
+                                    <td>{{ row.description }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
 
                         <h4>Analysis settings</h4>
                         <table class="settings-table">
@@ -217,6 +260,29 @@
                                 <tr>
                                     <th>{{ label }}</th>
                                     <td>{{ value }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+
+                        <h4>Grid-search initialization</h4>
+                        {{ grid_search_description_html | safe }}
+
+                        <h4>Selected performance metrics</h4>
+                        <table class="settings-table description-table">
+                            <thead>
+                                <tr>
+                                    <th>Metric</th>
+                                    <th>Direction</th>
+                                    <th>Description</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for metric in metric_description_rows %}
+                                <tr>
+                                    <td>{{ metric.name }}</td>
+                                    <td>{{ metric.direction }}</td>
+                                    <td>{{ metric.description }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -289,6 +355,9 @@
                                 <p>In vivo tau: {{ model_results.tau[1].n | round(4) }} &plusmn; {{ model_results.tau[1].s | round(4) }}</p>
                             {% else %}
                                 <p>In vivo tau: N/A</p>
+                            {% endif %}
+                            {% if model_results.prediction_skip_reasons and model_results.prediction_skip_reasons.tau_ratio %}
+                                <p class="prediction-skip-reason"><strong>Prediction method not performed:</strong> {{ model_results.prediction_skip_reasons.tau_ratio }}</p>
                             {% endif %}
                             <h4>Goodness of fit and validation</h4>
                             <h5>In vitro data</h5>
@@ -541,6 +610,9 @@
                                             <div id="approach2-{{ model_name }}-table-pred-tau-container" class="data-table-container" style="display: none;">
                                                 {{ pred_result['plot_tau']['table_html'] | safe }}
                                             </div>
+                                        {% elif pred_result.plot_tau_skip_reason %}
+                                            <h4>Time constant ratio rescaling</h4>
+                                            <p class="prediction-skip-reason">{{ pred_result.plot_tau_skip_reason }}</p>
                                         {% endif %}
                                         <!--{#{% if 'predictions' in pred_result %}
                                             <h4>Prediction Summary</h4>
@@ -614,13 +686,15 @@
         <!-- Data Processing Help -->
         <div id="data-processing-help-content">
             <h4>Data Processing</h4>
-            <p>This section shows how your data was preprocessed before model fitting:</p>
+            <p>This section shows how your data was preprocessed before model fitting and prediction.</p>
             <ul>
-                <li><strong>Normalization:</strong> Applied scaling methods to standardize data ranges</li>
-                <li><strong>Scaling:</strong> Mathematical transformations applied to improve model fitting</li>
-                <li><strong>Interpolation:</strong> Methods used to create evenly spaced data points</li>
+                {% for row in preprocessing_rows %}
+                <li><strong>{{ row.category }} - {{ row.name }}:</strong> {{ row.description }}</li>
+                {% endfor %}
             </ul>
-            <p><strong>For Model Selection:</strong> Review the plot to ensure data quality. For example, poor interpolation may indicate the need for different preprocessing options.</p>
+            <h4>Grid-search initialization</h4>
+            {{ grid_search_description_html | safe }}
+            <p><strong>For Model Selection:</strong> Review the plots to ensure data quality. For example, poor interpolation may indicate the need for different preprocessing options.</p>
         </div>
 
         <!-- Model Comparison Help -->
@@ -630,6 +704,12 @@
             <ul>
                 <li><strong>Performance Metrics:</strong> Quantitative measures of how well each model fits the data</li>
                 <li><strong>Kolmogorov-Smirnov Test:</strong> Statistical test comparing model predictions (p-values shown)</li>
+            </ul>
+            <h4>Selected metric definitions</h4>
+            <ul>
+                {% for metric in metric_description_rows %}
+                <li><strong>{{ metric.name }}:</strong> {{ metric.description }} {% if metric.direction %}<em>{{ metric.direction }}.</em>{% endif %}</li>
+                {% endfor %}
             </ul>
             <p><strong>For Model Selection:</strong></p>
             <ul>
