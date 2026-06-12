@@ -25,7 +25,6 @@ from sklearn.exceptions import UndefinedMetricWarning
 from models import models, approaches
 from preprocessing import preprocessing_options
 from utilities.evaluation import evaluate_goodness_of_fit, cross_validation_curve_fit, cross_validation_schemes, auto_grid_search, calculate_tau_with_uncertainty, generate_prediction_bands, generate_ratio_prediction_bands
-from utilities.selection import create_model_selector_from_metrics, select_best_models
 from utilities.descriptions import APPROACH_DESCRIPTIONS, format_analysis_config_rows
 from utilities.reporting import build_final_model_options
 from utilities.model_display import get_human_readable_function
@@ -163,15 +162,9 @@ def index():
         comparisons, ks_tables = {}, {}
         for approach in selected_approaches:
             comparisons[approach], ks_tables[approach] = create_comparison(results, approach)
-        # Add automatic model selection for use as a suggested final model.
-        try:
-            best_models, selection_report = select_best_models(results, selected_metrics, approaches, metrics)
-        except Exception:
-            best_models, selection_report = None, None
-            traceback.print_exc()
 
         analysis_config_rows = format_analysis_config_rows(analysis_config)
-        final_model_options = build_final_model_options(results, models, approaches, best_models=best_models)
+        final_model_options = build_final_model_options(results, models, approaches)
 
         # Process predictions if prediction file is provided
         prediction_results, prediction_interpolation_info = {}, {}
@@ -210,7 +203,7 @@ def index():
                                approaches=approaches, selected_approaches=selected_approaches, 
                                selected_scalings=selected_scalings, selected_normalizations=selected_normalizations, selected_interpolation=selected_interpolation,
                                metrics=metrics, selected_metrics=selected_metrics, prediction_results=prediction_results,
-                               best_models=best_models, selection_report=selection_report, analysis_config=analysis_config,
+                               analysis_config=analysis_config,
                                analysis_config_rows=analysis_config_rows, final_model_options=final_model_options,
                                approach_descriptions=APPROACH_DESCRIPTIONS)
     return render_template('index.html', models=models, approaches=approaches, preprocessing_options=preprocessing_options, 

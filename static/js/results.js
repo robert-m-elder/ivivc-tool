@@ -315,29 +315,77 @@ $(document).ready(function() {
 });
 
 
+function populateReportPlots(scope) {
+    var $scope = scope ? $(scope) : $(document);
+
+    $scope.find('.report-plot-placeholder').each(function() {
+        var $placeholder = $(this);
+        var sourceId = $placeholder.data('plot-source');
+        var source = sourceId ? document.getElementById(sourceId) : null;
+
+        if (!source) {
+            $placeholder.html('<p class="plot-unavailable">Referenced plot is not available.</p>');
+            return;
+        }
+
+        var sourcePlot = source.querySelector('.plotly-graph-div');
+        if (!sourcePlot) {
+            $placeholder.html('<p class="plot-unavailable">Referenced plot has not rendered yet.</p>');
+            return;
+        }
+
+        var clonedPlot = sourcePlot.cloneNode(true);
+        clonedPlot.removeAttribute('id');
+        clonedPlot.style.maxWidth = '100%';
+
+        var wrapper = document.createElement('div');
+        wrapper.className = 'report-plot-static';
+        wrapper.appendChild(clonedPlot);
+
+        $placeholder.empty().append(wrapper);
+    });
+}
+
+function setActiveFinalReport(selectedId) {
+    $('.final-report-content').hide().removeClass('active-report');
+    var report = document.getElementById(selectedId + '-report');
+    if (!report) {
+        return;
+    }
+
+    $(report).show().addClass('active-report');
+    populateReportPlots(report);
+
+    if (window.MathJax && window.MathJax.typesetPromise) {
+        window.MathJax.typesetPromise([report]);
+    }
+}
+
 // Final model/report selector
 $(document).ready(function() {
-    $('input[name="final_model_option"]').on('change', function() {
-        var selectedId = $(this).val();
-        $('.final-report-content').hide();
-        $('#' + selectedId + '-report').show();
+    var initialSelection = $('input[name="final_model_option"]:checked').val();
+    if (initialSelection) {
+        setActiveFinalReport(initialSelection);
+    }
 
-        if (window.MathJax && window.MathJax.typesetPromise) {
-            window.MathJax.typesetPromise([document.getElementById(selectedId + '-report')]);
-        }
+    $('input[name="final_model_option"]').on('change', function() {
+        setActiveFinalReport($(this).val());
     });
 
     $('#print-final-report').on('click', function() {
-        var reportHtml = $('.final-report-content:visible').html();
-        if (!reportHtml) {
+        var selectedId = $('input[name="final_model_option"]:checked').val();
+        if (!selectedId) {
             return;
         }
-        var printWindow = window.open('', '_blank');
-        printWindow.document.write('<html><head><title>IVIVC Final Model Report</title></head><body>');
-        printWindow.document.write(reportHtml);
-        printWindow.document.write('</body></html>');
-        printWindow.document.close();
-        printWindow.focus();
-        printWindow.print();
+
+        setActiveFinalReport(selectedId);
+        $('body').addClass('printing-final-report');
+
+        setTimeout(function() {
+            window.print();
+            setTimeout(function() {
+                $('body').removeClass('printing-final-report');
+            }, 250);
+        }, 150);
     });
 });

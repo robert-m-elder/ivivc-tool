@@ -90,7 +90,7 @@
             </table>
             <!--<img src="data:image/png;base64,{{ interpolation }}" alt="Data Processing Plot">-->
             <h4>Fitting Data:</h4>
-            <div class="plot-container">
+            <div id="plot-processing-raw-data" class="plot-container report-source-plot">
                 {{ raw_data_info['plot'] | safe }}
             </div>
             <div class="custom-button-container">
@@ -101,7 +101,7 @@
             <div id="raw-data-table-container" class="data-table-container" style="display: none;">
                 {{ raw_data_info['table_html'] | safe }}
             </div>
-            <div class="plot-container">
+            <div id="plot-processing-interpolation" class="plot-container report-source-plot">
                 {{ interpolation_info['plot'] | safe }}
             </div>
             <div class="custom-button-container">
@@ -117,7 +117,7 @@
             <!--<a href="{{ url_for('download_excel', filename=interpolation_info['filename']) }}" class="btn btn-primary">Download Data</a>-->
             {% if 'plot' in prediction_interpolation_info %}
                 <h4>Prediction Data:</h4>
-                <div class="plot-container">
+                <div id="plot-processing-prediction-interpolation" class="plot-container report-source-plot">
                     {{ prediction_interpolation_info['plot'] | safe }}
                 </div>
                 <div class="custom-button-container">
@@ -156,12 +156,6 @@
                 <h4>Pairwise Model Comparison (Kolmogorov-Smirnov Test p-values), In Vivo Data</h4>
                 {{ ks_tables["approach2"][1] | safe}}
             {% endif %}
-            <!-- Automatic Model Selection Results -->
-            {% if selection_report is not none %}
-                <div class="model-selection-section">
-                    {{ selection_report | safe }}
-                </div>
-            {% endif %}
         </div> 
 
         <!-- Final Model / Report Section -->
@@ -174,27 +168,27 @@
             </h2>
 
             {% if final_model_options %}
-                <p>Select the final model and prediction method to generate a report-ready summary. The suggested option is based on the composite model-selection score when available.</p>
+                <p>Select the final model and prediction method to generate a report-ready summary. The app does not rank or recommend a final model; final selection is left to the user.</p>
 
                 <div class="final-report-selector">
                     <h3>Choose Final Model / Method</h3>
                     {% for option in final_model_options %}
                         <label class="final-model-choice">
-                            <input type="radio" name="final_model_option" value="{{ option.id }}" {% if option.is_recommended %}checked{% endif %}>
-                            {{ option.label }}{% if option.is_recommended %} <strong>(suggested)</strong>{% endif %}
+                            <input type="radio" name="final_model_option" value="{{ option.id }}" {% if option.is_default %}checked{% endif %}>
+                            {{ option.label }}
                         </label>
                     {% endfor %}
                 </div>
 
                 <div class="custom-button-container">
-                    <button type="button" id="print-final-report" class="dt-button2 show-data-btn">
+                    <button type="button" id="print-final-report" class="dt-button2">
                         <span>Print Selected Report</span>
                     </button>
                 </div>
 
                 {% for option in final_model_options %}
                     {% set model_results = results[option.model_key] %}
-                    <div id="{{ option.id }}-report" class="final-report-content" style="display: {% if option.is_recommended %}block{% else %}none{% endif %};">
+                    <div id="{{ option.id }}-report" class="final-report-content" style="display: {% if option.is_default %}block{% else %}none{% endif %};">
                         <h3>Report Summary</h3>
                         <p><strong>Final selection:</strong> {{ option.label }}</p>
                         <p><strong>Approach:</strong> {{ option.approach_display }}</p>
@@ -221,6 +215,34 @@
 
                         <h4>Method description</h4>
                         {{ option.method_html | safe }}
+
+                        <h4>Input and preprocessing plots</h4>
+                        <h5>Raw input data</h5>
+                        <div class="report-plot-placeholder" data-plot-source="plot-processing-raw-data">
+                            <p class="plot-unavailable">Raw input data plot is not available.</p>
+                        </div>
+                        <h5>Preprocessed and interpolated fitting data</h5>
+                        <div class="report-plot-placeholder" data-plot-source="plot-processing-interpolation">
+                            <p class="plot-unavailable">Preprocessed fitting data plot is not available.</p>
+                        </div>
+                        {% if prediction_results and prediction_results != {} and 'error' not in prediction_results %}
+                            <h5>Preprocessed prediction data</h5>
+                            <div class="report-plot-placeholder" data-plot-source="plot-processing-prediction-interpolation">
+                                <p class="plot-unavailable">Preprocessed prediction data plot is not available.</p>
+                            </div>
+                        {% endif %}
+
+                        <h4>Model fitting plot</h4>
+                        <div class="report-plot-placeholder" data-plot-source="{{ option.fit_plot_source }}">
+                            <p class="plot-unavailable">Model fitting plot is not available.</p>
+                        </div>
+
+                        {% if prediction_results and prediction_results != {} and 'error' not in prediction_results and option.prediction_plot_source %}
+                            <h4>Prediction plot</h4>
+                            <div class="report-plot-placeholder" data-plot-source="{{ option.prediction_plot_source }}">
+                                <p class="plot-unavailable">Prediction plot is not available for this selection.</p>
+                            </div>
+                        {% endif %}
 
                         {% if option.approach_id == 'approach1' %}
                             <h4>Model equation</h4>
@@ -294,7 +316,7 @@
                                     <p class="error">Error: {{ model_results.error }}</p>
                                 {% else %}
                                     <!--{#<img src="data:image/png;base64,{{ model_results.plot }}" alt="{{ models[model_name].display_name }} Plot">#}-->
-                                    <div class="plot-container">
+                                    <div id="plot-fit-{{ model_key|replace(':', '-') }}" class="plot-container report-source-plot">
                                         {{ model_results['plot']['plot'] | safe }}
                                     </div>
                                     <div class="custom-button-container">
@@ -329,7 +351,7 @@
                                     <p class="error">Error: {{ model_results.error }}</p>
                                 {% else %}
                                     <!--{#<img src="data:image/png;base64,{{ model_results.plot }}" alt="{{ models[model_name].display_name }} Plot">#}-->
-                                    <div class="plot-container">
+                                    <div id="plot-fit-{{ model_key|replace(':', '-') }}" class="plot-container report-source-plot">
                                         {{ model_results['plot']['plot'] | safe }}
                                     </div>
                                     <div class="custom-button-container">
@@ -380,7 +402,7 @@
                             <div class="model-result {% if model_results.error %}has-error{% endif %}">
                                 <!--{#<img src="data:image/png;base64,{{ model_results.plot_v }}" alt="Approach 3 Value Plot">#}-->
                                 <!--{#<img src="data:image/png;base64,{{ model_results.plot_t }}" alt="Approach 3 Time Plot">#}-->
-                                <div class="plot-container">
+                                <div id="plot-fit-approach3-value" class="plot-container report-source-plot">
                                     {{ model_results['plot_v']['plot'] | safe }}
                                 </div>
                                 <div class="custom-button-container">
@@ -393,7 +415,7 @@
                                 </div>
                                 <!--{#<div class="custom-button-container"><a href="/download/{{ model_results['plot_v']['filename'] }}"  class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none;"><span>Download Data</span></a></div>#}-->
                                 <p></p>
-                                <div class="plot-container">
+                                <div id="plot-fit-approach3-time" class="plot-container report-source-plot">
                                     {{ model_results['plot_t']['plot'] | safe }}
                                 </div>
                                 <div class="custom-button-container">
@@ -434,7 +456,7 @@
                                     <div class="model-result">
                                         <h3>{{ models[model_name].display_name }}</h3>
                                         {% if 'plot' in pred_result %}
-                                            <div class="plot-container">
+                                            <div id="plot-prediction-{{ approach_id }}-{{ model_name }}" class="plot-container report-source-plot">
                                                 {{ pred_result.plot.plot | safe }}
                                             </div>
                                             <!--{#{% if 'filename' in pred_result.plot %}
@@ -467,7 +489,7 @@
                                         {% if 'plot' in pred_result %}
                                             <h4>Value ratio rescaling</h4>
                                             <!--<h4>Time ratio rescaling</h4>-->
-                                            <div class="plot-container">
+                                            <div id="plot-prediction-{{ approach_id }}-{{ model_name }}-value" class="plot-container report-source-plot">
                                                 {{ pred_result.plot.plot | safe }}
                                             </div>
                                             <div class="custom-button-container">
@@ -489,7 +511,7 @@
                                         {% endif %}
                                         {% if 'plot_tau' in pred_result and pred_result['plot_tau'] is not none %}
                                             <h4>Time constant ratio rescaling</h4>
-                                            <div class="plot-container">
+                                            <div id="plot-prediction-{{ approach_id }}-{{ model_name }}-tau" class="plot-container report-source-plot">
                                                 {{ pred_result.plot_tau.plot | safe }}
                                             </div>
                                             <div class="custom-button-container">
@@ -513,7 +535,7 @@
                                     <div class="model-result">
                                         <h3>Direct Mapping Predictions</h3>
                                         {% if 'plot' in pred_result %}
-                                            <div class="plot-container">
+                                            <div id="plot-prediction-approach3-{{ model_name|replace('_', '-') }}" class="plot-container report-source-plot">
                                                 {{ pred_result.plot.plot | safe }}
                                             </div>
                                             <div class="custom-button-container">
@@ -732,8 +754,8 @@
             <h4>Final Model / Report</h4>
             <p>This tab lets you choose a final model and prediction method after reviewing model fits, comparison metrics, and prediction behavior.</p>
             <ul>
-                <li><strong>Suggested option:</strong> selected from available model scores when automatic ranking succeeds. Treat this as a starting point, not a regulatory conclusion.</li>
-                <li><strong>Report summary:</strong> includes preprocessing choices, analysis settings, method description, parameter estimates, goodness-of-fit statistics, and uncertainty assumptions.</li>
+                <li><strong>User selection:</strong> the app does not rank or recommend a final model in this tab. The first option is only the initial UI default.</li>
+                <li><strong>Report summary:</strong> includes preprocessing choices, analysis settings, method description, relevant plots, parameter estimates, goodness-of-fit statistics, and uncertainty assumptions.</li>
                 <li><strong>Manual review:</strong> confirm that plots, residuals, parameter uncertainty, cross-validation behavior, and scientific expectations support the final choice.</li>
             </ul>
         </div>

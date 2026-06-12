@@ -940,3 +940,66 @@ body.modal-open {
     background-color: #f8f9fa;
     border-left: 4px solid #6c757d;
 }
+
+.report-plot-placeholder {
+    margin: 12px 0 20px 0;
+    padding: 10px;
+    border: 1px solid #e5e5e5;
+    background-color: #fbfbfb;
+    page-break-inside: avoid;
+}
+
+.report-plot-static {
+    width: 100%;
+    overflow: visible;
+}
+
+.report-plot-static .plotly-graph-div {
+    max-width: 100%;
+    margin: 0 auto;
+}
+
+.plot-unavailable {
+    margin: 0;
+    color: #666;
+    font-style: italic;
+}
+
+@media print {
+    body.printing-final-report header,
+    body.printing-final-report #vertical-tabs > ul,
+    body.printing-final-report #vertical-tabs > div:not(#final-model-report),
+    body.printing-final-report #final-model-report > h2,
+    body.printing-final-report #final-model-report > p,
+    body.printing-final-report .final-report-selector,
+    body.printing-final-report .custom-button-container,
+    body.printing-final-report .help-btn,
+    body.printing-final-report .modal {
+        display: none !important;
+    }
+
+    body.printing-final-report #vertical-tabs,
+    body.printing-final-report #final-model-report {
+        display: block !important;
+        border: none !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    body.printing-final-report .final-report-content {
+        display: none !important;
+        border: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    body.printing-final-report .final-report-content.active-report {
+        display: block !important;
+    }
+
+    body.printing-final-report .report-plot-placeholder,
+    body.printing-final-report table {
+        page-break-inside: avoid;
+    }
+}
