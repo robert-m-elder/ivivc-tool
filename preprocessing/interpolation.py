@@ -279,7 +279,7 @@ def interpolate_on_union(t1, m1, t2, m2):
 
 
 interpolations = {
-    'default_interpolation': interpolate_on_union,
-    'alternative_interpolation': interpolate,
+    'default': interpolate_on_union,
+    'alternative': interpolate,
 }
 

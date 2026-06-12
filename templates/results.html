@@ -30,6 +30,7 @@
 
     <script src="{{ url_for('static', filename='js/results.js') }}" defer></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="shortcut icon" href="{{ url_for('static', filename='images/favicon-32.ico') }}">
 </head>
 <body>
     <header>
@@ -66,26 +67,28 @@
                 </button>
             </h2>
             <h3>Preprocessing Applied:</h3>
-            <h4>Normalization:</h4>
-            <ul>
-                {% for norm in selected_normalizations %}
-                <li>{{ norm }}</li>
-                {% endfor %}
-            </ul>
-            <h4>Scaling:</h4>
-            <ul>
-                {% for scale in selected_scalings %}
-                <li>{{ scale }}</li>
-                {% endfor %}
-            </ul>
-            <h4>Interpolation:</h4>
-            <ul>
-                {% for interp in selected_interpolation %}
-                <li>{{ interp }}</li>
-                {% endfor %}
-            </ul>
+            <p><strong>Normalization:</strong>
+                {% if selected_normalizations %}{{ selected_normalizations | join('; ') }}{% else %}None{% endif %}
+            </p>
+            <p><strong>Scaling:</strong>
+                {% if selected_scalings %}{{ selected_scalings | join('; ') }}{% else %}None{% endif %}
+            </p>
+            <p><strong>Interpolation:</strong>
+                {% if selected_interpolation %}{{ selected_interpolation | join('; ') }}{% else %}None{% endif %}
+            </p>
             <!--<img src="data:image/png;base64,{{ interpolation }}" alt="Data Processing Plot">-->
             <h4>Fitting Data:</h4>
+            <div class="plot-container">
+                {{ raw_data_info['plot'] | safe }}
+            </div>
+            <div class="custom-button-container">
+                <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="raw-data-table" style="text-decoration: none;">
+                    <span>Show Data Table</span>
+                </button>
+            </div>
+            <div id="raw-data-table-container" class="data-table-container" style="display: none;">
+                {{ raw_data_info['table_html'] | safe }}
+            </div>
             <div class="plot-container">
                 {{ interpolation_info['plot'] | safe }}
             </div>
@@ -340,7 +343,8 @@
                                     <div class="model-result">
                                         <h3>Model: {{ models[model_name].display_name }}</h3>
                                         {% if 'plot' in pred_result %}
-                                            <h4>Time ratio rescaling</h4>
+                                            <h4>Value ratio rescaling</h4>
+                                            <!--<h4>Time ratio rescaling</h4>-->
                                             <div class="plot-container">
                                                 {{ pred_result.plot.plot | safe }}
                                             </div>

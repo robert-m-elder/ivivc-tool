@@ -20,8 +20,8 @@ cross_validation_schemes = {
                             #'approach2':sklearn.model_selection.KFold(n_splits=3, shuffle=True, random_state=12345),
                             #'approach1':sklearn.model_selection.LeaveOneOut(),
                             #'approach2':sklearn.model_selection.LeaveOneOut(),
-                            'approach1':sklearn.model_selection.ShuffleSplit(n_splits=10, test_size=0.25, random_state=12345),
-                            'approach2':sklearn.model_selection.ShuffleSplit(n_splits=10, test_size=0.25, random_state=12345),
+                            'approach1':sklearn.model_selection.ShuffleSplit(n_splits=20, test_size=0.5, random_state=12345),
+                            'approach2':sklearn.model_selection.ShuffleSplit(n_splits=20, test_size=0.5, random_state=12345),
                             #'approach2':sklearn.model_selection.TimeSeriesSplit(n_splits=5)
                            }
 
@@ -371,5 +371,150 @@ def generate_prediction_bands(model_function, x_values, params, pcov, residuals=
         'upper': mean_prediction + margin_of_error,
         'mean': mean_prediction,
         'std': prediction_std
+    }
+
+def generate_ratio_prediction_bands(model1_function, model2_function, x_values,
+                                  params1, pcov1, params2, pcov2,
+                                  residuals1=None, residuals2=None,
+                                  confidence_level=0.95, n_samples=1000):
+    """
+    Generate prediction bands for the ratio of two models (model2 / model1)
+
+    Parameters:
+    -----------
+    model1_function : callable
+        The first model function (denominator)
+    model2_function : callable
+        The second model function (numerator)
+    x_values : array-like
+        X values for prediction
+    params1 : dict
+        Best-fit parameters for model1
+    pcov1 : array-like
+        Parameter covariance matrix for model1
+    params2 : dict
+        Best-fit parameters for model2
+    pcov2 : array-like
+        Parameter covariance matrix for model2
+    residuals1 : array-like, optional
+        Residuals from model1 fit
+    residuals2 : array-like, optional
+        Residuals from model2 fit
+    confidence_level : float
+        Confidence level (default 0.95 for 95% prediction interval)
+    n_samples : int
+        Number of Monte Carlo samples
+
+    Returns:
+    --------
+    dict with 'lower', 'upper', 'mean' prediction bands for the ratio
+    """
+
+    # Convert params to arrays in consistent order
+    param_names1 = list(params1.keys())
+    param_values1 = np.array([params1[name] for name in param_names1])
+
+    param_names2 = list(params2.keys())
+    param_values2 = np.array([params2[name] for name in param_names2])
+
+    # Generate parameter samples from multivariate normal distributions
+    param_samples1 = sp.stats.multivariate_normal.rvs(mean=param_values1, cov=pcov1, size=n_samples)
+    param_samples2 = sp.stats.multivariate_normal.rvs(mean=param_values2, cov=pcov2, size=n_samples)
+
+    # Ensure param_samples are 2D even for single parameter
+    if param_samples1.ndim == 1:
+        param_samples1 = param_samples1.reshape(-1, 1)
+    if param_samples2.ndim == 1:
+        param_samples2 = param_samples2.reshape(-1, 1)
+
+    # Generate predictions for each parameter sample
+    ratios = []
+    valid_samples = 0
+
+    for i in range(n_samples):
+        sample_params1 = dict(zip(param_names1, param_samples1[i]))
+        sample_params2 = dict(zip(param_names2, param_samples2[i]))
+
+        try:
+            y_pred1 = model1_function(x_values, **sample_params1)
+            y_pred2 = model2_function(x_values, **sample_params2)
+
+            # Calculate ratio, avoiding division by zero
+            # Add small epsilon to denominator to avoid numerical issues
+            epsilon = 1e-4
+            y_pred1[y_pred1<epsilon] = epsilon
+            ratio = y_pred2 / (y_pred1 + epsilon)
+
+            # Filter out unreasonable ratios (optional - adjust thresholds as needed)
+            if np.all(np.isfinite(ratio)) and np.all(y_pred1 >= epsilon):
+                ratios.append(ratio)
+                valid_samples += 1
+
+        except Exception as e:
+            # Skip invalid parameter combinations
+            print(e)
+            continue
+
+    if valid_samples == 0:
+        raise ValueError("No valid parameter combinations found. Check your models and parameter ranges.")
+
+    print(f"Used {valid_samples} out of {n_samples} samples ({100*valid_samples/n_samples:.1f}%)")
+
+    ratios = np.array(ratios)
+    mean_ratio = np.mean(ratios, axis=0)
+
+    # Estimate residual standard error for the ratio
+    # This is more complex for ratios - we need to propagate uncertainty
+    if residuals1 is not None and residuals2 is not None:
+        # Calculate residual standard errors for individual models
+        residual_std1 = np.std(residuals1, ddof=len(param_values1))
+        residual_std2 = np.std(residuals2, ddof=len(param_values2))
+
+        # For ratio uncertainty propagation: if R = Y2/Y1, then
+        # Var(R) ≈ R² * [(σ₁/Y1)² + (σ₂/Y2)²] for uncorrelated errors
+        # We'll use the mean predictions to estimate this
+        y_mean1 = np.mean([model1_function(x_values, **params1)])
+        y_mean2 = np.mean([model2_function(x_values, **params2)])
+
+        # Relative errors
+        rel_error1 = residual_std1 / np.abs(y_mean1)
+        rel_error2 = residual_std2 / np.abs(y_mean2)
+
+        # Propagated relative error for ratio
+        rel_error_ratio = np.sqrt(rel_error1**2 + rel_error2**2)
+        residual_std_ratio = rel_error_ratio * np.abs(mean_ratio)
+
+    else:
+        # Estimate from Monte Carlo samples (less accurate)
+        residual_std_ratio = np.std(ratios, axis=0).mean()
+        print("Warning: No residuals provided. Using Monte Carlo uncertainty to estimate residual variance.")
+
+    # Calculate prediction variance = model uncertainty + residual variance
+    model_variance = np.var(ratios, axis=0)
+    total_variance = model_variance + residual_std_ratio**2
+    prediction_std = np.sqrt(total_variance)
+
+    # Degrees of freedom calculation
+    if residuals1 is not None and residuals2 is not None:
+        # Use minimum of the two models' degrees of freedom (conservative)
+        dof1 = len(residuals1) - len(param_values1)
+        dof2 = len(residuals2) - len(param_values2)
+        dof = min(dof1, dof2)
+    else:
+        dof = valid_samples - len(param_values1) - len(param_values2)  # Conservative estimate
+
+    # Calculate prediction intervals
+    alpha = 1 - confidence_level
+    t_value = sp.stats.t.ppf(1 - alpha/2, dof) if dof > 0 else 1.96
+
+    margin_of_error = t_value * prediction_std
+
+    return {
+        'lower': mean_ratio - margin_of_error,
+        'upper': mean_ratio + margin_of_error,
+        'mean': mean_ratio,
+        'std': prediction_std,
+        #'valid_samples': valid_samples,
+        #'total_samples': n_samples
     }
 
