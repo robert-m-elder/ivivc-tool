@@ -102,6 +102,105 @@ def _add_image(document, data_url, title=None):
     run.add_picture(image_stream, width=Inches(6.5))
 
 
+def _read_braced_group(value, start_index):
+    """Return the contents and end index for a LaTeX braced group."""
+    if start_index >= len(value) or value[start_index] != '{':
+        return '', start_index
+
+    depth = 0
+    group_start = start_index + 1
+    for index in range(start_index, len(value)):
+        char = value[index]
+        if char == '{':
+            depth += 1
+        elif char == '}':
+            depth -= 1
+            if depth == 0:
+                return value[group_start:index], index + 1
+    return value[group_start:], len(value)
+
+
+def _latex_to_word_runs(latex):
+    """Convert the app's simple LaTeX model equations to Word runs.
+
+    This intentionally supports only the subset produced by utilities.model_display:
+    multiplication, fractions rendered as text, and superscript exponents. It avoids
+    a heavyweight LaTeX-to-OMML dependency while preserving the common exponential
+    and power-model formatting in editable Word text.
+    """
+    text = str(latex or '').strip()
+    text = text.replace('\\left', '').replace('\\right', '')
+    text = text.replace('\\cdot', ' · ')
+    text = text.replace('\\,', ' ')
+    text = re.sub(r'\\mathrm\{([^{}]+)\}', r'\1', text)
+
+    # Render simple \frac{numerator}{denominator} constructs as editable text.
+    while '\\frac{' in text:
+        start = text.find('\\frac{')
+        numerator, after_num = _read_braced_group(text, start + len('\\frac'))
+        denominator, after_den = _read_braced_group(text, after_num)
+        replacement = f'({numerator})/({denominator})'
+        text = text[:start] + replacement + text[after_den:]
+
+    runs = []
+    normal_buffer = []
+    i = 0
+
+    def flush_normal():
+        if normal_buffer:
+            runs.append((''.join(normal_buffer), False))
+            normal_buffer.clear()
+
+    while i < len(text):
+        char = text[i]
+        if char == '^':
+            flush_normal()
+            if i + 1 < len(text) and text[i + 1] == '{':
+                exponent, next_index = _read_braced_group(text, i + 1)
+                runs.append((_latex_to_plain_text(exponent), True))
+                i = next_index
+            else:
+                exponent = text[i + 1:i + 2]
+                if exponent:
+                    runs.append((_latex_to_plain_text(exponent), True))
+                i += 2
+            continue
+        normal_buffer.append(char)
+        i += 1
+
+    flush_normal()
+    cleaned_runs = []
+    for run_text, superscript in runs:
+        run_text = _latex_to_plain_text(run_text)
+        run_text = re.sub(r'\s+', ' ', run_text)
+        if run_text:
+            cleaned_runs.append((run_text, superscript))
+    return cleaned_runs or [(_clean_text(latex), False)]
+
+
+def _latex_to_plain_text(value):
+    """Convert remaining simple LaTeX commands to readable editable text."""
+    value = str(value or '')
+    value = value.replace('\\cdot', ' · ')
+    value = value.replace('\\times', ' × ')
+    value = value.replace('\\left', '').replace('\\right', '')
+    value = value.replace('{', '').replace('}', '')
+    value = value.replace('\\', '')
+    return value.strip()
+
+
+def _add_equation(document, latex, fallback_text=None):
+    """Add a simple editable Word equation paragraph using superscript runs."""
+    runs = _latex_to_word_runs(latex or fallback_text)
+    paragraph = document.add_paragraph()
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    for text, superscript in runs:
+        run = paragraph.add_run(text)
+        run.font.name = 'Arial'
+        run.font.size = Pt(11)
+        run.font.superscript = bool(superscript)
+
 def build_word_report(payload):
     """Build a DOCX report from structured content posted by the browser.
 
@@ -146,6 +245,8 @@ def build_word_report(payload):
             text = _clean_text(item.get('text'))
             if text:
                 document.add_paragraph(text)
+        elif item_type == 'equation':
+            _add_equation(document, item.get('latex'), item.get('text'))
         elif item_type == 'bullet':
             text = _clean_text(item.get('text'))
             if text:

@@ -521,6 +521,19 @@ function appendReportElementToPayload(element, sections) {
     }
 
     if (tagName === 'p') {
+        if (element.classList.contains('report-equation')) {
+            var equationLatex = element.getAttribute('data-report-equation') || '';
+            var fallbackText = cleanReportText(element.textContent);
+            if (equationLatex || fallbackText) {
+                sections.push({
+                    type: 'equation',
+                    latex: equationLatex,
+                    text: fallbackText
+                });
+            }
+            return;
+        }
+
         var paragraphText = cleanReportText(element.textContent);
         if (paragraphText) {
             sections.push({type: 'paragraph', text: paragraphText});

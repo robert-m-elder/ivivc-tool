@@ -261,7 +261,7 @@
 
                         {% if option.approach_id == 'approach1' %}
                             <h4>Model equation</h4>
-                            <p>\[{{ model_results.function }}\]</p>
+                            <p class="report-equation" data-report-equation="{{ model_results.function }}">\[{{ model_results.function }}\]</p>
                             <h4>Final model parameters</h4>
                             {% for param, value in model_results.uparams.items() %}
                                 <p>{{ param }}: {{ value.n | round(4) }} &plusmn; {{ value.s | round(4) }}</p>
@@ -270,7 +270,7 @@
                             {{ model_results.stats_table | safe }}
                         {% elif option.approach_id == 'approach2' %}
                             <h4>Model equation</h4>
-                            <p>\[{{ model_results.function }}\]</p>
+                            <p class="report-equation" data-report-equation="{{ model_results.function }}">\[{{ model_results.function }}\]</p>
                             <h4>In vitro model parameters</h4>
                             {% for param, value in model_results.uparams[0].items() %}
                                 <p>{{ param }}: {{ value.n | round(4) }} &plusmn; {{ value.s | round(4) }}</p>
