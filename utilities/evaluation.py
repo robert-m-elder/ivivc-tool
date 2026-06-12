@@ -25,6 +25,33 @@ cross_validation_schemes = {
                             #'approach2':sklearn.model_selection.TimeSeriesSplit(n_splits=5)
                            }
 
+
+def make_cross_validator(config, approach_id=None):
+    """Create a scikit-learn cross-validator from user/app configuration."""
+    scheme = config.get('cv_scheme', 'shuffle_split')
+    n_splits = int(config.get('cv_n_splits', 20))
+    random_state = config.get('cv_random_state', 12345)
+    random_state = None if random_state in (None, '') else int(random_state)
+
+    if scheme == 'shuffle_split':
+        return sklearn.model_selection.ShuffleSplit(
+            n_splits=n_splits,
+            test_size=float(config.get('cv_test_size', 0.5)),
+            random_state=random_state,
+        )
+    if scheme == 'kfold':
+        return sklearn.model_selection.KFold(
+            n_splits=n_splits,
+            shuffle=True,
+            random_state=random_state,
+        )
+    if scheme == 'leave_one_out':
+        return sklearn.model_selection.LeaveOneOut()
+    if scheme == 'none':
+        return None
+
+    raise ValueError(f"Unknown cross-validation scheme: {scheme}")
+
 def calc_nrmse(y_true,y_pred):
     """
     RMSE normalized by standard deviation
@@ -153,6 +180,8 @@ def auto_grid_search_old(func, x, y, param_min=1e-6, param_max=1e6, num_points=2
 def cross_validation_curve_fit(x_data, y_data, model_function, cv, selected_metrics, p0=None, kwargs={}):
     num_params = len(inspect.signature(model_function).parameters) - 1  # subtract 1 for 'x'
     scores = {metric: [] for metric in selected_metrics}
+    if cv is None:
+        return {metric: np.array([np.nan]) for metric in selected_metrics}
     #scores = {metric: metrics[metric]['function'](y2, y_pred2) for metric in selected_metrics}
     #scores = {k:[] for k in evaluate_goodness_of_fit([0],[0])}
     for train_index, test_index in cv.split(x_data):

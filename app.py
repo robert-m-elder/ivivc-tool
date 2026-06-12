@@ -60,6 +60,30 @@ else:
 
 default_interpolation = 'default_interpolation'
 
+def _form_int(name, default):
+    value = request.form.get(name, '')
+    return default if value == '' else int(value)
+
+def _form_float(name, default):
+    value = request.form.get(name, '')
+    return default if value == '' else float(value)
+
+def parse_analysis_config():
+    default_grid_points = 10 if IS_PRODUCTION else 200
+    default_grid_cores = 1 if IS_PRODUCTION else None
+    grid_cores_raw = request.form.get('grid_search_num_cores', '')
+
+    return {
+        'cv_scheme': request.form.get('cv_scheme', 'shuffle_split'),
+        'cv_n_splits': _form_int('cv_n_splits', 20),
+        'cv_test_size': _form_float('cv_test_size', 0.5),
+        'cv_random_state': _form_int('cv_random_state', 12345),
+        'grid_search_num_points': _form_int('grid_search_num_points', default_grid_points),
+        'grid_search_num_cores': default_grid_cores if grid_cores_raw == '' else int(grid_cores_raw),
+        'grid_search_param_min': _form_float('grid_search_param_min', 1e-6),
+        'grid_search_param_max': _form_float('grid_search_param_max', 1e6),
+    }
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
@@ -71,6 +95,7 @@ def index():
         selected_scalings = request.form.getlist('scalings')
         selected_interpolation = request.form.getlist('interpolation')
         selected_metrics = request.form.getlist('metrics')
+        analysis_config = parse_analysis_config()
 
         # Get the output directory from the form, or use the default
         #output_directory = request.form.get('output_directory', DEFAULT_OUTPUT_DIR)
@@ -124,7 +149,7 @@ def index():
             warnings.filterwarnings("ignore", category=OptimizeWarning)
             warnings.filterwarnings("ignore", category=UndefinedMetricWarning)
             warnings.filterwarnings("ignore", category=RuntimeWarning)
-            results = process_data(data, selected_models, selected_approaches, selected_metrics)
+            results = process_data(data, selected_models, selected_approaches, selected_metrics, analysis_config=analysis_config)
         # TODO move this to models.__init__.py
         for model_key in results:
             # special for approach3
@@ -177,9 +202,10 @@ def index():
                                approaches=approaches, selected_approaches=selected_approaches, 
                                selected_scalings=selected_scalings, selected_normalizations=selected_normalizations, selected_interpolation=selected_interpolation,
                                metrics=metrics, selected_metrics=selected_metrics, prediction_results=prediction_results,
-                               best_models=best_models, selection_report=selection_report)
+                               best_models=best_models, selection_report=selection_report, analysis_config=analysis_config)
     return render_template('index.html', models=models, approaches=approaches, preprocessing_options=preprocessing_options, 
-                           default_interpolation=default_interpolation, metrics=metrics)
+                           default_interpolation=default_interpolation, metrics=metrics,
+                           default_grid_search_num_points=(10 if IS_PRODUCTION else 200))
 
 @app.route('/get_sheets', methods=['POST'])
 def get_sheets():

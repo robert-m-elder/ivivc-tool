@@ -343,6 +343,7 @@ $(document).ready(function() {
         'scaling-help': 'scaling-help-content',
         'interpolation-help': 'interpolation-help-content',
         'metrics-help': 'metrics-help-content',
+        'advanced-analysis-help': 'advanced-analysis-help-content',
         'r2-help': 'r2-help-content'
         // Add more mappings as needed
     };

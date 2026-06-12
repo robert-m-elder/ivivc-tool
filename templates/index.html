@@ -191,6 +191,41 @@
             </div>
         </div>
 
+
+        <div class="form-section">
+            <h3>
+                Advanced Analysis Parameters:
+                <button type="button" class="help-btn" data-modal="advanced-analysis-help">
+                    <span class="help-icon">?</span>
+                </button>
+            </h3>
+            <div class="form-group">
+                <label for="cv_scheme">Cross-validation scheme</label>
+                <select name="cv_scheme" id="cv_scheme">
+                    <option value="shuffle_split" selected>Shuffle split</option>
+                    <option value="kfold">K-fold</option>
+                    <option value="leave_one_out">Leave-one-out</option>
+                    <option value="none">None</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="cv_n_splits">CV splits/folds</label>
+                <input type="number" name="cv_n_splits" id="cv_n_splits" value="20" min="2">
+            </div>
+            <div class="form-group">
+                <label for="cv_test_size">ShuffleSplit test size</label>
+                <input type="number" name="cv_test_size" id="cv_test_size" value="0.5" min="0.05" max="0.95" step="0.05">
+            </div>
+            <div class="form-group">
+                <label for="cv_random_state">CV random seed</label>
+                <input type="number" name="cv_random_state" id="cv_random_state" value="12345">
+            </div>
+            <div class="form-group">
+                <label for="grid_search_num_points">Grid-search random starts</label>
+                <input type="number" name="grid_search_num_points" id="grid_search_num_points" value="{{ default_grid_search_num_points }}" min="1">
+            </div>
+        </div>
+
         <div class="form-section">
             <input type="submit" value="Analyze Data" class="submit-button">
         </div>
@@ -348,6 +383,20 @@
                 <li><strong>Default:</strong> Recommended interpolation method</li>
             </ul>
             <p>Interpolation ensures datasets have identical time points, which is necessary for some Approaches.</p>
+        </div>
+
+
+        <!-- Advanced Analysis Help -->
+        <div id="advanced-analysis-help-content">
+            <h4>Advanced Analysis Parameters</h4>
+            <p>These options control model validation and the initial parameter search used before nonlinear curve fitting.</p>
+            <ul>
+                <li><strong>Cross-validation scheme:</strong> validation splitter used for Approaches 1 and 2.</li>
+                <li><strong>CV splits/folds:</strong> number of repeated splits for ShuffleSplit or folds for K-fold.</li>
+                <li><strong>ShuffleSplit test size:</strong> fraction of observations held out in each ShuffleSplit repeat.</li>
+                <li><strong>CV random seed:</strong> seed used for reproducible randomized validation splits.</li>
+                <li><strong>Grid-search random starts:</strong> number of starting points sampled before final curve fitting. Higher values are more robust but slower.</li>
+            </ul>
         </div>
 
         <!-- Metrics Help -->
