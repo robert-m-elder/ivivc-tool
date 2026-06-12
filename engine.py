@@ -1565,9 +1565,11 @@ def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, m
         marker=dict(color=colors['in_vitro_2'], size=15, line=dict(color='white', width=2))
     ))
 
-    # Calculate prediction bands for the predicted in vivo times if available
+    # Calculate prediction bands/error bars for the predicted in vivo values or times if available
     error_x_lower = None
     error_x_upper = None
+    error_y_lower = None
+    error_y_upper = None
     
     if t_pred_vivo_err is None:
         ## MASS SCALING WITH ERROR BARS

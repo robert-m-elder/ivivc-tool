@@ -21,36 +21,35 @@ def _dom_id(value):
     return re.sub(r'[^A-Za-z0-9_-]+', '-', value).strip('-') or 'none'
 
 
-def build_final_model_options(results, models, approaches):
-    """Build reportable final-model/method options from completed model results.
+def _plot_source(source_id, title):
+    return {'source_id': source_id, 'title': title}
+
+
+def build_final_model_options(results, models, approaches, include_prediction_methods=False):
+    """Build reportable final-model options from completed model results.
+
+    When prediction data are not supplied, options are limited to fitted
+    approach/model combinations. Prediction-specific methods are only shown
+    when prediction outputs exist, because otherwise the report should describe
+    model fitting rather than a hypothetical prediction workflow.
 
     The first available option is checked by default for UI convenience only. No
     automatic recommendation or ranking is applied here.
     """
     options = []
 
-    def add_option(model_key, approach_id, model_name, method_id, method_display):
+    def add_option(model_key, approach_id, model_name, method_id=None, method_display='',
+                   fit_plot_sources=None, prediction_plot_sources=None):
         option_id = f"final-{len(options) + 1}"
         approach_description = APPROACH_DESCRIPTIONS.get(approach_id, {})
         model_dom_id = _dom_id(model_key)
         label_parts = [_approach_label(approaches, approach_id)]
         if model_name:
             label_parts.append(_model_label(models, model_name))
-        if method_display:
+        else:
+            label_parts.append('Direct mapping')
+        if include_prediction_methods and method_display:
             label_parts.append(method_display)
-
-        fit_plot_source = f"plot-fit-{model_dom_id}"
-        prediction_plot_source = None
-        if approach_id == 'approach1':
-            prediction_plot_source = f"plot-prediction-{model_dom_id}"
-        elif approach_id == 'approach2':
-            prediction_suffix = 'tau' if method_id == 'tau_ratio' else 'value'
-            prediction_plot_source = f"plot-prediction-{model_dom_id}-{prediction_suffix}"
-        elif approach_id == 'approach3':
-            fit_suffix = 'value' if method_id == 'value_scaling' else 'time'
-            prediction_suffix = 'method1-value-scaling' if method_id == 'value_scaling' else 'method2-time-scaling'
-            fit_plot_source = f"plot-fit-{model_dom_id}-{fit_suffix}"
-            prediction_plot_source = f"plot-prediction-{approach_id}-{prediction_suffix}"
 
         options.append({
             'id': option_id,
@@ -61,13 +60,14 @@ def build_final_model_options(results, models, approaches):
             'model_display': _model_label(models, model_name) if model_name else 'Direct mapping',
             'approach_display': _approach_label(approaches, approach_id),
             'method_id': method_id,
-            'method_display': method_display,
+            'method_display': method_display if include_prediction_methods else '',
             'label': ' - '.join(label_parts),
             'is_default': len(options) == 0,
-            'fit_plot_source': fit_plot_source,
-            'prediction_plot_source': prediction_plot_source,
+            'fit_plot_sources': fit_plot_sources or [],
+            'prediction_plot_sources': prediction_plot_sources or [],
             'method_html': approach_description.get('method_html', ''),
-            'error_html': approach_description.get('prediction_error_html', ''),
+            'fit_uncertainty_html': approach_description.get('fit_uncertainty_html', ''),
+            'prediction_error_html': approach_description.get('prediction_error_html', '') if include_prediction_methods else '',
         })
 
     for model_key, model_results in results.items():
@@ -79,20 +79,69 @@ def build_final_model_options(results, models, approaches):
         else:
             approach_id, model_name = model_key, None
 
+        model_dom_id = _dom_id(model_key)
+
         if approach_id == 'approach1':
-            add_option(model_key, approach_id, model_name, 'direct_time_correlation', 'Direct time correlation')
-        elif approach_id == 'approach2':
-            add_option(model_key, approach_id, model_name, 'value_ratio', 'Value-ratio rescaling')
-            tau_values = model_results.get('tau', [])
-            has_tau = (
-                len(tau_values) == 2
-                and all(getattr(tau, 'n', 0) > 0 for tau in tau_values)
-                and all(math.isfinite(getattr(tau, 'n', float('nan'))) for tau in tau_values)
+            fit_sources = [_plot_source(f"plot-fit-{model_dom_id}", 'Model fitting plot')]
+            prediction_sources = []
+            if include_prediction_methods:
+                prediction_sources = [_plot_source(f"plot-prediction-{model_dom_id}", 'Prediction plot')]
+            add_option(
+                model_key, approach_id, model_name,
+                method_id='direct_time_correlation' if include_prediction_methods else None,
+                method_display='Direct time correlation',
+                fit_plot_sources=fit_sources,
+                prediction_plot_sources=prediction_sources,
             )
-            if has_tau:
-                add_option(model_key, approach_id, model_name, 'tau_ratio', 'Time-constant-ratio rescaling')
+        elif approach_id == 'approach2':
+            fit_sources = [_plot_source(f"plot-fit-{model_dom_id}", 'Model fitting plot')]
+            if include_prediction_methods:
+                add_option(
+                    model_key, approach_id, model_name,
+                    method_id='value_ratio',
+                    method_display='Value-ratio rescaling',
+                    fit_plot_sources=fit_sources,
+                    prediction_plot_sources=[_plot_source(f"plot-prediction-{model_dom_id}-value", 'Value-ratio prediction plot')],
+                )
+                tau_values = model_results.get('tau', [])
+                has_tau = (
+                    len(tau_values) == 2
+                    and all(getattr(tau, 'n', 0) > 0 for tau in tau_values)
+                    and all(math.isfinite(getattr(tau, 'n', float('nan'))) for tau in tau_values)
+                )
+                if has_tau:
+                    add_option(
+                        model_key, approach_id, model_name,
+                        method_id='tau_ratio',
+                        method_display='Time-constant-ratio rescaling',
+                        fit_plot_sources=fit_sources,
+                        prediction_plot_sources=[_plot_source(f"plot-prediction-{model_dom_id}-tau", 'Time-constant-ratio prediction plot')],
+                    )
+            else:
+                add_option(model_key, approach_id, model_name, fit_plot_sources=fit_sources)
         elif approach_id == 'approach3':
-            add_option(model_key, approach_id, model_name, 'value_scaling', 'Direct value-ratio mapping')
-            add_option(model_key, approach_id, model_name, 'time_scaling', 'Direct time-ratio mapping')
+            if include_prediction_methods:
+                add_option(
+                    model_key, approach_id, model_name,
+                    method_id='value_scaling',
+                    method_display='Direct value-ratio mapping',
+                    fit_plot_sources=[_plot_source(f"plot-fit-{model_dom_id}-value", 'Value-ratio mapping plot')],
+                    prediction_plot_sources=[_plot_source('plot-prediction-approach3-method1-value-scaling', 'Direct value-ratio prediction plot')],
+                )
+                add_option(
+                    model_key, approach_id, model_name,
+                    method_id='time_scaling',
+                    method_display='Direct time-ratio mapping',
+                    fit_plot_sources=[_plot_source(f"plot-fit-{model_dom_id}-time", 'Time-ratio mapping plot')],
+                    prediction_plot_sources=[_plot_source('plot-prediction-approach3-method2-time-scaling', 'Direct time-ratio prediction plot')],
+                )
+            else:
+                add_option(
+                    model_key, approach_id, model_name,
+                    fit_plot_sources=[
+                        _plot_source(f"plot-fit-{model_dom_id}-value", 'Value-ratio mapping plot'),
+                        _plot_source(f"plot-fit-{model_dom_id}-time", 'Time-ratio mapping plot'),
+                    ],
+                )
 
     return options

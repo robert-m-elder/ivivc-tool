@@ -1,5 +1,9 @@
 $(function() {
-    $("#vertical-tabs").tabs().addClass("ui-tabs-vertical ui-helper-clearfix");
+    $("#vertical-tabs").tabs({
+        activate: function(event, ui) {
+            handleVisiblePlotResize();
+        }
+    }).addClass("ui-tabs-vertical ui-helper-clearfix");
     $("#vertical-tabs li").removeClass("ui-corner-top").addClass("ui-corner-left");
 });
 
@@ -221,7 +225,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Use debounced version for window resize, and force resize
-window.addEventListener('resize', debounce(function() { ensureResizePlots(true); }, 250));
+window.addEventListener('resize', debounce(function() { handleVisiblePlotResize(); }, 250));
 
 // Resize plots when tab is changed (if using tabs)
 $(document).ready(function() {
@@ -315,11 +319,50 @@ $(document).ready(function() {
 });
 
 
+function sanitizePlotId(value) {
+    return String(value || 'plot').replace(/[^A-Za-z0-9_-]/g, '-');
+}
+
+function clonePlotlyPayload(payload) {
+    return JSON.parse(JSON.stringify(payload || {}));
+}
+
+function getReportPlotHeight(sourcePlot) {
+    var height = 450;
+    if (sourcePlot && sourcePlot._fullLayout && sourcePlot._fullLayout.height) {
+        height = sourcePlot._fullLayout.height;
+    } else if (sourcePlot && sourcePlot.layout && sourcePlot.layout.height) {
+        height = sourcePlot.layout.height;
+    }
+    return Math.max(360, Math.min(height, 650));
+}
+
+function resizeReportPlots(scope) {
+    var $scope = scope ? $(scope) : $(document);
+    $scope.find('.report-plotly-div').each(function() {
+        var plotDiv = this;
+        var $placeholder = $(plotDiv).closest('.report-plot-placeholder');
+        var width = $placeholder.width();
+        var height = parseInt(plotDiv.getAttribute('data-report-height'), 10) || getReportPlotHeight(plotDiv);
+
+        if (width > 0 && height > 0 && plotDiv.layout) {
+            Plotly.relayout(plotDiv, {
+                width: width,
+                height: height,
+                autosize: true
+            });
+            Plotly.Plots.resize(plotDiv);
+        }
+    });
+}
+
 function populateReportPlots(scope) {
     var $scope = scope ? $(scope) : $(document);
+    var plotPromises = [];
 
-    $scope.find('.report-plot-placeholder').each(function() {
-        var $placeholder = $(this);
+    $scope.find('.report-plot-placeholder').each(function(index) {
+        var placeholder = this;
+        var $placeholder = $(placeholder);
         var sourceId = $placeholder.data('plot-source');
         var source = sourceId ? document.getElementById(sourceId) : null;
 
@@ -329,20 +372,48 @@ function populateReportPlots(scope) {
         }
 
         var sourcePlot = source.querySelector('.plotly-graph-div');
-        if (!sourcePlot) {
+        if (!sourcePlot || !sourcePlot.data || !sourcePlot.layout) {
             $placeholder.html('<p class="plot-unavailable">Referenced plot has not rendered yet.</p>');
             return;
         }
 
-        var clonedPlot = sourcePlot.cloneNode(true);
-        clonedPlot.removeAttribute('id');
-        clonedPlot.style.maxWidth = '100%';
+        var existingPlot = placeholder.querySelector('.report-plotly-div');
+        if (existingPlot && existingPlot.getAttribute('data-plot-source') === sourceId) {
+            resizeReportPlots(placeholder);
+            return;
+        }
 
-        var wrapper = document.createElement('div');
-        wrapper.className = 'report-plot-static';
-        wrapper.appendChild(clonedPlot);
+        var reportPlot = document.createElement('div');
+        var reportHeight = getReportPlotHeight(sourcePlot);
+        reportPlot.id = 'report-plot-' + sanitizePlotId(sourceId) + '-' + index + '-' + Date.now();
+        reportPlot.className = 'report-plotly-div';
+        reportPlot.setAttribute('data-plot-source', sourceId);
+        reportPlot.setAttribute('data-report-height', reportHeight);
+        reportPlot.style.width = '100%';
+        reportPlot.style.height = reportHeight + 'px';
 
-        $placeholder.empty().append(wrapper);
+        $placeholder.empty().append(reportPlot);
+
+        var data = clonePlotlyPayload(sourcePlot.data);
+        var layout = clonePlotlyPayload(sourcePlot.layout);
+        delete layout.width;
+        layout.height = reportHeight;
+        layout.autosize = true;
+        layout.margin = layout.margin || {l: 30, r: 30, t: 30, b: 30};
+
+        var config = {
+            responsive: true,
+            displaylogo: false
+        };
+
+        var plotPromise = Plotly.newPlot(reportPlot, data, layout, config).then(function() {
+            resizeReportPlots(placeholder);
+        });
+        plotPromises.push(plotPromise);
+    });
+
+    return Promise.all(plotPromises).then(function() {
+        resizeReportPlots($scope);
     });
 }
 
@@ -350,15 +421,35 @@ function setActiveFinalReport(selectedId) {
     $('.final-report-content').hide().removeClass('active-report');
     var report = document.getElementById(selectedId + '-report');
     if (!report) {
-        return;
+        return Promise.resolve();
     }
 
     $(report).show().addClass('active-report');
-    populateReportPlots(report);
 
-    if (window.MathJax && window.MathJax.typesetPromise) {
-        window.MathJax.typesetPromise([report]);
-    }
+    return populateReportPlots(report).then(function() {
+        if (window.MathJax && window.MathJax.typesetPromise) {
+            return window.MathJax.typesetPromise([report]);
+        }
+    }).then(function() {
+        resizeReportPlots(report);
+    });
+}
+
+function handleVisiblePlotResize() {
+    setTimeout(function() {
+        var activeReport = document.querySelector('.final-report-content.active-report');
+        if (activeReport) {
+            populateReportPlots(activeReport);
+        }
+        ensureResizePlots(true);
+        resizeReportPlots(activeReport || document);
+    }, 0);
+
+    setTimeout(function() {
+        var activeReport = document.querySelector('.final-report-content.active-report');
+        ensureResizePlots(true);
+        resizeReportPlots(activeReport || document);
+    }, 150);
 }
 
 // Final model/report selector
@@ -378,14 +469,17 @@ $(document).ready(function() {
             return;
         }
 
-        setActiveFinalReport(selectedId);
-        $('body').addClass('printing-final-report');
+        setActiveFinalReport(selectedId).then(function() {
+            $('body').addClass('printing-final-report');
+            resizeReportPlots(document.querySelector('.final-report-content.active-report'));
 
-        setTimeout(function() {
-            window.print();
             setTimeout(function() {
-                $('body').removeClass('printing-final-report');
-            }, 250);
-        }, 150);
+                window.print();
+                setTimeout(function() {
+                    $('body').removeClass('printing-final-report');
+                    handleVisiblePlotResize();
+                }, 250);
+            }, 300);
+        });
     });
 });

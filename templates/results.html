@@ -50,7 +50,6 @@
                 <li><a href="#{{ approach_id }}">Fitting: {{ approaches[approach_id].display_name }}</a></li>
             {% endfor %}
             <li><a href="#comparison">Model Comparison</a></li>
-            <li><a href="#final-model-report">Final Model / Report</a></li>
             {% if prediction_results and prediction_results != {} and 'error' not in prediction_results %}
                 {% for approach_id in selected_approaches %}
                     {% if approach_id in prediction_results and prediction_results[approach_id] %}
@@ -58,6 +57,7 @@
                     {% endif %}
                 {% endfor %}
             {% endif %}
+            <li><a href="#final-model-report">Final Model / Report</a></li>
         </ul>
 
         <div id="processing">
@@ -168,10 +168,14 @@
             </h2>
 
             {% if final_model_options %}
+                {% if include_prediction_methods %}
                 <p>Select the final model and prediction method to generate a report-ready summary. The app does not rank or recommend a final model; final selection is left to the user.</p>
+                {% else %}
+                <p>Select the final fitted approach/model to generate a report-ready summary. No prediction dataset was supplied, so prediction-specific methods are not listed. The app does not rank or recommend a final model; final selection is left to the user.</p>
+                {% endif %}
 
                 <div class="final-report-selector">
-                    <h3>Choose Final Model / Method</h3>
+                    <h3>{% if include_prediction_methods %}Choose Final Model / Prediction Method{% else %}Choose Final Model{% endif %}</h3>
                     {% for option in final_model_options %}
                         <label class="final-model-choice">
                             <input type="radio" name="final_model_option" value="{{ option.id }}" {% if option.is_default %}checked{% endif %}>
@@ -192,7 +196,9 @@
                         <h3>Report Summary</h3>
                         <p><strong>Final selection:</strong> {{ option.label }}</p>
                         <p><strong>Approach:</strong> {{ option.approach_display }}</p>
+                        {% if option.method_display %}
                         <p><strong>Prediction method:</strong> {{ option.method_display }}</p>
+                        {% endif %}
 
                         <h4>Preprocessing</h4>
                         <ul>
@@ -232,16 +238,22 @@
                             </div>
                         {% endif %}
 
-                        <h4>Model fitting plot</h4>
-                        <div class="report-plot-placeholder" data-plot-source="{{ option.fit_plot_source }}">
-                            <p class="plot-unavailable">Model fitting plot is not available.</p>
-                        </div>
-
-                        {% if prediction_results and prediction_results != {} and 'error' not in prediction_results and option.prediction_plot_source %}
-                            <h4>Prediction plot</h4>
-                            <div class="report-plot-placeholder" data-plot-source="{{ option.prediction_plot_source }}">
-                                <p class="plot-unavailable">Prediction plot is not available for this selection.</p>
+                        <h4>Model fitting plot{% if option.fit_plot_sources|length > 1 %}s{% endif %}</h4>
+                        {% for plot_source in option.fit_plot_sources %}
+                            <h5>{{ plot_source.title }}</h5>
+                            <div class="report-plot-placeholder" data-plot-source="{{ plot_source.source_id }}">
+                                <p class="plot-unavailable">{{ plot_source.title }} is not available.</p>
                             </div>
+                        {% endfor %}
+
+                        {% if option.prediction_plot_sources %}
+                            <h4>Prediction plot{% if option.prediction_plot_sources|length > 1 %}s{% endif %}</h4>
+                            {% for plot_source in option.prediction_plot_sources %}
+                                <h5>{{ plot_source.title }}</h5>
+                                <div class="report-plot-placeholder" data-plot-source="{{ plot_source.source_id }}">
+                                    <p class="plot-unavailable">{{ plot_source.title }} is not available for this selection.</p>
+                                </div>
+                            {% endfor %}
                         {% endif %}
 
                         {% if option.approach_id == 'approach1' %}
@@ -285,8 +297,11 @@
                             <p>Direct interpolation-based mapping; no parametric model is fitted for this approach.</p>
                         {% endif %}
 
-                        <h4>Error propagation and uncertainty</h4>
-                        {{ option.error_html | safe }}
+                        <h4>Uncertainty and error-bar interpretation</h4>
+                        {{ option.fit_uncertainty_html | safe }}
+                        {% if option.prediction_error_html %}
+                            {{ option.prediction_error_html | safe }}
+                        {% endif %}
 
                         <p class="report-disclaimer"><strong>Report note:</strong> This report summarizes the app configuration and fitted model output. It should be reviewed alongside the plots, source data, residual behavior, and any domain-specific acceptance criteria before use in a validation package.</p>
                     </div>
@@ -637,9 +652,11 @@
             <ul>
                 <li><strong>Plot:</strong> Scatter plot with fitted model overlay</li>
                 <li><strong>Function:</strong> Mathematical equation of the fitted model</li>
-                <li><strong>Parameters:</strong> Coefficients with uncertainty estimates (± std. err.)</li>
+                <li><strong>Parameters:</strong> Coefficients reported as estimate &plusmn; standard error</li>
                 <li><strong>Goodness of Fit:</strong> Statistical measures and cross-validation results</li>
             </ul>
+            <h4>Uncertainty and fitting plot bands</h4>
+            {{ approach_descriptions['approach1']['fit_uncertainty_html'] | safe }}
             <p><strong>For Model Selection:</strong></p>
             <ul>
                 <li>Look for <strong>high R² values</strong> and <strong>lower error metrics</strong> (e.g., RMSE)</li>
@@ -656,10 +673,12 @@
             <ul>
                 <li><strong>Plot:</strong> Both datasets with separate fitted models</li>
                 <li><strong>Function:</strong> Mathematical equation of the fitted model</li>
-                <li><strong>Parameters:</strong> Coefficients with uncertainty estimates (± std. err.)</li>
+                <li><strong>Parameters:</strong> Coefficients reported as estimate &plusmn; standard error</li>
                 <li><strong>Time Constant (Tau):</strong> Characteristic time scale of the process</li>
                 <li><strong>Separate Statistics:</strong> Goodness of fit for each dataset</li>
             </ul>
+            <h4>Uncertainty and fitting plot bands</h4>
+            {{ approach_descriptions['approach2']['fit_uncertainty_html'] | safe }}
             <p><strong>For Model Selection:</strong></p>
             <ul>
                 <li>Look for <strong>high R² values</strong> and <strong>lower error metrics</strong> (e.g., RMSE) for both datasets</li>
@@ -678,6 +697,8 @@
                 <li><strong>Value vs. Time Plot:</strong> Difference between dataset values over time</li>
                 <li><strong>Time vs. Value Plot:</strong> Ratio of dataset times across value ranges</li>
             </ul>
+            <h4>Uncertainty and fitting plot bands</h4>
+            {{ approach_descriptions['approach3']['fit_uncertainty_html'] | safe }}
             <p><strong>For Model Selection:</strong></p>
             <ul>
                 <!--<li>Look for <strong>systematic patterns</strong> rather than random scatter</li>-->
@@ -752,10 +773,12 @@
         <!-- Final Model / Report Help -->
         <div id="final-model-report-help-content">
             <h4>Final Model / Report</h4>
-            <p>This tab lets you choose a final model and prediction method after reviewing model fits, comparison metrics, and prediction behavior.</p>
+            <p>This tab lets you choose the final fitted approach/model after reviewing model fits and comparison metrics. Prediction-specific methods are only shown when a prediction dataset was supplied and successfully processed.</p>
             <ul>
                 <li><strong>User selection:</strong> the app does not rank or recommend a final model in this tab. The first option is only the initial UI default.</li>
-                <li><strong>Report summary:</strong> includes preprocessing choices, analysis settings, method description, relevant plots, parameter estimates, goodness-of-fit statistics, and uncertainty assumptions.</li>
+                <li><strong>Fit-only reports:</strong> if no prediction dataset was supplied, the selector lists only approach/model combinations and omits prediction-method choices.</li>
+                <li><strong>Prediction reports:</strong> if prediction data were supplied, the selector also lists available prediction methods such as value-ratio or time-constant-ratio rescaling.</li>
+                <li><strong>Report summary:</strong> includes preprocessing choices, analysis settings, method description, relevant plots, parameter estimates, goodness-of-fit statistics, and uncertainty/error-bar assumptions.</li>
                 <li><strong>Manual review:</strong> confirm that plots, residuals, parameter uncertainty, cross-validation behavior, and scientific expectations support the final choice.</li>
             </ul>
         </div>

@@ -1003,3 +1003,15 @@ body.modal-open {
         page-break-inside: avoid;
     }
 }
+
+.report-plotly-div {
+    width: 100%;
+    min-height: 360px;
+}
+
+@media print {
+    body.printing-final-report .report-plotly-div {
+        width: 100% !important;
+        min-height: 360px !important;
+    }
+}

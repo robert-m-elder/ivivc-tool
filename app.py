@@ -164,11 +164,11 @@ def index():
             comparisons[approach], ks_tables[approach] = create_comparison(results, approach)
 
         analysis_config_rows = format_analysis_config_rows(analysis_config)
-        final_model_options = build_final_model_options(results, models, approaches)
 
         # Process predictions if prediction file is provided
         prediction_results, prediction_interpolation_info = {}, {}
-        if prediction_file and prediction_file.filename:
+        has_prediction_dataset = bool(prediction_file and prediction_file.filename)
+        if has_prediction_dataset:
             try:
                 # Read prediction data
                 pred_filename = prediction_file.filename
@@ -198,6 +198,14 @@ def index():
 
         #print(prediction_results)
 
+        include_prediction_methods = bool(prediction_results and prediction_results != {} and 'error' not in prediction_results)
+        final_model_options = build_final_model_options(
+            results,
+            models,
+            approaches,
+            include_prediction_methods=include_prediction_methods
+        )
+
         return render_template('results.html', results=results, models=models, raw_data_info=raw_data_info, interpolation_info=interpolation_info, prediction_interpolation_info=prediction_interpolation_info, 
                                comparisons=comparisons, ks_tables=ks_tables, 
                                approaches=approaches, selected_approaches=selected_approaches, 
@@ -205,6 +213,7 @@ def index():
                                metrics=metrics, selected_metrics=selected_metrics, prediction_results=prediction_results,
                                analysis_config=analysis_config,
                                analysis_config_rows=analysis_config_rows, final_model_options=final_model_options,
+                               include_prediction_methods=include_prediction_methods,
                                approach_descriptions=APPROACH_DESCRIPTIONS)
     return render_template('index.html', models=models, approaches=approaches, preprocessing_options=preprocessing_options, 
                            default_interpolation=default_interpolation, metrics=metrics,
