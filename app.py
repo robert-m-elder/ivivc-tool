@@ -243,7 +243,9 @@ def index():
                            preprocessing_descriptions=PREPROCESSING_DESCRIPTIONS, metric_descriptions=METRIC_DESCRIPTIONS,
                            metric_description_rows=format_metric_description_rows(metrics),
                            grid_search_description_html=GRID_SEARCH_DESCRIPTION_HTML,
-                           default_grid_search_num_points=(10 if IS_PRODUCTION else 200))
+                           default_grid_search_num_points=(10 if IS_PRODUCTION else 200),
+                           default_grid_search_param_min='0.000001',
+                           default_grid_search_param_max='1000000')
 
 @app.route('/get_sheets', methods=['POST'])
 def get_sheets():
