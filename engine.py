@@ -102,8 +102,9 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
     analysis_config = analysis_config or {}
     grid_search_num_points = int(analysis_config.get('grid_search_num_points', num_points_for_grid_search))
     grid_search_num_cores = analysis_config.get('grid_search_num_cores', num_cores_for_grid_search)
-    grid_search_param_min = float(analysis_config.get('grid_search_param_min', 1e-6))
+    grid_search_param_min = float(analysis_config.get('grid_search_param_min', -1e6))
     grid_search_param_max = float(analysis_config.get('grid_search_param_max', 1e6))
+    grid_search_random_state = analysis_config.get('grid_search_random_state', 12345)
     t1,m1,t2,m2,mm,tt,ti1,ti2,mi1,mi2 = data
     
     results = {}
@@ -124,7 +125,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", category=RuntimeWarning)
                     p0 = auto_grid_search(models[model_name]['model_function'], x, y, param_min=grid_search_param_min, param_max=grid_search_param_max, 
-                                          num_points=grid_search_num_points, num_cores=grid_search_num_cores)
+                                          num_points=grid_search_num_points, num_cores=grid_search_num_cores, random_state=grid_search_random_state)
                 # cross-validation
                 cvs = cross_validation_curve_fit(x, y, models[model_name]['model_function'], cv, selected_metrics, p0=p0, kwargs=models[model_name]['fit_kwargs'])
                 cvs_mean = {f'{metric}':np.nanmean(values[np.isfinite(values)]) for metric,values in cvs.items()}
@@ -179,7 +180,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", category=RuntimeWarning)
                     p0 = auto_grid_search(models[model_name]['model_function'], x1, y1, param_min=grid_search_param_min, param_max=grid_search_param_max, 
-                                          num_points=grid_search_num_points, num_cores=grid_search_num_cores)
+                                          num_points=grid_search_num_points, num_cores=grid_search_num_cores, random_state=grid_search_random_state)
                 # cross-validation
                 cvs1 = cross_validation_curve_fit(x1, y1, models[model_name]['model_function'], cv, selected_metrics, p0=p0, kwargs=models[model_name]['fit_kwargs'])
                 cvs1_mean = {f'{metric}':np.nanmean(v[np.isfinite(v)]) for metric,v in cvs1.items()}
@@ -208,7 +209,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", category=RuntimeWarning)
                     p0 = auto_grid_search(models[model_name]['model_function'], x2, y2, param_min=grid_search_param_min, param_max=grid_search_param_max, 
-                                          num_points=grid_search_num_points, num_cores=grid_search_num_cores)
+                                          num_points=grid_search_num_points, num_cores=grid_search_num_cores, random_state=grid_search_random_state)
                 # cross-validation
                 cvs2 = cross_validation_curve_fit(x2, y2, models[model_name]['model_function'], cv, selected_metrics, p0=p0, kwargs=models[model_name]['fit_kwargs'])
                 cvs2_mean = {f'{metric}':np.nanmean(v[np.isfinite(v)]) for metric,v in cvs2.items()}

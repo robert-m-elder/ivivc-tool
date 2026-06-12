@@ -71,12 +71,12 @@ PREPROCESSING_DESCRIPTIONS = {
     },
     'interpolation': {
         'default': {
-            'display_name': 'Union-point linear interpolation',
-            'description': 'Interpolates both datasets onto the union of the original time points and the union of the original response values, using linear interpolation and marking out-of-range values as unavailable.',
+            'display_name': 'Shared-time interpolation',
+            'description': 'Interpolates both datasets onto the common set of experimental time points, using linear interpolation and marking out-of-range values as unavailable.',
         },
         'alternative': {
-            'display_name': 'Densified linear interpolation',
-            'description': 'Creates additional linearly spaced points between adjacent observations before interpolation; this can smooth displays but may add more interpolation-derived points.',
+            'display_name': 'Densified interpolation',
+            'description': 'Creates additional linearly spaced points between adjacent observations before interpolation. This can smooth displays and make fitting more stable, but adds more interpolation-derived points that skew statistical comparisons.',
         },
     },
 }
@@ -109,7 +109,8 @@ METRIC_DESCRIPTIONS = {
 }
 
 GRID_SEARCH_DESCRIPTION_HTML = '''
-    <p>The grid-search setting controls the search for initial parameter values before nonlinear least-squares fitting. For each selected model, the app evaluates multiple candidate starting points over the configured parameter range and uses the best candidate as the starting point for the final curve fit.</p>
+    <p>The grid-search setting controls the search for initial parameter values before nonlinear least-squares fitting. The minimum and maximum are real-space parameter bounds. Candidate values are sampled logarithmically by magnitude within those bounds, allowing negative and positive starting values when the configured range crosses zero.</p>
+    <p>For each selected model, the app evaluates multiple candidate starting points and uses the best candidate as the starting point for the final curve fit. The grid-search seed makes this random starting-point sampling reproducible.</p>
     <p>This initialization step can improve convergence and reduce sensitivity to poor starting values. It is not itself the final fitting algorithm and does not guarantee that the final fitted parameters are the global optimum.</p>
 '''
 
@@ -129,6 +130,7 @@ ANALYSIS_CONFIG_LABELS = {
     'grid_search_num_cores': 'Grid-search CPU cores',
     'grid_search_param_min': 'Grid-search parameter minimum',
     'grid_search_param_max': 'Grid-search parameter maximum',
+    'grid_search_random_state': 'Grid-search random seed',
 }
 
 
@@ -216,6 +218,7 @@ def format_analysis_config_rows(config):
         'grid_search_num_cores',
         'grid_search_param_min',
         'grid_search_param_max',
+        'grid_search_random_state',
     ]:
         value = config.get(key, '')
         if key == 'cv_scheme':

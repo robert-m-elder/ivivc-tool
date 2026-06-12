@@ -87,12 +87,13 @@ def parse_analysis_config():
     return {
         'cv_scheme': request.form.get('cv_scheme', 'shuffle_split'),
         'cv_n_splits': _form_int('cv_n_splits', 20),
-        'cv_test_size': _form_float('cv_test_size', 0.5),
+        'cv_test_size': _form_float('cv_test_size', 0.25),
         'cv_random_state': _form_int('cv_random_state', 12345),
         'grid_search_num_points': _form_int('grid_search_num_points', default_grid_points),
         'grid_search_num_cores': default_grid_cores if grid_cores_raw == '' else int(grid_cores_raw),
-        'grid_search_param_min': _form_float('grid_search_param_min', 1e-6),
+        'grid_search_param_min': _form_float('grid_search_param_min', -1e6),
         'grid_search_param_max': _form_float('grid_search_param_max', 1e6),
+        'grid_search_random_state': _form_int('grid_search_random_state', 12345),
     }
 
 @app.route('/', methods=['GET', 'POST'])
@@ -244,8 +245,9 @@ def index():
                            metric_description_rows=format_metric_description_rows(metrics),
                            grid_search_description_html=GRID_SEARCH_DESCRIPTION_HTML,
                            default_grid_search_num_points=(10 if IS_PRODUCTION else 200),
-                           default_grid_search_param_min='0.000001',
-                           default_grid_search_param_max='1000000')
+                           default_grid_search_param_min='-1000000',
+                           default_grid_search_param_max='1000000',
+                           default_grid_search_random_state='12345')
 
 @app.route('/get_sheets', methods=['POST'])
 def get_sheets():

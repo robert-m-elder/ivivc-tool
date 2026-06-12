@@ -220,7 +220,7 @@
                 </div>
                 <div class="advanced-field">
                     <label for="cv_test_size">Test size</label>
-                    <input type="number" name="cv_test_size" id="cv_test_size" value="0.5" min="0.05" max="0.95" step="0.05">
+                    <input type="number" name="cv_test_size" id="cv_test_size" value="0.25" min="0.05" max="0.95" step="0.05">
                 </div>
                 <div class="advanced-field">
                     <label for="cv_random_state">Random seed</label>
@@ -241,6 +241,10 @@
                 <div class="advanced-field">
                     <label for="grid_search_param_max">Parameter max</label>
                     <input type="number" name="grid_search_param_max" id="grid_search_param_max" value="{{ default_grid_search_param_max }}" step="any">
+                </div>
+                <div class="advanced-field">
+                    <label for="grid_search_random_state">Random seed</label>
+                    <input type="number" name="grid_search_random_state" id="grid_search_random_state" value="{{ default_grid_search_random_state }}">
                 </div>
             </div>
         </div>
@@ -396,7 +400,7 @@
 
         <div id="interpolation-help-content">
             <h4>Interpolation Options</h4>
-            <p>Create matched time and response grids for fitting, comparison, and direct mapping:</p>
+            <p>Use interpolation between the provided data to create matched time and response grids for fitting, comparison, and direct mapping. A common set of observed time points for the two datasets are needed so paired values can be compared or modeled.</p>
             <ul>
                 {% for option_key, option_info in preprocessing_descriptions['interpolation'].items() %}
                 <li><strong>{{ option_info.display_name }}:</strong> {{ option_info.description }}</li>
@@ -415,7 +419,8 @@
                 <li><strong>ShuffleSplit test size:</strong> fraction of observations held out in each ShuffleSplit repeat.</li>
                 <li><strong>CV random seed:</strong> seed used for reproducible randomized validation splits.</li>
                 <li><strong>Grid-search random starts:</strong> number of starting points sampled before final curve fitting. Higher values are more robust but slower.</li>
-                <li><strong>Grid-search parameter min/max:</strong> lower and upper bounds for the initial parameter-value search. These bounds affect the starting values passed to nonlinear fitting.</li>
+                <li><strong>Grid-search parameter min/max:</strong> real-space lower and upper bounds for initial parameter sampling. Values are sampled logarithmically by magnitude within these bounds.</li>
+                <li><strong>Grid-search seed:</strong> seed used for reproducible random starting-point sampling.</li>
             </ul>
             <h4>Grid-search initialization</h4>
             {{ grid_search_description_html | safe }}

@@ -86,8 +86,68 @@ def evaluate_goodness_of_fit(y_true, y_pred):
         'nrmse': nrmse
     }
 
-def auto_grid_search(func, x, y, param_min=1e-6, param_max=1e6, num_points=100, num_cores=None):
+def _sample_log_uniform_real_space(param_min, param_max, size, rng):
+    """Sample real-space values with logarithmic spacing by magnitude.
+
+    The user-supplied bounds are interpreted directly in real space. For
+    ranges that cross zero, negative and positive values are sampled from the
+    portions of the interval that are available. Zero itself cannot be sampled
+    logarithmically, so an internal lower magnitude based on the span is used
+    as the closest nonzero value.
+    """
+    param_min = float(param_min)
+    param_max = float(param_max)
+    if not np.isfinite(param_min) or not np.isfinite(param_max):
+        raise ValueError('Grid-search parameter bounds must be finite numbers.')
+    if param_min >= param_max:
+        raise ValueError('Grid-search parameter minimum must be less than the maximum.')
+
+    span = param_max - param_min
+    magnitude_floor = max(abs(span) * 1e-12, np.finfo(float).tiny)
+
+    def sample_magnitude(upper_magnitude, draw_size):
+        upper_magnitude = float(abs(upper_magnitude))
+        if upper_magnitude <= 0:
+            return np.zeros(draw_size)
+        lower_magnitude = min(magnitude_floor, upper_magnitude)
+        if np.isclose(lower_magnitude, upper_magnitude):
+            return np.full(draw_size, upper_magnitude)
+        return np.exp(rng.uniform(np.log(lower_magnitude), np.log(upper_magnitude), size=draw_size))
+
+    if param_min > 0:
+        lower_magnitude = max(param_min, magnitude_floor)
+        return np.exp(rng.uniform(np.log(lower_magnitude), np.log(param_max), size=size))
+
+    if param_max < 0:
+        magnitudes = sample_magnitude(abs(param_min), size)
+        lower_allowed = abs(param_max)
+        if lower_allowed > 0:
+            magnitudes = np.maximum(magnitudes, lower_allowed)
+        return -magnitudes
+
+    # Range crosses zero. Select sign using the amount of log-magnitude space
+    # available on each side, then sample the magnitude for that side.
+    negative_max = abs(param_min)
+    positive_max = abs(param_max)
+    negative_weight = max(np.log(negative_max / magnitude_floor), 0.0) if negative_max > 0 else 0.0
+    positive_weight = max(np.log(positive_max / magnitude_floor), 0.0) if positive_max > 0 else 0.0
+    total_weight = negative_weight + positive_weight
+
+    if total_weight == 0:
+        return np.zeros(size)
+
+    choose_negative = rng.random(size) < (negative_weight / total_weight)
+    starts = np.empty(size, dtype=float)
+    if np.any(choose_negative):
+        starts[choose_negative] = -sample_magnitude(negative_max, np.count_nonzero(choose_negative))
+    if np.any(~choose_negative):
+        starts[~choose_negative] = sample_magnitude(positive_max, np.count_nonzero(~choose_negative))
+    return starts
+
+
+def auto_grid_search(func, x, y, param_min=-1e6, param_max=1e6, num_points=100, num_cores=None, random_state=12345):
     num_params = len(inspect.signature(func).parameters) - 1  # subtract 1 for 'x'
+    rng = np.random.default_rng(None if random_state in (None, '') else int(random_state))
     
     # Define the objective function with warning filter
     def objective(params):
@@ -102,12 +162,9 @@ def auto_grid_search(func, x, y, param_min=1e-6, param_max=1e6, num_points=100, 
             except:
                 return np.inf
     
-    # Generate random starting points (log-uniform distribution)
-    log_min, log_max = np.log10(param_min), np.log10(param_max) 
-    random_starts = np.power(10, np.random.uniform(log_min, log_max, size=(num_points, num_params)))
-    
-    # Add negative values
-    random_starts *= np.random.choice([-1, 1], size=random_starts.shape)
+    # Generate random starting points. Bounds are interpreted directly in real
+    # space, while magnitudes are sampled logarithmically within those bounds.
+    random_starts = _sample_log_uniform_real_space(param_min, param_max, (num_points, num_params), rng)
 
     # Wrapper function for minimize to catch warnings
     def minimize_wrapper(x0):
