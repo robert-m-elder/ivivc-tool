@@ -101,10 +101,10 @@ METRIC_DESCRIPTIONS = {
         'description': 'RMSE normalized by the response mean. Lower values indicate smaller error relative to the response magnitude.',
     },
     'aic': {
-        'description': 'Akaike Information Criterion. Lower values indicate a better tradeoff between model fit and parameter count for the fitted dataset. AIC is intended for relative model comparison on the same dataset, not as an absolute goodness-of-fit measure.',
+        'description': 'Akaike Information Criterion. Lower values indicate a better fit-complexity tradeoff. AIC is intended for relative model comparison on the same dataset, not as an absolute goodness-of-fit measure.',
     },
     'bic': {
-        'description': 'Bayesian Information Criterion. Lower values indicate a better fit-complexity tradeoff with a stronger penalty for additional parameters than AIC and is intended for relative model comparison on the same dataset, not as an absolute goodness-of-fit measure.',
+        'description': 'Bayesian Information Criterion. Lower values indicate a better fit-complexity tradeoff, with a stronger penalty for additional parameters than AIC. BIC is intended for relative model comparison on the same dataset, not as an absolute goodness-of-fit measure.',
     },
 }
 
