@@ -188,11 +188,14 @@
                     <button type="button" id="print-final-report" class="dt-button2">
                         <span>Print Selected Report</span>
                     </button>
+                    <button type="button" id="download-word-report" class="dt-button2">
+                        <span>Download Selected Word Report</span>
+                    </button>
                 </div>
 
                 {% for option in final_model_options %}
                     {% set model_results = results[option.model_key] %}
-                    <div id="{{ option.id }}-report" class="final-report-content" style="display: {% if option.is_default %}block{% else %}none{% endif %};">
+                    <div id="{{ option.id }}-report" class="final-report-content" data-report-label="{{ option.label }}" style="display: {% if option.is_default %}block{% else %}none{% endif %};">
                         <h3>Report Summary</h3>
                         <p><strong>Final selection:</strong> {{ option.label }}</p>
                         <p><strong>Approach:</strong> {{ option.approach_display }}</p>
@@ -779,6 +782,7 @@
                 <li><strong>Fit-only reports:</strong> if no prediction dataset was supplied, the selector lists only approach/model combinations and omits prediction-method choices.</li>
                 <li><strong>Prediction reports:</strong> if prediction data were supplied, the selector also lists available prediction methods such as value-ratio or time-constant-ratio rescaling.</li>
                 <li><strong>Report summary:</strong> includes preprocessing choices, analysis settings, method description, relevant plots, parameter estimates, goodness-of-fit statistics, and uncertainty/error-bar assumptions.</li>
+                <li><strong>Word export:</strong> creates an editable .docx from the selected report content. Plotly figures are exported as static images and embedded in the Word file.</li>
                 <li><strong>Manual review:</strong> confirm that plots, residuals, parameter uncertainty, cross-validation behavior, and scientific expectations support the final choice.</li>
             </ul>
         </div>

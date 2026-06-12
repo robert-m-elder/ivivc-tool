@@ -496,7 +496,8 @@ table td.error {
     height: 100% !important;
 }
 
-/*a.dt-button2 {
+/*a.dt-button2,
+button.dt-button2 {
     display: inline-block;
     padding: 0.5em 1em;
     margin: 0.1em;
@@ -518,12 +519,14 @@ table td.error {
     outline: none;
 }
 
-a.dt-button2:hover {
+a.dt-button2:hover,
+button.dt-button2:hover {
     background-color: #e2e2e2;
     background-image: linear-gradient(to bottom, #f9f9f9 0%, #e2e2e2 100%);
 }
 
-a.dt-button2:active {
+a.dt-button2:active,
+button.dt-button2:active {
     background-color: #dadada;
     background-image: linear-gradient(to bottom, #f3f3f3 0%, #dadada 100%);
     box-shadow: inset 1px 1px 3px #666;
@@ -537,7 +540,8 @@ a.dt-button2:active {
 .show-data-btn,
 input[type="file"]::-webkit-file-upload-button,
 input[type="file"]::file-selector-button,
-a.dt-button2 {
+a.dt-button2,
+button.dt-button2 {
     background-color: #007cba;
     color: white;
     padding: 10px 20px;
@@ -556,7 +560,8 @@ a.dt-button2 {
 .dt-button:hover,
 .clear-file-btn:hover,
 .show-data-btn:hover,
-a.dt-button2:hover {
+a.dt-button2:hover,
+button.dt-button2:hover {
     background-color: #222c67;
 }
 
@@ -565,7 +570,8 @@ a.dt-button2:hover {
 .dt-button:active,
 .clear-file-btn:active,
 .show-data-btn:active,
-a.dt-button2:active {
+a.dt-button2:active,
+button.dt-button2:active {
     background-color: #1a2150; /* Slightly darker shade for pressed state */
 }
 
@@ -574,7 +580,8 @@ a.dt-button2:active {
 .dt-button:focus,
 .clear-file-btn:focus,
 .show-data-btn:focus,
-a.dt-button2:focus {
+a.dt-button2:focus,
+button.dt-button2:focus {
     outline: 2px solid #4a90e2;
     outline-offset: 2px;
 }
@@ -601,6 +608,8 @@ a.dt-button2:focus {
     display: flex;
     /*justify-content: flex-end;*/
     margin-top: 10px;  /* Adjust as needed to match spacing with DataTables buttons */
+    gap: 10px;
+    flex-wrap: wrap;
 }
 
 .data-table-container {
@@ -1014,4 +1023,10 @@ body.modal-open {
         width: 100% !important;
         min-height: 360px !important;
     }
+}
+
+button.dt-button2:disabled {
+    background-color: #6c757d;
+    cursor: not-allowed;
+    opacity: 0.75;
 }

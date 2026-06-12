@@ -27,6 +27,7 @@ from preprocessing import preprocessing_options
 from utilities.evaluation import evaluate_goodness_of_fit, cross_validation_curve_fit, cross_validation_schemes, auto_grid_search, calculate_tau_with_uncertainty, generate_prediction_bands, generate_ratio_prediction_bands
 from utilities.descriptions import APPROACH_DESCRIPTIONS, format_analysis_config_rows
 from utilities.reporting import build_final_model_options
+from utilities.word_report import build_word_report, safe_report_filename, WORD_MIME_TYPE
 from utilities.model_display import get_human_readable_function
 from utilities.misc import hex_to_rgba
 from metrics import metrics, calculate_metric
@@ -233,6 +234,27 @@ def get_sheets():
             return jsonify({'sheets': sheets})
         except Exception as e:
             return jsonify({'error': str(e)}), 400
+
+
+@app.route('/download_word_report', methods=['POST'])
+def download_word_report():
+    payload = request.get_json(silent=True) or {}
+    report_label = payload.get('report_label') or 'IVIVC_Report'
+
+    try:
+        document_io = build_word_report(payload)
+    except Exception as e:
+        print(f"Error generating Word report: {e}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 400
+
+    filename = f"{safe_report_filename(report_label)}.docx"
+    return send_file(
+        document_io,
+        as_attachment=True,
+        download_name=filename,
+        mimetype=WORD_MIME_TYPE,
+    )
 
 @app.route('/download/<path:filename>')
 def download_excel(filename):

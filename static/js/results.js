@@ -452,6 +452,313 @@ function handleVisiblePlotResize() {
     }, 150);
 }
 
+var reportImageDataById = {};
+
+function getPreviousHeadingText(element) {
+    var sibling = element.previousElementSibling;
+    while (sibling) {
+        if (/^H[1-6]$/.test(sibling.tagName)) {
+            return cleanReportText(sibling.textContent);
+        }
+        sibling = sibling.previousElementSibling;
+    }
+    return '';
+}
+
+function cleanReportText(value) {
+    return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function extractTableRows(table) {
+    var rows = [];
+    Array.from(table.querySelectorAll('tr')).forEach(function(row) {
+        var cells = Array.from(row.querySelectorAll('th, td')).map(function(cell) {
+            return cleanReportText(cell.textContent);
+        });
+        if (cells.some(function(cell) { return cell.length > 0; })) {
+            rows.push(cells);
+        }
+    });
+    return rows;
+}
+
+function appendReportElementToPayload(element, sections) {
+    if (!element || element.nodeType !== 1) {
+        return;
+    }
+
+    if (element.classList.contains('report-plot-placeholder')) {
+        var imageId = element.getAttribute('data-report-image-id');
+        if (imageId) {
+            sections.push({
+                type: 'image',
+                title: '',
+                data_url: reportImageDataById[imageId] || ''
+            });
+        } else if (element.getAttribute('data-report-export-attempted') === 'true') {
+            var plotTitle = getPreviousHeadingText(element) || 'Report plot';
+            var exportError = element.getAttribute('data-report-export-error') || 'Image export was unavailable.';
+            sections.push({
+                type: 'paragraph',
+                text: plotTitle + ': plot image could not be exported to Word. ' + exportError
+            });
+        }
+        return;
+    }
+
+    var tagName = element.tagName.toLowerCase();
+    if (/^h[1-6]$/.test(tagName)) {
+        var headingText = cleanReportText(element.textContent);
+        if (headingText) {
+            var htmlLevel = parseInt(tagName.substring(1), 10);
+            sections.push({
+                type: 'heading',
+                level: Math.max(1, Math.min(htmlLevel - 2, 3)),
+                text: headingText
+            });
+        }
+        return;
+    }
+
+    if (tagName === 'p') {
+        var paragraphText = cleanReportText(element.textContent);
+        if (paragraphText) {
+            sections.push({type: 'paragraph', text: paragraphText});
+        }
+        return;
+    }
+
+    if (tagName === 'ul' || tagName === 'ol') {
+        Array.from(element.children).forEach(function(child) {
+            if (child.tagName && child.tagName.toLowerCase() === 'li') {
+                var itemText = cleanReportText(child.textContent);
+                if (itemText) {
+                    sections.push({type: 'bullet', text: itemText});
+                }
+            }
+        });
+        return;
+    }
+
+    if (tagName === 'table') {
+        var rows = extractTableRows(element);
+        if (rows.length > 0) {
+            sections.push({type: 'table', rows: rows});
+        }
+        return;
+    }
+
+    Array.from(element.children).forEach(function(child) {
+        appendReportElementToPayload(child, sections);
+    });
+}
+
+function collectReportSections(report) {
+    var sections = [];
+    Array.from(report.children).forEach(function(child) {
+        appendReportElementToPayload(child, sections);
+    });
+    return sections;
+}
+
+function getPlotForWordExport(placeholder) {
+    // Prefer the report plot if it has already been rendered.
+    var reportPlot = placeholder.querySelector('.report-plotly-div');
+    if (reportPlot && reportPlot.data && reportPlot.layout) {
+        return reportPlot;
+    }
+
+    // Fall back to the original source plot. This avoids depending on report-tab
+    // sizing/state and is more reliable when the user has clicked through tabs in
+    // different orders.
+    var sourceId = placeholder.getAttribute('data-plot-source');
+    var source = sourceId ? document.getElementById(sourceId) : null;
+    var sourcePlot = source ? source.querySelector('.plotly-graph-div') : null;
+    if (sourcePlot && sourcePlot.data && sourcePlot.layout) {
+        return sourcePlot;
+    }
+
+    return null;
+}
+
+function clonePlotForFixedSizeExport(sourcePlot, width, height) {
+    if (!sourcePlot || typeof Plotly === 'undefined' || !Plotly.newPlot || !Plotly.toImage) {
+        return Promise.reject(new Error('Plotly image export is not available.'));
+    }
+
+    var data = clonePlotlyPayload(sourcePlot.data || sourcePlot._fullData || []);
+    var layout = clonePlotlyPayload(sourcePlot.layout || {});
+    layout.width = width;
+    layout.height = height;
+    layout.autosize = false;
+    layout.margin = layout.margin || {l: 60, r: 30, t: 50, b: 60};
+    layout.paper_bgcolor = layout.paper_bgcolor || 'white';
+    layout.plot_bgcolor = layout.plot_bgcolor || 'white';
+
+    var tempPlot = document.createElement('div');
+    tempPlot.style.position = 'fixed';
+    tempPlot.style.left = '-10000px';
+    tempPlot.style.top = '0';
+    tempPlot.style.width = width + 'px';
+    tempPlot.style.height = height + 'px';
+    tempPlot.style.background = 'white';
+    document.body.appendChild(tempPlot);
+
+    var cleanup = function() {
+        try {
+            if (typeof Plotly !== 'undefined' && Plotly.purge) {
+                Plotly.purge(tempPlot);
+            }
+        } catch (e) {
+            // Cleanup should never block report generation.
+        }
+        if (tempPlot.parentNode) {
+            tempPlot.parentNode.removeChild(tempPlot);
+        }
+    };
+
+    return Plotly.newPlot(tempPlot, data, layout, {
+        staticPlot: true,
+        displayModeBar: false,
+        responsive: false,
+        displaylogo: false
+    }).then(function() {
+        return Plotly.toImage(tempPlot, {
+            format: 'png',
+            width: width,
+            height: height,
+            scale: 2
+        });
+    }).then(function(dataUrl) {
+        cleanup();
+        return dataUrl;
+    }).catch(function(error) {
+        cleanup();
+        throw error;
+    });
+}
+
+function exportReportPlotImages(report) {
+    reportImageDataById = {};
+    var placeholders = Array.from(report.querySelectorAll('.report-plot-placeholder'));
+    var imagePromises = placeholders.map(function(placeholder, index) {
+        placeholder.setAttribute('data-report-export-attempted', 'true');
+        placeholder.removeAttribute('data-report-image-id');
+        placeholder.removeAttribute('data-report-export-error');
+
+        var plotDiv = getPlotForWordExport(placeholder);
+        if (!plotDiv) {
+            placeholder.setAttribute('data-report-export-error', 'Referenced plot could not be found or has not rendered.');
+            return Promise.resolve(false);
+        }
+
+        var height = parseInt(plotDiv.getAttribute('data-report-height'), 10) || getReportPlotHeight(plotDiv) || 450;
+        height = Math.max(360, Math.min(height, 650));
+        var imageId = 'report-image-' + index;
+
+        return clonePlotForFixedSizeExport(plotDiv, 1000, height).then(function(dataUrl) {
+            if (!dataUrl || dataUrl.indexOf('data:image/') !== 0) {
+                throw new Error('Plotly returned an invalid image payload.');
+            }
+            placeholder.setAttribute('data-report-image-id', imageId);
+            reportImageDataById[imageId] = dataUrl;
+            return true;
+        }).catch(function(error) {
+            var message = error && error.message ? error.message : 'Unknown plot export error.';
+            console.warn('Unable to export report plot image:', message, placeholder);
+            placeholder.removeAttribute('data-report-image-id');
+            placeholder.setAttribute('data-report-export-error', message);
+            delete reportImageDataById[imageId];
+            return false;
+        });
+    });
+
+    return Promise.all(imagePromises).then(function(results) {
+        return {
+            total: placeholders.length,
+            exported: results.filter(Boolean).length
+        };
+    });
+}
+
+function downloadBlob(blob, filename) {
+    var url = window.URL.createObjectURL(blob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = filename || 'IVIVC_Report.docx';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+}
+
+function filenameFromContentDisposition(header) {
+    if (!header) {
+        return null;
+    }
+    var match = header.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+    if (!match) {
+        return null;
+    }
+    return decodeURIComponent(match[1] || match[2]);
+}
+
+function downloadSelectedWordReport(selectedId, button) {
+    var report = document.getElementById(selectedId + '-report');
+    if (!report) {
+        return;
+    }
+
+    var originalText = button.find('span').text();
+    button.prop('disabled', true);
+    button.find('span').text('Preparing Word Report...');
+
+    setActiveFinalReport(selectedId)
+        .then(function() {
+            return exportReportPlotImages(report);
+        })
+        .then(function(imageExportSummary) {
+            if (imageExportSummary && imageExportSummary.total > 0 && imageExportSummary.exported === 0) {
+                console.warn('No report plot images were exported for the Word report.');
+                alert('No report plot images could be exported. The Word report will still download and will include notes where images were unavailable.');
+            } else if (imageExportSummary && imageExportSummary.exported < imageExportSummary.total) {
+                console.warn('Some report plot images were not exported for the Word report.', imageExportSummary);
+            }
+
+            var payload = {
+                report_label: report.getAttribute('data-report-label') || 'IVIVC Report',
+                sections: collectReportSections(report),
+                image_export_summary: imageExportSummary || {total: 0, exported: 0}
+            };
+
+            return fetch('/download_word_report', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+        })
+        .then(function(response) {
+            if (!response.ok) {
+                return response.json().catch(function() {
+                    return {error: 'Unable to generate Word report.'};
+                }).then(function(errorPayload) {
+                    throw new Error(errorPayload.error || 'Unable to generate Word report.');
+                });
+            }
+            var filename = filenameFromContentDisposition(response.headers.get('Content-Disposition')) || 'IVIVC_Report.docx';
+            return response.blob().then(function(blob) {
+                downloadBlob(blob, filename);
+            });
+        })
+        .catch(function(error) {
+            alert(error.message || 'Unable to generate Word report.');
+        })
+        .finally(function() {
+            button.prop('disabled', false);
+            button.find('span').text(originalText);
+        });
+}
+
 // Final model/report selector
 $(document).ready(function() {
     var initialSelection = $('input[name="final_model_option"]:checked').val();
@@ -481,5 +788,13 @@ $(document).ready(function() {
                 }, 250);
             }, 300);
         });
+    });
+
+    $('#download-word-report').on('click', function() {
+        var selectedId = $('input[name="final_model_option"]:checked').val();
+        if (!selectedId) {
+            return;
+        }
+        downloadSelectedWordReport(selectedId, $(this));
     });
 });
