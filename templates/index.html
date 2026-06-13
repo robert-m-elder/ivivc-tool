@@ -168,7 +168,7 @@
                         {% for interp_name, interp_func in preprocessing_options['interpolation'].items() %}
                         {% set interp_meta = preprocessing_descriptions['interpolation'].get(interp_name, {}) %}
                         <label>
-                            <input type="checkbox" name="interpolation" value="{{ interp_name }}" {% if interp_name == "default" %}checked{% endif %}>
+                            <input type="radio" name="interpolation" value="{{ interp_name }}" {% if interp_name == "default" %}checked{% endif %} required>
                             {{ interp_meta.get('display_name', interp_name) }}
                         </label><br>
                         {% endfor %}
@@ -400,7 +400,7 @@
 
         <div id="interpolation-help-content">
             <h4>Interpolation Options</h4>
-            <p>Use interpolation between the provided data to create matched time and response grids for fitting, comparison, and direct mapping. A common set of observed time points for the two datasets are needed so paired values can be compared or modeled.</p>
+            <p>Use interpolation between the provided data to create matched time and response grids for fitting, comparison, and direct mapping. A common set of observed time points for the two datasets are needed if paired values are to be compared or modeled (i.e., Approach 1, Approach 3).</p>
             <ul>
                 {% for option_key, option_info in preprocessing_descriptions['interpolation'].items() %}
                 <li><strong>{{ option_info.display_name }}:</strong> {{ option_info.description }}</li>

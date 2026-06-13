@@ -58,6 +58,10 @@ colors = {
 }
 
 def preprocess_data(t1, m1, t2, m2, selected_interpolation=None, selected_scalings=None, selected_normalizations=None):
+    selected_interpolation = selected_interpolation or []
+    selected_scalings = selected_scalings or []
+    selected_normalizations = selected_normalizations or []
+
     if (t2 is not None) and (m2 is not None):
         two_datasets = True
     else:
@@ -89,9 +93,11 @@ def preprocess_data(t1, m1, t2, m2, selected_interpolation=None, selected_scalin
             if two_datasets:
                 m2 = preprocessing_options['scaling'][scale](m2)
 
-    # Apply interpolation
+    # Apply interpolation/alignment. If no interpolation option is supplied,
+    # use exact raw alignment rather than failing with an unset data variable.
     if two_datasets:
-        for interp in selected_interpolation:
+        interpolation_choices = selected_interpolation or ['none']
+        for interp in interpolation_choices:
             data = preprocessing_options['interpolation'][interp](t1, m1, t2, m2)
     else:
         data = [t1, m1]

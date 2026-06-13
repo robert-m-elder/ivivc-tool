@@ -70,6 +70,10 @@ PREPROCESSING_DESCRIPTIONS = {
         },
     },
     'interpolation': {
+        'none': {
+            'display_name': 'No interpolation',
+            'description': 'Uses only exact raw alignments. No values are estimated between observations; unavailable aligned positions are marked as missing.',
+        },
         'default': {
             'display_name': 'Shared-time interpolation',
             'description': 'Interpolates both datasets onto the common set of experimental time points, using linear interpolation and marking out-of-range values as unavailable.',

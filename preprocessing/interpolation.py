@@ -278,7 +278,37 @@ def interpolate_on_union(t1, m1, t2, m2):
     return t1, m1, t2, m2, mm, tt, ti1, ti2, mi1, mi2
 
 
+def no_interpolation(t1, m1, t2, m2):
+    """Return analysis arrays without interpolating between observations.
+
+    Values are aligned only at exact observed time/value matches. Missing
+    positions are represented as NaN so downstream masks use only available
+    raw observations.
+    """
+    t1, m1 = np.asarray(t1), np.asarray(m1)
+    t2, m2 = np.asarray(t2), np.asarray(m2)
+
+    def exact_values_on_grid(x, y, grid):
+        out = np.full(len(grid), np.nan, dtype=float)
+        for i, value in enumerate(grid):
+            mask = x == value
+            if np.any(mask):
+                out[i] = np.nanmean(y[mask])
+        return out
+
+    tt = np.array(sorted(set(t1).union(set(t2))))
+    mm = np.array(sorted(set(m1).union(set(m2)), reverse=True))
+
+    mi1 = exact_values_on_grid(t1, m1, tt)
+    mi2 = exact_values_on_grid(t2, m2, tt)
+    ti1 = exact_values_on_grid(m1, t1, mm)
+    ti2 = exact_values_on_grid(m2, t2, mm)
+
+    return t1, m1, t2, m2, mm, tt, ti1, ti2, mi1, mi2
+
+
 interpolations = {
+    'none': no_interpolation,
     'default': interpolate_on_union,
     'alternative': interpolate,
 }
