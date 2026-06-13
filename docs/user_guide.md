@@ -87,8 +87,8 @@ This initialization step can improve convergence and reduce sensitivity to poor 
 | RMSE | `rmse` | Lower is generally better | Root mean squared error, in the same response units as the fitted data. Lower values indicate smaller typical residuals. |
 | NRMSE (mean) | `mnrmse` | Lower is generally better | RMSE normalized by the response mean. Lower values indicate smaller error relative to the response magnitude. |
 | NRMSE (std. dev.) | `nrmse` | Lower is generally better | RMSE normalized by the response standard deviation. Lower values indicate smaller error relative to response variability. |
-| AIC | `aic` | Lower is generally better | Akaike Information Criterion. Lower values indicate a better fit-complexity tradeoff. AIC is intended for relative model comparison on the same dataset, not as an absolute goodness-of-fit measure. |
-| BIC | `bic` | Lower is generally better | Bayesian Information Criterion. Lower values indicate a better fit-complexity tradeoff, with a stronger penalty for additional parameters than AIC. BIC is intended for relative model comparison on the same dataset, not as an absolute goodness-of-fit measure. |
+| AIC | `aic` | Lower is generally better | Akaike Information Criterion. Lower values indicate a better fit-complexity tradeoff. AIC is intended for comparison of models fitted to the same dataset, not as an absolute goodness-of-fit measure. |
+| BIC | `bic` | Lower is generally better | Bayesian Information Criterion. Lower values indicate a better fit-complexity tradeoff, with a stronger penalty for additional parameters than AIC. BIC is intended for comparison of models fitted to the same dataset, not as an absolute goodness-of-fit measure. |
 
 ## 7. Uncertainty and error bars
 
