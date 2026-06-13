@@ -167,17 +167,10 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
             elif approach_id == 'approach2':
                 cv = make_cross_validator(analysis_config, approach_id)
                 # process data for this approach
-                ## XXX
-                if 0:
-                    m = ~np.isnan(ti1)
-                    x1,y1 = ti1[m], mm[m]
-                    m = ~np.isnan(ti2)
-                    x2,y2 = ti2[m], mm[m]
-                if 1:
-                    m = ~np.isnan(mi1)
-                    x1,y1 = tt[m], mi1[m]
-                    m = ~np.isnan(mi2)
-                    x2,y2 = tt[m], mi2[m]
+                m = ~np.isnan(mi1)
+                x1,y1 = tt[m], mi1[m]
+                m = ~np.isnan(mi2)
+                x2,y2 = tt[m], mi2[m]
                 ## dataset 1
                 # get rough initial estimate of parameters
                 with warnings.catch_warnings():
@@ -377,11 +370,6 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                             m_pred_vivo = m_pred * ratio
                             
                             # Create prediction plot
-#                            plot_image = create_prediction_plot_a2(data, t_pred, m_pred, m_pred_vivo, t_pred_plot, model1_pred_plot, model2_pred_plot, {
-#                                'model_name': models[model_name]['display_name'],
-#                                'approach': approaches[approach_id]['display_name']
-#                            })
-                            # Create prediction plot
                             plot_image = create_prediction_plot_a2(data, t_pred, m_pred, m_pred_vivo, t_pred_plot, model1_pred_plot, model2_pred_plot, {
                                 'model_name': models[model_name]['display_name'],
                                 'approach': approaches[approach_id]['display_name'],
@@ -422,76 +410,7 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                                 t_pred_vivo_tau = None
                                 plot_image_tau = None
 
-                        if 0:
-                            ## Rescale time by the ratio of times implied by each value, i.e., numerically solve for the time at each value
-                            # Calculate model predictions for plotting
-                            t_pred_plot = np.linspace(min(t_pred), max(t_pred), max(len(t_pred),50))
-                            model1_pred_plot = models[model_name]['model_function'](t_pred_plot, **params1)  # in vitro model
-                            model2_pred_plot = models[model_name]['model_function'](t_pred_plot, **params2)  # in vitro model
-                            
-                            # Determine times implied by values, including error propagation
-                            t_pred_implied_vitro, t_pred_implied_vitro_err, all_valid_samples_vitro = invert_with_monte_carlo_parameters(models[model_name]['model_function'], np.array(list(params1.values())), 
-                                                                                                                                         model_results['pcov'][0], m_pred, n_samples=1000, x_guess=None, full_output=True)
-                            t_pred_implied_vivo, t_pred_implied_vivo_err, all_valid_samples_vivo = invert_with_monte_carlo_parameters(models[model_name]['model_function'], np.array(list(params2.values())), 
-                                                                                                                                      model_results['pcov'][1], m_pred, n_samples=1000, x_guess=None, full_output=True)
-                            ## XXX alternative error propagation through ratio...
-#                            for sample_vitro, sample_vivo in zip(all_valid_samples_vitro, all_valid_samples_vivo):
-#                                ratios = np.random.choice(sample_vivo,10000) / np.random.choice(sample_vitro,10000)
-#                                ratios = ratios[np.isfinite(ratios)]
-#                                print(np.nanmean(ratios), np.nanquantile(ratios, [0.05,0.95]))
-
-                            # Calculate the time scaling ratio
-                            time_ratio = t_pred_implied_vivo / t_pred_implied_vitro
-                            time_ratio_err = ((t_pred_implied_vitro_err/t_pred_implied_vitro)**2 + (t_pred_implied_vivo_err/t_pred_implied_vivo)**2)**0.5 # relative error
-
-#                            print('XXXXXX', model_name)
-#                            print(m_pred)
-#                            print(t_pred_implied_vitro, t_pred_implied_vivo, time_ratio)
-
-                            # Apply time scaling to get predicted in vivo times
-                            t_pred_vivo = t_pred * time_ratio
-                            t_pred_vivo_err = t_pred_vivo * time_ratio_err
-
-                            # Create prediction plot
-                            plot_image = create_prediction_plot_a2(data, t_pred, m_pred, t_pred_vivo, t_pred_plot, model1_pred_plot, model2_pred_plot, t_pred_vivo_err, {
-                                'model_name': models[model_name]['display_name'],
-                                'approach': approaches[approach_id]['display_name'],
-                                'model_function': models[model_name]['model_function'],
-                                'params': model_results['params'],
-                                'pcov': model_results['pcov'],
-                                'residuals': model_results['residuals']
-                            })
-
-                            ## Rescale by tau ratio, if available
-                            try:
-                                tau1,tau2 = model_results['tau']
-                                time_ratio = tau2/tau1 # uncertainties handles error propagation
-                                t_pred_vivo_tau_unc = t_pred * time_ratio
-                                t_pred_vivo_tau = np.array([t.n for t in t_pred_vivo_tau_unc])
-                                t_pred_vivo_err_tau = np.array([t.s for t in t_pred_vivo_tau_unc])
-                                ### Convert to error bar
-                                dof = len(tt) - len(model_results['params'])
-                                t_value = sp.stats.t.ppf(1-0.05/2, dof) if dof > 0 else 1.96
-                                t_pred_vivo_err_tau = t_value * t_pred_vivo_err_tau
-                                print(model_name,tau1,tau2,time_ratio,t_pred_vivo_tau,t_pred_vivo_err_tau)
-                                # Create prediction plot
-                                plot_image_tau = create_prediction_plot_a2(data, t_pred, m_pred, t_pred_vivo_tau, t_pred_plot, model1_pred_plot, model2_pred_plot, t_pred_vivo_err_tau, {
-                                    'model_name': models[model_name]['display_name'],
-                                    'approach': approaches[approach_id]['display_name'],
-                                    'model_function': models[model_name]['model_function'],
-                                })
-                            except Exception as e:
-                                print(e)
-                                t_pred_vivo_tau = None
-                                plot_image_tau = None
-
                         approach_predictions[model_name] = {
-#                            'predictions': {
-#                                'in_vitro_time': t_pred, 
-#                                'in_vitro_value': m_pred, 
-#                                'predicted_in_vivo_time': t_pred_vivo,
-#                                'predicted_in_vivo_time_tau': t_pred_vivo_tau
-#                            },
                             'plot': plot_image,
                             'plot_tau': plot_image_tau,
                             'plot_tau_skip_reason': model_results.get('prediction_skip_reasons', {}).get('tau_ratio')
@@ -851,9 +770,6 @@ def create_interpolation_plotly_new(t1, m1, t2, m2, mm, ti1, ti2):
         title_font=dict(size=20),  # Slightly larger than base font
         tickfont=dict(size=18)
     )
-    # Write data to Excel file
-    #output_filename = 'data_interpolation.xlsx'
-    #output_path = write_plotly_data_to_excel(fig, output_filename, output_directory)
     # Extract data as HTML table
     table_html = extract_plotly_data_for_table(fig)
 
@@ -936,41 +852,6 @@ def write_plotly_data_to_excel(fig, filename, directory):
             df.to_excel(writer, sheet_name=trace.name[:31], index=False)
     return full_path
 
-#def extract_plotly_data_for_table(fig):
-#    """Extract data from plotly figure and return as HTML table using pandas"""
-#    data_list = []
-#
-#    # Extract axis titles
-#    x_title = fig.layout.xaxis.title.text if fig.layout.xaxis.title else 'X'
-#    y_title = fig.layout.yaxis.title.text if fig.layout.yaxis.title else 'Y'
-#
-#    for trace in fig.data:
-#        if hasattr(trace, 'x') and hasattr(trace, 'y') and hasattr(trace, 'name') and trace.name is not None:
-#            # Create a DataFrame for this trace
-#            trace_df = pd.DataFrame({
-#                'Series': trace.name,
-#                x_title: trace.x,
-#                y_title: trace.y
-#            })
-#            data_list.append(trace_df)
-#
-#    # Combine all traces into one DataFrame
-#    if data_list:
-#        combined_df = pd.concat(data_list, ignore_index=True)
-#
-#        # Convert to HTML table with DataTables-compatible structure
-#        table_html = combined_df.to_html(
-#            classes='table table-striped',
-#            table_id='data-table',
-#            index=False,
-#            float_format=lambda x: f'{x:.4f}' if pd.notnull(x) else '',
-#            escape=False
-#        )
-#
-#        return table_html
-#    else:
-#        return "<p>No data available</p>"
-
 def extract_plotly_data_for_table(fig):
     """Extract data from plotly figure and return as HTML table with each trace in separate columns"""
 
@@ -1007,12 +888,9 @@ def extract_plotly_data_for_table(fig):
         x_col_name = f"{trace_name} - {x_title}"
         y_col_name = f"{trace_name} - {y_title}"
 
-        #table_dict[x_col_name] = x_data
-        #table_dict[y_col_name] = y_data
         table_dfs.append(pd.DataFrame(data=np.array([x_data, y_data]).T, columns=[x_col_name, y_col_name]))
 
     # Create DataFrame with all traces as separate columns
-    #combined_df = pd.DataFrame(table_dict)
     combined_df = pd.concat(table_dfs, axis=1)
 
     # Convert to HTML table with DataTables-compatible structure
@@ -1098,8 +976,6 @@ def create_plotly_a1(x, y, model_info, include_bands=True):
         yaxis_title='Time (In Vivo Data)',
         legend=dict(font=dict(size=18)),  # Slightly smaller than base font
         margin=dict(l=30, r=30, t=30, b=30),
-        #width=600,
-        #height=600*0.5,
         font=dict(
             family="Arial, sans-serif",
             size=14,  # Base font size
@@ -1331,9 +1207,6 @@ def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
         title_font=dict(size=20),  # Slightly larger than base font
         tickfont=dict(size=18)
     )
-    # Write data to Excel file
-    #output_filename = f'data_approach2_{model_info["model_name"]}.xlsx'
-    #output_path = write_plotly_data_to_excel(fig, output_filename, output_directory)
     # Extract data as HTML table
     table_html = extract_plotly_data_for_table(fig)
     # Configure the plot for download options
@@ -1383,8 +1256,6 @@ def create_plotly_a3(x, y1, y2, ptype='v'):
         title=f"Direct mapping {plot_name}",
         xaxis_title=x_label,
         yaxis_title=y_label,
-        #width=600,
-        #height=600*0.5,
         legend=dict(font=dict(size=18)),  # Slightly smaller than base font
         margin=dict(l=30, r=30, t=30, b=30),
         font=dict(
@@ -1510,17 +1381,6 @@ def create_prediction_plot_a1(data, t_pred, m_pred, t_pred_vivo, model_info, inc
             marker=dict(color=colors['in_vivo_2'], size=15, line=dict(color='white', width=2))
         ))
 
-    # Connection lines to show time scaling
-#    for i in range(len(t_pred)):
-#        fig.add_trace(go.Scatter(
-#            x=[t_pred[i], t_pred_vivo[i]],
-#            y=[m_pred[i], m_pred[i]],
-#            mode='lines',
-#            line=dict(color='gray', width=2, dash='dot'),
-#            showlegend=False,
-#            hoverinfo='skip'
-#        ))
-
     fig.update_layout(
         template='plotly_white',
         autosize=True,
@@ -1550,7 +1410,6 @@ def create_prediction_plot_a1(data, t_pred, m_pred, t_pred_vivo, model_info, inc
     return {'plot': plot_html, 'table_html': table_html}
 
 def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, model1_pred_plot, model2_pred_plot, model_info, t_pred_vivo_err=None, include_bands=True):
-#def create_prediction_plot_a2(data, t_pred, m_pred, m_pred_vivo, t_pred_plot, model1_pred_plot, model2_pred_plot, model_info, include_bands=True):
     """Create prediction plot for approach 2 - value scaling using model ratio"""
     t1,m1,t2,m2,mm,tt,ti1,ti2,mi1,mi2 = data
     fig = go.Figure()
@@ -1590,44 +1449,6 @@ def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, m
         title = f"In Vitro to In Vivo Value Prediction using value ratio rescaling with {model_info['model_name']}"
         if include_bands and 'pcov' in model_info and model_info['pcov'][0] is not None:
             try:
-                if 0:
-                    # Generate prediction bands for the predicted times
-                    bands1 = generate_prediction_bands(
-                        model_info['model_function'], 
-                        t_pred,  # Use the actual prediction times
-                        model_info['params'][0], 
-                        model_info['pcov'][0],
-                        model_info['residuals'][0]
-                    )
-                    bands2 = generate_prediction_bands(
-                        model_info['model_function'], 
-                        t_pred,  # Use the actual prediction times
-                        model_info['params'][1], 
-                        model_info['pcov'][1],
-                        model_info['residuals'][1]
-                    )
-
-                    # XXX
-                    # Estimate relative error in value ratio and multiply by time value to get estimate of absolute time error
-                    #relative_error = np.sqrt((bands1['std']/(bands1['mean'].max()-bands1['mean'].min()))**2 + (bands2['std']/(bands2['mean'].max()-bands2['mean'].min()))**2)
-                    relative_error = np.sqrt((bands1['std']/bands1['mean'][0])**2 + (bands2['std']/bands2['mean'][0])**2)
-                    #error = relative_error * (np.max(t_pred_vivo)-np.min(t_pred_vivo))
-                    error = m_pred_vivo * relative_error
-                    # For confidence intervals, assume t-distribution (more conservative)
-                    # Use the smaller degrees of freedom if available, otherwise use normal approximation
-                    t_value = 1.96  # 95% CI for normal distribution
-                    margin_of_error = t_value * error
-                    
-                    bands = {
-                        'mean': m_pred_vivo,
-                        'std': error,
-                        'lower': m_pred_vivo - margin_of_error,
-                        'upper': m_pred_vivo + margin_of_error
-                    }
-                    #print(bands)
-                    #print(bands1)
-                    #print(bands2)
-                    #print(m_pred_vivo)
                 bands = generate_ratio_prediction_bands(model_info['model_function'], model_info['model_function'], t_pred, model_info['params'][0], model_info['pcov'][0], model_info['params'][1], model_info['pcov'][1], residuals1=model_info['residuals'][0], residuals2=model_info['residuals'][1], confidence_level=0.95, n_samples=1000)
                 
                 # Calculate error bar lengths (distance from mean to upper/lower bounds)
@@ -1748,9 +1569,6 @@ def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, m
     fig.update_xaxes(title_font=dict(size=20), tickfont=dict(size=18))
     fig.update_yaxes(title_font=dict(size=20), tickfont=dict(size=18))
 
-    # Write data to Excel file
-    #output_filename = f'prediction_approach2_{model_info["model_name"]}.xlsx'
-    #output_path = write_plotly_data_to_excel(fig, output_filename, output_directory)
     # Extract data as HTML table
     table_html = extract_plotly_data_for_table(fig)
 
@@ -1882,9 +1700,6 @@ def create_prediction_plot_a3(data, t_pred, m_pred, var_pred_scaled, ptype='v'):
     fig.update_xaxes(title_font=dict(size=20), tickfont=dict(size=18))
     fig.update_yaxes(title_font=dict(size=20), tickfont=dict(size=18))
 
-    # Write data to Excel file
-    #output_filename = 'prediction_approach3.xlsx'
-    #output_path = write_plotly_data_to_excel(fig, output_filename, output_directory)
     # Extract data as HTML table
     table_html = extract_plotly_data_for_table(fig)
 
