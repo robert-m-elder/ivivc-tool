@@ -7,7 +7,15 @@ import pandas as pd
 from scipy.optimize import OptimizeWarning
 from sklearn.exceptions import UndefinedMetricWarning
 
-from engine import *
+from engine import (
+    num_cores_for_grid_search,
+    num_points_for_grid_search,
+    preprocess_data,
+    process_data,
+)
+from metrics import metrics
+from models import approaches, models
+from preprocessing import preprocessing_options
 
 def parse_sheet_spec(spec: str | None, sheet_names: list[str]) -> list[tuple[int, str]]:
     """
@@ -130,13 +138,30 @@ def rows_from_result(file_path, sheet_idx, sheet_name, model_key, result):
     return rows
 
 
+def build_analysis_config(args):
+    return {
+        "cv_scheme": args.cv_scheme,
+        "cv_n_splits": args.cv_n_splits,
+        "cv_test_size": args.cv_test_size,
+        "cv_random_state": args.cv_random_state,
+        "grid_search_num_points": args.grid_search_num_points,
+        "grid_search_num_cores": args.grid_search_num_cores,
+        "grid_search_param_min": args.grid_search_param_min,
+        "grid_search_param_max": args.grid_search_param_max,
+        "grid_search_random_state": args.grid_search_random_state,
+    }
+
+
 def run_one_df(file_path, sheet_idx, sheet_name, df, approach, model, metrics,
-               interpolation, scalings, normalizations):
+               interpolation, scalings, normalizations, analysis_config):
     if approach == "approach3":
         raise ValueError(
             "approach3 currently returns plots, not numeric fit stats. "
             "Use approach1 or approach2 for batch summaries."
         )
+
+    if model not in approaches[approach]["models"]:
+        raise ValueError(f"Model {model!r} is not available for {approach}.")
 
     t1, m1, t2, m2 = extract_fit_columns(df)
     data = preprocess_data(
@@ -144,7 +169,7 @@ def run_one_df(file_path, sheet_idx, sheet_name, df, approach, model, metrics,
         m1,
         t2,
         m2,
-        selected_interpolation=interpolation,
+        selected_interpolation=[interpolation],
         selected_scalings=scalings,
         selected_normalizations=normalizations,
     )
@@ -160,6 +185,7 @@ def run_one_df(file_path, sheet_idx, sheet_name, df, approach, model, metrics,
             selected_models=[model_key],
             selected_approaches=[approach],
             selected_metrics=metrics,
+            analysis_config=analysis_config,
         )
 
     return rows_from_result(file_path, sheet_idx, sheet_name, model_key, results[model_key])
@@ -191,16 +217,32 @@ def main():
         ),
     )
     parser.add_argument("--approach", required=True, choices=["approach1", "approach2"])
-    parser.add_argument("--model", required=True, help="Model name as used in your app")
-    parser.add_argument("--metric", dest="metrics", action="append", required=True)
-    parser.add_argument("--interpolation", action="append", default=["default_interpolation"])
-    parser.add_argument("--scaling", dest="scalings", action="append", default=[])
-    parser.add_argument("--normalization", dest="normalizations", action="append", default=[])
+    parser.add_argument("--model", required=True, choices=sorted(models), help="Model name as used in your app")
+    parser.add_argument("--metric", dest="metrics", action="append", choices=sorted(metrics), required=True)
+    parser.add_argument(
+        "--interpolation",
+        choices=sorted(preprocessing_options["interpolation"]),
+        default="default",
+        help="Interpolation/alignment method. Default: default (shared-time interpolation).",
+    )
+    parser.add_argument("--scaling", dest="scalings", action="append", choices=sorted(preprocessing_options["scaling"]), default=[])
+    parser.add_argument("--normalization", dest="normalizations", action="append", choices=sorted(preprocessing_options["normalization"]), default=[])
+
+    parser.add_argument("--cv-scheme", choices=["shuffle_split", "kfold", "leave_one_out", "none"], default="shuffle_split")
+    parser.add_argument("--cv-n-splits", type=int, default=20)
+    parser.add_argument("--cv-test-size", type=float, default=0.25)
+    parser.add_argument("--cv-random-state", type=int, default=12345)
+    parser.add_argument("--grid-search-num-points", type=int, default=num_points_for_grid_search)
+    parser.add_argument("--grid-search-num-cores", type=int, default=num_cores_for_grid_search)
+    parser.add_argument("--grid-search-param-min", type=float, default=-1e6)
+    parser.add_argument("--grid-search-param-max", type=float, default=1e6)
+    parser.add_argument("--grid-search-random-state", type=int, default=12345)
     parser.add_argument(
         "--out",
         help="Optional output CSV path. If omitted, results are printed to stdout."
     )
     args = parser.parse_args()
+    analysis_config = build_analysis_config(args)
 
     files = []
     for pattern in args.inputs:
@@ -225,6 +267,7 @@ def main():
                         interpolation=args.interpolation,
                         scalings=args.scalings,
                         normalizations=args.normalizations,
+                        analysis_config=analysis_config,
                     )
                 )
         except Exception as e:
