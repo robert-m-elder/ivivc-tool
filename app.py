@@ -49,6 +49,16 @@ import json
 
 app = Flask(__name__)
 
+
+@app.route('/user-guide')
+def user_guide():
+    """Serve the generated user guide PDF, if present."""
+    return send_from_directory(
+        os.path.join(app.root_path, 'docs'),
+        'user_guide.pdf',
+        as_attachment=False,
+    )
+
 # Determine environment
 IS_PRODUCTION = 'PYTHONANYWHERE_DOMAIN' in os.environ
 # Basic configuration

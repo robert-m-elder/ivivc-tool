@@ -57,6 +57,40 @@ h1 {
     object-position: left;
 }
 
+
+.user-guide-button {
+    position: absolute;
+    top: 50%;
+    right: 20px;
+    transform: translateY(-50%);
+    display: inline-block;
+    padding: 8px 14px;
+    border: 1px solid #007cba;
+    border-radius: 4px;
+    background-color: #fff;
+    color: #007cba;
+    font-size: 0.9rem;
+    font-weight: 600;
+    line-height: 1;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.user-guide-button:hover,
+.user-guide-button:focus {
+    background-color: #007cba;
+    color: #fff;
+    text-decoration: none;
+}
+
+@media (max-width: 700px) {
+    .user-guide-button {
+        right: 8px;
+        padding: 6px 8px;
+        font-size: 0.78rem;
+    }
+}
+
 main {
     width: 100%;
     margin-top: 80px; /* Should match the header height */
