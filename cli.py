@@ -289,6 +289,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# usage example
-# python cli.py '/Users/robert.elder/OneDrive - FDA/IVIVC Tool/data/Literature_and_submission_data_v1.xlsx' --approach approach2 --model exponential --metric rmse --sheet 1: --out summary.csv

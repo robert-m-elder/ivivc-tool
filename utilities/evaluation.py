@@ -6,25 +6,11 @@ import sklearn
 import sklearn.model_selection
 from sklearn.metrics import r2_score, mean_squared_error, root_mean_squared_error
 import scipy as sp
-import scipy.optimize
-import scipy.stats
 import inspect
-from itertools import product
-from metrics import metrics, calculate_metric
+from metrics import calculate_metric
 
 from joblib import Parallel, delayed
 import multiprocessing
-
-cross_validation_schemes = {
-                            #'approach1':sklearn.model_selection.KFold(n_splits=3, shuffle=True, random_state=12345),
-                            #'approach2':sklearn.model_selection.KFold(n_splits=3, shuffle=True, random_state=12345),
-                            #'approach1':sklearn.model_selection.LeaveOneOut(),
-                            #'approach2':sklearn.model_selection.LeaveOneOut(),
-                            'approach1':sklearn.model_selection.ShuffleSplit(n_splits=20, test_size=0.5, random_state=12345),
-                            'approach2':sklearn.model_selection.ShuffleSplit(n_splits=20, test_size=0.5, random_state=12345),
-                            #'approach2':sklearn.model_selection.TimeSeriesSplit(n_splits=5)
-                           }
-
 
 def make_cross_validator(config, approach_id=None):
     """Create a scikit-learn cross-validator from user/app configuration."""
@@ -153,13 +139,12 @@ def auto_grid_search(func, x, y, param_min=-1e6, param_max=1e6, num_points=100, 
     def objective(params):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
-            #return np.sum((y - func(x, *params))**2)
             try:
                 pred = func(x, *params)
                 if np.any(np.isnan(pred)) or np.any(np.isinf(pred)):
                     return np.inf
                 return np.sum((y - pred)**2)
-            except:
+            except Exception:
                 return np.inf
     
     # Generate random starting points. Bounds are interpreted directly in real
@@ -187,60 +172,11 @@ def auto_grid_search(func, x, y, param_min=-1e6, param_max=1e6, num_points=100, 
     
     return best_result.x
 
-def auto_grid_search_old(func, x, y, param_min=1e-6, param_max=1e6, num_points=25):
-    """
-    Perform an automatic grid search for the best parameters of a given function,
-    including both positive and negative log-scaled values.
-
-    Parameters:
-    func : callable
-        The function to optimize. Should take x as the first argument,
-        followed by the parameters to be optimized.
-    x : array_like
-        The x data.
-    y : array_like
-        The y data.
-    num_points : int, optional
-        Number of points to sample for each parameter (default is 20).
-    range_scale : float, optional
-        Scale factor for parameter ranges (default is 1, giving a range of -1e5 to 1e5).
-
-    Returns:
-    best_params : ndarray
-        The best parameters found.
-    """
-    # Automatically determine the number of parameters
-    num_params = len(inspect.signature(func).parameters) - 1  # subtract 1 for 'x'
-    
-    if num_params>2: num_points = num_points // 2
-
-    # Generate log-spaced ranges for each parameter, including negative values
-    tmp_range = np.logspace(np.log10(param_min), np.log10(param_max), num=num_points)
-    full_range = np.concatenate([-tmp_range[::-1], [0], tmp_range])
-    allparams = np.array(list(product(*[full_range]*num_params)))
-
-    # Define the objective function 
-    def objective(params):
-        # Convert params from log space, preserving signs
-        #actual_params = np.sign(params) * 10**np.abs(params)
-        return np.sum((y - func(x, *params))**2)
-
-    # Perform the grid search
-    results = np.apply_along_axis(objective, 1, allparams) 
-
-    # Get best set of parameters, handling nan and inf
-    results[~np.isfinite(results)] = np.inf
-    best_params = allparams[np.nanargmin(results)]
-
-    return best_params
-
 def cross_validation_curve_fit(x_data, y_data, model_function, cv, selected_metrics, p0=None, kwargs={}):
     num_params = len(inspect.signature(model_function).parameters) - 1  # subtract 1 for 'x'
     scores = {metric: [] for metric in selected_metrics}
     if cv is None:
         return {metric: np.array([np.nan]) for metric in selected_metrics}
-    #scores = {metric: metrics[metric]['function'](y2, y_pred2) for metric in selected_metrics}
-    #scores = {k:[] for k in evaluate_goodness_of_fit([0],[0])}
     for train_index, test_index in cv.split(x_data):
         x_train, x_test = x_data[train_index], x_data[test_index]
         y_train, y_test = y_data[train_index], y_data[test_index]
@@ -249,7 +185,6 @@ def cross_validation_curve_fit(x_data, y_data, model_function, cv, selected_metr
             popt, pcov = sp.optimize.curve_fit(model_function, x_train, y_train, p0, **kwargs)
         y_pred = model_function(x_test, *popt)
         tmp_scores = {metric: calculate_metric(metric, y_test, y_pred, num_params) for metric in selected_metrics}
-        #tmp_scores = {metric: metrics[metric]['function'](y_test, y_pred) for metric in selected_metrics}
         #tmp_scores = evaluate_goodness_of_fit(y_test, y_pred)
         for k,v in tmp_scores.items():
             scores[k].append(v)
@@ -351,7 +286,7 @@ def generate_confidence_bands(model_function, x_values, params, pcov, confidence
         try:
             y_pred = model_function(x_values, **sample_params)
             predictions.append(y_pred)
-        except:
+        except Exception:
             # Skip invalid parameter combinations
             continue
 
@@ -414,7 +349,7 @@ def generate_prediction_bands(model_function, x_values, params, pcov, residuals=
         try:
             y_pred = model_function(x_values, **sample_params)
             predictions.append(y_pred)
-        except:
+        except Exception:
             # Skip invalid parameter combinations
             continue
 

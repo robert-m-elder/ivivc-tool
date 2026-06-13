@@ -1,4 +1,4 @@
-<!-- index.html -->
+
 <!DOCTYPE html>
 <html>
 <head>
@@ -15,8 +15,7 @@
             In Vitro-In Vivo Correlation (IVIVC) App
             <div class="header-image">
                 <img src="{{ url_for('static', filename='images/Logo_FDA_Primary_Blue.png') }}" alt="FDA Logo">
-                <!--<img src="{{ url_for('static', filename='images/Logo_FDA_Primary_WhiteOnBlue_CDRH.png') }}" alt="FDA/CDRH Logo">-->
-            </div>
+</div>
             <a class="user-guide-button" href="{{ url_for('user_guide') }}" target="_blank" rel="noopener">User Guide</a>
         </h1>
     </header>
@@ -37,8 +36,7 @@
                 <button type="button" class="btn btn-sm btn-outline-secondary mt-1 clear-file-btn" data-target="file">
                     Clear Selection
                 </button>
-                <!--<small class="form-text text-muted">Upload a CSV or Excel file with two sets of time vs. value data for fitting models.</small>-->
-            </div>
+</div>
             <div id="sheet-selection" class="form-group" style="display: none;">
                 <label for="sheet">
                     Select Worksheet:
@@ -57,8 +55,7 @@
                 <button type="button" class="btn btn-sm btn-outline-secondary mt-1 clear-file-btn" data-target="prediction_file">
                     Clear Selection
                 </button>
-                <!--<small class="form-text text-muted">Upload a CSV or Excel file with time vs. value data for predictions.</small>-->
-            </div>
+</div>
             <div id="sheet-selection2" class="form-group" style="display: none;">
                 <label for="sheet2">Select Worksheet:</label>
                 <select name="prediction_sheet" id="sheet2">
@@ -68,11 +65,7 @@
                     </option>
                 </select>
             </div>
-            <!--{#<div class="form-group">
-                <label for="output_directory">Output Directory:</label>
-                <input type="text" id="output_directory" name="output_directory" value="{{ output_directory }}">
-            </div>#}-->
-        </div>
+</div>
 
         <div class="form-section">
             <h3>
@@ -112,8 +105,7 @@
                         <label>
                             <input type="checkbox" name="models" value="{{ approach_id }}:{{ model_name }}" checked>
                             {{ models[model_name].display_name }}
-                            <!--{#<button type="button" class="help-btn-tiny" data-modal="{{ model_name }}-help">?</button>#}-->
-                        </label><br>
+</label><br>
                         {% endfor %}
                         {% if approach_id == 'approach3' %}
                             N/A
@@ -195,7 +187,6 @@
             </div>
         </div>
 
-
         <div class="form-section">
             <h3>
                 Advanced Analysis Parameters:
@@ -255,9 +246,7 @@
         </div>
     </form>
     </main>
-
-    <!-- Modal Structure -->
-    <div id="help-modal" class="modal">
+<div id="help-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
                 <h4 id="modal-title">Help</h4>
@@ -265,20 +254,15 @@
             </div>
             <div class="modal-body">
                 <div id="modal-text">
-                    <!-- Content will be loaded here -->
-                </div>
+</div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="modal-close-btn">Close</button>
             </div>
         </div>
     </div>
-
-    <!-- Modal Content Definitions -->
-    <div id="modal-content-definitions" style="display: none;">
-        
-        <!-- Data Section Help -->
-        <div id="data-help-content">
+<div id="modal-content-definitions" style="display: none;">
+<div id="data-help-content">
             <h4>Data Upload</h4>
             <p>This section allows you to upload datasets for IVIVC analysis:</p>
             <ul>
@@ -318,9 +302,7 @@
         <div id="prediction-sheet-help-content">
             <p>If your file for prediction contains multiple sheets, select the sheet you want to use.</p>
         </div>
-
-        <!-- Approaches Help -->
-        <div id="approaches-help-content">
+<div id="approaches-help-content">
             <h4>Analysis Approaches</h4>
             <p>Choose from different mathematical approaches for establishing IVIVC:</p>
             <ul>
@@ -367,9 +349,7 @@
             </ul>
             <p><strong>Best for:</strong> Exploratory analysis or when model assumptions may not hold.</p>
         </div>
-
-        <!-- Preprocessing Help -->
-        <div id="preprocessing-help-content">
+<div id="preprocessing-help-content">
             <h4>Data Preprocessing</h4>
             <p>Transform your data before analysis to improve model fitting and comparability. The selected preprocessing choices are included in the results and downloadable Word report.</p>
             <ul>
@@ -408,10 +388,7 @@
                 {% endfor %}
             </ul>
         </div>
-
-
-        <!-- Advanced Analysis Help -->
-        <div id="advanced-analysis-help-content">
+<div id="advanced-analysis-help-content">
             <h4>Advanced Analysis Parameters</h4>
             <p>These options control model validation and the initial parameter search used before nonlinear curve fitting.</p>
             <ul>
@@ -426,9 +403,7 @@
             <h4>Grid-search initialization</h4>
             {{ grid_search_description_html | safe }}
         </div>
-
-        <!-- Metrics Help -->
-        <div id="metrics-help-content">
+<div id="metrics-help-content">
             <h4>Performance Metrics</h4>
             <p>Choose metrics to evaluate model performance. The selected metric definitions are included in the report.</p>
             <ul>

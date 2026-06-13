@@ -1,21 +1,15 @@
-<!-- results.html -->
+
 <!DOCTYPE html>
 <html>
 <head>
     <title>Correlation Results</title>
     <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
     <script type="text/javascript" charset="utf8" src="https://code.jquery.com/jquery-3.7.1.js"></script>
-    <!--<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>-->
-    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <script src="https://cdn.plot.ly/plotly-3.0.1.min.js" charset="utf-8"></script>
-
-    <!--<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.10.24/css/jquery.dataTables.css">
-    <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.10.24/js/jquery.dataTables.js"></script>-->
-
-    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/2.3.2/css/dataTables.dataTables.css">
-    <!--<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/buttons/3.2.3/css/buttons.dataTables.css">-->
-    <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/2.3.2/js/dataTables.js"></script>
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/2.3.2/css/dataTables.dataTables.css">
+<script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/2.3.2/js/dataTables.js"></script>
     <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/buttons/3.2.3/js/dataTables.buttons.js"></script>
     <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/buttons/3.2.3/js/buttons.dataTables.js"></script>
     <script type="text/javascript" charset="utf8" src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -38,8 +32,7 @@
             Correlation Results
             <div class="header-image">
                 <img src="{{ url_for('static', filename='images/Logo_FDA_Primary_Blue.png') }}" alt="FDA Logo">
-                <!--<img src="{{ url_for('static', filename='images/Logo_FDA_Primary_WhiteOnBlue_CDRH.png') }}" alt="FDA/CDRH Logo">-->
-            </div>
+</div>
             <a class="user-guide-button" href="{{ url_for('user_guide') }}" target="_blank" rel="noopener">User Guide</a>
         </h1>
     </header>
@@ -100,8 +93,7 @@
             </table>
             <h4>Grid-search initialization</h4>
             {{ grid_search_description_html | safe }}
-            <!--<img src="data:image/png;base64,{{ interpolation }}" alt="Data Processing Plot">-->
-            <h4>Fitting Data:</h4>
+<h4>Fitting Data:</h4>
             <div id="plot-processing-raw-data" class="plot-container report-source-plot">
                 {{ raw_data_info['plot'] | safe }}
             </div>
@@ -124,10 +116,8 @@
             <div id="interpolation-table-container" class="data-table-container" style="display: none;">
                 {{ interpolation_info['table_html'] | safe }}
             </div>
-            <!--{#<div class="custom-button-container"><a href="/download/{{ interpolation_info['filename'] }}"  class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none;"><span>Download Data</span></a></div>
-            <a href="/download/{{ interpolation_info['filename'] }}" class="btn btn-primary">Download Data</a>#}-->
-            <!--<a href="{{ url_for('download_excel', filename=interpolation_info['filename']) }}" class="btn btn-primary">Download Data</a>-->
-            {% if 'plot' in prediction_interpolation_info %}
+
+{% if 'plot' in prediction_interpolation_info %}
                 <h4>Prediction Data:</h4>
                 <div id="plot-processing-prediction-interpolation" class="plot-container report-source-plot">
                     {{ prediction_interpolation_info['plot'] | safe }}
@@ -142,9 +132,7 @@
                 </div>
             {% endif %}
         </div>
-        
-        <!-- Comparison Section -->
-        <div id="comparison">
+<div id="comparison">
             <h2>
                 Model Comparison
                 <button type="button" class="help-btn" data-modal="model-comparison-help">
@@ -170,8 +158,7 @@
                     {% endfor %}
                 </tbody>
             </table>
-            <!--<img src="data:image/png;base64,{ { comparison.plot } }" alt="Model Comparison Plot">--!>
-            {% if "approach1" in selected_approaches %}
+{% if "approach1" in selected_approaches %}
                 <h3>{{ approaches["approach1"].display_name }}</h3>
                 <h4>Performance Metrics</h4>
                 {{ comparisons["approach1"] | safe }}
@@ -187,10 +174,8 @@
                 <h4>Pairwise Model Comparison (Kolmogorov-Smirnov Test p-values), In Vivo Data</h4>
                 {{ ks_tables["approach2"][1] | safe}}
             {% endif %}
-        </div> 
-
-        <!-- Final Model / Report Section -->
-        <div id="final-model-report">
+        </div>
+<div id="final-model-report">
             <h2>
                 Final Model / Report
                 <button type="button" class="help-btn" data-modal="final-model-report-help">
@@ -383,9 +368,7 @@
                 <p>No successful model results are available for final model selection.</p>
             {% endif %}
         </div>
-
-        <!-- Individual Model Results Section -->
-        {% for approach_id in selected_approaches %}
+{% for approach_id in selected_approaches %}
             <div id="{{ approach_id }}">
                 <h2>
                     Fitting: {{ approaches[approach_id].display_name }}
@@ -393,8 +376,7 @@
                         <span class="help-icon">?</span>
                     </button>
                 </h2>
-                <!--{# <p><strong>Preprocessing:</strong> {{ approaches[approach_id].preprocess.__name__ if approaches[approach_id].preprocess else 'None' }}</p> #}--!>
-                {% for model_key, model_results in results.items() %}
+{% for model_key, model_results in results.items() %}
                     {% if model_key.startswith(approach_id) %}
                         {% if approach_id == "approach1" %}
                         {% set model_name = model_key.split(':')[1] %}
@@ -403,8 +385,7 @@
                                 {% if model_results.error %}
                                     <p class="error">Error: {{ model_results.error }}</p>
                                 {% else %}
-                                    <!--{#<img src="data:image/png;base64,{{ model_results.plot }}" alt="{{ models[model_name].display_name }} Plot">#}-->
-                                    <div id="plot-fit-{{ model_key|replace(':', '-') }}" class="plot-container report-source-plot">
+<div id="plot-fit-{{ model_key|replace(':', '-') }}" class="plot-container report-source-plot">
                                         {{ model_results['plot']['plot'] | safe }}
                                     </div>
                                     <div class="custom-button-container">
@@ -415,15 +396,11 @@
                                     <div id="approach1-{{ model_name }}-table-container" class="data-table-container" style="display: none;">
                                         {{ model_results['plot']['table_html'] | safe }}
                                     </div>
-                                    <!--{#<div class="custom-button-container"><a href="/download/{{ model_results['plot']['filename'] }}"  class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none;"><span>Download Data</span></a></div>#}-->
-                                    <!--{#<a href="/download/{{ model_results['plot']['filename'] }}" class="btn btn-primary">Download Data</a>#}-->
-                                    <h4>Function</h4>
+
+<h4>Function</h4>
                                     <p>\[{{ model_results.function }}\]</p>
                                     <h4>Final model parameters</h4>
-                                    <!--{#{% for param, value in model_results.params.items() %}
-                                    <p>{{ param }}: {{ value | round(4) }}</p>
-                                    {% endfor %}#}-->
-                                    {% for param, value in model_results.uparams.items() %}
+{% for param, value in model_results.uparams.items() %}
                                     <p>{{ param }}: {{ value.n | round(4) }} &plusmn; {{ value.s | round(4) }}</p>
                                     {% endfor %}
                                     <h4>Goodness of fit</h4>
@@ -438,8 +415,7 @@
                                 {% if model_results.error %}
                                     <p class="error">Error: {{ model_results.error }}</p>
                                 {% else %}
-                                    <!--{#<img src="data:image/png;base64,{{ model_results.plot }}" alt="{{ models[model_name].display_name }} Plot">#}-->
-                                    <div id="plot-fit-{{ model_key|replace(':', '-') }}" class="plot-container report-source-plot">
+<div id="plot-fit-{{ model_key|replace(':', '-') }}" class="plot-container report-source-plot">
                                         {{ model_results['plot']['plot'] | safe }}
                                     </div>
                                     <div class="custom-button-container">
@@ -450,14 +426,11 @@
                                     <div id="approach2-{{ model_name }}-table-container" class="data-table-container" style="display: none;">
                                         {{ model_results['plot']['table_html'] | safe }}
                                     </div>
-                                    <!--{#<div class="custom-button-container"><a href="/download/{{ model_results['plot']['filename'] }}"  class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none;"><span>Download Data</span></a></div>#}-->
-                                    <h4>Function</h4>
+<h4>Function</h4>
                                     <p>\[{{ model_results.function }}\]</p>
                                     <h4>In Vitro Data</h4>
                                     <h4>Final model parameters</h4>
-                                    <!--{# {% for param, value in model_results.params[0].items() %}
-                                    <p>{{ param }}: {{ value | round(4) }}</p> #}-->
-                                    {% for param, value in model_results.uparams[0].items() %}
+{% for param, value in model_results.uparams[0].items() %}
                                     <p>{{ param }}: {{ value.n | round(4) }} &plusmn; {{ value.s | round(4) }}</p>
                                     {% endfor %}
                                     <h4>Time constant</h4>
@@ -470,9 +443,7 @@
                                     {{ model_results.stats_table[0] | safe }}
                                     <h4>In Vivo Data</h4>
                                     <h4>Final model parameters</h4>
-                                    <!--{# {% for param, value in model_results.params[1].items() %}
-                                    <p>{{ param }}: {{ value | round(4) }}</p> #}-->
-                                    {% for param, value in model_results.uparams[1].items() %}
+{% for param, value in model_results.uparams[1].items() %}
                                     <p>{{ param }}: {{ value.n | round(4) }} &plusmn; {{ value.s | round(4) }}</p>
                                     {% endfor %}
                                     <h4>Time constant</h4>
@@ -488,9 +459,8 @@
                         {% endif %}
                         {% if approach_id == "approach3" %}
                             <div class="model-result {% if model_results.error %}has-error{% endif %}">
-                                <!--{#<img src="data:image/png;base64,{{ model_results.plot_v }}" alt="Approach 3 Value Plot">#}-->
-                                <!--{#<img src="data:image/png;base64,{{ model_results.plot_t }}" alt="Approach 3 Time Plot">#}-->
-                                <div id="plot-fit-approach3-value" class="plot-container report-source-plot">
+
+<div id="plot-fit-approach3-value" class="plot-container report-source-plot">
                                     {{ model_results['plot_v']['plot'] | safe }}
                                 </div>
                                 <div class="custom-button-container">
@@ -501,8 +471,7 @@
                                 <div id="approach3-table-1-container" class="data-table-container" style="display: none;">
                                     {{ model_results['plot_v']['table_html'] | safe }}
                                 </div>
-                                <!--{#<div class="custom-button-container"><a href="/download/{{ model_results['plot_v']['filename'] }}"  class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none;"><span>Download Data</span></a></div>#}-->
-                                <p></p>
+<p></p>
                                 <div id="plot-fit-approach3-time" class="plot-container report-source-plot">
                                     {{ model_results['plot_t']['plot'] | safe }}
                                 </div>
@@ -514,16 +483,13 @@
                                 <div id="approach3-table-2-container" class="data-table-container" style="display: none;">
                                     {{ model_results['plot_t']['table_html'] | safe }}
                                 </div>
-                                <!--<div class="custom-button-container"><a href="/download/{{ model_results['plot_t']['filename'] }}"  class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none;"><span>Download Data</span></a></div>#}-->
-                            </div>
+</div>
                         {% endif %}
                     {% endif %}
                 {% endfor %}
             </div>
         {% endfor %}
-
-        <!-- Prediction Results Sections -->
-        {% if prediction_results and prediction_results != {} and 'error' not in prediction_results %}
+{% if prediction_results and prediction_results != {} and 'error' not in prediction_results %}
             {% for approach_id in selected_approaches %}
                 {% if approach_id in prediction_results and prediction_results[approach_id] %}
                     <div id="prediction-{{ approach_id }}">
@@ -547,14 +513,7 @@
                                             <div id="plot-prediction-{{ approach_id }}-{{ model_name }}" class="plot-container report-source-plot">
                                                 {{ pred_result.plot.plot | safe }}
                                             </div>
-                                            <!--{#{% if 'filename' in pred_result.plot %}
-                                                <div class="custom-button-container">
-                                                    <a href="/download/{{ pred_result.plot.filename }}" class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none;">
-                                                        <span>Download Data</span>
-                                                    </a>
-                                                </div>
-                                            {% endif %}#}-->
-                                            <div class="custom-button-container">
+<div class="custom-button-container">
                                                 <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" 
                                                     data-target="approach1-{{ model_name }}-table-pred" style="text-decoration: none;">
                                                     <span>Show Data Table</span>
@@ -564,11 +523,7 @@
                                                 {{ pred_result['plot']['table_html'] | safe }}
                                             </div>
                                         {% endif %}
-                                        <!--{#{% if 'predictions' in pred_result %}
-                                            <h4>Prediction Summary</h4>
-                                            <p>Generated {{ pred_result.predictions|length }} predictions using fitted {{ models[model_name].display_name }} model.</p>
-                                        {% endif %}#}-->
-                                    </div>
+</div>
                                 {% endif %}
                                 
                                 {% if approach_id == "approach2" %}
@@ -576,8 +531,7 @@
                                         <h3>Model: {{ models[model_name].display_name }}</h3>
                                         {% if 'plot' in pred_result %}
                                             <h4>Value ratio rescaling</h4>
-                                            <!--<h4>Time ratio rescaling</h4>-->
-                                            <div id="plot-prediction-{{ approach_id }}-{{ model_name }}-value" class="plot-container report-source-plot">
+<div id="plot-prediction-{{ approach_id }}-{{ model_name }}-value" class="plot-container report-source-plot">
                                                 {{ pred_result.plot.plot | safe }}
                                             </div>
                                             <div class="custom-button-container">
@@ -589,14 +543,7 @@
                                             <div id="approach2-{{ model_name }}-table-pred-container" class="data-table-container" style="display: none;">
                                                 {{ pred_result['plot']['table_html'] | safe }}
                                             </div>
-                                            <!--{#{% if 'filename' in pred_result.plot %}
-                                                <div class="custom-button-container">
-                                                    <a href="/download/{{ pred_result.plot.filename }}" class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none;">
-                                                        <span>Download Data</span>
-                                                    </a>
-                                                </div>
-                                            {% endif %}#}-->
-                                        {% endif %}
+{% endif %}
                                         {% if 'plot_tau' in pred_result and pred_result['plot_tau'] is not none %}
                                             <h4>Time constant ratio rescaling</h4>
                                             <div id="plot-prediction-{{ approach_id }}-{{ model_name }}-tau" class="plot-container report-source-plot">
@@ -615,11 +562,7 @@
                                             <h4>Time constant ratio rescaling</h4>
                                             <p class="prediction-skip-reason">{{ pred_result.plot_tau_skip_reason }}</p>
                                         {% endif %}
-                                        <!--{#{% if 'predictions' in pred_result %}
-                                            <h4>Prediction Summary</h4>
-                                            <p>Generated {{ pred_result.predictions[0]|length }} predictions using In Vitro Data parameters and {{ pred_result.predictions[1]|length }} predictions using In Vivo Data parameters.</p>
-                                        {% endif %}#}-->
-                                    </div>
+</div>
                                 {% endif %}
                                 
                                 {% if approach_id == "approach3" %}
@@ -638,14 +581,7 @@
                                             <div id="approach3-{{ model_name }}-pred-container" class="data-table-container" style="display: none;">
                                                 {{ pred_result.plot.table_html | safe }}
                                             </div>
-                                            <!--{#{% if 'filename' in pred_result.plot %}
-                                                <div class="custom-button-container">
-                                                    <a href="/download/{{ pred_result.plot.filename }}" class="dt-button2 buttons-copy buttons-html5" style="text-decoration: none;">
-                                                        <span>Download Data</span>
-                                                    </a>
-                                                </div>
-                                            {% endif %}#}-->
-                                        {% endif %}
+{% endif %}
                                     </div>
                                 {% endif %}
                             {% endif %}
@@ -662,9 +598,7 @@
             </div>
         {% endif %}
     </div>
-
-    <!-- Modal Structure -->
-    <div id="help-modal" class="modal">
+<div id="help-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
                 <h4 id="modal-title">Help</h4>
@@ -672,20 +606,15 @@
             </div>
             <div class="modal-body">
                 <div id="modal-text">
-                    <!-- Content will be loaded here -->
-                </div>
+</div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="modal-close-btn">Close</button>
             </div>
         </div>
     </div>
-
-    <!-- Modal Content Definitions -->
-    <div id="modal-content-definitions" style="display: none;">
-        
-        <!-- Data Processing Help -->
-        <div id="data-processing-help-content">
+<div id="modal-content-definitions" style="display: none;">
+<div id="data-processing-help-content">
             <h4>Data Processing</h4>
             <p>This section shows how your data was preprocessed before model fitting and prediction.</p>
             <ul>
@@ -697,9 +626,7 @@
             {{ grid_search_description_html | safe }}
             <p><strong>For Model Selection:</strong> Review the plots to ensure data quality. For example, poor interpolation may indicate the need for different preprocessing options.</p>
         </div>
-
-        <!-- Model Comparison Help -->
-        <div id="model-comparison-help-content">
+<div id="model-comparison-help-content">
             <h4>Model Comparison</h4>
             <p>This section provides statistical comparisons between different models:</p>
             <ul>
@@ -728,9 +655,7 @@
                 </li>
             </ul>
         </div>
-
-        <!-- Approach 1 Results Help -->
-        <div id="approach1-results-help-content">
+<div id="approach1-results-help-content">
             <h4>Approach 1: Direct Correlation Results</h4>
             <p>Shows results from direct correlation between in vitro and in vivo data:</p>
             <ul>
@@ -749,9 +674,7 @@
                 <li>Compare <strong>cross-validation results</strong> to final model performance - similar values of correlation coefficients and error metrics indicate good generalization</li>
             </ul>
         </div>
-
-        <!-- Approach 2 Results Help -->
-        <div id="approach2-results-help-content">
+<div id="approach2-results-help-content">
             <h4>Approach 2: Independent Model Fitting Results</h4>
             <p>Shows results from independent fitting to each dataset:</p>
             <ul>
@@ -772,9 +695,7 @@
                 <li>Compare <strong>cross-validation results</strong> to final model performance - similar values of correlation coefficients and error metrics indicate good generalization</li>
             </ul>
         </div>
-
-        <!-- Approach 3 Results Help -->
-        <div id="approach3-results-help-content">
+<div id="approach3-results-help-content">
             <h4>Approach 3: Direct Mapping Results</h4>
             <p>Shows direct comparison between interpolated datasets:</p>
             <ul>
@@ -785,31 +706,20 @@
             {{ approach_descriptions['approach3']['fit_uncertainty_html'] | safe }}
             <p><strong>For Model Selection:</strong></p>
             <ul>
-                <!--<li>Look for <strong>systematic patterns</strong> rather than random scatter</li>-->
-                <li>Identify <strong>trends or patterns</strong> that could inform model-based correlation strategies</li>
-                <!--<li>Use these plots to <strong>validate assumptions</strong> made by parametric models</li>-->
-                <li>Consider this approach when <strong>model-based methods fail</strong> or show poor fits</li>
+<li>Identify <strong>trends or patterns</strong> that could inform model-based correlation strategies</li>
+<li>Consider this approach when <strong>model-based methods fail</strong> or show poor fits</li>
             </ul>
         </div>
-
-        <!-- Prediction Results Help -->
-        <div id="prediction-approach1-help-content">
+<div id="prediction-approach1-help-content">
             <h4>Approach 1: Prediction Results</h4>
             <p>Shows predictions made using the in vitro to in vivo time correlation models:</p>
             <ul>
                 <li><strong>Input Data:</strong> Your in vitro prediction dataset</li>
                 <li><strong>Predicted Data:</strong> Corresponding in vivo time points calculated using fitted correlation between in vitro and in vivo time</li>
-                <!--<li><strong>Connection Lines:</strong> Show the time scaling transformation</li>-->
-            </ul>
+</ul>
             <h4>Error propagation and uncertainty</h4>
             {{ approach_descriptions['approach1']['prediction_error_html'] | safe }}
-            <!--<p><strong>For Model Selection:</strong></p>
-            <ul>
-                <li>Verify that <strong>predictions are consistent with your expectations</strong></li>
-                <li>Check for <strong>reasonable time scaling</strong> - extreme compressions or extensions may indicate poor model choice</li>
-                <li>Compare predictions from different models to assess <strong>consistency</strong></li>
-            </ul>-->
-        </div>
+</div>
 
         <div id="prediction-approach2-help-content">
             <h4>Approach 2: Prediction Results</h4>
@@ -823,17 +733,10 @@
                     </ul>
                 </li>
                 <li><strong>Fitted Models:</strong> Both in vitro and in vivo model curves</li>
-                <!--<li><strong>Connection Lines:</strong> Show the time scaling transformation</li>-->
-            </ul>
+</ul>
             <h4>Error propagation and uncertainty</h4>
             {{ approach_descriptions['approach2']['prediction_error_html'] | safe }}
-            <!--<p><strong>For Model Selection:</strong></p>
-            <ul>
-                <li>Look for <strong>smooth, realistic prediction curves</strong></li>
-                <li>Verify that the <strong>predictions are consistent with your expectations</strong></li>
-                <li>Choose models where both <strong>individual fits are good</strong> and the <strong>ratio is stable</strong></li>
-            </ul>-->
-        </div>
+</div>
 
         <div id="prediction-approach3-help-content">
             <h4>Approach 3: Prediction Results</h4>
@@ -846,16 +749,8 @@
             </ul>
             <h4>Error propagation and uncertainty</h4>
             {{ approach_descriptions['approach3']['prediction_error_html'] | safe }}
-            <!--<p><strong>For Model Selection:</strong></p>
-            <ul>
-                <li>Compare <strong>different scaling approaches</strong> to see which produces more reasonable results</li>
-                <li>Use this as a <strong>validation tool</strong> for parametric model predictions</li>
-                <li>Consider if these <strong>model-free approaches</strong> may be more appropriate than parametric models</li>
-            </ul>-->
-        </div>
-
-        <!-- Final Model / Report Help -->
-        <div id="final-model-report-help-content">
+</div>
+<div id="final-model-report-help-content">
             <h4>Final Model / Report</h4>
             <p>This tab lets you choose the final fitted approach/model after reviewing model fits and comparison metrics. Prediction-specific methods are only shown when a prediction dataset was supplied and successfully processed.</p>
             <ul>

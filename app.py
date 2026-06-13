@@ -1,30 +1,14 @@
-from pprint import pprint
-import io,re,os
-import base64
-
-from flask import Flask, render_template, request, jsonify
-from flask import send_from_directory, send_file
-
-import numpy as np
-import scipy as sp
-import pandas as pd
-
-# for correct error propagation
-import uncertainties as unc
-import uncertainties.unumpy as unp
-
-#import matplotlib
-#matplotlib.use('Agg')
-#import matplotlib.pyplot as plt
-
+import os
 import traceback
 import warnings
+
+import pandas as pd
+from flask import Flask, jsonify, render_template, request, send_file, send_from_directory
 from scipy.optimize import OptimizeWarning
 from sklearn.exceptions import UndefinedMetricWarning
 
-from models import models, approaches
+from models import approaches, models
 from preprocessing import preprocessing_options
-from utilities.evaluation import evaluate_goodness_of_fit, cross_validation_curve_fit, cross_validation_schemes, auto_grid_search, calculate_tau_with_uncertainty, generate_prediction_bands, generate_ratio_prediction_bands
 from utilities.descriptions import (
     APPROACH_DESCRIPTIONS,
     GRID_SEARCH_DESCRIPTION_HTML,
@@ -38,14 +22,16 @@ from utilities.descriptions import (
 from utilities.reporting import build_final_model_options
 from utilities.word_report import build_word_report, safe_report_filename, WORD_MIME_TYPE
 from utilities.model_display import get_human_readable_function
-from utilities.misc import hex_to_rgba
-from metrics import metrics, calculate_metric
-from engine import *
-
-import plotly.utils
-import plotly.graph_objects as go
-import plotly.io as pio
-import json
+from metrics import metrics
+from engine import (
+    create_comparison,
+    create_initial_plotly,
+    create_interpolation_plotly,
+    create_prediction_interpolation_plotly,
+    preprocess_data,
+    process_data,
+    process_predictions,
+)
 
 app = Flask(__name__)
 
@@ -64,22 +50,7 @@ IS_PRODUCTION = 'PYTHONANYWHERE_DOMAIN' in os.environ
 # Basic configuration
 app.config['DEBUG'] = not IS_PRODUCTION
 app.config['ENV'] = 'production' if IS_PRODUCTION else 'development'
-# Other configuration for PythonAnywhere
-if IS_PRODUCTION:
-    # PythonAnywhere-specific settings
-    app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MiB
-    #num_cores_for_grid_search = 1
-    #num_points_for_grid_search = 10
-else:
-    # Local development settings
-    app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MiB
-    #num_cores_for_grid_search = None
-    #num_points_for_grid_search = 200
-    ## profiling
-    #from werkzeug.middleware.profiler import ProfilerMiddleware
-    #app.wsgi_app = ProfilerMiddleware(app.wsgi_app, restrictions=[lambda info: __file__.replace('.py', '') in info[0], 30], sort_by=('cumulative',)) #profile_dir='.', 
-
-default_interpolation = 'default_interpolation'
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MiB
 
 def _form_int(name, default):
     value = request.form.get(name, '')
@@ -110,7 +81,7 @@ def parse_analysis_config():
 def index():
     if request.method == 'POST':
         file = request.files['file']
-        prediction_file = request.files.get('prediction_file')  # New prediction file
+        prediction_file = request.files.get('prediction_file')
         selected_models = request.form.getlist('models')
         selected_approaches = request.form.getlist('approaches')
         selected_normalizations = request.form.getlist('normalizations')
@@ -118,11 +89,6 @@ def index():
         selected_interpolation = request.form.getlist('interpolation')
         selected_metrics = request.form.getlist('metrics')
         analysis_config = parse_analysis_config()
-
-        # Get the output directory from the form, or use the default
-        #output_directory = request.form.get('output_directory', DEFAULT_OUTPUT_DIR)
-        # Ensure the output directory exists
-        #os.makedirs(output_directory, exist_ok=True)
 
         human_readable_functions = {model_name:get_human_readable_function(models[model_name]['model_function']) for model_name in set([m.split(':')[-1] for m in selected_models])}
 
@@ -133,13 +99,6 @@ def index():
         if not file or not selected_models or not selected_approaches or not selected_metrics:
             return "Please upload a file, select at least one model, one approach, and one metric", 400
 
-        #print(selected_models)
-        #print(selected_approaches)
-        #print(selected_scalings)
-        #print(selected_normalizations)
-        #print(selected_interpolation)
-        #print(selected_metrics)
-
         # Read data
         filename = file.filename
         file_extension = filename.rsplit('.', 1)[1].lower()
@@ -148,23 +107,17 @@ def index():
             df = pd.read_csv(file)
         else:
             sheet_name = request.form.get('sheet')
-            #print(sheet_name)
             if not sheet_name:
                 return "Please select a sheet for Excel files", 400
             df = pd.read_excel(file, sheet_name=sheet_name)
-        #df = pd.read_excel(file, sheet_name=sheet_name)
         t1,m1,t2,m2 = df.values.T
         
         # Apply preprocessing
         data = preprocess_data(t1, m1, t2, m2, selected_interpolation=selected_interpolation, selected_scalings=selected_scalings, selected_normalizations=selected_normalizations)
         t1_scale,m1_scale,t2_scale,m2_scale,mm,tt,ti1,ti2,mi1,mi2 = data
-        #for aaa,bbb in zip(['t1_scale','m1_scale','t2_scale','m2_scale','mm','tt','ti1','ti2','mi1','mi2'], data):
-        #    print(aaa,bbb)
 
-        ## TODO add before/after scaling/normalization plot
         raw_data_info = create_initial_plotly(t1, m1, t2, m2)
         interpolation_info = create_interpolation_plotly(t1_scale, m1_scale, t2_scale, m2_scale, tt, mi1, mi2)
-        #interpolation_info = create_interpolation_plotly_new(t1_scale, m1_scale, t2_scale, m2_scale, mm, ti1, ti2)
 
         # Apply models
         with warnings.catch_warnings():
@@ -172,7 +125,6 @@ def index():
             warnings.filterwarnings("ignore", category=UndefinedMetricWarning)
             warnings.filterwarnings("ignore", category=RuntimeWarning)
             results = process_data(data, selected_models, selected_approaches, selected_metrics, analysis_config=analysis_config)
-        # TODO move this to models.__init__.py
         for model_key in results:
             # special for approach3
             if len(model_key.split(':'))>1:
@@ -219,7 +171,6 @@ def index():
                 
                 prediction_data = preprocess_data(t_pred, m_pred, None, None, selected_interpolation=selected_interpolation, selected_scalings=selected_scalings, selected_normalizations=selected_normalizations)
 
-                ## TODO add before/after scaling/normalization plot
                 prediction_interpolation_info = create_prediction_interpolation_plotly(*prediction_data)
 
                 prediction_results = process_predictions(data, prediction_data, results, selected_approaches, interpolated_data=data)
@@ -227,8 +178,6 @@ def index():
             except Exception as e:
                 print(f"Error processing prediction file: {e}")
                 prediction_results = {'error': str(e)}
-
-        #print(prediction_results)
 
         include_prediction_methods = bool(prediction_results and prediction_results != {} and 'error' not in prediction_results)
         final_model_options = build_final_model_options(
@@ -250,7 +199,7 @@ def index():
                                include_prediction_methods=include_prediction_methods,
                                approach_descriptions=APPROACH_DESCRIPTIONS)
     return render_template('index.html', models=models, approaches=approaches, preprocessing_options=preprocessing_options, 
-                           default_interpolation=default_interpolation, metrics=metrics,
+                           metrics=metrics,
                            preprocessing_descriptions=PREPROCESSING_DESCRIPTIONS, metric_descriptions=METRIC_DESCRIPTIONS,
                            metric_description_rows=format_metric_description_rows(metrics),
                            grid_search_description_html=GRID_SEARCH_DESCRIPTION_HTML,

@@ -1,52 +1,37 @@
-from pprint import pprint
-import io,re,os
-import base64
-
-import numpy as np
-import scipy as sp
-import pandas as pd
-
-# for correct error propagation
-import uncertainties as unc
-import uncertainties.unumpy as unp
-
+import os
 import traceback
 import warnings
-from scipy.optimize import OptimizeWarning
-from sklearn.exceptions import UndefinedMetricWarning
 
-from models import models, approaches
-from preprocessing import preprocessing_options
-from utilities.evaluation import evaluate_goodness_of_fit, cross_validation_curve_fit, make_cross_validator, auto_grid_search, calculate_tau_with_uncertainty, generate_prediction_bands, generate_ratio_prediction_bands
-from utilities.selection import create_model_selector_from_metrics, select_best_models
-from utilities.prediction_validity import describe_tau_prediction_skip_reason
-from utilities.model_display import get_human_readable_function
-from utilities.misc import hex_to_rgba
-from metrics import metrics, calculate_metric
-
-import plotly.utils
+import numpy as np
+import pandas as pd
+import scipy as sp
 import plotly.graph_objects as go
 import plotly.io as pio
-import json
+import uncertainties as unc
+
+from metrics import calculate_metric, metrics
+from models import approaches, models
+from preprocessing import preprocessing_options
+from utilities.evaluation import (
+    auto_grid_search,
+    calculate_tau_with_uncertainty,
+    cross_validation_curve_fit,
+    generate_prediction_bands,
+    generate_ratio_prediction_bands,
+    make_cross_validator,
+)
+from utilities.misc import hex_to_rgba
+from utilities.prediction_validity import describe_tau_prediction_skip_reason
 
 # Determine environment
 IS_PRODUCTION = 'PYTHONANYWHERE_DOMAIN' in os.environ
-# Other configuration for PythonAnywhere
 if IS_PRODUCTION:
-    # PythonAnywhere-specific settings
     num_cores_for_grid_search = 1
     num_points_for_grid_search = 10
 else:
-    # Local development settings
     num_cores_for_grid_search = None
     num_points_for_grid_search = 200
 
-#colors = {
-#    'in_vitro': '#4A9FD1',      # Blue
-#    'in_vivo': '#B85A9B',       # Purple-red
-#    'in_vitro_2': '#6BB26E',  # Light sage green
-#    'in_vivo_2':'#E8956A'   # Light peach-orange
-#    }
 colors = {
     'in_vitro': '#2E5F8A',      # Darker blue
     'in_vivo': '#8B3A6B',       # Darker purple-red
@@ -136,12 +121,9 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                 model_result = models[model_name]['fit_model'](x, y, p0=p0)
                 y_pred = model_result['predict'](x)
                 # Evaluate goodness of fit
-                #gof = evaluate_goodness_of_fit(y, y_pred)
-                #gof = {metric: metrics[metric]['function'](y, y_pred) for metric in selected_metrics}
                 gof = {metric: calculate_metric(metric, y, y_pred, len(p0)) for metric in selected_metrics}
                 stats = pd.concat([pd.DataFrame(gof, index=[0]), pd.DataFrame({'CV '+metric:v for metric,v in cvs_mean.items()}, index=[0])], axis=1)
                 stats_table = pd.concat([pd.DataFrame({metrics[metric]['display_name']:v for metric,v in gof.items()}, index=['Final model']), pd.DataFrame({metrics[metric]['display_name']:v for metric,v in cvs_mean.items()}, index=['Cross-validation'])], axis=0)
-                #stats_table = pd.concat([pd.DataFrame({metrics[metric]['display_name']:v for metric,v in gof.items()}, index=[0]), pd.DataFrame({'CV '+metrics[metric]['display_name']:v for metric,v in cvs_mean.items()}, index=[0])], axis=1)
                 popt, pcov = list(model_result['params'].values()), model_result['pcov']
                 upopt = unc.correlated_values(popt, pcov)
                 upopt = dict(zip(model_result['params'].keys(),upopt))
@@ -150,14 +132,14 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                     'model_name': models[model_name]['display_name'],
                     'model_function': models[model_name]['model_function'],
                     'params': model_result['params'],
-                    'pcov': model_result['pcov'],  # Add this line
+                    'pcov': model_result['pcov'],
                     'residuals': y-y_pred,
                     'approach': approaches[approach_id]['display_name']
                 })
                 results[model_key] = {
                     'params': model_result['params'],
                     'uparams': upopt,
-                    'pcov': model_result['pcov'],  # Add this line
+                    'pcov': model_result['pcov'],
                     'residuals': y-y_pred,
                     'stats': stats,
                     'predictions': y_pred,
@@ -171,7 +153,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                 x1,y1 = tt[m], mi1[m]
                 m = ~np.isnan(mi2)
                 x2,y2 = tt[m], mi2[m]
-                ## dataset 1
+                # Dataset 1
                 # get rough initial estimate of parameters
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", category=RuntimeWarning)
@@ -184,13 +166,9 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                 model_result1 = models[model_name]['fit_model'](x1, y1, p0=p0)
                 y_pred1 = model_result1['predict'](x1)
                 # Evaluate goodness of fit
-                #gof1 = {metric: metrics[metric]['function'](y1, y_pred1) for metric in selected_metrics}
                 gof1 = {metric: calculate_metric(metric, y1, y_pred1, len(p0)) for metric in selected_metrics}
                 stats1 = pd.concat([pd.DataFrame(gof1, index=[0]), pd.DataFrame({'CV '+metric:v for metric,v in cvs1_mean.items()}, index=[0])], axis=1)
                 stats_table1 = pd.concat([pd.DataFrame({metrics[metric]['display_name']:v for metric,v in gof1.items()}, index=['Final model']), pd.DataFrame({metrics[metric]['display_name']:v for metric,v in cvs1_mean.items()}, index=['Cross-validation'])], axis=0)
-                #stats_table1 = pd.concat([pd.DataFrame({metrics[metric]['display_name']:v for metric,v in gof1.items()}, index=[0]), pd.DataFrame({'CV '+metrics[metric]['display_name']:v for metric,v in cvs1_mean.items()}, index=[0])], axis=1)
-                #upopt1 = unc.correlated_values(popt1, pcov1)
-                #tau1 = get_tau(modelname, upopt1)
                 popt1, pcov1 = list(model_result1['params'].values()), model_result1['pcov']
                 upopt1 = unc.correlated_values(popt1, pcov1)
                 upopt1 = dict(zip(model_result1['params'].keys(),upopt1))
@@ -200,7 +178,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                     tau1 = unc.ufloat(*tau1)
                 else:
                     tau1 = unc.ufloat(0,1)
-                ## dataset 2
+                # Dataset 2
                 # get rough initial estimate of parameters
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", category=RuntimeWarning)
@@ -213,11 +191,9 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                 model_result2 = models[model_name]['fit_model'](x2, y2, p0=p0)
                 y_pred2 = model_result2['predict'](x2)
                 # Evaluate goodness of fit
-                #gof2 = {metric: metrics[metric]['function'](y2, y_pred2) for metric in selected_metrics}
                 gof2 = {metric: calculate_metric(metric, y2, y_pred2, len(p0)) for metric in selected_metrics}
                 stats2 = pd.concat([pd.DataFrame(gof2, index=[0]), pd.DataFrame({'CV '+metric:v for metric,v in cvs2_mean.items()}, index=[0])], axis=1)
                 stats_table2 = pd.concat([pd.DataFrame({metrics[metric]['display_name']:v for metric,v in gof2.items()}, index=['Final model']), pd.DataFrame({metrics[metric]['display_name']:v for metric,v in cvs2_mean.items()}, index=['Cross-validation'])], axis=0)
-                #stats_table2 = pd.concat([pd.DataFrame({metrics[metric]['display_name']:v for metric,v in gof2.items()}, index=[0]), pd.DataFrame({'CV '+metrics[metric]['display_name']:v for metric,v in cvs2_mean.items()}, index=[0])], axis=1)
                 #upopt2 = unc.correlated_values(popt2, pcov2)
                 #tau2 = get_tau(modelname, upopt2)
                 popt2, pcov2 = list(model_result2['params'].values()), model_result2['pcov']
@@ -263,52 +239,6 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
             traceback.print_exc()
     
     return results
-
-def invert_with_monte_carlo_parameters(func, params, param_cov, y_values, n_samples=1000, x_guess=None, full_output=False):
-    """
-    Use Monte Carlo sampling of parameters for error propagation
-    """
-    params = np.asarray(params)
-    param_cov = np.asarray(param_cov)
-    y_values = np.asarray(y_values)
-    if x_guess is None:
-        x_guess = np.ones_like(y_values)
-    # Sample parameters from multivariate normal distribution
-    param_samples = np.random.multivariate_normal(params, param_cov, n_samples)
-    x_inverted = np.zeros_like(y_values)
-    x_errors = np.zeros_like(y_values)
-    if full_output:
-        all_valid_samples = []
-    for i, (y_val, x_init) in enumerate(zip(y_values, x_guess)):
-        x_samples = np.zeros(n_samples)
-        for j, param_sample in enumerate(param_samples):
-            def equation(x):
-                return func(x, *param_sample) - y_val
-            try:
-                x_samples[j] = sp.optimize.fsolve(equation, x_init)[0]
-            except:
-                x_samples[j] = np.nan
-        # Remove failed inversions
-        valid_samples = x_samples[~np.isnan(x_samples)]
-        if len(valid_samples) > 0:
-            #x_inverted[i] = np.mean(valid_samples)
-            x_errors[i] = np.std(valid_samples)
-        else:
-            #x_inverted[i] = np.nan
-            x_errors[i] = np.nan
-        if full_output:
-            all_valid_samples.append(valid_samples)
-        # Get true inverted value rather than sampling
-        def equation(x):
-            return func(x, *params) - y_val
-        try:
-            x_inverted[i] = sp.optimize.fsolve(equation, x_init)[0]
-        except:
-            x_inverted[i] = np.nan
-    if full_output:
-        return x_inverted, x_errors, all_valid_samples
-    else:
-        return x_inverted, x_errors
 
 def process_predictions(data, prediction_data, results, selected_approaches, interpolated_data=None):
     """Process predictions using fitted models on new dataset"""
@@ -393,7 +323,6 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                                     dof = len(tt) - len(model_results['params'])
                                     t_value = sp.stats.t.ppf(1-0.05/2, dof) if dof > 0 else 1.96
                                     t_pred_vivo_err_tau = t_value * t_pred_vivo_err_tau
-                                    #print(model_name,tau1,tau2,time_ratio,t_pred_vivo_tau,t_pred_vivo_err_tau)
                                     # Create prediction plot
                                     plot_image_tau = create_prediction_plot_a2(data, t_pred, m_pred, t_pred_vivo_tau, t_pred_plot, model1_pred_plot, model2_pred_plot, {
                                         'model_name': models[model_name]['display_name'],
@@ -545,37 +474,6 @@ def create_comparison(results, approach):
     return metrics_table, ks_tables
 
     
-def create_plotly_table(df):
-    numeric_cols = df.select_dtypes(include='number').columns
-    formats = ['.4f' if c in numeric_cols else None for c in df.columns]
-    fig = go.Figure(data=[go.Table(
-        header=dict(
-            values=list(df.columns),
-            fill_color='#f0f0f0',  # Light gray for header
-            align='left',
-            font=dict(color='black', size=12),
-            line_color='#d9d9d9',  # Slightly darker gray for borders
-            height=40
-        ),
-        cells=dict(
-            values=[df[col] for col in df.columns],
-            fill_color=['#ffffff', '#f9f9f9'],  # Alternating white and very light gray
-            align='left',
-            font=dict(color='black', size=11),
-            line_color='#d9d9d9',  # Slightly darker gray for borders
-            height=30,
-            format=formats  # Assuming first column is string (model/approach name)
-        )
-    )])
-    
-    fig.update_layout(
-        margin=dict(l=0, r=0, t=0, b=0),
-        paper_bgcolor='rgba(0,0,0,0)',  # Transparent background
-        plot_bgcolor='rgba(0,0,0,0)',   # Transparent plot area
-        #width='100%'  # This makes the table responsive
-    )
-    return json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
-
 def create_initial_plotly(t1, m1, t2, m2):
     fig = go.Figure()
     # In Vitro Data (actual)
