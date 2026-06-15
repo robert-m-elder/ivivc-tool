@@ -12,6 +12,7 @@ from preprocessing import preprocessing_options
 from utilities.descriptions import (
     APPROACH_DESCRIPTIONS,
     GRID_SEARCH_DESCRIPTION_HTML,
+    TOOL_PURPOSE_HTML,
     METRIC_DESCRIPTIONS,
     PREPROCESSING_DESCRIPTIONS,
     format_analysis_config_rows,
@@ -195,7 +196,8 @@ def index():
                                analysis_config=analysis_config,
                                analysis_config_rows=analysis_config_rows, preprocessing_rows=preprocessing_rows,
                                preprocessing_summary=preprocessing_summary, metric_description_rows=metric_description_rows,
-                               grid_search_description_html=GRID_SEARCH_DESCRIPTION_HTML, final_model_options=final_model_options,
+                               grid_search_description_html=GRID_SEARCH_DESCRIPTION_HTML, tool_purpose_html=TOOL_PURPOSE_HTML,
+                               final_model_options=final_model_options,
                                include_prediction_methods=include_prediction_methods,
                                approach_descriptions=APPROACH_DESCRIPTIONS)
     return render_template('index.html', models=models, approaches=approaches, preprocessing_options=preprocessing_options, 
@@ -203,6 +205,7 @@ def index():
                            preprocessing_descriptions=PREPROCESSING_DESCRIPTIONS, metric_descriptions=METRIC_DESCRIPTIONS,
                            metric_description_rows=format_metric_description_rows(metrics),
                            grid_search_description_html=GRID_SEARCH_DESCRIPTION_HTML,
+                           tool_purpose_html=TOOL_PURPOSE_HTML,
                            default_grid_search_num_points=(10 if IS_PRODUCTION else 200),
                            default_grid_search_param_min='-1000000',
                            default_grid_search_param_max='1000000',

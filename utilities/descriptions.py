@@ -1,5 +1,39 @@
 """Reusable explanatory text for IVIVC approaches, preprocessing, metrics, and reports."""
 
+
+
+TOOL_PURPOSE_HTML = '''
+    <p>Establishing an in vitro-in vivo correlation (IVIVC) can support the evaluation of medical devices that include absorbable polymers by relating in vivo changes in material properties over time to corresponding in vitro test results, such as degradation profiles.</p>
+    <p>IVIVCs may help evaluate manufacturing or material changes, support predictions of in vivo performance when modifying an existing device design, and reduce reliance on animal studies during preclinical development.</p>
+    <p>This tool is intended to facilitate IVIVC development. The user supplies paired in vitro and in vivo fitting data, and may optionally supply an in vitro prediction dataset. The app applies selected preprocessing steps, fits and compares multiple correlation approaches and model families, evaluates selected performance metrics and cross-validation results, generates fitting and prediction plots, and produces report-ready summaries that can be reviewed and incorporated into external documentation.</p>
+'''
+
+TOOL_PURPOSE_TEXT = (
+    "Establishing an in vitro-in vivo correlation (IVIVC) can support the "
+    "evaluation of medical devices that include absorbable polymers by relating "
+    "in vivo changes in material properties over time to corresponding in vitro "
+    "test results, such as degradation profiles. IVIVCs may help evaluate "
+    "manufacturing or material changes, support predictions of in vivo performance "
+    "when modifying an existing device design, and reduce reliance on animal "
+    "studies during preclinical development. This tool is intended to facilitate "
+    "IVIVC development. The user supplies paired in vitro and in vivo fitting "
+    "data, and may optionally supply an in vitro prediction dataset. The app "
+    "applies selected preprocessing steps, fits and compares multiple correlation "
+    "approaches and model families, evaluates selected performance metrics and "
+    "cross-validation results, generates fitting and prediction plots, and "
+    "produces report-ready summaries that can be reviewed and incorporated into "
+    "external documentation."
+)
+
+TOOL_CAPABILITY_SUMMARY = [
+    "Apply selected normalization, scaling, and interpolation options to prepare fitting and prediction data.",
+    "Fit user-selected IVIVC approaches and model families to paired in vitro and in vivo data.",
+    "Calculate selected goodness-of-fit, model-comparison, and cross-validation metrics.",
+    "Generate fitting, comparison, and prediction plots with uncertainty displays where supported.",
+    "Create report-ready HTML and editable Word summaries for user-selected final models or methods.",
+]
+
+
 APPROACH_DESCRIPTIONS = {
     'approach1': {
         'title': 'Approach 1: Direct Correlation',

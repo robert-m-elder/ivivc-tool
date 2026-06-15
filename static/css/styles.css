@@ -91,6 +91,35 @@ h1 {
     }
 }
 
+
+.intro-panel {
+    max-width: 1200px;
+    margin: 0 auto 20px auto;
+    padding: 18px 22px;
+    border-left: 5px solid #007cba;
+    border-radius: 4px;
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+    line-height: 1.45;
+}
+
+.intro-panel h2,
+.intro-panel h3 {
+    margin-top: 0;
+    color: #222c67;
+}
+
+.intro-panel p:last-child {
+    margin-bottom: 0;
+}
+
+.results-intro-panel {
+    max-width: none;
+    margin-bottom: 24px;
+    box-shadow: none;
+    background: #f8fbfd;
+}
+
 main {
     width: 100%;
     margin-top: 80px; /* Should match the header height */

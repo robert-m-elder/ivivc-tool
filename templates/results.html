@@ -55,6 +55,10 @@
         </ul>
 
         <div id="processing">
+            <section class="intro-panel results-intro-panel">
+                <h3>Purpose of this tool</h3>
+                {{ tool_purpose_html | safe }}
+            </section>
             <h2>
                 Data Processing
                 <button type="button" class="help-btn" data-modal="data-processing-help">
@@ -217,6 +221,8 @@
                     {% set model_results = results[option.model_key] %}
                     <div id="{{ option.id }}-report" class="final-report-content" data-report-label="{{ option.label }}" style="display: {% if option.is_default %}block{% else %}none{% endif %};">
                         <h3>Report Summary</h3>
+                        <h4>Purpose of this tool</h4>
+                        {{ tool_purpose_html | safe }}
                         <p><strong>Final selection:</strong> {{ option.label }}</p>
                         <p><strong>Approach:</strong> {{ option.approach_display }}</p>
                         {% if option.method_display %}

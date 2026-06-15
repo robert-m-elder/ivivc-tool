@@ -49,15 +49,13 @@ from utilities.descriptions import (  # noqa: E402
     GRID_SEARCH_DESCRIPTION_HTML,
     METRIC_DESCRIPTIONS,
     PREPROCESSING_DESCRIPTIONS,
+    TOOL_CAPABILITY_SUMMARY,
+    TOOL_PURPOSE_TEXT,
 )
 
 README_PATH = ROOT / "README.md"
 GUIDE_PATH = ROOT / "docs" / "user_guide.md"
-APP_DESCRIPTION = (
-    "The IVIVC app fits and compares mathematical relationships between paired "
-    "in vitro and in vivo datasets. It can also apply fitted relationships to an "
-    "optional in vitro prediction dataset to estimate corresponding in vivo values."
-)
+APP_DESCRIPTION = TOOL_PURPOSE_TEXT
 
 
 def html_to_text(value: str) -> str:
@@ -138,6 +136,7 @@ def grid_parameter_description(key: str) -> str:
 
 
 def build_readme() -> str:
+    capabilities_md = "\n".join(f"        - {item}" for item in TOOL_CAPABILITY_SUMMARY)
     return generated_notice() + dedent(
         f"""
         # IVIVC App
@@ -162,6 +161,10 @@ def build_readme() -> str:
         - **Preprocessing:** optional normalization, scaling, and interpolation settings.
         - **Metrics:** goodness-of-fit and model-comparison metrics.
         - **Analysis parameters:** cross-validation and grid-search settings.
+
+        ## What the app does
+
+{capabilities_md}
 
         ## Main outputs
 
@@ -197,7 +200,12 @@ def build_user_guide() -> str:
     parts: list[str] = [generated_notice(), heading(1, "IVIVC App User Guide")]
     parts.append(APP_DESCRIPTION + "\n\n")
 
-    parts.append(heading(2, "1. Input datasets"))
+    parts.append(heading(2, "1. What the app does"))
+    for item in TOOL_CAPABILITY_SUMMARY:
+        parts.append(f"- {item}\n")
+    parts.append("\n")
+
+    parts.append(heading(2, "2. Input datasets"))
     parts.append(table(
         ["Input", "Description"],
         [
@@ -207,7 +215,7 @@ def build_user_guide() -> str:
     ))
     parts.append("For Excel workbooks, select the sheet containing the relevant data. For CSV files, the first columns are read directly in the order described above.\n\n")
 
-    parts.append(heading(2, "2. Analysis approaches and models"))
+    parts.append(heading(2, "3. Analysis approaches and models"))
     approach_rows = []
     for approach_key, approach_info in approaches.items():
         desc = APPROACH_DESCRIPTIONS.get(approach_key, {})
@@ -221,7 +229,7 @@ def build_user_guide() -> str:
         ])
     parts.append(table(["Approach", "Description", "Available models"], approach_rows))
 
-    parts.append(heading(2, "3. Preprocessing options"))
+    parts.append(heading(2, "4. Preprocessing options"))
     for category in ["normalization", "scaling", "interpolation"]:
         parts.append(heading(3, category.title()))
         keys = list(preprocessing_options.get(category, {}).keys())
@@ -230,7 +238,7 @@ def build_user_guide() -> str:
         rows = [[preprocessing_label(category, key), f"`{key}`", preprocessing_description(category, key)] for key in keys]
         parts.append(table(["Option", "Internal key", "Description"], rows))
 
-    parts.append(heading(2, "4. Cross-validation options"))
+    parts.append(heading(2, "5. Cross-validation options"))
     parts.append(table(
         ["Scheme", "Internal key"],
         [[label, f"`{key}`"] for key, label in CV_SCHEME_LABELS.items()],
@@ -241,7 +249,7 @@ def build_user_guide() -> str:
             cv_rows.append([label, f"`{key}`", cv_parameter_description(key)])
     parts.append(table(["Parameter", "Internal key", "Description"], cv_rows))
 
-    parts.append(heading(2, "5. Grid-search initialization"))
+    parts.append(heading(2, "6. Grid-search initialization"))
     parts.append(html_to_text(GRID_SEARCH_DESCRIPTION_HTML) + "\n\n")
     grid_rows = []
     for key, label in ANALYSIS_CONFIG_LABELS.items():
@@ -249,7 +257,7 @@ def build_user_guide() -> str:
             grid_rows.append([label, f"`{key}`", grid_parameter_description(key)])
     parts.append(table(["Parameter", "Internal key", "Description"], grid_rows))
 
-    parts.append(heading(2, "6. Performance metrics"))
+    parts.append(heading(2, "7. Performance metrics"))
     metric_rows = []
     for metric_key, metric_info in metrics.items():
         metric_rows.append([
@@ -263,7 +271,7 @@ def build_user_guide() -> str:
             metric_rows.append([metric_key.replace("_", " ").title(), f"`{metric_key}`", "", desc.get("description", "")])
     parts.append(table(["Metric", "Internal key", "Preferred direction", "Description"], metric_rows))
 
-    parts.append(heading(2, "7. Uncertainty and error bars"))
+    parts.append(heading(2, "8. Uncertainty and error bars"))
     uncertainty_rows = []
     for approach_key, desc in APPROACH_DESCRIPTIONS.items():
         title = desc.get("title", approach_key)
@@ -275,7 +283,7 @@ def build_user_guide() -> str:
             uncertainty_rows.append([title, "Prediction uncertainty", prediction_text])
     parts.append(table(["Approach", "Topic", "Description"], uncertainty_rows))
 
-    parts.append(heading(2, "8. Outputs"))
+    parts.append(heading(2, "9. Outputs"))
     parts.append(table(
         ["Output", "Description"],
         [
@@ -288,10 +296,10 @@ def build_user_guide() -> str:
     ))
     parts.append("Output availability depends on the selected approaches, whether fitting succeeds, and whether a prediction dataset was supplied.\n\n")
 
-    parts.append(heading(2, "9. Command-line interface"))
+    parts.append(heading(2, "10. Command-line interface"))
     parts.append("The repository includes `cli.py` for batch-oriented fitting from the command line. Use `python cli.py --help` to see available arguments for input files, approaches, models, metrics, preprocessing options, cross-validation settings, and grid-search settings.\n\n")
 
-    parts.append(heading(2, "10. Regenerating this guide"))
+    parts.append(heading(2, "11. Regenerating this guide"))
     parts.append(dedent(
         """
         Most descriptive text in this guide is generated from `utilities/descriptions.py`. After editing that file, regenerate the Markdown files with:
