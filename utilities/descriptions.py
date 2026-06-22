@@ -150,6 +150,7 @@ GRID_SEARCH_DESCRIPTION_HTML = '''
     <p>The app conducts an automated grid search to identify suitable starting parameter values for each model before nonlinear least-squares fitting, avoiding the need for manual parameter tuning. The grid-search settings control the number of candidate starting points, the real-space parameter bounds, and the random seed used for reproducible sampling.</p>
     <p>For each selected model, the app evaluates multiple candidate starting points and uses the best candidate as the starting point for the final curve fit. The grid-search seed makes this random sampling reproducible.</p>
     <p>The grid search makes it more likely for the app to identify suitable starting parameters, but it does not guarantee that the final fitted parameters are the global optimum.</p>
+    <p>If fitting fails or appears unstable, consider increasing the number of candidate starting points, widening or narrowing the parameter bounds, changing the random seed, or reviewing whether the selected model is appropriate for the data.</p>
 '''
 
 CV_SCHEME_LABELS = {
