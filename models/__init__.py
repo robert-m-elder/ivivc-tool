@@ -37,6 +37,9 @@ for filename in os.listdir(current_dir):
                 'model_function': module.model_function,
                 'display_name': getattr(module, 'display_name', module_name.replace('_', ' ').title())
             }
+            for optional_attr in ['description', 'latex_equation', 'initial_guess', 'supports_tau']:
+                if hasattr(module, optional_attr):
+                    models[module_name][optional_attr] = getattr(module, optional_attr)
             if hasattr(module, 'fit_kwargs'):
                 models[module_name].update({'fit_kwargs':module.fit_kwargs})
             else:

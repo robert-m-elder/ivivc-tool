@@ -51,7 +51,7 @@
                     {% endif %}
                 {% endfor %}
             {% endif %}
-            <li><a href="#final-model-report">Final Model / Report</a></li>
+            <li><a href="#final-model-report">Model Selection & Summary</a></li>
         </ul>
 
         <div id="processing">
@@ -185,7 +185,7 @@
         </div>
 <div id="final-model-report">
             <h2>
-                Final Model / Report
+                Model Selection & Summary
                 <button type="button" class="help-btn" data-modal="final-model-report-help">
                     <span class="help-icon">?</span>
                 </button>
@@ -193,13 +193,13 @@
 
             {% if final_model_options %}
                 {% if include_prediction_methods %}
-                <p>Select the final model and prediction method to generate a report-ready summary. The app does not rank or recommend a final model; final selection is left to the user.</p>
+                <p>Select the model and prediction method to generate a report-ready summary. The app does not rank or recommend a model; selection is left to the user.</p>
                 {% else %}
-                <p>Select the final fitted approach/model to generate a report-ready summary. No prediction dataset was supplied, so prediction-specific methods are not listed. The app does not rank or recommend a final model; final selection is left to the user.</p>
+                <p>Select the model to generate a report-ready summary. No prediction dataset was supplied, so prediction-specific methods are not listed. The app does not rank or recommend a model; selection is left to the user.</p>
                 {% endif %}
 
                 <div class="final-report-selector">
-                    <h3>{% if include_prediction_methods %}Choose Final Model / Prediction Method{% else %}Choose Final Model{% endif %}</h3>
+                    <h3>{% if include_prediction_methods %}Choose Model / Prediction Method{% else %}Choose Model{% endif %}</h3>
                     {% for option in final_model_options %}
                         <label class="final-model-choice">
                             <input type="radio" name="final_model_option" value="{{ option.id }}" {% if option.is_default %}checked{% endif %}>
@@ -209,9 +209,11 @@
                 </div>
 
                 <div class="custom-button-container">
+                    <!--
                     <button type="button" id="print-final-report" class="dt-button2">
                         <span>Print Selected Report</span>
                     </button>
+                    --!>
                     <button type="button" id="download-word-report" class="dt-button2">
                         <span>Download Selected Word Report</span>
                     </button>
@@ -223,7 +225,7 @@
                         <h3>Report Summary</h3>
                         <h4>Purpose of this tool</h4>
                         {{ tool_purpose_html | safe }}
-                        <p><strong>Final selection:</strong> {{ option.label }}</p>
+                        <p><strong>Model selection:</strong> {{ option.label }}</p>
                         <p><strong>Approach:</strong> {{ option.approach_display }}</p>
                         {% if option.method_display %}
                         <p><strong>Prediction method:</strong> {{ option.method_display }}</p>
@@ -324,7 +326,7 @@
                         {% if option.approach_id == 'approach1' %}
                             <h4>Model equation</h4>
                             <p class="report-equation" data-report-equation="{{ model_results.function }}">\[{{ model_results.function }}\]</p>
-                            <h4>Final model parameters</h4>
+                            <h4>Model parameters</h4>
                             {% for param, value in model_results.uparams.items() %}
                                 <p>{{ param }}: {{ value.n | round(4) }} &plusmn; {{ value.s | round(4) }}</p>
                             {% endfor %}
@@ -375,7 +377,7 @@
                     </div>
                 {% endfor %}
             {% else %}
-                <p>No successful model results are available for final model selection.</p>
+                <p>No successful model results are available for model selection.</p>
             {% endif %}
         </div>
 {% for approach_id in selected_approaches %}
@@ -409,7 +411,7 @@
 
 <h4>Function</h4>
                                     <p>\[{{ model_results.function }}\]</p>
-                                    <h4>Final model parameters</h4>
+                                    <h4>Model parameters</h4>
 {% for param, value in model_results.uparams.items() %}
                                     <p>{{ param }}: {{ value.n | round(4) }} &plusmn; {{ value.s | round(4) }}</p>
                                     {% endfor %}
@@ -439,7 +441,7 @@
 <h4>Function</h4>
                                     <p>\[{{ model_results.function }}\]</p>
                                     <h4>In Vitro Data</h4>
-                                    <h4>Final model parameters</h4>
+                                    <h4>Model parameters</h4>
 {% for param, value in model_results.uparams[0].items() %}
                                     <p>{{ param }}: {{ value.n | round(4) }} &plusmn; {{ value.s | round(4) }}</p>
                                     {% endfor %}
@@ -452,7 +454,7 @@
                                     <h4>Goodness of Fit</h4>
                                     {{ model_results.stats_table[0] | safe }}
                                     <h4>In Vivo Data</h4>
-                                    <h4>Final model parameters</h4>
+                                    <h4>Model parameters</h4>
 {% for param, value in model_results.uparams[1].items() %}
                                     <p>{{ param }}: {{ value.n | round(4) }} &plusmn; {{ value.s | round(4) }}</p>
                                     {% endfor %}
@@ -683,7 +685,7 @@
                 <li>Look for <strong>high R² values</strong> and <strong>lower error metrics</strong> (e.g., RMSE)</li>
                 <li>Use <strong>Information Criteria (AIC/BIC)</strong> to balance model fit with complexity - lower values indicate better models that avoid overfitting</li>
                 <li>Consider <strong>parameter uncertainty</strong> - smaller ± values indicate more reliable estimates</li>
-                <li>Compare <strong>cross-validation results</strong> to final model performance - similar values of correlation coefficients and error metrics indicate good generalization</li>
+                <li>Compare <strong>cross-validation results</strong> to model performance - similar values of correlation coefficients and error metrics indicate good generalization</li>
             </ul>
         </div>
 <div id="approach2-results-help-content">
@@ -704,7 +706,7 @@
                 <li>Use <strong>Information Criteria (AIC/BIC)</strong> to balance model fit with complexity - lower values indicate better models that avoid overfitting</li>
                 <li>Consider <strong>parameter uncertainty</strong> - smaller ± values indicate more reliable estimates</li>
                 <li>Compare <strong>time constants</strong> between datasets for consistency with your expectations</li>
-                <li>Compare <strong>cross-validation results</strong> to final model performance - similar values of correlation coefficients and error metrics indicate good generalization</li>
+                <li>Compare <strong>cross-validation results</strong> to model performance - similar values of correlation coefficients and error metrics indicate good generalization</li>
             </ul>
         </div>
 <div id="approach3-results-help-content">
@@ -763,15 +765,15 @@
             {{ approach_descriptions['approach3']['prediction_error_html'] | safe }}
 </div>
 <div id="final-model-report-help-content">
-            <h4>Final Model / Report</h4>
-            <p>This tab lets you choose the final fitted approach/model after reviewing model fits and comparison metrics. Prediction-specific methods are only shown when a prediction dataset was supplied and successfully processed.</p>
+            <h4>Model Selection & Summary</h4>
+            <p>This tab lets you choose the fitted approach/model after reviewing model fits and comparison metrics. Prediction-specific methods are only shown when a prediction dataset was supplied and successfully processed.</p>
             <ul>
-                <li><strong>User selection:</strong> the app does not rank or recommend a final model in this tab. The first option is only the initial UI default.</li>
+                <li><strong>User selection:</strong> the app does not rank or recommend a model in this tab. The first option is only the initial UI default.</li>
                 <li><strong>Fit-only reports:</strong> if no prediction dataset was supplied, the selector lists only approach/model combinations and omits prediction-method choices.</li>
                 <li><strong>Prediction reports:</strong> if prediction data were supplied, the selector also lists available prediction methods such as value-ratio or time-constant-ratio rescaling.</li>
                 <li><strong>Report summary:</strong> includes preprocessing choices, analysis settings, method description, relevant plots, parameter estimates, goodness-of-fit statistics, and uncertainty/error-bar assumptions.</li>
                 <li><strong>Word export:</strong> creates an editable .docx from the selected report content. Plotly figures are exported as static images and embedded in the Word file.</li>
-                <li><strong>Manual review:</strong> confirm that plots, residuals, parameter uncertainty, cross-validation behavior, and scientific expectations support the final choice.</li>
+                <li><strong>Manual review:</strong> confirm that plots, residuals, parameter uncertainty, cross-validation behavior, and scientific expectations support the chosen model.</li>
             </ul>
         </div>
 

@@ -332,7 +332,7 @@ def build_user_guide() -> str:
             ["Model fitting outputs", "Parameter estimates, parameter standard errors where available, fitted plots, and selected performance metrics."],
             ["Model comparison outputs", "Tables comparing selected approaches, models, metrics, and cross-validation summaries."],
             ["Prediction outputs", "Prediction plots and downloadable tables when a prediction dataset is supplied and the selected method can be applied."],
-            ["Final model/report outputs", "User-selected report summaries and optional Word report export for incorporation into external documentation."],
+            ["Selected model & summary of outputs", "User-selected report summaries and optional Word report export for incorporation into external documentation."],
         ],
     ))
     parts.append("Output availability depends on the selected approaches, whether fitting succeeds, and whether a prediction dataset was supplied.\n\n")

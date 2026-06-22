@@ -32,6 +32,14 @@ else:
     num_cores_for_grid_search = None
     num_points_for_grid_search = 200
 
+
+def _model_initial_points(model_name, x, y):
+    """Return optional model-specific/data-driven starting points."""
+    initial_guess = models[model_name].get('initial_guess')
+    if initial_guess is None:
+        return None
+    return initial_guess(x, y)
+
 colors = {
     'in_vitro': '#2E5F8A',      # Darker blue
     'in_vivo': '#8B3A6B',       # Darker purple-red
@@ -113,7 +121,8 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", category=RuntimeWarning)
                     p0 = auto_grid_search(models[model_name]['model_function'], x, y, param_min=grid_search_param_min, param_max=grid_search_param_max, 
-                                          num_points=grid_search_num_points, num_cores=grid_search_num_cores, random_state=grid_search_random_state)
+                                          num_points=grid_search_num_points, num_cores=grid_search_num_cores, random_state=grid_search_random_state,
+                                          initial_points=_model_initial_points(model_name, x, y))
                 # cross-validation
                 cvs = cross_validation_curve_fit(x, y, models[model_name]['model_function'], cv, selected_metrics, p0=p0, kwargs=models[model_name]['fit_kwargs'])
                 cvs_mean = {f'{metric}':np.nanmean(values[np.isfinite(values)]) for metric,values in cvs.items()}
@@ -158,7 +167,8 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", category=RuntimeWarning)
                     p0 = auto_grid_search(models[model_name]['model_function'], x1, y1, param_min=grid_search_param_min, param_max=grid_search_param_max, 
-                                          num_points=grid_search_num_points, num_cores=grid_search_num_cores, random_state=grid_search_random_state)
+                                          num_points=grid_search_num_points, num_cores=grid_search_num_cores, random_state=grid_search_random_state,
+                                          initial_points=_model_initial_points(model_name, x1, y1))
                 # cross-validation
                 cvs1 = cross_validation_curve_fit(x1, y1, models[model_name]['model_function'], cv, selected_metrics, p0=p0, kwargs=models[model_name]['fit_kwargs'])
                 cvs1_mean = {f'{metric}':np.nanmean(v[np.isfinite(v)]) for metric,v in cvs1.items()}
@@ -183,7 +193,8 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", category=RuntimeWarning)
                     p0 = auto_grid_search(models[model_name]['model_function'], x2, y2, param_min=grid_search_param_min, param_max=grid_search_param_max, 
-                                          num_points=grid_search_num_points, num_cores=grid_search_num_cores, random_state=grid_search_random_state)
+                                          num_points=grid_search_num_points, num_cores=grid_search_num_cores, random_state=grid_search_random_state,
+                                          initial_points=_model_initial_points(model_name, x2, y2))
                 # cross-validation
                 cvs2 = cross_validation_curve_fit(x2, y2, models[model_name]['model_function'], cv, selected_metrics, p0=p0, kwargs=models[model_name]['fit_kwargs'])
                 cvs2_mean = {f'{metric}':np.nanmean(v[np.isfinite(v)]) for metric,v in cvs2.items()}

@@ -91,7 +91,10 @@ def index():
         selected_metrics = request.form.getlist('metrics')
         analysis_config = parse_analysis_config()
 
-        human_readable_functions = {model_name:get_human_readable_function(models[model_name]['model_function']) for model_name in set([m.split(':')[-1] for m in selected_models])}
+        human_readable_functions = {
+            model_name: models[model_name].get('latex_equation') or get_human_readable_function(models[model_name]['model_function'])
+            for model_name in set([m.split(':')[-1] for m in selected_models])
+        }
 
         # add placeholder for approach3
         if 'approach3' in selected_approaches:

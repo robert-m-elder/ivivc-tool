@@ -131,7 +131,7 @@ def _sample_log_uniform_real_space(param_min, param_max, size, rng):
     return starts
 
 
-def auto_grid_search(func, x, y, param_min=-1e6, param_max=1e6, num_points=100, num_cores=None, random_state=12345):
+def auto_grid_search(func, x, y, param_min=-1e6, param_max=1e6, num_points=100, num_cores=None, random_state=12345, initial_points=None):
     num_params = len(inspect.signature(func).parameters) - 1  # subtract 1 for 'x'
     rng = np.random.default_rng(None if random_state in (None, '') else int(random_state))
     
@@ -150,6 +150,18 @@ def auto_grid_search(func, x, y, param_min=-1e6, param_max=1e6, num_points=100, 
     # Generate random starting points. Bounds are interpreted directly in real
     # space, while magnitudes are sampled logarithmically within those bounds.
     random_starts = _sample_log_uniform_real_space(param_min, param_max, (num_points, num_params), rng)
+
+    # Include any model-specific/data-driven starting points alongside the
+    # sampled points. These are useful for higher-parameter models where a fully
+    # generic random search may otherwise waste many candidates in implausible
+    # regions of parameter space.
+    if initial_points is not None:
+        initial_points = np.atleast_2d(np.asarray(initial_points, dtype=float))
+        if initial_points.shape[1] != num_params:
+            raise ValueError('Model-specific initial points have the wrong number of parameters.')
+        initial_points = initial_points[np.all(np.isfinite(initial_points), axis=1)]
+        if len(initial_points):
+            random_starts = np.vstack([initial_points, random_starts])
 
     # Wrapper function for minimize to catch warnings
     def minimize_wrapper(x0):
@@ -193,6 +205,8 @@ def cross_validation_curve_fit(x_data, y_data, model_function, cv, selected_metr
 
 ## time constant, generic function
 def calculate_tau(model_function, params):
+    if getattr(model_function, 'supports_tau', True) is False:
+        return np.nan
     # Get the initial value
     f_0 = model_function(0, *params)
     # Integrate from 0 to infinity
@@ -202,6 +216,8 @@ def calculate_tau(model_function, params):
     return tau
 
 def calculate_tau_with_uncertainty(model_function, params, pcov, num_samples=50):
+    if getattr(model_function, 'supports_tau', True) is False:
+        return np.nan, np.nan
     # Generate samples from the multivariate normal distribution
     param_samples = np.random.multivariate_normal(params, pcov, num_samples)
     tau_samples = []
