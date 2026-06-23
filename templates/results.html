@@ -2,7 +2,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Correlation Results</title>
+    <title>IVIVC Results for Absorbable Polymers</title>
     <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
     <script type="text/javascript" charset="utf8" src="https://code.jquery.com/jquery-3.7.1.js"></script>
 <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
@@ -27,14 +27,14 @@
     <link rel="shortcut icon" href="{{ url_for('static', filename='images/favicon-32.ico') }}">
 </head>
 <body>
-    <header>
-        <h1>
-            Correlation Results
+    <header class="site-header">
+        <div class="header-inner">
             <div class="header-image">
                 <img src="{{ url_for('static', filename='images/Logo_FDA_Primary_Blue.png') }}" alt="FDA Logo">
-</div>
-            <a class="user-guide-button" href="{{ url_for('user_guide') }}" target="_blank" rel="noopener">User Guide</a>
-        </h1>
+            </div>
+            <h1 class="app-title">IVIVC Results for Absorbable Polymers</h1>
+            <a class="user-guide-button header-user-guide-button" href="{{ url_for('user_guide') }}" target="_blank" rel="noopener">User Guide</a>
+        </div>
     </header>
 
     <div id="vertical-tabs">
@@ -640,34 +640,7 @@
         </div>
 <div id="model-comparison-help-content">
             <h4>Model Comparison</h4>
-            <p>This section provides statistical comparisons between different models:</p>
-            <ul>
-                <li><strong>Performance Metrics:</strong> Quantitative measures of how well each model fits the data</li>
-                <!--<li><strong>Kolmogorov-Smirnov Test:</strong> Statistical test comparing model predictions (p-values shown)</li>--!>
-            </ul>
-            <h4>Selected metric definitions</h4>
-            <ul>
-                {% for metric in metric_description_rows %}
-                <li><strong>{{ metric.name }}:</strong> {{ metric.description }} {% if metric.direction %}<em>{{ metric.direction }}.</em>{% endif %}</li>
-                {% endfor %}
-            </ul>
-            <p><strong>For Model Selection:</strong></p>
-            <ul>
-                <li>Look for models with <strong>lower error metrics</strong> (e.g., RMSE)</li>
-                <li>Prefer models with <strong>higher R²</strong> values (closer to 1.0)</li>
-                <!--
-                <li>Use K-S test p-values to identify significantly different models. A p-value of 1.0 indicates identical models, 
-                    so the diagonal values are all 1.0. A p-value &lt; 0.05 implies a significant difference between models.</li>
-                --!>
-                <li>Consider the <strong>Information Criteria (AIC/BIC)</strong> - lower values indicate better model fit with appropriate complexity
-                    <ul>
-                        <li><strong>AIC (Akaike Information Criterion):</strong> Balances model fit with complexity. Lower values are better.</li>
-                        <li><strong>BIC (Bayesian Information Criterion):</strong> More conservative than AIC, penalizes complexity more heavily. Lower values are better.</li>
-                        <li><strong>Interpretation:</strong> Differences &lt; 2 indicate equivalent models; differences &gt; 6 show strong evidence for the lower-value model.</li>
-                        <li><strong>When they disagree:</strong> AIC favors prediction accuracy; BIC favors simpler, more interpretable models.</li>
-                    </ul>
-                </li>
-            </ul>
+            {{ modal_help['results']['model_comparison_html'] | safe }}
         </div>
 <div id="approach1-results-help-content">
             <h4>Approach 1: Direct Correlation Results</h4>

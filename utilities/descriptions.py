@@ -1,4 +1,16 @@
-"""Reusable explanatory text for IVIVC approaches, preprocessing, metrics, and reports."""
+"""Reusable explanatory text for IVIVC approaches, preprocessing, metrics, and reports.
+
+Most routine wording edits should be made in utilities/descriptions.yaml.
+This module keeps Python fallback values and formatting helpers for templates,
+reports, and generated documentation.
+"""
+
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError:  # pragma: no cover - dependency fallback
+    yaml = None
 
 
 
@@ -171,6 +183,98 @@ ANALYSIS_CONFIG_LABELS = {
     'grid_search_param_max': 'Grid-search parameter maximum',
     'grid_search_random_state': 'Grid-search random seed',
 }
+
+
+MODAL_HELP = {
+    'index': {
+        'preprocessing_overview_html': '''
+            <p>Transform your data before analysis to improve model fitting and comparability. The selected preprocessing choices are included in the results and downloadable Word report.</p>
+            <ul>
+                <li><strong>Normalization:</strong> optional transformations applied to response values.</li>
+                <li><strong>Scaling:</strong> optional mathematical transformations applied to time or response values.</li>
+                <li><strong>Interpolation:</strong> methods used to create matched time and response grids for fitting or direct mapping.</li>
+            </ul>
+            <p>For details on individual preprocessing options, use the help buttons next to Normalization, Scaling, and Interpolation.</p>
+        ''',
+        'advanced_analysis_overview_html': '''
+            <p>Advanced analysis parameters control how the app estimates out-of-sample performance and how it initializes nonlinear model fitting.</p>
+            <ul>
+                <li><strong>Cross-validation:</strong> controls how fitting data are split into training and holdout subsets for validation metrics.</li>
+                <li><strong>Grid search:</strong> controls the automated search for suitable starting parameter values before nonlinear least-squares fitting.</li>
+            </ul>
+            <p>Default settings are intended to be reasonable starting points. Users may adjust these settings when datasets are small, fits are unstable, or a reproducible analysis configuration is needed.</p>
+        ''',
+        'cross_validation_html': '''
+            <p>Cross-validation estimates how selected fitted models perform on held-out data. It is used for Approaches 1 and 2, where parametric models are fitted.</p>
+            <ul>
+                <li><strong>Scheme:</strong> selects the splitting method, such as Shuffle split, K-fold, Leave-one-out, or None.</li>
+                <li><strong>Splits/folds:</strong> controls the number of repeated splits or folds where applicable.</li>
+                <li><strong>Test size:</strong> controls the held-out fraction for Shuffle split.</li>
+                <li><strong>Random seed:</strong> makes randomized splitting reproducible.</li>
+            </ul>
+            <p>Very small datasets may produce unstable or unavailable validation metrics, especially when many folds or large holdout fractions are requested.</p>
+        ''',
+        'grid_search_html': GRID_SEARCH_DESCRIPTION_HTML,
+    },
+    'results': {
+        'model_comparison_html': '''
+            <p>This section summarizes how each fitted model performed under the user-selected metrics. Use these results together with the fitting plots, prediction plots where available, parameter uncertainty, residual behavior, and scientific expectations for the system.</p>
+            <p>The metric definitions and better/worse direction are shown in the Model Comparison tab itself, so this help box intentionally provides only a high-level interpretation guide.</p>
+            <ul>
+                <li>Lower error metrics such as MSE, RMSE, NRMSE, and mean-normalized RMSE generally indicate smaller residuals.</li>
+                <li>Higher R² or adjusted R² values generally indicate that the fitted model explains more response variability.</li>
+                <li>Lower AIC or BIC values can support relative comparison among models fitted to the same dataset under comparable error assumptions.</li>
+            </ul>
+            <p>The app does not automatically choose a regulatory final model. The user should review the full set of outputs and select the model or method that is scientifically justified for the intended use.</p>
+        ''',
+    },
+}
+
+
+def _deep_update(base, updates):
+    """Recursively update dictionaries while preserving unspecified defaults."""
+    for key, value in updates.items():
+        if isinstance(value, dict) and isinstance(base.get(key), dict):
+            _deep_update(base[key], value)
+        else:
+            base[key] = value
+    return base
+
+
+def _load_yaml_descriptions():
+    """Load human-editable description text from utilities/descriptions.yaml."""
+    if yaml is None:
+        return {}
+
+    yaml_path = Path(__file__).with_suffix('.yaml')
+    if not yaml_path.exists():
+        return {}
+
+    with yaml_path.open('r', encoding='utf-8') as handle:
+        return yaml.safe_load(handle) or {}
+
+
+_DESCRIPTION_CONTENT = _load_yaml_descriptions()
+
+_tool_content = _DESCRIPTION_CONTENT.get('tool', {})
+TOOL_PURPOSE_HTML = _tool_content.get('purpose_html', TOOL_PURPOSE_HTML)
+TOOL_PURPOSE_TEXT = _tool_content.get('purpose_text', TOOL_PURPOSE_TEXT)
+TOOL_CAPABILITY_SUMMARY = _tool_content.get('capability_summary', TOOL_CAPABILITY_SUMMARY)
+
+# Optional YAML overrides for all major reusable description dictionaries. The
+# YAML file may contain a partial set of keys; unspecified Python defaults remain
+# available so small wording edits do not require duplicating every description.
+_deep_update(APPROACH_DESCRIPTIONS, _DESCRIPTION_CONTENT.get('approaches', {}))
+_deep_update(PREPROCESSING_DESCRIPTIONS, _DESCRIPTION_CONTENT.get('preprocessing', {}))
+_deep_update(METRIC_DESCRIPTIONS, _DESCRIPTION_CONTENT.get('metrics', {}))
+_deep_update(CV_SCHEME_LABELS, _DESCRIPTION_CONTENT.get('cv_scheme_labels', {}))
+_deep_update(ANALYSIS_CONFIG_LABELS, _DESCRIPTION_CONTENT.get('analysis_config_labels', {}))
+GRID_SEARCH_DESCRIPTION_HTML = _DESCRIPTION_CONTENT.get('grid_search_description_html', GRID_SEARCH_DESCRIPTION_HTML)
+
+_modal_content = _DESCRIPTION_CONTENT.get('modal_help', {})
+if _modal_content:
+    _deep_update(MODAL_HELP, _modal_content)
+    GRID_SEARCH_DESCRIPTION_HTML = MODAL_HELP.get('index', {}).get('grid_search_html', GRID_SEARCH_DESCRIPTION_HTML)
 
 
 def _preprocessing_label(category, key):

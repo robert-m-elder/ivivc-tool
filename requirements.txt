@@ -22,3 +22,6 @@ xlrd>=2.0.0
 
 # Editable Word report generation
 python-docx>=1.1.0
+
+# Human-editable configuration/content
+PyYAML>=6.0

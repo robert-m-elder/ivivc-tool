@@ -2,7 +2,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>IVIVC App</title>
+    <title>IVIVC App for Absorbable Polymers</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="{{ url_for('static', filename='js/index.js') }}" defer></script>
@@ -10,14 +10,14 @@
     <link rel="shortcut icon" href="{{ url_for('static', filename='images/favicon-32.ico') }}">
 </head>
 <body>
-    <header>
-        <h1>
-            In Vitro-In Vivo Correlation (IVIVC) App
+    <header class="site-header">
+        <div class="header-inner">
             <div class="header-image">
                 <img src="{{ url_for('static', filename='images/Logo_FDA_Primary_Blue.png') }}" alt="FDA Logo">
-</div>
-            <a class="user-guide-button" href="{{ url_for('user_guide') }}" target="_blank" rel="noopener">User Guide</a>
-        </h1>
+            </div>
+            <h1 class="app-title">In Vitro-In Vivo Correlation (IVIVC) App for Absorbable Polymers</h1>
+            <a class="user-guide-button header-user-guide-button" href="{{ url_for('user_guide') }}" target="_blank" rel="noopener">User Guide</a>
+        </div>
     </header>
 
     <main>
@@ -25,6 +25,14 @@
         <section class="intro-panel">
             <h2>Purpose of this tool</h2>
             {{ tool_purpose_html | safe }}
+        </section>
+
+        <section class="user-guide-callout">
+            <div>
+                <strong>Please see the user guide for more information.</strong>
+                <span>The guide describes input file formats, preprocessing options, analysis settings, outputs, and interpretation notes.</span>
+            </div>
+            <a class="guide-download-button" href="{{ url_for('user_guide') }}" target="_blank" rel="noopener">Download User Guide</a>
         </section>
     <form method="post" enctype="multipart/form-data" id="upload-form" class="analysis-form">
         <div class="form-section">
@@ -201,7 +209,7 @@
             </h3>
 
             <div class="advanced-parameter-row">
-                <div class="advanced-row-label">Cross-validation</div>
+                <div class="advanced-row-label">Cross-validation <button type="button" class="help-btn-small" data-modal="cross-validation-help">?</button></div>
                 <div class="advanced-field">
                     <label for="cv_scheme">Scheme</label>
                     <select name="cv_scheme" id="cv_scheme">
@@ -226,7 +234,7 @@
             </div>
 
             <div class="advanced-parameter-row">
-                <div class="advanced-row-label">Grid search</div>
+                <div class="advanced-row-label">Grid search <button type="button" class="help-btn-small" data-modal="grid-search-help">?</button></div>
                 <div class="advanced-field">
                     <label for="grid_search_num_points">Random starts</label>
                     <input type="number" name="grid_search_num_points" id="grid_search_num_points" value="{{ default_grid_search_num_points }}" min="1">
@@ -356,12 +364,7 @@
         </div>
 <div id="preprocessing-help-content">
             <h4>Data Preprocessing</h4>
-            <p>Transform your data before analysis to improve model fitting and comparability. The selected preprocessing choices are included in the results and downloadable Word report.</p>
-            <ul>
-                <li><strong>Normalization:</strong> optional transformations applied to response values.</li>
-                <li><strong>Scaling:</strong> optional mathematical transformations applied to time or response values.</li>
-                <li><strong>Interpolation:</strong> methods used to create matched time and response grids for fitting or direct mapping.</li>
-            </ul>
+            {{ modal_help['index']['preprocessing_overview_html'] | safe }}
         </div>
 
         <div id="normalization-help-content">
@@ -395,18 +398,15 @@
         </div>
 <div id="advanced-analysis-help-content">
             <h4>Advanced Analysis Parameters</h4>
-            <p>These options control model validation and the initial parameter search used before nonlinear curve fitting.</p>
-            <ul>
-                <li><strong>Cross-validation scheme:</strong> validation splitter used for Approaches 1 and 2.</li>
-                <li><strong>CV splits/folds:</strong> number of repeated splits for ShuffleSplit or folds for K-fold.</li>
-                <li><strong>ShuffleSplit test size:</strong> fraction of observations held out in each ShuffleSplit repeat.</li>
-                <li><strong>CV random seed:</strong> seed used for reproducible randomized validation splits.</li>
-                <li><strong>Grid-search random starts:</strong> number of starting points sampled before final curve fitting. Higher values are more robust but slower.</li>
-                <li><strong>Grid-search parameter min/max:</strong> real-space lower and upper bounds for initial parameter sampling. Values are sampled logarithmically by magnitude within these bounds.</li>
-                <li><strong>Grid-search seed:</strong> seed used for reproducible random starting-point sampling.</li>
-            </ul>
+            {{ modal_help['index']['advanced_analysis_overview_html'] | safe }}
+        </div>
+        <div id="cross-validation-help-content">
+            <h4>Cross-validation</h4>
+            {{ modal_help['index']['cross_validation_html'] | safe }}
+        </div>
+        <div id="grid-search-help-content">
             <h4>Grid-search initialization</h4>
-            {{ grid_search_description_html | safe }}
+            {{ modal_help['index']['grid_search_html'] | safe }}
         </div>
 <div id="metrics-help-content">
             <h4>Performance Metrics</h4>

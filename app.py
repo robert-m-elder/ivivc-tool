@@ -14,6 +14,7 @@ from utilities.descriptions import (
     GRID_SEARCH_DESCRIPTION_HTML,
     TOOL_PURPOSE_HTML,
     METRIC_DESCRIPTIONS,
+    MODAL_HELP,
     PREPROCESSING_DESCRIPTIONS,
     format_analysis_config_rows,
     format_metric_description_rows,
@@ -200,6 +201,7 @@ def index():
                                analysis_config_rows=analysis_config_rows, preprocessing_rows=preprocessing_rows,
                                preprocessing_summary=preprocessing_summary, metric_description_rows=metric_description_rows,
                                grid_search_description_html=GRID_SEARCH_DESCRIPTION_HTML, tool_purpose_html=TOOL_PURPOSE_HTML,
+                               modal_help=MODAL_HELP,
                                final_model_options=final_model_options,
                                include_prediction_methods=include_prediction_methods,
                                approach_descriptions=APPROACH_DESCRIPTIONS)
@@ -209,6 +211,7 @@ def index():
                            metric_description_rows=format_metric_description_rows(metrics),
                            grid_search_description_html=GRID_SEARCH_DESCRIPTION_HTML,
                            tool_purpose_html=TOOL_PURPOSE_HTML,
+                           modal_help=MODAL_HELP,
                            default_grid_search_num_points=(10 if IS_PRODUCTION else 200),
                            default_grid_search_param_min='-1000000',
                            default_grid_search_param_max='1000000',

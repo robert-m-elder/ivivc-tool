@@ -16,53 +16,61 @@ body {
     padding: 0;
 }
 
-header {
+
+:root {
+    --header-height: 86px;
+    --header-height-mobile: 128px;
+}
+
+header,
+.site-header {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
-    height: 80px; /* Adjust this value to your desired height */
+    min-height: var(--header-height);
     background-color: #fff;
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     z-index: 1000;
 }
 
-h1 {
-    color: #007cba;            
-    text-align: center;
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    display: flex;
+.header-inner {
+    display: grid;
+    grid-template-columns: minmax(120px, 220px) minmax(0, 1fr) auto;
     align-items: center;
-    justify-content: center;
-    position: relative;
-    overflow: hidden;
-    line-height: 1.2; /* Adjust as needed for your font */
+    gap: 16px;
+    min-height: var(--header-height);
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 20px;
+}
+
+.app-title {
+    color: #007cba;
+    text-align: center;
+    margin: 0;
+    font-size: clamp(1.05rem, 2.2vw, 1.65rem);
+    line-height: 1.18;
+    font-weight: 700;
 }
 
 .header-image {
-    position: absolute;
-    top: 0;
-    left: 0;
+    display: flex;
+    align-items: center;
+    min-width: 0;
     height: 100%;
-    overflow: hidden;
 }
 
 .header-image img {
-    height: 100%;
+    display: block;
+    max-height: 62px;
+    max-width: 100%;
     width: auto;
-    max-width: none;
-    object-fit: cover;
-    object-position: left;
+    object-fit: contain;
 }
 
-
-.user-guide-button {
-    position: absolute;
-    top: 50%;
-    right: 20px;
-    transform: translateY(-50%);
+.user-guide-button,
+.guide-download-button {
     display: inline-block;
     padding: 8px 14px;
     border: 1px solid #007cba;
@@ -77,20 +85,95 @@ h1 {
 }
 
 .user-guide-button:hover,
-.user-guide-button:focus {
+.user-guide-button:focus,
+.guide-download-button:hover,
+.guide-download-button:focus {
     background-color: #007cba;
     color: #fff;
     text-decoration: none;
 }
 
-@media (max-width: 700px) {
-    .user-guide-button {
-        right: 8px;
-        padding: 6px 8px;
-        font-size: 0.78rem;
-    }
+.header-user-guide-button {
+    justify-self: end;
 }
 
+.user-guide-callout {
+    max-width: 1200px;
+    margin: 0 auto 24px auto;
+    padding: 14px 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 18px;
+    border: 1px solid #b7d7eb;
+    border-radius: 4px;
+    background: #f6fbff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+    line-height: 1.4;
+}
+
+.user-guide-callout span {
+    display: block;
+    margin-top: 4px;
+    color: #444;
+}
+
+.guide-download-button {
+    background-color: #007cba;
+    color: #fff;
+    flex-shrink: 0;
+}
+
+.guide-download-button:hover,
+.guide-download-button:focus {
+    background-color: #222c67;
+    border-color: #222c67;
+}
+
+@media (max-width: 760px) {
+    header,
+    .site-header {
+        min-height: var(--header-height-mobile);
+    }
+
+    .header-inner {
+        min-height: var(--header-height-mobile);
+        grid-template-columns: minmax(96px, 1fr) auto;
+        grid-template-areas:
+            "logo guide"
+            "title title";
+        gap: 6px 12px;
+        padding: 8px 12px;
+    }
+
+    .header-image {
+        grid-area: logo;
+    }
+
+    .header-image img {
+        max-height: 46px;
+    }
+
+    .app-title {
+        grid-area: title;
+        font-size: clamp(0.95rem, 4.5vw, 1.2rem);
+    }
+
+    .header-user-guide-button {
+        grid-area: guide;
+        padding: 7px 10px;
+        font-size: 0.8rem;
+    }
+
+    .user-guide-callout {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .guide-download-button {
+        text-align: center;
+    }
+}
 
 .intro-panel {
     max-width: 1200px;
@@ -122,7 +205,7 @@ h1 {
 
 main {
     width: 100%;
-    margin-top: 80px; /* Should match the header height */
+    margin-top: var(--header-height); /* Should match the header height */
     padding: 10px; /* Add some padding for content */
 }
 
@@ -362,7 +445,7 @@ input[type="checkbox"]:hover {
     max-width: 1800px;
     height: calc(100vh - 110px); /* Subtract the height of the h1 and some padding */
     /*margin: 20px auto;*/
-    margin: 90px auto;
+    margin: calc(var(--header-height) + 10px) auto 20px auto;
     background-color: white;
     border-radius: 5px;
     box-shadow: 0 0 10px rgba(0,0,0,0.1);
@@ -460,7 +543,12 @@ input[type="checkbox"]:hover {
 
 /* Media query for smaller screens */
 @media (max-width: 768px) {
+    main {
+        margin-top: var(--header-height-mobile);
+    }
+
     #vertical-tabs {
+        margin-top: calc(var(--header-height-mobile) + 10px);
         width: 100%;
         height: auto;
         flex-direction: column;
