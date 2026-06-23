@@ -1,7 +1,7 @@
 import numpy as np
 
 # Compact asymmetric sigmoidal mass-loss model with lag/plateau behavior.
-display_name = "Mass Loss, Gompertz"
+display_name = "Mass Loss (Gompertz)"
 approaches = ['approach2']
 fit_kwargs = {'maxfev': 20000, 'ftol': 1e-6, 'xtol': 1e-6}
 latex_equation = r"y = y0 - A \cdot e^{-e^{\left(\frac{e \cdot rmax}{A}\right)(lag - x) + 1}}"

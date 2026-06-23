@@ -1,7 +1,7 @@
 import numpy as np
 
 # Geometry-inspired surface-erosion model with fitted shape exponent.
-display_name = "Mass Loss, Surface Erosion"
+display_name = "Mass Loss (Surface Erosion)"
 approaches = ['approach2']
 fit_kwargs = {'maxfev': 20000, 'ftol': 1e-6, 'xtol': 1e-6}
 latex_equation = r"y = y0 \cdot \max(1 - k \cdot x, 0)^n"
