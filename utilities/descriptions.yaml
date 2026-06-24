@@ -98,7 +98,7 @@ cv_schemes:
     description: Repeatedly creates random training and holdout subsets. This can be useful when the dataset has enough observations to support repeated resampling. The test-size parameter controls the fraction held out in each split, and the random seed makes the random splits reproducible.
   kfold:
     display_name: K-fold
-    description: Divides the dataset into a specified number of folds, fits the model on all but one fold, and evaluates on the held-out fold. Each fold is used once as the holdout set. The splits/folds parameter controls the number of folds.
+    description: Divides the dataset into a specified number of folds, fits the model on all but one fold, and evaluates on the held-out fold. Each fold is used once as the holdout set. The splits/folds parameter controls the number of folds. The data are randomly shuffled before splitting into folds (e.g., to avoid folds with only short-time data being used to predict long-time data), and the random seed makes the shuffling reproducible.
   leave_one_out:
     display_name: Leave-one-out
     description: Uses one observation as the holdout set and fits the model on all remaining observations, repeating until each observation has been held out once. This can be useful for very small datasets, but the results can be variable and computationally slower.
