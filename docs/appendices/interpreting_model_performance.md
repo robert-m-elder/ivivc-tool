@@ -31,7 +31,7 @@ Goodness-of-fit metrics describe how well the model fits the data used to estima
 
 High fitted-data performance can be encouraging, but it can also be optimistic, especially for small datasets, flexible models, or models with many parameters. A model with strong fitted-data performance may still be unsuitable if it has unstable parameters, poor cross-validation performance, systematic residual patterns, or a fitted shape that is not scientifically plausible for the degradation process.
 
-When interpreting fitted-data metrics, consider whether the residual errors are small enough to be meaningful for the specific degradation endpoint and context of use. There is no universal RMSE or NRMSE cutoff for IVIVC adequacy.
+When interpreting fitted-data metrics, consider whether the uncertainty is small enough to be meaningful for the specific degradation endpoint and context of use. There is no universal performance cutoff for IVIVC adequacy.
 
 ## 4. Interpreting prediction error
 
@@ -64,6 +64,7 @@ Fit/CV ratios summarize the relationship between fitted-data and held-out perfor
 
 AIC, AICc, and BIC should not be interpreted as ordinary cross-validation scores because the final model and the cross-validation models are fitted to different subsets of the data and may involve different effective sample sizes. Use information criteria for relative evidence among comparable fitted models, and use cross-validation metrics to evaluate held-out predictive behavior.
 
+<!--
 ## 7. Inspecting residuals and diagnostic plots
 
 Summary metrics can hide important model behavior. Residual plots should be reviewed for systematic patterns, bias, curvature, clustering, changing variance, or influential observations.
@@ -77,50 +78,50 @@ Summary metrics can hide important model behavior. Residual plots should be revi
 | One point dominates the apparent fit | The model may be sensitive to individual observations or limited data density. |
 
 Outliers should be investigated using scientific and data-quality rationale. Removing observations solely to improve metrics can make the model-selection rationale difficult to justify.
+--!>
 
-## 8. Interpreting parameter uncertainty
+## 7. Interpreting parameter uncertainty
 
 Parameter estimates should be reviewed for scientific plausibility and numerical stability. Large standard errors, wide confidence intervals, failed covariance estimation, or highly correlated parameters may indicate that the data do not strongly identify the model parameters.
 
 Parameter uncertainty is especially important when a fitted model will be interpreted mechanistically, used to support extrapolation, or used to compare degradation behavior across materials, processes, or test conditions. A model with strong fitted metrics but poorly estimated or implausible parameters may be difficult to justify.
 
-## 9. Considering model complexity
+## 8. Considering model complexity
 
 More complex models can often fit observed data more closely, but they may overfit small datasets or produce unstable parameter estimates. Adjusted R^2, AIC, AICc, BIC, cross-validation metrics, and residual diagnostics can help evaluate whether additional complexity is justified.
 
 When two models have similar fitted performance and similar relative evidence, the simpler and more interpretable model may be easier to justify, provided it is scientifically plausible and performs adequately for the intended use. Model complexity should be supported by data density, degradation-mechanism expectations, and the intended context of use.
 
-## 10. Scientific plausibility and intended use
+## 9. Scientific plausibility and intended use
 
 Statistical performance should be interpreted together with knowledge of the polymer, degradation mechanism, test conditions, and proposed use of the IVIVC. A model may be statistically competitive but scientifically difficult to justify if its fitted shape, parameter values, or extrapolated behavior conflict with known degradation behavior.
 
 The intended use should determine the amount and type of supporting evidence needed. Exploratory model development may tolerate more uncertainty than a model intended to support a specific regulatory argument, design change, or prediction of in vivo performance.
 
-## 11. Suggested model-selection workflow
+## 10. Suggested model-selection workflow
 
 1. Confirm that the dataset, preprocessing choices, and selected response variables are appropriate.
-2. Review fitted curves and residual plots for each candidate model.
-3. Compare fitted-data metrics, including R^2, adjusted R^2, RMSE, and NRMSE.
+2. Review fitted curves and uncertainty bands for each candidate model.
+3. Compare fitted-data metrics, such as R^2 and RMSE.
 4. Review prediction-error metrics in the context of assay variability, endpoint importance, and intended use.
 5. Review cross-validation performance and fit/CV ratios, where cross-validation is applicable.
 6. Review Relative Model Evidence using AIC, AICc, and/or BIC, where parametric model comparisons are applicable.
-7. Review fitted-parameter estimates, standard errors, covariance behavior, and scientific plausibility.
+7. Review fitted-parameter estimates, standard errors, and scientific plausibility.
 8. Consider model complexity and whether additional parameters are justified by the data and degradation mechanism.
-9. Select the model or method based on a documented balance of statistical performance, diagnostic behavior, scientific plausibility, and intended use.
-10. Avoid presenting the selected model as automatically chosen, validated, or accepted by the app.
+9. Select the model or method based on a documented balance of statistical performance, scientific plausibility, and intended use.
 
-## 12. Example interpretation statements
+## 11. Example interpretation statements
 
-The following examples illustrate neutral wording that may be adapted for reports. Users should tailor the language to the specific analysis and supporting evidence.
+The following examples illustrate wording that may be adapted for reports. Users should tailor the language to the specific analysis and supporting evidence.
 
-- Model A had the lowest RMSE and highest adjusted R^2 among the evaluated models, indicating strong fitted-data performance under the selected preprocessing conditions.
+- Model A had the lowest RMSE and highest adjusted R^2 among the evaluated models, indicating strong performance under the selected preprocessing conditions.
 - Model B had similar AICc support to Model A, with Delta AICc less than 2, suggesting that the two models were not clearly distinguished by AICc within this candidate set.
 - Although Model C had strong fitted-data performance, its cross-validation error was substantially higher than its fitted error, suggesting possible sensitivity to the validation procedure or reduced generalizability.
-- The selected model was chosen based on a balance of fitted performance, cross-validation behavior, relative evidence, parameter plausibility, residual diagnostics, and scientific interpretability.
+- The selected model was chosen based on a balance of fitted performance, cross-validation behavior, relative evidence, parameter plausibility, and scientific interpretability.
 
-## 13. Limitations
+## 12. Limitations
 
-Model-performance metrics are descriptive and comparative tools, not automatic acceptance criteria. Small datasets can produce unstable estimates, and similar metric values do not necessarily indicate equivalent scientific validity. Users should document preprocessing assumptions, fitting settings, model-selection rationale, limitations, and any planned use of the model outside the fitted data range.
+Performance metrics are descriptive and comparative tools, not acceptance criteria. Small datasets can produce unstable estimates, and similar metric values do not necessarily indicate equivalent scientific validity. Users should document preprocessing assumptions, fitting settings, model selection rationale, limitations, and any planned use of the model outside the fitted data range.
 
 ## References and suggested reading
 
