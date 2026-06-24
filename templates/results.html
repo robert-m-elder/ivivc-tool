@@ -166,6 +166,9 @@
                 <h3>{{ approaches["approach1"].display_name }}</h3>
                 <h4>Performance Metrics</h4>
                 {{ comparisons["approach1"] | safe }}
+                <h4>Cross-Validation Summary</h4>
+                {{ cross_validation_summary_html | safe }}
+                {{ cv_summary_tables.get("approach1", "") | safe }}
                 {% set approach1_evidence = evidence_tables.get('approach1', {}).get('fit') %}
                 {% if approach1_evidence %}
                     <h4>Relative Model Evidence</h4>
@@ -181,6 +184,9 @@
                 <h3>{{ approaches["approach2"].display_name }}</h3>
                 <h4>Performance Metrics</h4>
                 {{ comparisons["approach2"] | safe }}
+                <h4>Cross-Validation Summary</h4>
+                {{ cross_validation_summary_html | safe }}
+                {{ cv_summary_tables.get("approach2", "") | safe }}
                 <h4>Relative Model Evidence</h4>
                 {{ relative_model_evidence_html | safe }}
                 {% set approach2_evidence = evidence_tables.get('approach2', {}) %}

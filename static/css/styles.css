@@ -1304,3 +1304,14 @@ button.dt-button2:disabled {
 .evidence-badge-minimal {
     background: #f7eeee;
 }
+
+/* Cross-validation model comparison summaries */
+.cv-summary-table {
+    margin-top: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.cv-summary-table th,
+.cv-summary-table td {
+    vertical-align: middle;
+}

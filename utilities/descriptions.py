@@ -48,6 +48,7 @@ RELATIVE_MODEL_EVIDENCE_HTML = _required(_DESCRIPTION_CONTENT, 'relative_model_e
 RELATIVE_MODEL_EVIDENCE_NOTE_HTML = RELATIVE_MODEL_EVIDENCE_HTML
 RELATIVE_MODEL_EVIDENCE_TEXT = _required(_DESCRIPTION_CONTENT, 'relative_model_evidence_text')
 CROSS_VALIDATION_DESCRIPTION_HTML = _required(_DESCRIPTION_CONTENT, 'cross_validation_description_html')
+CROSS_VALIDATION_SUMMARY_HTML = _required(_DESCRIPTION_CONTENT, 'cross_validation_summary_html')
 GRID_SEARCH_DESCRIPTION_HTML = _required(_DESCRIPTION_CONTENT, 'grid_search_description_html')
 CV_SCHEMES = _required(_DESCRIPTION_CONTENT, 'cv_schemes')
 ANALYSIS_PARAMETERS = _required(_DESCRIPTION_CONTENT, 'analysis_parameters')

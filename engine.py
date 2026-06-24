@@ -427,6 +427,95 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
     
     return prediction_results
 
+
+def _finite_float(value):
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return np.nan
+    return value if np.isfinite(value) else np.nan
+
+
+def _fit_cv_ratio(fit_value, cv_value):
+    fit_value = _finite_float(fit_value)
+    cv_value = _finite_float(cv_value)
+    if not np.isfinite(fit_value) or not np.isfinite(cv_value) or cv_value == 0:
+        return np.nan
+    return fit_value / cv_value
+
+
+CV_SUMMARY_EXCLUDED_METRICS = {'aic', 'aicc', 'bic'}
+
+
+def _cross_validation_row(model_display_name, stats_row, selected_metrics, dataset_label=None):
+    row = {'Model': model_display_name}
+    if dataset_label is not None:
+        row['Dataset'] = dataset_label
+
+    has_cv_value = False
+    for metric in selected_metrics:
+        if metric in CV_SUMMARY_EXCLUDED_METRICS or metric not in metrics:
+            continue
+        display_name = metrics[metric]['display_name']
+        fit_value = stats_row.get(metric, np.nan)
+        cv_value = stats_row.get(f'CV {metric}', np.nan)
+        ratio = _fit_cv_ratio(fit_value, cv_value)
+        cv_value = _finite_float(cv_value)
+        if np.isfinite(cv_value):
+            has_cv_value = True
+        row[f'CV {display_name}'] = cv_value
+        row[f'Ratio {display_name}'] = ratio
+
+    return row if has_cv_value else None
+
+
+def _cross_validation_table(rows):
+    if not rows:
+        return '<p class="evidence-note">Cross-validation summary is not available because cross-validation was not run or did not produce finite values for the selected eligible metrics.</p>'
+    df = pd.DataFrame(rows)
+    return df.to_html(classes='table table-striped cv-summary-table', index=False, float_format=lambda x: f'{x:.4f}', na_rep='N/A')
+
+
+def create_cross_validation_summary(results, approach, selected_metrics):
+    """Create compact model-comparison tables for held-out CV scores.
+
+    The table reports mean cross-validation scores that were already calculated
+    during fitting, plus a neutral fit/CV ratio for each selected metric.
+    """
+    if approach not in ('approach1', 'approach2'):
+        return '<p class="evidence-note">Cross-validation summary is not applicable because no parametric model is used.</p>'
+
+    rows = []
+    for model_key, model_results in results.items():
+        if len(model_key.split(':')) > 1:
+            approach_id, model_name = model_key.split(':')
+        else:
+            approach_id = model_key
+        if approach_id != approach or model_results.get('error'):
+            continue
+
+        model_display_name = models[model_name]['display_name']
+        if approach == 'approach1':
+            row = _cross_validation_row(
+                model_display_name,
+                model_results['stats'].iloc[0],
+                selected_metrics,
+            )
+            if row:
+                rows.append(row)
+        elif approach == 'approach2':
+            for i, dataset_label in enumerate(['In Vitro', 'In Vivo']):
+                row = _cross_validation_row(
+                    model_display_name,
+                    model_results['stats'][i].iloc[0],
+                    selected_metrics,
+                    dataset_label=dataset_label,
+                )
+                if row:
+                    rows.append(row)
+
+    return _cross_validation_table(rows)
+
 def create_comparison(results, approach):
     comparison_data = []
     model_keys, model_display_names = [],[]

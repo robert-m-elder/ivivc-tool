@@ -12,6 +12,7 @@ from preprocessing import preprocessing_options
 from utilities.descriptions import (
     APPROACH_DESCRIPTIONS,
     GRID_SEARCH_DESCRIPTION_HTML,
+    CROSS_VALIDATION_SUMMARY_HTML,
     RELATIVE_MODEL_EVIDENCE_HTML,
     TOOL_PURPOSE_HTML,
     METRIC_DESCRIPTIONS,
@@ -29,6 +30,7 @@ from utilities.model_display import get_human_readable_function
 from metrics import metrics
 from engine import (
     create_comparison,
+    create_cross_validation_summary,
     create_initial_plotly,
     create_interpolation_plotly,
     create_prediction_interpolation_plotly,
@@ -139,9 +141,10 @@ def index():
                 results[model_key]['function'] = human_readable_functions[model_name]
 
         # Compare model performance
-        comparisons, ks_tables = {}, {}
+        comparisons, ks_tables, cv_summary_tables = {}, {}, {}
         for approach in selected_approaches:
             comparisons[approach], ks_tables[approach] = create_comparison(results, approach)
+            cv_summary_tables[approach] = create_cross_validation_summary(results, approach, selected_metrics)
 
         evidence_tables, evidence_lookup = build_relative_evidence_tables(
             results=results,
@@ -202,7 +205,7 @@ def index():
         )
 
         return render_template('results.html', results=results, models=models, raw_data_info=raw_data_info, interpolation_info=interpolation_info, prediction_interpolation_info=prediction_interpolation_info, 
-                               comparisons=comparisons, ks_tables=ks_tables, 
+                               comparisons=comparisons, ks_tables=ks_tables, cv_summary_tables=cv_summary_tables,
                                approaches=approaches, selected_approaches=selected_approaches, 
                                selected_scalings=selected_scalings, selected_normalizations=selected_normalizations, selected_interpolation=selected_interpolation,
                                metrics=metrics, selected_metrics=selected_metrics, prediction_results=prediction_results,
@@ -211,6 +214,7 @@ def index():
                                preprocessing_summary=preprocessing_summary, metric_description_rows=metric_description_rows,
                                grid_search_description_html=GRID_SEARCH_DESCRIPTION_HTML, tool_purpose_html=TOOL_PURPOSE_HTML,
                                relative_model_evidence_html=RELATIVE_MODEL_EVIDENCE_HTML,
+                               cross_validation_summary_html=CROSS_VALIDATION_SUMMARY_HTML,
                                modal_help=MODAL_HELP,
                                final_model_options=final_model_options,
                                evidence_tables=evidence_tables, evidence_lookup=evidence_lookup,

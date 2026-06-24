@@ -87,6 +87,8 @@ relative_model_evidence_text: |-
 cross_validation_description_html: |-
   <p>Cross-validation provides an approximate check of how a fitted model performs on held-out data. It is most useful when there are enough observations to fit the model repeatedly while leaving some observations out for evaluation.</p>
   <p>The available schemes are Shuffle split, K-fold, Leave-one-out, and None. Shuffle split uses repeated random holdout sets, K-fold uses systematic fold-based holdouts, Leave-one-out holds out one observation at a time, and None disables cross-validation. For small IVIVC datasets, cross-validation summaries should be interpreted as exploratory diagnostics rather than definitive validation results.</p>
+cross_validation_summary_html: |-
+  <p>The Cross-Validation Summary table reports the mean held-out score for each selected eligible metric where cross-validation was run successfully. For each metric, <strong>CV [metric]</strong> is the mean cross-validation score and <strong>Ratio [metric]</strong> is the fitted-model score divided by the cross-validation score. Ratios are reported as neutral fit/CV comparisons and are not pass/fail criteria. AIC, AICc, and BIC are excluded from this table even when selected because information criteria are calculated from fitted-sample likelihood/error and parameter counts rather than directly comparable held-out prediction scores.</p>
 grid_search_description_html: |-
   <p>The app conducts an automated grid search to identify suitable starting parameter values for each model before nonlinear least-squares fitting, reducing the need for manual parameter tuning. Candidate values are sampled within the configured parameter bounds and are used only to initialize the final curve fit.</p>
   <p>This initialization step improves convergence and reduces sensitivity to poor starting values. It is not itself the final fitting algorithm and does not guarantee that the final fitted parameters are the global optimum.</p>
@@ -168,12 +170,13 @@ modal_help:
       <p>For each selected model, the app evaluates the candidate starting values and uses the best candidate as the starting point for the final curve fit. If fitting fails or appears unstable, consider increasing the number of random starts, adjusting the parameter bounds, changing the random seed, or reviewing whether the selected model is appropriate for the data.</p>
   results:
     model_comparison_html: |-
-      <p>This section summarizes how each fitted model performed under the user-selected metrics and, where applicable, under the Relative Model Evidence tables. Use these results together with the fitting plots, prediction plots where available, parameter uncertainty, residual behavior, and scientific expectations for the system.</p>
+      <p>This section summarizes how each fitted model performed under the user-selected metrics, cross-validation summary tables, and, where applicable, Relative Model Evidence tables. Use these results together with the fitting plots, prediction plots where available, parameter uncertainty, residual behavior, and scientific expectations for the system.</p>
       <p>The metric definitions and better/worse direction are shown in the Model Comparison tab itself, so this help box intentionally provides only a high-level interpretation guide.</p>
       <ul>
         <li>Error metrics generally summarize the size of residuals.</li>
         <li>R²-type metrics summarize explained response variability.</li>
         <li>AIC/AICc/BIC-type metrics support relative comparison among candidate parametric models fitted to the same dataset under comparable assumptions.</li>
+        <li>Cross-validation scores summarize held-out performance from the selected CV scheme. Ratio columns show fitted score divided by CV score for the same metric.</li>
         <li>Delta values, evidence weights, and evidence ratios are relative summaries; they do not prove that a model is correct, mechanistic, predictive outside the fitted range, or suitable for a regulatory submission.</li>
       </ul>
       <p>The app does not automatically choose a model. The user should review the full set of outputs and select the model or method that is scientifically justified for the intended use.</p>
