@@ -65,7 +65,18 @@ For Excel workbooks, select the sheet containing the relevant data. For CSV file
 | Shared-time interpolation | `default` | Interpolates both datasets onto the common set of experimental time points, using linear interpolation and marking out-of-range values as unavailable. |
 | Densified interpolation | `alternative` | Creates additional linearly spaced points between adjacent observations before interpolation. This can smooth displays and make fitting more stable, but adds more interpolation-derived points that skew statistical comparisons. |
 
-## 5. Cross-validation options
+## 5. Relative model evidence
+
+Relative model evidence compares candidate parametric models fitted to the same dataset under the same preprocessing settings and IVIVC approach. AIC, AICc, and BIC are relative criteria; their absolute values are not interpreted directly, and negative values are allowed. Delta values show how far each model is from the lowest value in the candidate set. Values near 0 indicate similar relative support. Larger values indicate lower support relative to the leading candidate model under that criterion. Evidence weights are normalized relative-support values across the displayed candidate models, and evidence ratios compare each model's weight with the highest weight in the set. AICc is a small-sample correction to AIC and is especially useful when the number of fitted observations is small relative to the number of fitted parameters. If there are too few observations for AICc to be defined, the app reports AICc as unavailable for that model. The app reports these summaries to support user review. It does not select, recommend, or validate a model.
+
+| Evidence summary | Interpretation |
+| --- | --- |
+| Delta AICc / Delta AIC / Delta BIC | Difference from the lowest value in the displayed candidate set. Values near 0 indicate similar relative support; larger values indicate lower support relative to the leading candidate under that criterion. |
+| AICc or BIC weight | Normalized relative-support value across the candidate models in the displayed evidence table. Weights are relative, not absolute probabilities that a model is true. |
+| Evidence ratio | Ratio of the highest evidence weight to the model's evidence weight. Larger ratios indicate less relative support compared with the highest-weighted model in the set. |
+| Interpretation badge | Neutral rule-of-thumb label based on the displayed delta values. The label supports user review and is not an app recommendation. |
+
+## 6. Cross-validation options
 
 Cross-validation provides an approximate check of how a fitted model performs on held-out data. It is most useful when there are enough observations to fit the model repeatedly while leaving some observations out for evaluation.
 
@@ -85,34 +96,34 @@ The available schemes are Shuffle split, K-fold, Leave-one-out, and None. Shuffl
 | ShuffleSplit test size | `cv_test_size` | The fraction of observations held out for testing in each Shuffle split repeat. Smaller values leave more observations for fitting; larger values make the holdout test more demanding but leave fewer observations for training. |
 | CV random seed | `cv_random_state` | Seed used to make randomized cross-validation splits reproducible. This applies to Shuffle split and shuffled K-fold. |
 
-## 6. Grid-search initialization
+## 7. Grid-search initialization
 
-The app conducts an automated grid search to identify suitable starting parameter values for each model before nonlinear least-squares fitting, reducing the need for manual parameter tuning. Candidate values are sampled within the configured real-space parameter bounds and are used only to initialize the final curve fit.
+The app conducts an automated grid search to identify suitable starting parameter values for each model before nonlinear least-squares fitting, reducing the need for manual parameter tuning. Candidate values are sampled within the configured parameter bounds and are used only to initialize the final curve fit.
 
-This initialization step can improve convergence and reduce sensitivity to poor starting values. It is not itself the final fitting algorithm and does not guarantee that the final fitted parameters are the global optimum.
+This initialization step improves convergence and reduces sensitivity to poor starting values. It is not itself the final fitting algorithm and does not guarantee that the final fitted parameters are the global optimum.
 
 | Parameter | Internal key | Description |
 | --- | --- | --- |
 | Grid-search random starts | `grid_search_num_points` | Number of candidate starting parameter sets evaluated before nonlinear least-squares fitting. Higher values may improve robustness but increase runtime. |
 | Grid-search CPU cores | `grid_search_num_cores` | Number of CPU cores used for the starting-point search. Blank or Auto uses the app default. |
-| Grid-search parameter minimum | `grid_search_param_min` | Lower real-space bound for randomly sampled candidate starting parameter values. |
-| Grid-search parameter maximum | `grid_search_param_max` | Upper real-space bound for randomly sampled candidate starting parameter values. |
+| Grid-search parameter minimum | `grid_search_param_min` | Lower bound for randomly sampled candidate starting parameter values. |
+| Grid-search parameter maximum | `grid_search_param_max` | Upper bound for randomly sampled candidate starting parameter values. |
 | Grid-search random seed | `grid_search_random_state` | Seed used to make randomized starting-point sampling reproducible. Changing the seed changes the sampled candidates while keeping the same bounds and number of starts. |
 
-## 7. Performance metrics
+## 8. Performance metrics
 
 | Metric | Internal key | Preferred direction | Description |
 | --- | --- | --- | --- |
-| Adjusted R² | `adjusted_r_squared` | Higher is generally better | R² adjusted for the number of fitted parameters. Higher values are better and can penalize unnecessary model complexity. |
 | R² | `r_squared` | Higher is generally better | Coefficient of determination. Higher values indicate that the model explains more variance in the observed response. |
+| Adjusted R² | `adjusted_r_squared` | Higher is generally better | R² adjusted for the number of fitted parameters. Higher values are better and can penalize unnecessary model complexity. |
 | MSE | `mse` | Lower is generally better | Mean squared error between observed and fitted values. Lower values indicate smaller average squared residuals. |
 | RMSE | `rmse` | Lower is generally better | Root mean squared error, in the same response units as the fitted data. Lower values indicate smaller typical residuals. |
 | NRMSE (mean) | `mnrmse` | Lower is generally better | RMSE normalized by the response mean. Lower values indicate smaller error relative to the response magnitude. |
 | NRMSE (std. dev.) | `nrmse` | Lower is generally better | RMSE normalized by the response standard deviation. Lower values indicate smaller error relative to response variability. |
-| AIC | `aic` | Lower is generally better | Akaike Information Criterion. Lower values indicate a better fit-complexity tradeoff. AIC is intended for comparison of models fitted to the same dataset, not as an absolute goodness-of-fit measure. |
-| BIC | `bic` | Lower is generally better | Bayesian Information Criterion. Lower values indicate a better fit-complexity tradeoff, with a stronger penalty for additional parameters than AIC. BIC is intended for comparison of models fitted to the same dataset, not as an absolute goodness-of-fit measure. |
+| AIC | `aic` | Lower is generally better | Akaike Information Criterion. Lower values indicate stronger relative fit-complexity support among models fitted to the same dataset under comparable assumptions. Absolute AIC values, including negative values, should not be interpreted as standalone quality grades. |
+| BIC | `bic` | Lower is generally better | Bayesian Information Criterion. Lower values indicate stronger relative fit-complexity support among models fitted to the same dataset under comparable assumptions, with a stronger penalty for additional parameters than AIC. Absolute BIC values, including negative values, should not be interpreted as standalone quality grades. |
 
-## 8. Uncertainty and error bars
+## 9. Uncertainty and error bars
 
 The following descriptions summarize how fitted-parameter uncertainty, fitting-plot bands, and prediction error bars are calculated or interpreted for each approach.
 
@@ -164,7 +175,7 @@ Ratio-based uncertainty can become unstable when the denominator model predictio
 
 Uncertainty is therefore limited to the quality of the input data, preprocessing, interpolation, and the assumption that the observed mapping remains valid for the prediction dataset. Extrapolated points outside the interpolation range are excluded or returned as unavailable.
 
-## 9. Outputs
+## 10. Outputs
 
 | Output | Description |
 | --- | --- |
@@ -176,11 +187,11 @@ Uncertainty is therefore limited to the quality of the input data, preprocessing
 
 Output availability depends on the selected approaches, whether fitting succeeds, and whether a prediction dataset was supplied.
 
-## 10. Command-line interface
+## 11. Command-line interface
 
 The repository includes `cli.py` for batch-oriented fitting from the command line. Use `python cli.py --help` to see available arguments for input files, approaches, models, metrics, preprocessing options, cross-validation settings, and grid-search settings. The internal keys specified in this user guide are used as settings with `cli.py`.
 
-## 11. Regenerating this guide
+## 12. Regenerating this guide
 
 Most descriptive text in this guide is generated from `utilities/descriptions.py`, with routine wording overrides in `utilities/descriptions.yaml`. After editing those files, regenerate the Markdown files with:
 

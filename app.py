@@ -22,6 +22,7 @@ from utilities.descriptions import (
     format_selected_preprocessing_summary,
 )
 from utilities.reporting import build_final_model_options
+from utilities.model_evidence import build_relative_evidence_tables
 from utilities.word_report import build_word_report, safe_report_filename, WORD_MIME_TYPE
 from utilities.model_display import get_human_readable_function
 from metrics import metrics
@@ -141,6 +142,12 @@ def index():
         for approach in selected_approaches:
             comparisons[approach], ks_tables[approach] = create_comparison(results, approach)
 
+        evidence_tables, evidence_lookup = build_relative_evidence_tables(
+            results=results,
+            models_registry=models,
+            selected_approaches=selected_approaches,
+        )
+
         analysis_config_rows = format_analysis_config_rows(analysis_config)
         preprocessing_rows = format_preprocessing_rows(
             selected_normalizations,
@@ -203,6 +210,7 @@ def index():
                                grid_search_description_html=GRID_SEARCH_DESCRIPTION_HTML, tool_purpose_html=TOOL_PURPOSE_HTML,
                                modal_help=MODAL_HELP,
                                final_model_options=final_model_options,
+                               evidence_tables=evidence_tables, evidence_lookup=evidence_lookup,
                                include_prediction_methods=include_prediction_methods,
                                approach_descriptions=APPROACH_DESCRIPTIONS)
     return render_template('index.html', models=models, approaches=approaches, preprocessing_options=preprocessing_options, 

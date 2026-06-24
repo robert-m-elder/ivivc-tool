@@ -166,6 +166,12 @@
                 <h3>{{ approaches["approach1"].display_name }}</h3>
                 <h4>Performance Metrics</h4>
                 {{ comparisons["approach1"] | safe }}
+                {% set approach1_evidence = evidence_tables.get('approach1', {}).get('fit') %}
+                {% if approach1_evidence %}
+                    <h4>Relative Model Evidence</h4>
+                    <p class="evidence-note">Relative evidence compares candidate models fitted under the same approach, dataset, and preprocessing settings. Lower AIC/AICc/BIC values indicate stronger relative support within this candidate set. The app does not select or recommend a model.</p>
+                    {{ approach1_evidence.html | safe }}
+                {% endif %}
                 <!--
                 <h4>Pairwise Model Comparison (Kolmogorov-Smirnov Test p-values)</h4>
                 {{ ks_tables["approach1"][0] | safe}}
@@ -175,6 +181,21 @@
                 <h3>{{ approaches["approach2"].display_name }}</h3>
                 <h4>Performance Metrics</h4>
                 {{ comparisons["approach2"] | safe }}
+                <h4>Relative Model Evidence</h4>
+                <p class="evidence-note">Relative evidence compares candidate models fitted under the same approach, dataset, and preprocessing settings. For Approach 2, the combined table summarizes the paired in vitro and in vivo fits together. The app does not select or recommend a model.</p>
+                {% set approach2_evidence = evidence_tables.get('approach2', {}) %}
+                {% if approach2_evidence.get('combined') %}
+                    <h5>Combined in vitro + in vivo evidence</h5>
+                    {{ approach2_evidence.get('combined').html | safe }}
+                {% endif %}
+                {% if approach2_evidence.get('in_vitro') %}
+                    <h5>In vitro fit evidence</h5>
+                    {{ approach2_evidence.get('in_vitro').html | safe }}
+                {% endif %}
+                {% if approach2_evidence.get('in_vivo') %}
+                    <h5>In vivo fit evidence</h5>
+                    {{ approach2_evidence.get('in_vivo').html | safe }}
+                {% endif %}
                 <!--
                 <h4>Pairwise Model Comparison (Kolmogorov-Smirnov Test p-values), In Vitro Data</h4>
                 {{ ks_tables["approach2"][0] | safe}}
@@ -332,6 +353,12 @@
                             {% endfor %}
                             <h4>Goodness of fit and validation</h4>
                             {{ model_results.stats_table | safe }}
+                            {% set evidence_context = evidence_lookup.get(option.model_key) %}
+                            {% if evidence_context and evidence_context.report_html %}
+                                <h4>Relative evidence context</h4>
+                                <p class="evidence-note">This summarizes how the selected model compared with other candidate models fitted under the same approach and preprocessing settings. It is not an app recommendation.</p>
+                                {{ evidence_context.report_html | safe }}
+                            {% endif %}
                         {% elif option.approach_id == 'approach2' %}
                             <h4>Model equation</h4>
                             <p class="report-equation" data-report-equation="{{ model_results.function }}">\[{{ model_results.function }}\]</p>
@@ -362,6 +389,12 @@
                             {{ model_results.stats_table[0] | safe }}
                             <h5>In vivo data</h5>
                             {{ model_results.stats_table[1] | safe }}
+                            {% set evidence_context = evidence_lookup.get(option.model_key) %}
+                            {% if evidence_context and evidence_context.report_html %}
+                                <h4>Relative evidence context</h4>
+                                <p class="evidence-note">This summarizes how the selected model compared with other candidate models fitted under the same approach and preprocessing settings. It is not an app recommendation.</p>
+                                {{ evidence_context.report_html | safe }}
+                            {% endif %}
                         {% elif option.approach_id == 'approach3' %}
                             <h4>Model form</h4>
                             <p>Direct interpolation-based mapping; no parametric model is fitted for this approach.</p>
@@ -656,7 +689,7 @@
             <p><strong>For Model Selection:</strong></p>
             <ul>
                 <li>Look for <strong>high R² values</strong> and <strong>lower error metrics</strong> (e.g., RMSE)</li>
-                <li>Use <strong>Information Criteria (AIC/BIC)</strong> to balance model fit with complexity - lower values indicate better models that avoid overfitting</li>
+                <li>Use <strong>Relative Model Evidence</strong> and information criteria (AIC/AICc/BIC) to compare fit-complexity tradeoffs among candidate models fitted under the same approach and preprocessing settings.</li>
                 <li>Consider <strong>parameter uncertainty</strong> - smaller ± values indicate more reliable estimates</li>
                 <li>Compare <strong>cross-validation results</strong> to model performance - similar values of correlation coefficients and error metrics indicate good generalization</li>
             </ul>
@@ -676,7 +709,7 @@
             <p><strong>For Model Selection:</strong></p>
             <ul>
                 <li>Look for <strong>high R² values</strong> and <strong>lower error metrics</strong> (e.g., RMSE) for both datasets</li>
-                <li>Use <strong>Information Criteria (AIC/BIC)</strong> to balance model fit with complexity - lower values indicate better models that avoid overfitting</li>
+                <li>Use <strong>Relative Model Evidence</strong> and information criteria (AIC/AICc/BIC) to compare fit-complexity tradeoffs among candidate models fitted under the same approach and preprocessing settings.</li>
                 <li>Consider <strong>parameter uncertainty</strong> - smaller ± values indicate more reliable estimates</li>
                 <li>Compare <strong>time constants</strong> between datasets for consistency with your expectations</li>
                 <li>Compare <strong>cross-validation results</strong> to model performance - similar values of correlation coefficients and error metrics indicate good generalization</li>

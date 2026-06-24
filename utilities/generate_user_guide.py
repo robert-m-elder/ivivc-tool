@@ -53,6 +53,7 @@ from utilities.descriptions import (  # noqa: E402
     GRID_SEARCH_DESCRIPTION_HTML,
     METRIC_DESCRIPTIONS,
     PREPROCESSING_DESCRIPTIONS,
+    RELATIVE_MODEL_EVIDENCE_TEXT,
     TOOL_CAPABILITY_SUMMARY,
     TOOL_PURPOSE_TEXT,
 )
@@ -263,7 +264,19 @@ def build_user_guide() -> str:
         rows = [[preprocessing_label(category, key), f"`{key}`", preprocessing_description(category, key)] for key in keys]
         parts.append(table(["Option", "Internal key", "Description"], rows))
 
-    parts.append(heading(2, "5. Cross-validation options"))
+    parts.append(heading(2, "5. Relative model evidence"))
+    parts.append(RELATIVE_MODEL_EVIDENCE_TEXT + "\n\n")
+    parts.append(table(
+        ["Evidence summary", "Interpretation"],
+        [
+            ["Delta AICc / Delta AIC / Delta BIC", "Difference from the lowest value in the displayed candidate set. Values near 0 indicate similar relative support; larger values indicate lower support relative to the leading candidate under that criterion."],
+            ["AICc or BIC weight", "Normalized relative-support value across the candidate models in the displayed evidence table. Weights are relative, not absolute probabilities that a model is true."],
+            ["Evidence ratio", "Ratio of the highest evidence weight to the model's evidence weight. Larger ratios indicate less relative support compared with the highest-weighted model in the set."],
+            ["Interpretation badge", "Neutral rule-of-thumb label based on the displayed delta values. The label supports user review and is not an app recommendation."],
+        ],
+    ))
+
+    parts.append(heading(2, "6. Cross-validation options"))
     parts.append(html_to_text(CROSS_VALIDATION_DESCRIPTION_HTML) + "\n\n")
     parts.append(table(
         ["Scheme", "Internal key", "Description"],
@@ -275,7 +288,7 @@ def build_user_guide() -> str:
             cv_rows.append([label, f"`{key}`", analysis_parameter_description(key)])
     parts.append(table(["Parameter", "Internal key", "Description"], cv_rows))
 
-    parts.append(heading(2, "6. Grid-search initialization"))
+    parts.append(heading(2, "7. Grid-search initialization"))
     parts.append(html_to_text(GRID_SEARCH_DESCRIPTION_HTML) + "\n\n")
     grid_rows = []
     for key, label in ANALYSIS_CONFIG_LABELS.items():
@@ -283,7 +296,7 @@ def build_user_guide() -> str:
             grid_rows.append([label, f"`{key}`", analysis_parameter_description(key)])
     parts.append(table(["Parameter", "Internal key", "Description"], grid_rows))
 
-    parts.append(heading(2, "7. Performance metrics"))
+    parts.append(heading(2, "8. Performance metrics"))
     metric_rows = []
     for metric_key, metric_info in metrics.items():
         metric_rows.append([
@@ -297,7 +310,7 @@ def build_user_guide() -> str:
             metric_rows.append([metric_key.replace("_", " ").title(), f"`{metric_key}`", "", desc.get("description", "")])
     parts.append(table(["Metric", "Internal key", "Preferred direction", "Description"], metric_rows))
 
-    parts.append(heading(2, "8. Uncertainty and error bars"))
+    parts.append(heading(2, "9. Uncertainty and error bars"))
     parts.append(
         "The following descriptions summarize how fitted-parameter uncertainty, fitting-plot bands, "
         "and prediction error bars are calculated or interpreted for each approach.\n\n"
@@ -312,7 +325,7 @@ def build_user_guide() -> str:
         if prediction_text:
             parts.append(f"**Prediction uncertainty**\n\n{prediction_text}\n\n")
 
-    parts.append(heading(2, "9. Outputs"))
+    parts.append(heading(2, "10. Outputs"))
     parts.append(table(
         ["Output", "Description"],
         [
@@ -325,10 +338,10 @@ def build_user_guide() -> str:
     ))
     parts.append("Output availability depends on the selected approaches, whether fitting succeeds, and whether a prediction dataset was supplied.\n\n")
 
-    parts.append(heading(2, "10. Command-line interface"))
+    parts.append(heading(2, "11. Command-line interface"))
     parts.append("The repository includes `cli.py` for batch-oriented fitting from the command line. Use `python cli.py --help` to see available arguments for input files, approaches, models, metrics, preprocessing options, cross-validation settings, and grid-search settings. The internal keys specified in this user guide are used as settings with `cli.py`.\n\n")
 
-    parts.append(heading(2, "11. Regenerating this guide"))
+    parts.append(heading(2, "12. Regenerating this guide"))
     parts.append(dedent(
         """
         Most descriptive text in this guide is generated from `utilities/descriptions.py`, with routine wording overrides in `utilities/descriptions.yaml`. After editing those files, regenerate the Markdown files with:

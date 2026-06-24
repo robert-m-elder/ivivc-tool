@@ -145,13 +145,21 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                     'residuals': y-y_pred,
                     'approach': approaches[approach_id]['display_name']
                 })
+                residuals = y - y_pred
                 results[model_key] = {
                     'params': model_result['params'],
                     'uparams': upopt,
                     'pcov': model_result['pcov'],
-                    'residuals': y-y_pred,
+                    'residuals': residuals,
                     'stats': stats,
                     'predictions': y_pred,
+                    'evidence_data': {
+                        'fit': {
+                            'n': int(len(y)),
+                            'rss': float(np.sum(residuals ** 2)),
+                            'n_params': int(len(model_result['params']))
+                        }
+                    },
                     'stats_table': stats_table.to_html(classes='table table-striped', index=True, float_format=lambda x: f'{x:.4f}'),
                     'plot': plot_image
                 }
@@ -228,6 +236,8 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                     'residuals2': y2-y_pred2,
                     'approach': approaches[approach_id]['display_name']
                 })
+                residuals1 = y1 - y_pred1
+                residuals2 = y2 - y_pred2
                 results[model_key] = {
                     'params': [model_result1['params'],model_result2['params']],
                     'uparams': [upopt1,upopt2],
@@ -235,7 +245,19 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                     'stats': [stats1,stats2],
                     'predictions': [y_pred1,y_pred2],
                     'pcov': [pcov1,pcov2],
-                    'residuals': [y1-y_pred1,y2-y_pred2],
+                    'residuals': [residuals1,residuals2],
+                    'evidence_data': {
+                        'in_vitro': {
+                            'n': int(len(y1)),
+                            'rss': float(np.sum(residuals1 ** 2)),
+                            'n_params': int(len(model_result1['params']))
+                        },
+                        'in_vivo': {
+                            'n': int(len(y2)),
+                            'rss': float(np.sum(residuals2 ** 2)),
+                            'n_params': int(len(model_result2['params']))
+                        }
+                    },
                     'stats_table': [stats_table1.to_html(classes='table table-striped', index=True, float_format=lambda x: f'{x:.4f}'), 
                                     stats_table2.to_html(classes='table table-striped', index=True, float_format=lambda x: f'{x:.4f}')],
                     'plot': plot_image
