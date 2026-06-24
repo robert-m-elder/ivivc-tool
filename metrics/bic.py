@@ -1,7 +1,7 @@
 import numpy as np
 
 display_name = "BIC"
-sort_order = 6
+sort_order = 7
 better_direction = 'lower'
 
 def metric_function(y_true, y_pred, n_params=None):

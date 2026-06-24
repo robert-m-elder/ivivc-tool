@@ -12,6 +12,7 @@ from preprocessing import preprocessing_options
 from utilities.descriptions import (
     APPROACH_DESCRIPTIONS,
     GRID_SEARCH_DESCRIPTION_HTML,
+    RELATIVE_MODEL_EVIDENCE_HTML,
     TOOL_PURPOSE_HTML,
     METRIC_DESCRIPTIONS,
     MODAL_HELP,
@@ -146,6 +147,7 @@ def index():
             results=results,
             models_registry=models,
             selected_approaches=selected_approaches,
+            selected_metrics=selected_metrics,
         )
 
         analysis_config_rows = format_analysis_config_rows(analysis_config)
@@ -208,6 +210,7 @@ def index():
                                analysis_config_rows=analysis_config_rows, preprocessing_rows=preprocessing_rows,
                                preprocessing_summary=preprocessing_summary, metric_description_rows=metric_description_rows,
                                grid_search_description_html=GRID_SEARCH_DESCRIPTION_HTML, tool_purpose_html=TOOL_PURPOSE_HTML,
+                               relative_model_evidence_html=RELATIVE_MODEL_EVIDENCE_HTML,
                                modal_help=MODAL_HELP,
                                final_model_options=final_model_options,
                                evidence_tables=evidence_tables, evidence_lookup=evidence_lookup,

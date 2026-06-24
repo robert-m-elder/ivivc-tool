@@ -169,7 +169,7 @@
                 {% set approach1_evidence = evidence_tables.get('approach1', {}).get('fit') %}
                 {% if approach1_evidence %}
                     <h4>Relative Model Evidence</h4>
-                    <p class="evidence-note">Relative evidence compares candidate models fitted under the same approach, dataset, and preprocessing settings. Lower AIC/AICc/BIC values indicate stronger relative support within this candidate set. The app does not select or recommend a model.</p>
+                    {{ relative_model_evidence_html | safe }}
                     {{ approach1_evidence.html | safe }}
                 {% endif %}
                 <!--
@@ -182,7 +182,7 @@
                 <h4>Performance Metrics</h4>
                 {{ comparisons["approach2"] | safe }}
                 <h4>Relative Model Evidence</h4>
-                <p class="evidence-note">Relative evidence compares candidate models fitted under the same approach, dataset, and preprocessing settings. For Approach 2, the combined table summarizes the paired in vitro and in vivo fits together. The app does not select or recommend a model.</p>
+                {{ relative_model_evidence_html | safe }}
                 {% set approach2_evidence = evidence_tables.get('approach2', {}) %}
                 {% if approach2_evidence.get('combined') %}
                     <h5>Combined in vitro + in vivo evidence</h5>
@@ -272,40 +272,45 @@
                             </tbody>
                         </table>
 
-                        <h4>Analysis settings</h4>
-                        <table class="settings-table">
-                            <tbody>
-                                {% for label, value in analysis_config_rows %}
-                                <tr>
-                                    <th>{{ label }}</th>
-                                    <td>{{ value }}</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+                        {% if option.approach_id == 'approach3' %}
+                            <h4>Analysis settings</h4>
+                            <p class="evidence-note">Cross-validation and grid-search initialization are not applicable to Approach 3 because no parametric model is used. Selected performance metrics are not included in this report section for the same reason.</p>
+                        {% else %}
+                            <h4>Analysis settings</h4>
+                            <table class="settings-table">
+                                <tbody>
+                                    {% for label, value in analysis_config_rows %}
+                                    <tr>
+                                        <th>{{ label }}</th>
+                                        <td>{{ value }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
 
-                        <h4>Grid-search initialization</h4>
-                        {{ grid_search_description_html | safe }}
+                            <h4>Grid-search initialization</h4>
+                            {{ grid_search_description_html | safe }}
 
-                        <h4>Selected performance metrics</h4>
-                        <table class="settings-table description-table">
-                            <thead>
-                                <tr>
-                                    <th>Metric</th>
-                                    <th>Direction</th>
-                                    <th>Description</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for metric in metric_description_rows %}
-                                <tr>
-                                    <td>{{ metric.name }}</td>
-                                    <td>{{ metric.direction }}</td>
-                                    <td>{{ metric.description }}</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+                            <h4>Selected performance metrics</h4>
+                            <table class="settings-table description-table">
+                                <thead>
+                                    <tr>
+                                        <th>Metric</th>
+                                        <th>Direction</th>
+                                        <th>Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for metric in metric_description_rows %}
+                                    <tr>
+                                        <td>{{ metric.name }}</td>
+                                        <td>{{ metric.direction }}</td>
+                                        <td>{{ metric.description }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        {% endif %}
 
                         <h4>Method description</h4>
                         {{ option.method_html | safe }}
@@ -353,11 +358,11 @@
                             {% endfor %}
                             <h4>Goodness of fit and validation</h4>
                             {{ model_results.stats_table | safe }}
-                            {% set evidence_context = evidence_lookup.get(option.model_key) %}
-                            {% if evidence_context and evidence_context.report_html %}
+                            {% set approach_evidence = evidence_tables.get(option.approach_id, {}) %}
+                            {% if approach_evidence.get('fit') %}
                                 <h4>Relative evidence context</h4>
-                                <p class="evidence-note">This summarizes how the selected model compared with other candidate models fitted under the same approach and preprocessing settings. It is not an app recommendation.</p>
-                                {{ evidence_context.report_html | safe }}
+                                {{ relative_model_evidence_html | safe }}
+                                {{ approach_evidence.get('fit').html | safe }}
                             {% endif %}
                         {% elif option.approach_id == 'approach2' %}
                             <h4>Model equation</h4>
@@ -389,11 +394,22 @@
                             {{ model_results.stats_table[0] | safe }}
                             <h5>In vivo data</h5>
                             {{ model_results.stats_table[1] | safe }}
-                            {% set evidence_context = evidence_lookup.get(option.model_key) %}
-                            {% if evidence_context and evidence_context.report_html %}
+                            {% set approach_evidence = evidence_tables.get(option.approach_id, {}) %}
+                            {% if approach_evidence %}
                                 <h4>Relative evidence context</h4>
-                                <p class="evidence-note">This summarizes how the selected model compared with other candidate models fitted under the same approach and preprocessing settings. It is not an app recommendation.</p>
-                                {{ evidence_context.report_html | safe }}
+                                {{ relative_model_evidence_html | safe }}
+                                {% if approach_evidence.get('combined') %}
+                                    <h5>Combined in vitro + in vivo evidence</h5>
+                                    {{ approach_evidence.get('combined').html | safe }}
+                                {% endif %}
+                                {% if approach_evidence.get('in_vitro') %}
+                                    <h5>In vitro fit evidence</h5>
+                                    {{ approach_evidence.get('in_vitro').html | safe }}
+                                {% endif %}
+                                {% if approach_evidence.get('in_vivo') %}
+                                    <h5>In vivo fit evidence</h5>
+                                    {{ approach_evidence.get('in_vivo').html | safe }}
+                                {% endif %}
                             {% endif %}
                         {% elif option.approach_id == 'approach3' %}
                             <h4>Model form</h4>

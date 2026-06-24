@@ -13,21 +13,12 @@ import pandas as pd
 
 
 _EPS = np.finfo(float).eps
-
-
-EVIDENCE_NOTE = (
-    "Relative evidence compares candidate models fitted under the same approach, "
-    "dataset, and preprocessing settings. Lower AIC/AICc/BIC values indicate "
-    "stronger relative support within this candidate set. The app does not select "
-    "or recommend a model."
-)
-
-EVIDENCE_FOOTNOTE = (
-    "Similar relative evidence does not mean the models are scientifically "
-    "equivalent. Final model selection should also consider prediction error, "
-    "cross-validation behavior, residual patterns, parameter uncertainty, model "
-    "simplicity, and biological or degradation-mechanism plausibility."
-)
+CRITERION_LABELS = {
+    "aic": "AIC",
+    "aicc": "AICc",
+    "bic": "BIC",
+}
+INTERPRETATION_PREFERENCE = ("aicc", "aic", "bic")
 
 
 BADGE_CLASSES = {
@@ -41,6 +32,19 @@ BADGE_CLASSES = {
     "Strong BIC evidence difference": "evidence-badge-minimal",
     "Very strong BIC evidence difference": "evidence-badge-minimal",
 }
+
+
+def selected_information_criteria(selected_metrics):
+    """Return selected information criteria in the user's metric display order."""
+    if selected_metrics is None:
+        selected_metrics = CRITERION_LABELS.keys()
+
+    criteria = []
+    for metric in selected_metrics:
+        metric_key = str(metric).lower()
+        if metric_key in CRITERION_LABELS and metric_key not in criteria:
+            criteria.append(metric_key)
+    return criteria
 
 
 def _finite(value) -> bool:
@@ -91,10 +95,14 @@ def _badge(label):
 
 def ic_from_n_rss_k(n, rss, k):
     """Calculate AIC, AICc, and BIC from sample size, RSS, and parameter count."""
-    n = int(n)
-    k = int(k)
-    rss = max(_as_float(rss), _EPS)
+    try:
+        n = int(n)
+        k = int(k)
+    except (TypeError, ValueError):
+        n = 0
+        k = 0
 
+    rss = _as_float(rss)
     if n <= 0 or k < 0 or not isfinite(rss):
         return {
             "n": n,
@@ -106,6 +114,7 @@ def ic_from_n_rss_k(n, rss, k):
             "aicc_defined": False,
         }
 
+    rss = max(rss, _EPS)
     aic = n * log(rss / n) + 2 * k
     bic = n * log(rss / n) + k * log(n) if n > 0 else np.nan
     if n > k + 1:
@@ -211,25 +220,21 @@ def bic_support_label(delta):
     return "Very strong BIC evidence difference"
 
 
-def _primary_criterion(rows):
-    if sum(_finite(row.get("aicc")) for row in rows) >= 2:
-        return "aicc"
-    if sum(_finite(row.get("aic")) for row in rows) >= 2:
-        return "aic"
-    if sum(_finite(row.get("bic")) for row in rows) >= 2:
-        return "bic"
+def _primary_criterion(rows, criteria):
+    for criterion in INTERPRETATION_PREFERENCE:
+        if criterion in criteria and sum(_finite(row.get(criterion)) for row in rows) >= 2:
+            return criterion
     return None
 
 
-def _sort_rows(rows):
-    primary = _primary_criterion(rows)
+def _sort_rows(rows, criteria):
+    primary = _primary_criterion(rows, criteria)
     if not primary:
-        return rows
+        return sorted(rows, key=lambda row: row.get("model", ""))
     return sorted(rows, key=lambda row: (_as_float(row.get(primary)) if _finite(row.get(primary)) else float("inf"), row.get("model", "")))
 
 
 def _interpretation(row, primary=None):
-    primary = primary or _primary_criterion([row])
     if primary in ("aicc", "aic"):
         return aic_support_label(row.get(f"delta_{primary}"))
     if primary == "bic":
@@ -263,8 +268,8 @@ def _row_from_evidence_data(model_key, model_display, evidence_data, dataset_lab
     }
 
 
-def _format_table_rows(rows, include_dataset=False):
-    primary = _primary_criterion(rows)
+def _format_table_rows(rows, criteria, include_dataset=False):
+    primary = _primary_criterion(rows, criteria)
     formatted_rows = []
     for row in rows:
         interpretation = row.get("interpretation_label") or _interpretation(row, primary)
@@ -272,26 +277,24 @@ def _format_table_rows(rows, include_dataset=False):
             "Model": row.get("model", ""),
             "n": row.get("n", ""),
             "k": row.get("k", ""),
-            "AICc": _format_number(row.get("aicc")),
-            "Delta AICc": _format_number(row.get("delta_aicc")),
-            "AICc weight": _format_weight(row.get("aicc_weight")),
-            "AICc evidence ratio": _format_ratio(row.get("aicc_evidence_ratio")),
-            "BIC": _format_number(row.get("bic")),
-            "Delta BIC": _format_number(row.get("delta_bic")),
-            "BIC weight": _format_weight(row.get("bic_weight")),
-            "BIC evidence ratio": _format_ratio(row.get("bic_evidence_ratio")),
-            "Interpretation": _badge(interpretation) if interpretation != "N/A" else "N/A",
         }
+        for criterion in criteria:
+            label = CRITERION_LABELS[criterion]
+            formatted[label] = _format_number(row.get(criterion))
+            formatted[f"Delta {label}"] = _format_number(row.get(f"delta_{criterion}"))
+            formatted[f"{label} weight"] = _format_weight(row.get(f"{criterion}_weight"))
+            formatted[f"{label} evidence ratio"] = _format_ratio(row.get(f"{criterion}_evidence_ratio"))
+        formatted["Interpretation"] = _badge(interpretation) if interpretation != "N/A" else "N/A"
         if include_dataset:
             formatted = {"Evidence set": row.get("dataset", "")} | formatted
         formatted_rows.append(formatted)
     return formatted_rows
 
 
-def _html_table(rows, include_dataset=False):
+def _html_table(rows, criteria, include_dataset=False):
     if not rows:
         return ""
-    df = pd.DataFrame(_format_table_rows(rows, include_dataset=include_dataset))
+    df = pd.DataFrame(_format_table_rows(rows, criteria, include_dataset=include_dataset))
     return df.to_html(
         classes="table table-striped evidence-table",
         index=False,
@@ -299,49 +302,56 @@ def _html_table(rows, include_dataset=False):
     )
 
 
-def _panel_html(rows, extra_notes=None):
+def _panel_html(rows, criteria, extra_notes=None):
     extra_notes = extra_notes or []
+    if not criteria:
+        return '<p class="evidence-note">Relative model evidence is not shown because no information-criterion metric (AIC, AICc, or BIC) was selected.</p>'
     if not rows:
         return '<p class="evidence-note">Relative evidence is not available for this model set.</p>'
 
-    sorted_rows = _sort_rows(rows)
-    primary = _primary_criterion(sorted_rows)
+    sorted_rows = _sort_rows(rows, criteria)
+    primary = _primary_criterion(sorted_rows, criteria)
     notes = []
-    if primary == "aic":
-        notes.append("AICc is not available for enough models in this set, so the interpretation label uses AIC differences.")
-    elif primary == "bic":
-        notes.append("AIC/AICc are not available for enough models in this set, so the interpretation label uses BIC differences.")
-    elif primary is None:
-        notes.append("Relative evidence requires at least two models with finite information-criterion values.")
-    if any(not row.get("aicc_defined") for row in sorted_rows):
+    if primary is None:
+        notes.append("Relative evidence requires at least two models with finite values for a selected information-criterion metric.")
+    elif len(criteria) > 1:
+        notes.append(f"Interpretation labels use {CRITERION_LABELS[primary]} differences because it is the selected information criterion prioritized for the badge summary.")
+
+    for criterion in criteria:
+        finite_count = sum(_finite(row.get(criterion)) for row in sorted_rows)
+        if finite_count < 2:
+            label = CRITERION_LABELS[criterion]
+            notes.append(f"{label} delta values, weights, and evidence ratios require at least two finite {label} values.")
+
+    if "aicc" in criteria and any(not row.get("aicc_defined") for row in sorted_rows):
         notes.append("AICc is undefined for one or more models because the number of observations is too small relative to the number of fitted parameters.")
     notes.extend(extra_notes)
 
     note_html = "".join(f'<p class="evidence-note">{note}</p>' for note in notes)
-    return f'{_html_table(sorted_rows)}{note_html}<p class="evidence-note">{EVIDENCE_FOOTNOTE}</p>'
+    return f'{_html_table(sorted_rows, criteria)}{note_html}'
 
 
 def _unavailable_panel(message):
     return {"html": f'<p class="evidence-note">{message}</p>', "rows": []}
 
 
-def _final_report_html(rows):
-    if not rows:
+def _final_report_html(rows, criteria):
+    if not rows or not criteria:
         return ""
-    return _html_table(rows, include_dataset=True)
+    return _html_table(rows, criteria, include_dataset=True)
 
 
-def _add_relative_fields(rows):
-    for criterion in ("aic", "aicc", "bic"):
+def _add_relative_fields(rows, criteria):
+    for criterion in criteria:
         add_relative_evidence(rows, criterion)
-    primary = _primary_criterion(rows)
+    primary = _primary_criterion(rows, criteria)
     for row in rows:
         row["primary_criterion"] = primary
         row["interpretation_label"] = _interpretation(row, primary) if primary else "N/A"
     return rows
 
 
-def _approach1_rows(results, models_registry):
+def _approach1_rows(results, models_registry, criteria):
     rows = []
     excluded_count = 0
     for model_key, model_results in results.items():
@@ -357,10 +367,10 @@ def _approach1_rows(results, models_registry):
             continue
         display = models_registry.get(model_name, {}).get("display_name", model_name)
         rows.append(_row_from_evidence_data(model_key, display, evidence_data, "Approach 1 fit"))
-    return _add_relative_fields(rows), excluded_count
+    return _add_relative_fields(rows, criteria), excluded_count
 
 
-def _approach2_rows(results, models_registry):
+def _approach2_rows(results, models_registry, criteria):
     combined_rows = []
     in_vitro_rows = []
     in_vivo_rows = []
@@ -400,9 +410,9 @@ def _approach2_rows(results, models_registry):
         combined_rows.append(_row_from_evidence_data(model_key, display, {}, "Combined in vitro + in vivo", combined_values))
 
     return {
-        "combined": _add_relative_fields(combined_rows),
-        "in_vitro": _add_relative_fields(in_vitro_rows),
-        "in_vivo": _add_relative_fields(in_vivo_rows),
+        "combined": _add_relative_fields(combined_rows, criteria),
+        "in_vitro": _add_relative_fields(in_vitro_rows, criteria),
+        "in_vivo": _add_relative_fields(in_vivo_rows, criteria),
     }, excluded_count
 
 
@@ -413,28 +423,31 @@ def _excluded_note(excluded_count):
     return [f"{excluded_count} model{plural} with fitting errors or incomplete evidence data were excluded from relative evidence calculations."]
 
 
-def _panel_from_rows(rows, excluded_count=0):
+def _panel_from_rows(rows, criteria, excluded_count=0):
+    if not criteria:
+        return _unavailable_panel("Relative model evidence is not shown because no information-criterion metric (AIC, AICc, or BIC) was selected.")
     if len(rows) < 2:
         return _unavailable_panel("Relative evidence requires at least two successfully fitted candidate models for this approach.")
-    return {"html": _panel_html(rows, _excluded_note(excluded_count)), "rows": rows}
+    return {"html": _panel_html(rows, criteria, _excluded_note(excluded_count)), "rows": rows, "criteria": criteria}
 
 
-def build_relative_evidence_tables(results, models_registry, selected_approaches):
+def build_relative_evidence_tables(results, models_registry, selected_approaches, selected_metrics=None):
     """Build HTML evidence tables and selected-model lookup rows for templates."""
+    criteria = selected_information_criteria(selected_metrics)
     evidence_tables = {}
     evidence_lookup = {}
 
     if "approach1" in selected_approaches:
-        rows, excluded_count = _approach1_rows(results, models_registry)
-        evidence_tables.setdefault("approach1", {})["fit"] = _panel_from_rows(rows, excluded_count)
+        rows, excluded_count = _approach1_rows(results, models_registry, criteria)
+        evidence_tables.setdefault("approach1", {})["fit"] = _panel_from_rows(rows, criteria, excluded_count)
         for row in rows:
             evidence_lookup.setdefault(row["model_key"], {}).setdefault("rows", []).append(row)
 
     if "approach2" in selected_approaches:
-        row_sets, excluded_count = _approach2_rows(results, models_registry)
+        row_sets, excluded_count = _approach2_rows(results, models_registry, criteria)
         evidence_tables.setdefault("approach2", {})
         for key, rows in row_sets.items():
-            evidence_tables["approach2"][key] = _panel_from_rows(rows, excluded_count if key == "combined" else 0)
+            evidence_tables["approach2"][key] = _panel_from_rows(rows, criteria, excluded_count if key == "combined" else 0)
             for row in rows:
                 evidence_lookup.setdefault(row["model_key"], {}).setdefault("rows", []).append(row)
 
@@ -444,6 +457,6 @@ def build_relative_evidence_tables(results, models_registry, selected_approaches
         )
 
     for model_key, payload in evidence_lookup.items():
-        payload["report_html"] = _final_report_html(payload.get("rows", []))
+        payload["report_html"] = _final_report_html(payload.get("rows", []), criteria)
 
     return evidence_tables, evidence_lookup
