@@ -47,6 +47,44 @@ colors = {
     'in_vivo_2': '#D487B8'      # Light purple-red
 }
 
+
+CV_COMPARISON_EXCLUDED_METRICS = {'aic', 'aicc', 'bic'}
+
+
+def _goodness_cv_comparison_table(gof, cvs_mean):
+    """Build the final-model vs CV table for prediction-score metrics only."""
+    comparable_metrics = [
+        metric for metric in gof
+        if metric not in CV_COMPARISON_EXCLUDED_METRICS and metric in metrics
+    ]
+
+    if not comparable_metrics:
+        return (
+            '<p class="evidence-note">'
+            'Goodness-of-fit and cross-validation comparison is not available '
+            'for the selected metrics because AIC, AICc, and BIC are information '
+            'criteria rather than directly comparable held-out prediction scores.'
+            '</p>'
+        )
+
+    stats_table = pd.concat([
+        pd.DataFrame(
+            {metrics[metric]['display_name']: gof[metric] for metric in comparable_metrics},
+            index=['Final model']
+        ),
+        pd.DataFrame(
+            {metrics[metric]['display_name']: cvs_mean.get(metric, np.nan) for metric in comparable_metrics},
+            index=['Cross-validation']
+        )
+    ], axis=0)
+
+    return stats_table.to_html(
+        classes='table table-striped',
+        index=True,
+        float_format=lambda x: f'{x:.4f}',
+        na_rep='N/A'
+    )
+
 def preprocess_data(t1, m1, t2, m2, selected_interpolation=None, selected_scalings=None, selected_normalizations=None):
     selected_interpolation = selected_interpolation or []
     selected_scalings = selected_scalings or []
@@ -132,7 +170,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                 # Evaluate goodness of fit
                 gof = {metric: calculate_metric(metric, y, y_pred, len(p0)) for metric in selected_metrics}
                 stats = pd.concat([pd.DataFrame(gof, index=[0]), pd.DataFrame({'CV '+metric:v for metric,v in cvs_mean.items()}, index=[0])], axis=1)
-                stats_table = pd.concat([pd.DataFrame({metrics[metric]['display_name']:v for metric,v in gof.items()}, index=['Final model']), pd.DataFrame({metrics[metric]['display_name']:v for metric,v in cvs_mean.items()}, index=['Cross-validation'])], axis=0)
+                stats_table = _goodness_cv_comparison_table(gof, cvs_mean)
                 popt, pcov = list(model_result['params'].values()), model_result['pcov']
                 upopt = unc.correlated_values(popt, pcov)
                 upopt = dict(zip(model_result['params'].keys(),upopt))
@@ -160,7 +198,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                             'n_params': int(len(model_result['params']))
                         }
                     },
-                    'stats_table': stats_table.to_html(classes='table table-striped', index=True, float_format=lambda x: f'{x:.4f}'),
+                    'stats_table': stats_table,
                     'plot': plot_image
                 }
             elif approach_id == 'approach2':
@@ -186,7 +224,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                 # Evaluate goodness of fit
                 gof1 = {metric: calculate_metric(metric, y1, y_pred1, len(p0)) for metric in selected_metrics}
                 stats1 = pd.concat([pd.DataFrame(gof1, index=[0]), pd.DataFrame({'CV '+metric:v for metric,v in cvs1_mean.items()}, index=[0])], axis=1)
-                stats_table1 = pd.concat([pd.DataFrame({metrics[metric]['display_name']:v for metric,v in gof1.items()}, index=['Final model']), pd.DataFrame({metrics[metric]['display_name']:v for metric,v in cvs1_mean.items()}, index=['Cross-validation'])], axis=0)
+                stats_table1 = _goodness_cv_comparison_table(gof1, cvs1_mean)
                 popt1, pcov1 = list(model_result1['params'].values()), model_result1['pcov']
                 upopt1 = unc.correlated_values(popt1, pcov1)
                 upopt1 = dict(zip(model_result1['params'].keys(),upopt1))
@@ -212,7 +250,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                 # Evaluate goodness of fit
                 gof2 = {metric: calculate_metric(metric, y2, y_pred2, len(p0)) for metric in selected_metrics}
                 stats2 = pd.concat([pd.DataFrame(gof2, index=[0]), pd.DataFrame({'CV '+metric:v for metric,v in cvs2_mean.items()}, index=[0])], axis=1)
-                stats_table2 = pd.concat([pd.DataFrame({metrics[metric]['display_name']:v for metric,v in gof2.items()}, index=['Final model']), pd.DataFrame({metrics[metric]['display_name']:v for metric,v in cvs2_mean.items()}, index=['Cross-validation'])], axis=0)
+                stats_table2 = _goodness_cv_comparison_table(gof2, cvs2_mean)
                 #upopt2 = unc.correlated_values(popt2, pcov2)
                 #tau2 = get_tau(modelname, upopt2)
                 popt2, pcov2 = list(model_result2['params'].values()), model_result2['pcov']
@@ -258,8 +296,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                             'n_params': int(len(model_result2['params']))
                         }
                     },
-                    'stats_table': [stats_table1.to_html(classes='table table-striped', index=True, float_format=lambda x: f'{x:.4f}'), 
-                                    stats_table2.to_html(classes='table table-striped', index=True, float_format=lambda x: f'{x:.4f}')],
+                    'stats_table': [stats_table1, stats_table2],
                     'plot': plot_image
                 }
             elif approach_id == 'approach3':
@@ -444,7 +481,7 @@ def _fit_cv_ratio(fit_value, cv_value):
     return fit_value / cv_value
 
 
-CV_SUMMARY_EXCLUDED_METRICS = {'aic', 'aicc', 'bic'}
+CV_SUMMARY_EXCLUDED_METRICS = CV_COMPARISON_EXCLUDED_METRICS
 
 
 def _cross_validation_row(model_display_name, stats_row, selected_metrics, dataset_label=None):
