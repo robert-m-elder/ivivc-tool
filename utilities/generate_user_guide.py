@@ -45,7 +45,10 @@ except Exception:  # pragma: no cover - documentation fallback
 
 from utilities.descriptions import (  # noqa: E402
     ANALYSIS_CONFIG_LABELS,
+    ANALYSIS_PARAMETER_DESCRIPTIONS,
     APPROACH_DESCRIPTIONS,
+    CROSS_VALIDATION_DESCRIPTION_HTML,
+    CV_SCHEME_DESCRIPTIONS,
     CV_SCHEME_LABELS,
     GRID_SEARCH_DESCRIPTION_HTML,
     METRIC_DESCRIPTIONS,
@@ -153,25 +156,8 @@ def direction_label(direction: str) -> str:
     return direction or ""
 
 
-def cv_parameter_description(key: str) -> str:
-    descriptions = {
-        "cv_scheme": "Cross-validation splitter used to estimate out-of-sample performance.",
-        "cv_n_splits": "Number of repeated splits for ShuffleSplit or folds for K-fold cross-validation.",
-        "cv_test_size": "Fraction of observations held out in each ShuffleSplit repeat.",
-        "cv_random_state": "Seed used to make randomized cross-validation splits reproducible.",
-    }
-    return descriptions.get(key, "")
-
-
-def grid_parameter_description(key: str) -> str:
-    descriptions = {
-        "grid_search_num_points": "Number of candidate starting points evaluated before nonlinear least-squares fitting.",
-        "grid_search_num_cores": "Number of CPU cores used for the starting-point search; blank or Auto uses the app default.",
-        "grid_search_param_min": "Lower bound for candidate starting parameter values.",
-        "grid_search_param_max": "Upper bound for candidate starting parameter values.",
-        "grid_search_random_state": "Seed used to make randomized starting-point sampling reproducible.",
-    }
-    return descriptions.get(key, "")
+def analysis_parameter_description(key: str) -> str:
+    return ANALYSIS_PARAMETER_DESCRIPTIONS.get(key, "")
 
 
 def build_readme() -> str:
@@ -278,14 +264,15 @@ def build_user_guide() -> str:
         parts.append(table(["Option", "Internal key", "Description"], rows))
 
     parts.append(heading(2, "5. Cross-validation options"))
+    parts.append(html_to_text(CROSS_VALIDATION_DESCRIPTION_HTML) + "\n\n")
     parts.append(table(
-        ["Scheme", "Internal key"],
-        [[label, f"`{key}`"] for key, label in CV_SCHEME_LABELS.items()],
+        ["Scheme", "Internal key", "Description"],
+        [[label, f"`{key}`", CV_SCHEME_DESCRIPTIONS.get(key, "")] for key, label in CV_SCHEME_LABELS.items()],
     ))
     cv_rows = []
     for key, label in ANALYSIS_CONFIG_LABELS.items():
         if key.startswith("cv_"):
-            cv_rows.append([label, f"`{key}`", cv_parameter_description(key)])
+            cv_rows.append([label, f"`{key}`", analysis_parameter_description(key)])
     parts.append(table(["Parameter", "Internal key", "Description"], cv_rows))
 
     parts.append(heading(2, "6. Grid-search initialization"))
@@ -293,7 +280,7 @@ def build_user_guide() -> str:
     grid_rows = []
     for key, label in ANALYSIS_CONFIG_LABELS.items():
         if key.startswith("grid_search"):
-            grid_rows.append([label, f"`{key}`", grid_parameter_description(key)])
+            grid_rows.append([label, f"`{key}`", analysis_parameter_description(key)])
     parts.append(table(["Parameter", "Internal key", "Description"], grid_rows))
 
     parts.append(heading(2, "7. Performance metrics"))

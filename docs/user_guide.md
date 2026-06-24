@@ -67,37 +67,37 @@ For Excel workbooks, select the sheet containing the relevant data. For CSV file
 
 ## 5. Cross-validation options
 
-| Scheme | Internal key |
-| --- | --- |
-| Shuffle split | `shuffle_split` |
-| K-fold | `kfold` |
-| Leave-one-out | `leave_one_out` |
-| None | `none` |
+Cross-validation provides an approximate check of how a fitted model performs on held-out data. It is most useful when there are enough observations to fit the model repeatedly while leaving some observations out for evaluation.
+
+The available schemes are Shuffle split, K-fold, Leave-one-out, and None. Shuffle split uses repeated random holdout sets, K-fold uses systematic fold-based holdouts, Leave-one-out holds out one observation at a time, and None disables cross-validation. For small IVIVC datasets, cross-validation summaries should be interpreted as exploratory diagnostics rather than definitive validation results.
+
+| Scheme | Internal key | Description |
+| --- | --- | --- |
+| Shuffle split | `shuffle_split` | Repeatedly creates random training and holdout subsets. This can be useful when the dataset has enough observations to support repeated resampling. The test-size parameter controls the fraction held out in each split, and the random seed makes the random splits reproducible. |
+| K-fold | `kfold` | Divides the dataset into a specified number of folds, fits the model on all but one fold, and evaluates on the held-out fold. Each fold is used once as the holdout set. The splits/folds parameter controls the number of folds. |
+| Leave-one-out | `leave_one_out` | Uses one observation as the holdout set and fits the model on all remaining observations, repeating until each observation has been held out once. This can be useful for very small datasets, but the results can be variable and computationally slower. |
+| None | `none` | Disables cross-validation. This may be appropriate when the dataset is too small for meaningful holdout validation or when only fitted-model summaries are needed. |
 
 | Parameter | Internal key | Description |
 | --- | --- | --- |
-| Cross-validation scheme | `cv_scheme` | Cross-validation splitter used to estimate out-of-sample performance. |
-| CV splits/folds | `cv_n_splits` | Number of repeated splits for ShuffleSplit or folds for K-fold cross-validation. |
-| ShuffleSplit test size | `cv_test_size` | Fraction of observations held out in each ShuffleSplit repeat. |
-| CV random seed | `cv_random_state` | Seed used to make randomized cross-validation splits reproducible. |
+| Cross-validation scheme | `cv_scheme` | Selects the splitting method used to estimate held-out performance for fitted parametric models. |
+| CV splits/folds | `cv_n_splits` | For Shuffle split, the number of repeated random train/test splits. For K-fold, the number of folds. This setting is not used for Leave-one-out or None. |
+| ShuffleSplit test size | `cv_test_size` | The fraction of observations held out for testing in each Shuffle split repeat. Smaller values leave more observations for fitting; larger values make the holdout test more demanding but leave fewer observations for training. |
+| CV random seed | `cv_random_state` | Seed used to make randomized cross-validation splits reproducible. This applies to Shuffle split and shuffled K-fold. |
 
 ## 6. Grid-search initialization
 
-The app conducts an automated grid search to identify suitable starting parameter values for each model before nonlinear least-squares fitting, avoiding the need for manual parameter tuning. The grid-search settings control the number of candidate starting points, the real-space parameter bounds, and the random seed used for reproducible sampling.
+The app conducts an automated grid search to identify suitable starting parameter values for each model before nonlinear least-squares fitting, reducing the need for manual parameter tuning. Candidate values are sampled within the configured real-space parameter bounds and are used only to initialize the final curve fit.
 
-For each selected model, the app evaluates multiple candidate starting points and uses the best candidate as the starting point for the final curve fit. The grid-search seed makes this random sampling reproducible.
-
-The grid search makes it more likely for the app to identify suitable starting parameters, but it does not guarantee that the final fitted parameters are the global optimum.
-
-If fitting fails or appears unstable, consider increasing the number of candidate starting points, widening or narrowing the parameter bounds, changing the random seed, or reviewing whether the selected model is appropriate for the data.
+This initialization step can improve convergence and reduce sensitivity to poor starting values. It is not itself the final fitting algorithm and does not guarantee that the final fitted parameters are the global optimum.
 
 | Parameter | Internal key | Description |
 | --- | --- | --- |
-| Grid-search random starts | `grid_search_num_points` | Number of candidate starting points evaluated before nonlinear least-squares fitting. |
-| Grid-search CPU cores | `grid_search_num_cores` | Number of CPU cores used for the starting-point search; blank or Auto uses the app default. |
-| Grid-search parameter minimum | `grid_search_param_min` | Lower bound for candidate starting parameter values. |
-| Grid-search parameter maximum | `grid_search_param_max` | Upper bound for candidate starting parameter values. |
-| Grid-search random seed | `grid_search_random_state` | Seed used to make randomized starting-point sampling reproducible. |
+| Grid-search random starts | `grid_search_num_points` | Number of candidate starting parameter sets evaluated before nonlinear least-squares fitting. Higher values may improve robustness but increase runtime. |
+| Grid-search CPU cores | `grid_search_num_cores` | Number of CPU cores used for the starting-point search. Blank or Auto uses the app default. |
+| Grid-search parameter minimum | `grid_search_param_min` | Lower real-space bound for randomly sampled candidate starting parameter values. |
+| Grid-search parameter maximum | `grid_search_param_max` | Upper real-space bound for randomly sampled candidate starting parameter values. |
+| Grid-search random seed | `grid_search_random_state` | Seed used to make randomized starting-point sampling reproducible. Changing the seed changes the sampled candidates while keeping the same bounds and number of starts. |
 
 ## 7. Performance metrics
 
