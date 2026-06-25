@@ -1,6 +1,6 @@
 # Human-editable text used by the app, reports, and generated documentation.
 # Routine wording changes should be made here. Restart the Flask app after edits.
-# Regenerate Markdown/PDF documentation after edits that should appear in the guide.
+# Regenerate LaTeX/PDF documentation after edits that should appear in the guide.
 
 tool:
   purpose_html: |-
