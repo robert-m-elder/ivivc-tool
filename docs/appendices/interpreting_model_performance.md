@@ -1,6 +1,6 @@
 # Appendix: How to Interpret Model Performance
 
-No single performance metric determines whether an IVIVC model is meaningful. Model selection should consider goodness of fit, prediction error, model complexity, cross-validation behavior, residual patterns, parameter uncertainty, and whether the fitted relationship is scientifically plausible for the polymer degradation mechanism and the intended context of use.
+No single performance metric determines whether an IVIVC model is meaningful. Model selection should consider goodness of fit, prediction error, model complexity, cross-validation behavior, residual patterns, parameter uncertainty, and whether the fitted relationship is scientifically plausible for the polymer degradation mechanism and the intended context of use. For regulatory-facing analyses, the amount and type of supporting evidence should be tied to the model's intended use and credibility needs.
 
 The app reports metrics and comparison tables to support user review. It does not select, recommend, validate, or establish regulatory acceptability for any model. Users should document the rationale for the final model or method selected for a specific analysis.
 
@@ -18,7 +18,7 @@ Do not directly compare AIC, AICc, or BIC values across different datasets, tran
 | Adjusted R^2 | Higher is generally better. It can be lower than R^2 and may be negative. | Adjusted R^2 penalizes additional fitted parameters and may be more informative than R^2 when comparing models with different complexity. |
 | MSE | Lower is generally better. Units are the squared response units. | MSE summarizes average squared error. It is useful computationally but can be less intuitive than RMSE because the units are squared. |
 | RMSE | Lower is generally better. Units match the response units. | RMSE summarizes typical prediction error on the response scale. Interpret RMSE relative to assay variability, measurement uncertainty, clinically or biologically meaningful differences, and the intended use. |
-| NRMSE | Lower is generally better. The value is normalized and is intended to be more comparable across response scales. | NRMSE expresses prediction error relative to a normalization quantity, such as the response mean or response standard deviation. Interpretation depends on the normalization method. |
+| NRMSE | Lower is generally better. The value is normalized and is intended to be more comparable across response scales. | NRMSE expresses prediction error relative to a normalization quantity, such as the response mean or response standard deviation. Interpretation depends on the normalization method, because scale-dependent error measures should be compared carefully across datasets or response scales. |
 | AIC | Lower is generally better, but only relative to other comparable models. AIC has no fixed lower or upper bound, and negative values are allowed. | AIC balances fitted error and model complexity. Absolute AIC values should not be interpreted as standalone quality grades. |
 | AICc | Lower is generally better, but only relative to other comparable models. AICc is undefined when there are too few observations relative to the number of fitted parameters. | AICc is AIC with a small-sample correction. It is often more appropriate than AIC when the number of observations is limited relative to the number of parameters. |
 | BIC | Lower is generally better, but only relative to other comparable models. BIC has no fixed lower or upper bound, and negative values are allowed. | BIC also balances fitted error and model complexity, but it usually penalizes additional parameters more strongly than AIC. |
@@ -35,7 +35,7 @@ When interpreting fitted-data metrics, consider whether the uncertainty is small
 
 ## 4. Interpreting prediction error
 
-Prediction-error metrics should be interpreted in practical context. RMSE is often easier to interpret than MSE because it is reported in the same units as the response. NRMSE can be useful for comparing error across response scales, but the denominator matters. For example, NRMSE normalized by the response mean and NRMSE normalized by the response standard deviation answer different questions.
+Prediction-error metrics should be interpreted in practical context. RMSE is often easier to interpret than MSE because it is reported in the same units as the response. NRMSE can be useful for comparing error across response scales, but the denominator matters. For example, NRMSE normalized by the response mean and NRMSE normalized by the response standard deviation answer different questions; this is consistent with the broader caution that scale-dependent accuracy measures require care when comparing across scales or datasets.
 
 A prediction error may be numerically small but practically important if the relevant assay, device attribute, or degradation endpoint has narrow acceptable variation. Conversely, a larger numerical error may be acceptable for exploratory model development if the intended use does not require high predictive precision.
 
@@ -78,7 +78,7 @@ Summary metrics can hide important model behavior. Residual plots should be revi
 | One point dominates the apparent fit | The model may be sensitive to individual observations or limited data density. |
 
 Outliers should be investigated using scientific and data-quality rationale. Removing observations solely to improve metrics can make the model-selection rationale difficult to justify.
---!>
+-->
 
 ## 7. Interpreting parameter uncertainty
 
@@ -132,3 +132,12 @@ Performance metrics are descriptive and comparative tools, not acceptance criter
 5. Kass, R. E., and Raftery, A. E. Bayes Factors. *Journal of the American Statistical Association*. 1995;90(430):773-795. https://doi.org/10.1080/01621459.1995.10476572
 6. Hodson, T. O. Root-mean-square error (RMSE) or mean absolute error (MAE): when to use them or not. *Geoscientific Model Development*. 2022;15:5481-5487. https://doi.org/10.5194/gmd-15-5481-2022
 7. scikit-learn developers. `sklearn.metrics.r2_score` documentation. https://sklearn.org/stable/modules/generated/sklearn.metrics.r2_score.html
+8. Arlot, S., and Celisse, A. A survey of cross-validation procedures for model selection. *Statistics Surveys*. 2010;4:40-79. https://doi.org/10.1214/09-SS054
+9. Hyndman, R. J., and Koehler, A. B. Another look at measures of forecast accuracy. *International Journal of Forecasting*. 2006;22(4):679-688. https://doi.org/10.1016/j.ijforecast.2006.03.001
+10. Hurvich, C. M., and Tsai, C.-L. Regression and time series model selection in small samples. *Biometrika*. 1989;76(2):297-307. https://doi.org/10.1093/biomet/76.2.297
+11. R Core Team. `AIC` documentation, R `stats` package. https://stat.ethz.ch/R-manual/R-devel/library/stats/html/AIC.html
+12. R Core Team. `summary.lm` documentation, R `stats` package. https://stat.ethz.ch/R-manual/R-devel/library/stats/html/summary.lm.html
+13. Wagenmakers, E.-J., and Farrell, S. AIC model selection using Akaike weights. *Psychonomic Bulletin & Review*. 2004;11:192-196. https://doi.org/10.3758/BF03206482
+14. scikit-learn developers. `sklearn.metrics.mean_squared_error` and `sklearn.metrics.root_mean_squared_error` documentation. https://sklearn.org/stable/modules/model_evaluation.html#regression-metrics
+- Akaike, H. A new look at the statistical model identification. *IEEE Transactions on Automatic Control*. 1974;19(6):716–723. https://doi.org/10.1109/TAC.1974.1100705
+
