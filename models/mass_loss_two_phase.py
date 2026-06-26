@@ -5,7 +5,7 @@ import numpy as np
 display_name = "Mass Loss (Two-Phase)"
 approaches = ['approach2']
 fit_kwargs = {'maxfev': 20000, 'ftol': 1e-6, 'xtol': 1e-6}
-latex_equation = r"y = y0 - B \cdot (1 - e^{-kb \cdot x}) - \frac{D}{1 + e^{-\frac{x - t50}{s}}}"
+latex_equation = r"y = y_0 - B(1-e^{-k_b x}) - D/(1+e^{-(x-t_{50})/s})"
 description = (
     "Mass-remaining model with an optional early burst-loss phase followed by "
     "a delayed sigmoidal loss phase. It is intended for mass-loss profiles that "

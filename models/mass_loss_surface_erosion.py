@@ -4,7 +4,7 @@ import numpy as np
 display_name = "Mass Loss (Surface Erosion)"
 approaches = ['approach2']
 fit_kwargs = {'maxfev': 20000, 'ftol': 1e-6, 'xtol': 1e-6}
-latex_equation = r"y = y0 \cdot \max(1 - k \cdot x, 0)^n"
+latex_equation = r"y = y_0 \max(1-kx,0)^n"
 #latex_equation = r"y = yinf + (y0 - yinf) \cdot \max(1 - k \cdot x, 0)^n"
 description = (
     "Mass-remaining model for surface-controlled erosion. The fitted exponent "

@@ -43,11 +43,11 @@ Establishing an in vitro-in vivo correlation (IVIVC) can support the evaluation 
 
 ## User guide
 
-See [`docs/user_guide.pdf`](docs/user_guide.pdf) for detailed descriptions of inputs, options, methods, and outputs. The LaTeX source is [`docs/user_guide.tex`](docs/user_guide.tex), with appendices in [`docs/appendices/`](docs/appendices/).
+See [`docs/user_guide.pdf`](docs/user_guide.pdf) for detailed descriptions of inputs, options, methods, and outputs. The main LaTeX content source is [`docs/user_guide.tex`](docs/user_guide.tex), with appendices in [`docs/appendices/`](docs/appendices/). These files are content-only so they can be copied into an Overleaf project and included from a top-level LaTeX document.
 
 ## Updating documentation text
 
-User-facing descriptions are centralized in `utilities/descriptions.py`, with routine wording overrides in `utilities/descriptions.yaml`. The main guide is generated as LaTeX source, and long-form appendices are maintained as separate LaTeX files in `docs/appendices/`.
+User-facing descriptions are centralized in `utilities/descriptions.py`, with routine wording overrides in `utilities/descriptions.yaml`. The main guide content is generated as LaTeX source, and long-form appendices are maintained as separate LaTeX files in `docs/appendices/`.
 
 After editing source text, regenerate the main LaTeX guide with:
 
@@ -59,11 +59,4 @@ Compile the PDF with:
 
 ```bash
 bash utilities/generate_user_guide_pdf.sh
-```
-
-Or run the LaTeX command directly from the repository root:
-
-```bash
-python utilities/generate_user_guide.py
-cd docs && latexmk -xelatex -interaction=nonstopmode -halt-on-error user_guide.tex
 ```

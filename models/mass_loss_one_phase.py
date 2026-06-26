@@ -4,7 +4,7 @@ import numpy as np
 display_name = "Mass Loss (One-Phase)"
 approaches = ['approach2']
 fit_kwargs = {'maxfev': 20000, 'ftol': 1e-6, 'xtol': 1e-6}
-latex_equation = r"y = y0 - \frac{A}{1 + e^{-\frac{x - t50}{s}}}"
+latex_equation = r"y = y_0 - A/(1 + e^{-(x-t_{50})/s})"
 description = (
     "Mass-remaining model with a delayed sigmoidal loss phase. It is intended "
     "for mass-loss profiles that begin constant and show a later drop."

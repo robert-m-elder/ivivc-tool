@@ -4,7 +4,7 @@ import numpy as np
 display_name = "Mass Loss (Gompertz)"
 approaches = ['approach2']
 fit_kwargs = {'maxfev': 20000, 'ftol': 1e-6, 'xtol': 1e-6}
-latex_equation = r"y = y0 - A \cdot e^{-e^{\left(\frac{e \cdot rmax}{A}\right)(lag - x) + 1}}"
+latex_equation = r"y = y_0 - A \exp\{-\exp[(e r_{max}/A)(t_{lag}-x)+1]\}"
 description = (
     "Mass-remaining model based on the modified Gompertz curve. It is intended "
     "for asymmetric sigmoidal mass-loss profiles with an apparent lag or plateau, "
