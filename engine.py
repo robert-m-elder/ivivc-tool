@@ -21,6 +21,7 @@ from utilities.evaluation import (
     make_cross_validator,
 )
 from utilities.misc import hex_to_rgba
+from utilities.parameter_diagnostics import build_parameter_diagnostics_html
 from utilities.prediction_validity import describe_tau_prediction_skip_reason
 
 # Determine environment
@@ -199,6 +200,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                         }
                     },
                     'stats_table': stats_table,
+                    'parameter_diagnostics_html': build_parameter_diagnostics_html(model_result['params'], model_result['pcov']),
                     'plot': plot_image
                 }
             elif approach_id == 'approach2':
@@ -297,6 +299,10 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                         }
                     },
                     'stats_table': [stats_table1, stats_table2],
+                    'parameter_diagnostics_html': [
+                        build_parameter_diagnostics_html(model_result1['params'], pcov1),
+                        build_parameter_diagnostics_html(model_result2['params'], pcov2)
+                    ],
                     'plot': plot_image
                 }
             elif approach_id == 'approach3':

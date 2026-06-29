@@ -362,6 +362,8 @@
                             {% for param, value in model_results.uparams.items() %}
                                 <p>{{ param }}: {{ value.n | round(4) }} &plusmn; {{ value.s | round(4) }}</p>
                             {% endfor %}
+                            <h4>Parameter covariance diagnostics</h4>
+                            {{ model_results.parameter_diagnostics_html | safe }}
                             <h4>Goodness of fit and validation</h4>
                             {{ model_results.stats_table | safe }}
                             {% set approach_evidence = evidence_tables.get(option.approach_id, {}) %}
@@ -377,10 +379,14 @@
                             {% for param, value in model_results.uparams[0].items() %}
                                 <p>{{ param }}: {{ value.n | round(4) }} &plusmn; {{ value.s | round(4) }}</p>
                             {% endfor %}
+                            <h4>In vitro parameter covariance diagnostics</h4>
+                            {{ model_results.parameter_diagnostics_html[0] | safe }}
                             <h4>In vivo model parameters</h4>
                             {% for param, value in model_results.uparams[1].items() %}
                                 <p>{{ param }}: {{ value.n | round(4) }} &plusmn; {{ value.s | round(4) }}</p>
                             {% endfor %}
+                            <h4>In vivo parameter covariance diagnostics</h4>
+                            {{ model_results.parameter_diagnostics_html[1] | safe }}
                             <h4>Time constants</h4>
                             {% if model_results.tau[0].n > 0 %}
                                 <p>In vitro tau: {{ model_results.tau[0].n | round(4) }} &plusmn; {{ model_results.tau[0].s | round(4) }}</p>
@@ -470,6 +476,8 @@
 {% for param, value in model_results.uparams.items() %}
                                     <p>{{ param }}: {{ value.n | round(4) }} &plusmn; {{ value.s | round(4) }}</p>
                                     {% endfor %}
+                                    <h4>Parameter covariance diagnostics</h4>
+                                    {{ model_results.parameter_diagnostics_html | safe }}
                                     <h4>Goodness of fit</h4>
                                     {{ model_results.stats_table | safe }}
                                 {% endif %}
@@ -500,6 +508,8 @@
 {% for param, value in model_results.uparams[0].items() %}
                                     <p>{{ param }}: {{ value.n | round(4) }} &plusmn; {{ value.s | round(4) }}</p>
                                     {% endfor %}
+                                    <h4>Parameter covariance diagnostics</h4>
+                                    {{ model_results.parameter_diagnostics_html[0] | safe }}
                                     <h4>Time constant</h4>
                                     {% if model_results.tau[0].n > 0 %}
                                         <p>Tau: {{  model_results.tau[0].n | round(4) }} &plusmn; {{ model_results.tau[0].s |round(4) }}</p>
@@ -513,6 +523,8 @@
 {% for param, value in model_results.uparams[1].items() %}
                                     <p>{{ param }}: {{ value.n | round(4) }} &plusmn; {{ value.s | round(4) }}</p>
                                     {% endfor %}
+                                    <h4>Parameter covariance diagnostics</h4>
+                                    {{ model_results.parameter_diagnostics_html[1] | safe }}
                                     <h4>Time constant</h4>
                                     {% if model_results.tau[1].n > 0 %}
                                         <p>Tau: {{  model_results.tau[1].n | round(4) }} &plusmn; {{ model_results.tau[1].s |round(4) }}</p>

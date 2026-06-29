@@ -82,9 +82,29 @@ Fit/CV ratios summarize the relationship between fitted-data and held-out perfor
 
 AIC, AIC\textsubscript{c}, and BIC should not be interpreted as ordinary cross-validation scores because the final model and the cross-validation models are fitted to different subsets of the data and may involve different effective sample sizes. Use information criteria for relative evidence among comparable fitted models, and use cross-validation metrics to evaluate held-out predictive behavior.
 
+
 \subsection{Interpreting parameter uncertainty}
 
 Parameter estimates should be reviewed for scientific plausibility and numerical stability. Large standard errors, wide confidence intervals, failed covariance estimation, or highly correlated parameters may indicate that the data do not strongly identify the model parameters.
+
+The app summarizes fitted-parameter covariance diagnostics using plain-language badges. These badges are screening aids, not acceptance criteria. They are intended to help identify fits that may deserve closer review before a model is used for interpretation or prediction.
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.26\textwidth}>{\raggedright\arraybackslash}p{0.32\textwidth}>{\raggedright\arraybackslash}p{0.34\textwidth}@{}}
+\toprule
+\textbf{Diagnostic} & \textbf{What it summarizes} & \textbf{Interpretation guidance} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Diagnostic} & \textbf{What it summarizes} & \textbf{Interpretation guidance} \\
+\midrule
+\endhead
+Relative standard error & Parameter standard error divided by the absolute parameter estimate, expressed as a percentage. & Large relative standard errors can indicate that a parameter is weakly identified or sensitive to the available data. As a screening aid, the app flags values of at least 50\% as elevated and at least 100\% as large. \\
+Parameter correlation & Pairwise correlation implied by the covariance matrix. & High absolute parameter correlations can indicate that two parameters are difficult to estimate independently, possibly because the model is overparameterized for the available data. As a screening aid, the app flags absolute correlations of at least 0.95 as elevated and at least 0.99 as high. \\
+Covariance condition number & Numerical conditioning of the parameter covariance matrix. & Very large condition numbers can indicate numerical instability, redundancy, or practical non-identifiability. As a screening aid, the app flags condition numbers of at least \(10^8\) as elevated and at least \(10^{12}\) as ill-conditioned. \\
+\bottomrule
+\end{longtable}
+
+If no covariance concerns are identified, this means that the app did not detect large relative standard errors, high pairwise parameter correlations, or covariance-conditioning concerns using these screening checks. It does not by itself validate the model, prove mechanistic correctness, or establish regulatory acceptability. Conversely, a warning badge does not automatically invalidate a model; it indicates that the fitted parameters should be reviewed together with the fitted curves, residuals, cross-validation behavior, model complexity, and scientific plausibility.
 
 Parameter uncertainty is especially important when a fitted model will be interpreted mechanistically, used to support extrapolation, or used to compare degradation behavior across materials, processes, or test conditions. A model with strong fitted metrics but poorly estimated or implausible parameters may be difficult to justify.
 
@@ -109,7 +129,7 @@ The intended use should determine the amount and type of supporting evidence nee
 \item Review prediction-error metrics in the context of assay variability, endpoint importance, and intended use.
 \item Review cross-validation performance and fit/CV ratios, where cross-validation is applicable.
 \item Review Relative Model Evidence using AIC, AIC\textsubscript{c}, and/or BIC, where parametric model comparisons are applicable.
-\item Review fitted-parameter estimates, standard errors, and scientific plausibility.
+\item Review fitted-parameter estimates, standard errors, covariance diagnostics, and scientific plausibility.
 \item Consider model complexity and whether additional parameters are justified by the data and degradation mechanism.
 \item Select the model or method based on a documented balance of statistical performance, scientific plausibility, and intended use.
 \end{enumerate}
