@@ -146,53 +146,69 @@ def build_parameter_diagnostics_html(params, pcov):
 
     badges = []
     details = []
+    concern_details = []
+    coupling_details = []
 
     rse_values = _relative_standard_errors(params, covariance, param_names)
     largest_rse = max(rse_values, key=lambda item: item[1]) if rse_values else None
-    if largest_rse and largest_rse[1] >= RSE_HIGH_THRESHOLD:
+    has_elevated_rse = bool(largest_rse and largest_rse[1] >= RSE_ELEVATED_THRESHOLD)
+    has_high_rse = bool(largest_rse and largest_rse[1] >= RSE_HIGH_THRESHOLD)
+    if has_high_rse:
         badges.append(_badge('Large parameter uncertainty', 'warning'))
-        details.append(
+        concern_details.append(
             f'Largest relative standard error: {escape(largest_rse[0])} = '
             f'{escape(_format_percent(largest_rse[1]))}.'
         )
-    elif largest_rse and largest_rse[1] >= RSE_ELEVATED_THRESHOLD:
+    elif has_elevated_rse:
         badges.append(_badge('Elevated parameter uncertainty', 'caution'))
-        details.append(
+        concern_details.append(
             f'Largest relative standard error: {escape(largest_rse[0])} = '
             f'{escape(_format_percent(largest_rse[1]))}.'
+        )
+
+    condition_number = _covariance_condition_number(covariance)
+    has_elevated_condition = bool(
+        not np.isfinite(condition_number)
+        or condition_number >= CONDITION_ELEVATED_THRESHOLD
+    )
+    has_high_condition = bool(
+        not np.isfinite(condition_number)
+        or condition_number >= CONDITION_HIGH_THRESHOLD
+    )
+    if has_high_condition:
+        badges.append(_badge('Parameter stability caution', 'warning'))
+        concern_details.append(
+            'Covariance condition number: '
+            f'{escape(_format_number(condition_number))}.'
+        )
+    elif has_elevated_condition:
+        badges.append(_badge('Elevated covariance condition', 'caution'))
+        concern_details.append(
+            'Covariance condition number: '
+            f'{escape(_format_number(condition_number))}.'
         )
 
     largest_correlation = _largest_parameter_correlation(covariance, param_names)
     if largest_correlation:
         abs_corr, signed_corr, first_param, second_param = largest_correlation
-        if abs_corr >= CORRELATION_HIGH_THRESHOLD:
-            badges.append(_badge('High parameter correlation', 'warning'))
-            details.append(
+        if abs_corr >= CORRELATION_ELEVATED_THRESHOLD:
+            correlation_detail = (
                 'Largest absolute parameter correlation: '
                 f'|corr({escape(first_param)}, {escape(second_param)})| = {abs_corr:.3f} '
                 f'(signed value {signed_corr:.3f}).'
             )
-        elif abs_corr >= CORRELATION_ELEVATED_THRESHOLD:
-            badges.append(_badge('Elevated parameter correlation', 'caution'))
-            details.append(
-                'Largest absolute parameter correlation: '
-                f'|corr({escape(first_param)}, {escape(second_param)})| = {abs_corr:.3f} '
-                f'(signed value {signed_corr:.3f}).'
-            )
+            if has_elevated_rse or has_elevated_condition:
+                if abs_corr >= CORRELATION_HIGH_THRESHOLD or has_high_rse or has_high_condition:
+                    badges.append(_badge('Parameter identifiability caution', 'warning'))
+                else:
+                    badges.append(_badge('Parameter identifiability caution', 'caution'))
+                concern_details.append(correlation_detail)
+            else:
+                badges.append(_badge('Parameter coupling noted', 'ok'))
+                coupling_details.append(correlation_detail)
 
-    condition_number = _covariance_condition_number(covariance)
-    if not np.isfinite(condition_number) or condition_number >= CONDITION_HIGH_THRESHOLD:
-        badges.append(_badge('Ill-conditioned covariance', 'warning'))
-        details.append(
-            'Covariance condition number: '
-            f'{escape(_format_number(condition_number))}.'
-        )
-    elif condition_number >= CONDITION_ELEVATED_THRESHOLD:
-        badges.append(_badge('Elevated covariance condition', 'caution'))
-        details.append(
-            'Covariance condition number: '
-            f'{escape(_format_number(condition_number))}.'
-        )
+    details.extend(concern_details)
+    details.extend(coupling_details)
 
     if not badges:
         badges.append(_badge('No covariance concerns identified', 'ok'))
@@ -201,10 +217,26 @@ def build_parameter_diagnostics_html(params, pcov):
             'high pairwise parameter correlations, or covariance conditioning concerns. '
             'This does not by itself validate the model.'
         )
+    elif concern_details:
+        if coupling_details:
+            summary = (
+                'Review these parameter-covariance diagnostics. Correlated parameter '
+                'estimates can occur naturally in nonlinear models, especially when '
+                'parameters control scale, shape, or rate, but correlation accompanied '
+                'by elevated uncertainty or covariance-conditioning concerns may indicate '
+                'weakly identified, redundant, or data-sensitive fitted parameters.'
+            )
+        else:
+            summary = (
+                'Review these parameter-covariance diagnostics. They may indicate '
+                'weakly identified, redundant, or data-sensitive fitted parameters.'
+            )
     else:
         summary = (
-            'Review these parameter-covariance diagnostics. They may indicate '
-            'weakly identified, redundant, or data-sensitive fitted parameters.'
+            'Correlated parameter estimates were detected. This can occur naturally in '
+            'nonlinear models, especially when parameters control scale, shape, or rate. '
+            'Review whether parameter uncertainty or covariance-conditioning concerns '
+            'are also present before treating this as an identifiability concern.'
         )
 
     details_html = ''
