@@ -14,6 +14,7 @@ from utilities.descriptions import (
     GRID_SEARCH_DESCRIPTION_HTML,
     CROSS_VALIDATION_SUMMARY_HTML,
     RELATIVE_MODEL_EVIDENCE_HTML,
+    PARAMETER_DIAGNOSTICS_COMPARISON_HTML,
     TOOL_PURPOSE_HTML,
     METRIC_DESCRIPTIONS,
     MODAL_HELP,
@@ -31,6 +32,7 @@ from metrics import metrics
 from engine import (
     create_comparison,
     create_cross_validation_summary,
+    create_parameter_diagnostics_summary,
     create_initial_plotly,
     create_interpolation_plotly,
     create_prediction_interpolation_plotly,
@@ -141,10 +143,11 @@ def index():
                 results[model_key]['function'] = human_readable_functions[model_name]
 
         # Compare model performance
-        comparisons, ks_tables, cv_summary_tables = {}, {}, {}
+        comparisons, ks_tables, cv_summary_tables, parameter_diagnostic_tables = {}, {}, {}, {}
         for approach in selected_approaches:
             comparisons[approach], ks_tables[approach] = create_comparison(results, approach)
             cv_summary_tables[approach] = create_cross_validation_summary(results, approach, selected_metrics)
+            parameter_diagnostic_tables[approach] = create_parameter_diagnostics_summary(results, approach)
 
         evidence_tables, evidence_lookup = build_relative_evidence_tables(
             results=results,
@@ -215,6 +218,8 @@ def index():
                                grid_search_description_html=GRID_SEARCH_DESCRIPTION_HTML, tool_purpose_html=TOOL_PURPOSE_HTML,
                                relative_model_evidence_html=RELATIVE_MODEL_EVIDENCE_HTML,
                                cross_validation_summary_html=CROSS_VALIDATION_SUMMARY_HTML,
+                               parameter_diagnostics_comparison_html=PARAMETER_DIAGNOSTICS_COMPARISON_HTML,
+                               parameter_diagnostic_tables=parameter_diagnostic_tables,
                                modal_help=MODAL_HELP,
                                final_model_options=final_model_options,
                                evidence_tables=evidence_tables, evidence_lookup=evidence_lookup,

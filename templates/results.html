@@ -169,6 +169,9 @@
                 <h4>Cross-Validation Summary</h4>
                 {{ cross_validation_summary_html | safe }}
                 {{ cv_summary_tables.get("approach1", "") | safe }}
+                <h4>Fitted Parameter Diagnostics</h4>
+                {{ parameter_diagnostics_comparison_html | safe }}
+                {{ parameter_diagnostic_tables.get("approach1", "") | safe }}
                 {% set approach1_evidence = evidence_tables.get('approach1', {}).get('fit') %}
                 {% if approach1_evidence %}
                     <h4>Relative Model Evidence</h4>
@@ -187,6 +190,9 @@
                 <h4>Cross-Validation Summary</h4>
                 {{ cross_validation_summary_html | safe }}
                 {{ cv_summary_tables.get("approach2", "") | safe }}
+                <h4>Fitted Parameter Diagnostics</h4>
+                {{ parameter_diagnostics_comparison_html | safe }}
+                {{ parameter_diagnostic_tables.get("approach2", "") | safe }}
                 <h4>Relative Model Evidence</h4>
                 {{ relative_model_evidence_html | safe }}
                 {% set approach2_evidence = evidence_tables.get('approach2', {}) %}

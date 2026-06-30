@@ -1317,6 +1317,22 @@ button.dt-button2:disabled {
 }
 
 /* Fitted parameter diagnostics */
+
+.parameter-diagnostics-summary-table {
+    margin-top: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.parameter-diagnostics-summary-table th,
+.parameter-diagnostics-summary-table td {
+    vertical-align: middle;
+}
+
+.parameter-diagnostics-summary-table .evidence-badge {
+    margin-right: 0.25rem;
+    margin-bottom: 0.2rem;
+}
+
 .parameter-diagnostics {
     margin-top: 0.5rem;
     margin-bottom: 0.9rem;

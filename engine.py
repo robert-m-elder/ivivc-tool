@@ -21,7 +21,10 @@ from utilities.evaluation import (
     make_cross_validator,
 )
 from utilities.misc import hex_to_rgba
-from utilities.parameter_diagnostics import build_parameter_diagnostics_html
+from utilities.parameter_diagnostics import (
+    build_parameter_diagnostics_html,
+    extract_parameter_diagnostic_badges_html,
+)
 from utilities.prediction_validity import describe_tau_prediction_skip_reason
 
 # Determine environment
@@ -517,6 +520,55 @@ def _cross_validation_table(rows):
         return '<p class="evidence-note">Cross-validation summary is not available because cross-validation was not run or did not produce finite values for the selected eligible metrics.</p>'
     df = pd.DataFrame(rows)
     return df.to_html(classes='table table-striped cv-summary-table', index=False, float_format=lambda x: f'{x:.4f}', na_rep='N/A')
+
+
+def _parameter_diagnostic_table(rows):
+    if not rows:
+        return '<p class="evidence-note">Fitted parameter diagnostics are not available for this approach.</p>'
+    df = pd.DataFrame(rows)
+    return df.to_html(classes='table table-striped parameter-diagnostics-summary-table', index=False, escape=False)
+
+
+def create_parameter_diagnostics_summary(results, approach):
+    """Create a compact model-comparison table of parameter diagnostic badges."""
+    if approach not in ('approach1', 'approach2'):
+        return '<p class="evidence-note">Fitted parameter diagnostics are not applicable because no parametric model is used.</p>'
+
+    rows = []
+    for model_key, model_results in results.items():
+        if len(model_key.split(':')) > 1:
+            approach_id, model_name = model_key.split(':')
+        else:
+            approach_id = model_key
+        if approach_id != approach:
+            continue
+
+        model_display_name = models[model_name]['display_name']
+        if model_results.get('error'):
+            unavailable = '<span class="evidence-badge evidence-badge-minimal">Parameter uncertainty unavailable</span>'
+            if approach == 'approach1':
+                rows.append({'Model': model_display_name, 'Fitted parameter diagnostics': unavailable})
+            else:
+                rows.append({'Model': model_display_name, 'Dataset': 'In Vitro', 'Fitted parameter diagnostics': unavailable})
+                rows.append({'Model': model_display_name, 'Dataset': 'In Vivo', 'Fitted parameter diagnostics': unavailable})
+            continue
+
+        if approach == 'approach1':
+            rows.append({
+                'Model': model_display_name,
+                'Fitted parameter diagnostics': extract_parameter_diagnostic_badges_html(model_results.get('parameter_diagnostics_html')),
+            })
+        elif approach == 'approach2':
+            diagnostics = model_results.get('parameter_diagnostics_html') or []
+            for i, dataset_label in enumerate(['In Vitro', 'In Vivo']):
+                diagnostics_html = diagnostics[i] if i < len(diagnostics) else ''
+                rows.append({
+                    'Model': model_display_name,
+                    'Dataset': dataset_label,
+                    'Fitted parameter diagnostics': extract_parameter_diagnostic_badges_html(diagnostics_html),
+                })
+
+    return _parameter_diagnostic_table(rows)
 
 
 def create_cross_validation_summary(results, approach, selected_metrics):

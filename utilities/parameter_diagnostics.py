@@ -253,3 +253,27 @@ def build_parameter_diagnostics_html(params, pcov):
         + details_html
         + '</div>'
     )
+
+
+def extract_parameter_diagnostic_badges_html(diagnostics_html):
+    """Return only the badge row from a full diagnostics HTML block.
+
+    The full diagnostics block is shown with each fitted model. The model
+    comparison table uses only the badges so users can scan diagnostics across
+    models without duplicating the detailed explanatory text.
+    """
+    if not diagnostics_html:
+        return _badge('Parameter uncertainty unavailable', 'warning')
+
+    start_marker = '<div class="parameter-diagnostic-badges">'
+    start = diagnostics_html.find(start_marker)
+    if start < 0:
+        return _badge('Parameter uncertainty unavailable', 'warning')
+
+    start += len(start_marker)
+    end = diagnostics_html.find('</div>', start)
+    if end < 0:
+        return _badge('Parameter uncertainty unavailable', 'warning')
+
+    badges_html = diagnostics_html[start:end].strip()
+    return badges_html or _badge('Parameter uncertainty unavailable', 'warning')
