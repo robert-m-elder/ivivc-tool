@@ -1,4 +1,4 @@
-"""Plain-language parameter covariance diagnostics for fitted models."""
+"""Plain-language fitted-parameter diagnostics for fitted models."""
 
 from html import escape
 
@@ -49,7 +49,7 @@ def _diagnostic_unavailable(message):
     return (
         '<div class="parameter-diagnostics">'
         '<div class="parameter-diagnostic-badges">'
-        f'{_badge("Covariance unavailable", "warning")}'
+        f'{_badge("Parameter uncertainty unavailable", "warning")}'
         '</div>'
         f'<p>{escape(message)}</p>'
         '</div>'
@@ -59,23 +59,23 @@ def _diagnostic_unavailable(message):
 def _validate_covariance(params, pcov):
     param_names = list(params.keys())
     if pcov is None:
-        return None, param_names, 'Parameter-covariance diagnostics are not available because the covariance matrix was not returned for this fit.'
+        return None, param_names, 'Parameter-uncertainty diagnostics are not available because uncertainty information was not returned for this fit.'
 
     try:
         covariance = np.asarray(pcov, dtype=float)
     except Exception:
-        return None, param_names, 'Parameter-covariance diagnostics are not available because the covariance matrix could not be converted to numeric values.'
+        return None, param_names, 'Parameter-uncertainty diagnostics are not available because uncertainty information could not be converted to numeric values.'
 
     n_params = len(param_names)
     if covariance.ndim != 2 or covariance.shape != (n_params, n_params):
-        return None, param_names, 'Parameter-covariance diagnostics are not available because the covariance matrix shape does not match the number of fitted parameters.'
+        return None, param_names, 'Parameter-uncertainty diagnostics are not available because uncertainty information does not match the number of fitted parameters.'
 
     if not np.all(np.isfinite(covariance)):
-        return None, param_names, 'Parameter-covariance diagnostics are not available because the covariance matrix contains non-finite values.'
+        return None, param_names, 'Parameter-uncertainty diagnostics are not available because uncertainty information contains non-finite values.'
 
     diagonal = np.diag(covariance)
     if np.any(diagonal < 0):
-        return None, param_names, 'Parameter-covariance diagnostics are not available because one or more covariance diagonal entries are negative.'
+        return None, param_names, 'Parameter-uncertainty diagnostics are not available because one or more uncertainty entries are not physically interpretable.'
 
     return covariance, param_names, None
 
@@ -134,7 +134,7 @@ def _covariance_condition_number(covariance):
 
 
 def build_parameter_diagnostics_html(params, pcov):
-    """Return a compact HTML summary of parameter-covariance diagnostics.
+    """Return a compact HTML summary of fitted-parameter diagnostics.
 
     The diagnostics are intended as screening aids. They do not label a model as
     valid or invalid and should be interpreted together with plots, residuals,
@@ -156,36 +156,36 @@ def build_parameter_diagnostics_html(params, pcov):
     if has_high_rse:
         badges.append(_badge('Large parameter uncertainty', 'warning'))
         concern_details.append(
-            f'Largest relative standard error: {escape(largest_rse[0])} = '
+            f'Largest ± uncertainty relative to the fitted value: {escape(largest_rse[0])} = '
             f'{escape(_format_percent(largest_rse[1]))}.'
         )
     elif has_elevated_rse:
-        badges.append(_badge('Elevated parameter uncertainty', 'caution'))
+        badges.append(_badge('Large parameter uncertainty', 'caution'))
         concern_details.append(
-            f'Largest relative standard error: {escape(largest_rse[0])} = '
+            f'Largest ± uncertainty relative to the fitted value: {escape(largest_rse[0])} = '
             f'{escape(_format_percent(largest_rse[1]))}.'
         )
 
     condition_number = _covariance_condition_number(covariance)
-    has_elevated_condition = bool(
+    has_elevated_stability = bool(
         not np.isfinite(condition_number)
         or condition_number >= CONDITION_ELEVATED_THRESHOLD
     )
-    has_high_condition = bool(
+    has_high_stability = bool(
         not np.isfinite(condition_number)
         or condition_number >= CONDITION_HIGH_THRESHOLD
     )
-    if has_high_condition:
+    if has_high_stability:
         badges.append(_badge('Parameter stability caution', 'warning'))
         concern_details.append(
-            'Covariance condition number: '
-            f'{escape(_format_number(condition_number))}.'
+            'The fitted parameter estimates or their ± uncertainty may be sensitive '
+            'to small changes in the data.'
         )
-    elif has_elevated_condition:
-        badges.append(_badge('Elevated covariance condition', 'caution'))
+    elif has_elevated_stability:
+        badges.append(_badge('Parameter stability caution', 'caution'))
         concern_details.append(
-            'Covariance condition number: '
-            f'{escape(_format_number(condition_number))}.'
+            'The fitted parameter estimates or their ± uncertainty may be sensitive '
+            'to small changes in the data.'
         )
 
     largest_correlation = _largest_parameter_correlation(covariance, param_names)
@@ -193,12 +193,12 @@ def build_parameter_diagnostics_html(params, pcov):
         abs_corr, signed_corr, first_param, second_param = largest_correlation
         if abs_corr >= CORRELATION_ELEVATED_THRESHOLD:
             correlation_detail = (
-                'Largest absolute parameter correlation: '
+                'Strongest parameter coupling: '
                 f'|corr({escape(first_param)}, {escape(second_param)})| = {abs_corr:.3f} '
                 f'(signed value {signed_corr:.3f}).'
             )
-            if has_elevated_rse or has_elevated_condition:
-                if abs_corr >= CORRELATION_HIGH_THRESHOLD or has_high_rse or has_high_condition:
+            if has_elevated_rse or has_elevated_stability:
+                if abs_corr >= CORRELATION_HIGH_THRESHOLD or has_high_rse or has_high_stability:
                     badges.append(_badge('Parameter identifiability caution', 'warning'))
                 else:
                     badges.append(_badge('Parameter identifiability caution', 'caution'))
@@ -211,31 +211,32 @@ def build_parameter_diagnostics_html(params, pcov):
     details.extend(coupling_details)
 
     if not badges:
-        badges.append(_badge('No covariance concerns identified', 'ok'))
+        badges.append(_badge('No parameter uncertainty concerns identified', 'ok'))
         summary = (
-            'Screening checks did not identify large relative standard errors, '
-            'high pairwise parameter correlations, or covariance conditioning concerns. '
-            'This does not by itself validate the model.'
+            'Screening checks did not identify large parameter uncertainty, strong '
+            'parameter coupling, or signs that parameter estimates may be sensitive '
+            'to small changes in the data. This does not by itself validate the model.'
         )
     elif concern_details:
         if coupling_details:
             summary = (
-                'Review these parameter-covariance diagnostics. Correlated parameter '
+                'Review these fitted-parameter diagnostics. Correlated parameter '
                 'estimates can occur naturally in nonlinear models, especially when '
                 'parameters control scale, shape, or rate, but correlation accompanied '
-                'by elevated uncertainty or covariance-conditioning concerns may indicate '
+                'by large uncertainty or parameter-stability concerns may indicate '
                 'weakly identified, redundant, or data-sensitive fitted parameters.'
             )
         else:
             summary = (
-                'Review these parameter-covariance diagnostics. They may indicate '
-                'weakly identified, redundant, or data-sensitive fitted parameters.'
+                'Review these fitted-parameter diagnostics. They may indicate '
+                'large parameter uncertainty, sensitivity to the available data, or '
+                'weakly identified fitted parameters.'
             )
     else:
         summary = (
             'Correlated parameter estimates were detected. This can occur naturally in '
             'nonlinear models, especially when parameters control scale, shape, or rate. '
-            'Review whether parameter uncertainty or covariance-conditioning concerns '
+            'Review whether large parameter uncertainty or parameter-stability concerns '
             'are also present before treating this as an identifiability concern.'
         )
 

@@ -1316,7 +1316,7 @@ button.dt-button2:disabled {
     vertical-align: middle;
 }
 
-/* Parameter covariance diagnostics */
+/* Fitted parameter diagnostics */
 .parameter-diagnostics {
     margin-top: 0.5rem;
     margin-bottom: 0.9rem;
