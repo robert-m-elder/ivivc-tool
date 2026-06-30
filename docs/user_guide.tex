@@ -4,15 +4,56 @@
 
 Establishing an in vitro-in vivo correlation (IVIVC) can support the evaluation of medical devices that include absorbable polymers by relating in vivo changes in material properties over time to corresponding in vitro test results, such as degradation profiles. IVIVCs may help evaluate manufacturing or material changes, support predictions of in vivo performance when modifying an existing device design, and reduce reliance on animal studies during preclinical development. This tool is intended to facilitate IVIVC development. The user supplies paired in vitro and in vivo fitting data, and may optionally supply an in vitro prediction dataset. The app applies selected preprocessing steps, fits and compares multiple correlation approaches and model families, evaluates selected performance metrics and cross-validation results, generates fitting and prediction plots, and produces report-ready summaries that can be reviewed and incorporated into external documentation.
 
+
 \section{What the app does}
 
 \begin{itemize}
-\item Apply selected normalization, scaling, and interpolation options to prepare fitting and prediction data.
-\item Fit user-selected IVIVC approaches and model families to paired in vitro and in vivo data.
-\item Calculate selected goodness-of-fit, model-comparison, and cross-validation metrics.
-\item Generate fitting, comparison, and prediction plots with uncertainty displays where supported.
-\item Create report-ready HTML and editable Word summaries for user-selected final models or methods.
+\item Applies selected normalization, scaling, and interpolation options to prepare fitting and prediction data.
+\item Fits user-selected IVIVC approaches and model families to paired in vitro and in vivo data.
+\item Calculates selected goodness-of-fit, model-comparison, and cross-validation metrics.
+\item Generates fitting, comparison, and prediction plots with uncertainty displays where supported.
+\item Creates summaries for user-selected models.
 \end{itemize}
+
+
+\section{Inputs}
+
+The IVIVC app requires paired in vitro and in vivo degradation data, along with user-selected analysis settings that define how the data are processed, modeled, and summarized. At a high level, the required and optional inputs include:
+
+\begin{itemize}
+    \item an input spreadsheet containing in vitro and in vivo degradation data;
+    \item selection of one or more IVIVC modeling approaches;
+    \item selection of candidate models to evaluate, where applicable;
+    \item preprocessing options, such as normalization, interpolation, or scaling choices;
+    \item selected performance metrics to display in the results and reports;
+    \item cross-validation settings for applicable parametric models; and
+    \item grid-search settings for model initialization.
+\end{itemize}
+
+The sections below provide additional detail on input file structure, required data columns, preprocessing options, model-selection inputs, and optional analysis settings.
+
+
+\section{Outputs}
+
+The IVIVC app generates interactive results and downloadable reports that summarize fitted model behavior, model-comparison metrics, diagnostic information, and user-selected analysis settings. Output availability depends on the selected approaches, whether fitting succeeds, and whether a prediction dataset was supplied.
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.24\textwidth}>{\raggedright\arraybackslash}p{0.68\textwidth}@{}}
+\toprule
+\textbf{Output} & \textbf{Description} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Output} & \textbf{Description} \\
+\midrule
+\endhead
+Preprocessing outputs & Processed data tables and plots showing the data used for fitting and prediction. \\
+Model fitting outputs & Parameter estimates, parameter standard errors where available, fitted plots, and selected performance metrics. \\
+Model comparison outputs & Tables comparing selected approaches, models, metrics, cross-validation summaries, and relative model evidence. \\
+Prediction outputs & Prediction plots and downloadable tables when a prediction dataset is supplied and the selected method can be applied. \\
+Selected model \& summary of outputs & User-selected report summaries and optional Word report export for incorporation into external documentation. \\
+\bottomrule
+\end{longtable}
+
 
 \section{Input datasets}
 
@@ -31,6 +72,7 @@ Prediction dataset & Optional two-column in vitro dataset used after fitting to 
 \end{longtable}
 
 For Excel workbooks, select the sheet containing the relevant data. For CSV files, the first columns are read directly in the order described above.
+
 
 \section{Analysis approaches and models}
 
@@ -72,6 +114,7 @@ Power & Approach 1, Approach 2 & \(y = a x^{b}\) & Power-law empirical relations
 Stretched Exponential & Approach 2 & \(y = a e^{b x^{c}}\) & Exponential relationship with a fitted stretching exponent. It can describe non-single-rate behavior, but the additional shape parameter can increase sensitivity when data are sparse. \\
 \bottomrule
 \end{longtable}
+
 
 \section{Preprocessing options}
 
@@ -124,25 +167,30 @@ Densified interpolation & alternative & Creates additional linearly spaced point
 \bottomrule
 \end{longtable}
 
-\section{Relative model evidence}
 
-Relative model evidence compares candidate parametric models fitted to the same dataset under the same preprocessing settings and IVIVC approach. The evidence table is based only on the information-criterion metrics selected by the user: AIC, AIC\textsubscript{c}, and/or BIC. These criteria are relative; their absolute values are not interpreted directly, and negative values are allowed. Table definitions: n is the number of fitted observations; k is the number of fitted model parameters; Delta is the difference between a model's criterion value and the lowest value in the displayed candidate set; weight is the normalized relative support for that model under the criterion; and evidence ratio compares the highest weight in the set with the model's weight. Delta values near 0 indicate similar relative support; larger delta values indicate lower support relative to the leading candidate under that criterion. Similar relative evidence does not mean the models are scientifically equivalent. Final model selection should also consider prediction error, cross-validation behavior, residual patterns, parameter uncertainty, model simplicity, and biological or degradation-mechanism plausibility. The app reports these summaries to support user review. It does not select, recommend, or validate a model.
+\section{Performance metrics}
 
-\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.24\textwidth}>{\raggedright\arraybackslash}p{0.68\textwidth}@{}}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.17\textwidth}>{\raggedright\arraybackslash}p{0.18\textwidth}>{\raggedright\arraybackslash}p{0.20\textwidth}>{\raggedright\arraybackslash}p{0.37\textwidth}@{}}
 \toprule
-\textbf{Evidence summary} & \textbf{Interpretation} \\
+\textbf{Metric} & \textbf{Internal key} & \textbf{Preferred direction} & \textbf{Description} \\
 \midrule
 \endfirsthead
 \toprule
-\textbf{Evidence summary} & \textbf{Interpretation} \\
+\textbf{Metric} & \textbf{Internal key} & \textbf{Preferred direction} & \textbf{Description} \\
 \midrule
 \endhead
-Delta AIC\textsubscript{c} / Delta AIC / Delta BIC & Difference from the lowest value in the displayed candidate set. Values near 0 indicate similar relative support; larger values indicate lower support relative to the leading candidate under that criterion. \\
-AIC\textsubscript{c} or BIC weight & Normalized relative-support value across the candidate models in the displayed evidence table. Weights are relative, not absolute probabilities that a model is true. \\
-Evidence ratio & Ratio of the highest evidence weight to the model's evidence weight. Larger ratios indicate less relative support compared with the highest-weighted model in the set. \\
-Interpretation badge & Neutral rule-of-thumb label based on the displayed delta values. The label supports user review and is not an app recommendation. \\
+\(R^2\) & r\_squared & Higher is generally better & Coefficient of determination. Higher values indicate that the model explains more variance in the observed response. \\
+Adjusted \(R^2\) & adjusted\_r\_squared & Higher is generally better & \(R^2\) adjusted for the number of fitted parameters. Higher values are better and can penalize unnecessary model complexity. \\
+MSE & mse & Lower is generally better & Mean squared error between observed and fitted values. Lower values indicate smaller average squared residuals. \\
+RMSE & rmse & Lower is generally better & Root mean squared error, in the same response units as the fitted data. Lower values indicate smaller typical residuals. \\
+NRMSE (mean) & mnrmse & Lower is generally better & RMSE normalized by the response mean. Lower values indicate smaller error relative to the response magnitude. \\
+NRMSE (std. dev.) & nrmse & Lower is generally better & RMSE normalized by the response standard deviation. Lower values indicate smaller error relative to response variability. \\
+AIC & aic & Lower is generally better & Akaike Information Criterion. Lower values indicate stronger relative fit-complexity support among models fitted to the same dataset under comparable assumptions. Absolute AIC values, including negative values, should not be interpreted as standalone quality grades. \\
+AIC\textsubscript{c} & aicc & Lower is generally better & Corrected Akaike Information Criterion. AIC\textsubscript{c} applies a small-sample correction to AIC and is often more appropriate when the number of fitted observations is small relative to the number of fitted parameters. Lower values indicate stronger relative fit-complexity support among comparable fitted models; AIC\textsubscript{c} is undefined when there are too few observations relative to the number of parameters. \\
+BIC & bic & Lower is generally better & Bayesian Information Criterion. Lower values indicate stronger relative fit-complexity support among models fitted to the same dataset under comparable assumptions, with a stronger penalty for additional parameters than AIC. Absolute BIC values, including negative values, should not be interpreted as standalone quality grades. \\
 \bottomrule
 \end{longtable}
+
 
 \section{Cross-validation options}
 
@@ -182,6 +230,7 @@ CV random seed & cv\_random\_state & Seed used to make randomized cross-validati
 \bottomrule
 \end{longtable}
 
+
 \section{Grid-search initialization}
 
 The app conducts an automated grid search to identify suitable starting parameter values for each model before nonlinear least-squares fitting, reducing the need for manual parameter tuning. Candidate values are sampled within the configured parameter bounds and are used only to initialize the final curve fit.
@@ -205,28 +254,6 @@ Grid-search random seed & grid\_search\_random\_state & Seed used to make random
 \bottomrule
 \end{longtable}
 
-\section{Performance metrics}
-
-\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.17\textwidth}>{\raggedright\arraybackslash}p{0.18\textwidth}>{\raggedright\arraybackslash}p{0.20\textwidth}>{\raggedright\arraybackslash}p{0.37\textwidth}@{}}
-\toprule
-\textbf{Metric} & \textbf{Internal key} & \textbf{Preferred direction} & \textbf{Description} \\
-\midrule
-\endfirsthead
-\toprule
-\textbf{Metric} & \textbf{Internal key} & \textbf{Preferred direction} & \textbf{Description} \\
-\midrule
-\endhead
-\(R^2\) & r\_squared & Higher is generally better & Coefficient of determination. Higher values indicate that the model explains more variance in the observed response. \\
-Adjusted \(R^2\) & adjusted\_r\_squared & Higher is generally better & \(R^2\) adjusted for the number of fitted parameters. Higher values are better and can penalize unnecessary model complexity. \\
-MSE & mse & Lower is generally better & Mean squared error between observed and fitted values. Lower values indicate smaller average squared residuals. \\
-RMSE & rmse & Lower is generally better & Root mean squared error, in the same response units as the fitted data. Lower values indicate smaller typical residuals. \\
-NRMSE (mean) & mnrmse & Lower is generally better & RMSE normalized by the response mean. Lower values indicate smaller error relative to the response magnitude. \\
-NRMSE (std. dev.) & nrmse & Lower is generally better & RMSE normalized by the response standard deviation. Lower values indicate smaller error relative to response variability. \\
-AIC & aic & Lower is generally better & Akaike Information Criterion. Lower values indicate stronger relative fit-complexity support among models fitted to the same dataset under comparable assumptions. Absolute AIC values, including negative values, should not be interpreted as standalone quality grades. \\
-AIC\textsubscript{c} & aicc & Lower is generally better & Corrected Akaike Information Criterion. AIC\textsubscript{c} applies a small-sample correction to AIC and is often more appropriate when the number of fitted observations is small relative to the number of fitted parameters. Lower values indicate stronger relative fit-complexity support among comparable fitted models; AIC\textsubscript{c} is undefined when there are too few observations relative to the number of parameters. \\
-BIC & bic & Lower is generally better & Bayesian Information Criterion. Lower values indicate stronger relative fit-complexity support among models fitted to the same dataset under comparable assumptions, with a stronger penalty for additional parameters than AIC. Absolute BIC values, including negative values, should not be interpreted as standalone quality grades. \\
-\bottomrule
-\end{longtable}
 
 \section{Uncertainty and error bars}
 
@@ -280,28 +307,34 @@ Prediction plot error bars: Approach 3 currently does not generate formal propag
 
 Uncertainty is therefore limited to the quality of the input data, preprocessing, interpolation, and the assumption that the observed mapping remains valid for the prediction dataset. Extrapolated points outside the interpolation range are excluded or returned as unavailable.
 
-\section{Outputs}
+
+\section{Relative model evidence}
+
+Relative model evidence compares candidate parametric models fitted to the same dataset under the same preprocessing settings and IVIVC approach. The evidence table is based only on the information-criterion metrics selected by the user: AIC, AIC\textsubscript{c}, and/or BIC. These criteria are relative; their absolute values are not interpreted directly, and negative values are allowed. Table definitions: n is the number of fitted observations; k is the number of fitted model parameters; Delta is the difference between a model's criterion value and the lowest value in the displayed candidate set; weight is the normalized relative support for that model under the criterion; and evidence ratio compares the highest weight in the set with the model's weight. Delta values near 0 indicate similar relative support; larger delta values indicate lower support relative to the leading candidate under that criterion. Similar relative evidence does not mean the models are scientifically equivalent. Final model selection should also consider prediction error, cross-validation behavior, residual patterns, parameter uncertainty, model simplicity, and biological or degradation-mechanism plausibility. The app reports these summaries to support user review. It does not select, recommend, or validate a model.
 
 \begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.24\textwidth}>{\raggedright\arraybackslash}p{0.68\textwidth}@{}}
 \toprule
-\textbf{Output} & \textbf{Description} \\
+\textbf{Evidence summary} & \textbf{Interpretation} \\
 \midrule
 \endfirsthead
 \toprule
-\textbf{Output} & \textbf{Description} \\
+\textbf{Evidence summary} & \textbf{Interpretation} \\
 \midrule
 \endhead
-Preprocessing outputs & Processed data tables and plots showing the data used for fitting and prediction. \\
-Model fitting outputs & Parameter estimates, parameter standard errors where available, fitted plots, and selected performance metrics. \\
-Model comparison outputs & Tables comparing selected approaches, models, metrics, and cross-validation summaries. \\
-Prediction outputs & Prediction plots and downloadable tables when a prediction dataset is supplied and the selected method can be applied. \\
-Selected model \& summary of outputs & User-selected report summaries and optional Word report export for incorporation into external documentation. \\
+Delta AIC\textsubscript{c} / Delta AIC / Delta BIC & Difference from the lowest value in the displayed candidate set. Values near 0 indicate similar relative support; larger values indicate lower support relative to the leading candidate under that criterion. \\
+AIC\textsubscript{c} or BIC weight & Normalized relative-support value across the candidate models in the displayed evidence table. Weights are relative, not absolute probabilities that a model is true. \\
+Evidence ratio & Ratio of the highest evidence weight to the model's evidence weight. Larger ratios indicate less relative support compared with the highest-weighted model in the set. \\
+Interpretation badge & Neutral rule-of-thumb label based on the displayed delta values. The label supports user review and is not an app recommendation. \\
 \bottomrule
 \end{longtable}
 
-Output availability depends on the selected approaches, whether fitting succeeds, and whether a prediction dataset was supplied.
 
 \section{Command-line interface}
 
 The repository includes cli.py for batch-oriented fitting from the command line. Use python cli.py --help to see available arguments for input files, approaches, models, metrics, preprocessing options, cross-validation settings, and grid-search settings. The internal keys specified in this user guide are used as settings with cli.py.
+
+
+\section{Extending the app}
+
+The IVIVC app is designed so that common extensions can be added with minimal changes to the main application code. In many cases, new models, performance metrics, and preprocessing methods can be added by following the structure of the existing files in the relevant subdirectories.
 
