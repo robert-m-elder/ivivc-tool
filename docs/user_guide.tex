@@ -19,12 +19,13 @@ Establishing an in vitro-in vivo correlation (IVIVC) can support the evaluation 
 The IVIVC app requires paired in vitro and in vivo degradation data, along with user-selected analysis settings that define how the data are processed, modeled, and summarized. At a high level, the inputs include:
 
 \begin{itemize}
-\item an input spreadsheet containing in vitro and in vivo time-course degradation data;
+\item a spreadsheet containing in vitro and in vivo time-course degradation data for fitting correlations;
+\item optionally, a spreadsheet containing in vitro data from which to generate predictions using fitted correlations;
 \item selection of one or more IVIVC modeling approaches;
 \item selection of candidate models to evaluate, where applicable;
-\item preprocessing options, such as normalization, interpolation, or scaling choices;
+\item optionally, preprocessing options, such as normalization, interpolation, or scaling choices;
 \item selected performance metrics to display in the results and reports
-\item cross-validation settings for applicable parametric models; and
+\item optionally, cross-validation settings for applicable parametric models; and
 \item grid-search settings for model initialization.
 \end{itemize}
 
@@ -253,15 +254,15 @@ Grid-search random seed & grid\_search\_random\_state & Seed used to make random
 \textbf{Metric} & \textbf{Internal key} & \textbf{Preferred direction} & \textbf{Description} \\
 \midrule
 \endhead
-\(R^2\) & r\_squared & Higher is generally better & Coefficient of determination. Higher values indicate that the model explains more variance in the observed response. \\
-Adjusted \(R^2\) & adjusted\_r\_squared & Higher is generally better & \(R^2\) adjusted for the number of fitted parameters. Higher values are better and can penalize unnecessary model complexity. \\
-MSE & mse & Lower is generally better & Mean squared error between observed and fitted values. Lower values indicate smaller average squared residuals. \\
-RMSE & rmse & Lower is generally better & Root mean squared error, in the same response units as the fitted data. Lower values indicate smaller typical residuals. \\
-NRMSE (mean) & mnrmse & Lower is generally better & RMSE normalized by the response mean. Lower values indicate smaller error relative to the response magnitude. \\
-NRMSE (std. dev.) & nrmse & Lower is generally better & RMSE normalized by the response standard deviation. Lower values indicate smaller error relative to response variability. \\
-AIC & aic & Lower is generally better & Akaike Information Criterion. Information-criterion metrics balance how well a model fits the data with model complexity (the number of fitted parameters). Among comparable fitted models, a lower AIC value generally indicates a better model representation: the model explains the data well without unnecessary complexity. Absolute AIC values, including negative values, should not be interpreted as standalone quality grades. \\
-AIC\textsubscript{c} & aicc & Lower is generally better & Corrected Akaike Information Criterion. AIC\textsubscript{c} applies a small-sample correction to AIC and is often preferred when the number of fitted observations is limited relative to the number of fitted parameters, with n/k < 40 commonly used as a rule of thumb. Among comparable fitted models, a lower AIC\textsubscript{c} value generally indicates a better balance of fit quality and model complexity; AIC\textsubscript{c} is undefined when there are too few observations relative to the number of parameters. \\
-BIC & bic & Lower is generally better & Bayesian Information Criterion. BIC balances how well a model fits the data with model complexity, usually applying a stronger penalty for additional parameters than AIC. Among comparable fitted models, a lower BIC value generally indicates a better model representation without unnecessary complexity. Absolute BIC values, including negative values, should not be interpreted as standalone quality grades. \\
+\(R^2\) & r\_squared & Higher is better & Coefficient of determination. Higher values indicate that the model explains more variance in the observed response. \\
+Adjusted \(R^2\) & adjusted\_r\_squared & Higher is better & \(R^2\) adjusted for the number of fitted parameters. Higher values are better and can penalize unnecessary model complexity. \\
+MSE & mse & Lower is better & Mean squared error between observed and fitted values. Lower values indicate smaller average squared residuals. \\
+RMSE & rmse & Lower is better & Root mean squared error, in the same response units as the fitted data. Lower values indicate smaller typical residuals. \\
+NRMSE (mean) & mnrmse & Lower is better & RMSE normalized by the response mean. Lower values indicate smaller error relative to the response magnitude. \\
+NRMSE (std. dev.) & nrmse & Lower is better & RMSE normalized by the response standard deviation. Lower values indicate smaller error relative to response variability. \\
+AIC & aic & Lower is better & Akaike Information Criterion. Information-criterion metrics balance how well a model fits the data with model complexity (the number of fitted parameters). Among comparable fitted models, a lower AIC value generally indicates a better model representation: the model explains the data well without unnecessary complexity. Absolute AIC values, including negative values, should not be interpreted as standalone quality grades. \\
+AIC\textsubscript{c} & aicc & Lower is better & Corrected Akaike Information Criterion. AIC\textsubscript{c} applies a small-sample correction to AIC and is often preferred when the number of fitted observations (n) is limited relative to the number of fitted parameters (k), with n/k < 40 commonly used as a rule of thumb. Among comparable fitted models, a lower AIC\textsubscript{c} value generally indicates a better balance of fit quality and model complexity; AIC\textsubscript{c} is undefined when there are too few observations relative to the number of parameters. \\
+BIC & bic & Lower is better & Bayesian Information Criterion. BIC balances how well a model fits the data with model complexity, usually applying a stronger penalty for additional parameters than AIC. Among comparable fitted models, a lower BIC value generally indicates a better model representation without unnecessary complexity. Absolute BIC values, including negative values, should not be interpreted as standalone quality grades. \\
 \bottomrule
 \end{longtable}
 

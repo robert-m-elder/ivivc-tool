@@ -1,6 +1,7 @@
 import os
 import traceback
 import warnings
+from html import escape
 
 import numpy as np
 import pandas as pd
@@ -71,22 +72,30 @@ def _goodness_cv_comparison_table(gof, cvs_mean):
             '</p>'
         )
 
-    stats_table = pd.concat([
-        pd.DataFrame(
-            {metrics[metric]['display_name']: gof[metric] for metric in comparable_metrics},
-            index=['Final model']
-        ),
-        pd.DataFrame(
-            {metrics[metric]['display_name']: cvs_mean.get(metric, np.nan) for metric in comparable_metrics},
-            index=['Cross-validation']
-        )
-    ], axis=0)
+    final_row = {}
+    cv_row = {}
+    ratio_row = {}
+    comparison_row = {}
+    for metric in comparable_metrics:
+        display_name = metrics[metric]['display_name']
+        fit_value = gof[metric]
+        cv_value = cvs_mean.get(metric, np.nan)
+        final_row[display_name] = fit_value
+        cv_row[display_name] = _finite_float(cv_value)
+        ratio_row[display_name] = _fit_cv_ratio(fit_value, cv_value)
+        comparison_row[display_name] = _cv_status_badge(metric, fit_value, cv_value)[0]
+
+    stats_table = pd.DataFrame(
+        [final_row, cv_row, ratio_row, comparison_row],
+        index=['Final model', 'Cross-validation', 'Final/CV ratio', 'CV comparison']
+    )
 
     return stats_table.to_html(
         classes='table table-striped',
         index=True,
         float_format=lambda x: f'{x:.4f}',
-        na_rep='N/A'
+        na_rep='N/A',
+        escape=False
     )
 
 def preprocess_data(t1, m1, t2, m2, selected_interpolation=None, selected_scalings=None, selected_normalizations=None):
@@ -490,7 +499,96 @@ def _fit_cv_ratio(fit_value, cv_value):
     return fit_value / cv_value
 
 
+CV_RATIO_MODERATE_THRESHOLD = 1.25
+CV_RATIO_SUBSTANTIAL_THRESHOLD = 2.0
+
 CV_SUMMARY_EXCLUDED_METRICS = CV_COMPARISON_EXCLUDED_METRICS
+
+_CV_BADGE_CLASS_BY_LEVEL = {
+    'ok': 'evidence-badge-comparable',
+    'caution': 'evidence-badge-lower',
+    'warning': 'evidence-badge-minimal',
+    'unavailable': 'evidence-badge-lower',
+}
+
+_CV_STATUS_RANK = {
+    'ok': 0,
+    'unavailable': 1,
+    'caution': 2,
+    'warning': 3,
+}
+
+
+def _cv_badge(label, level):
+    badge_class = _CV_BADGE_CLASS_BY_LEVEL.get(level, 'evidence-badge-lower')
+    return (
+        f'<span class="evidence-badge {badge_class}">'
+        f'{escape(label)}'
+        '</span>'
+    )
+
+
+def _cv_worse_factor(metric, fit_value, cv_value):
+    """Return how much worse CV performance is than final-model performance.
+
+    A value near 1 indicates similar or better CV performance. Values above 1
+    indicate worse CV performance, with direction interpreted using the metric's
+    better_direction metadata.
+    """
+    fit_value = _finite_float(fit_value)
+    cv_value = _finite_float(cv_value)
+    if not np.isfinite(fit_value) or not np.isfinite(cv_value):
+        return np.nan
+
+    direction = metrics.get(metric, {}).get('better_direction', 'lower')
+
+    if direction == 'higher':
+        if cv_value >= fit_value:
+            return 1.0
+        if fit_value > 0 and cv_value <= 0:
+            return np.inf
+        if fit_value > 0 and cv_value > 0:
+            return fit_value / cv_value
+        return np.nan
+
+    # Default: lower values are better.
+    if cv_value <= fit_value:
+        return 1.0
+    if fit_value == 0:
+        return np.inf if cv_value > 0 else 1.0
+    if fit_value > 0 and cv_value > 0:
+        return cv_value / fit_value
+    return np.nan
+
+
+def _cv_status(metric, fit_value, cv_value):
+    factor = _cv_worse_factor(metric, fit_value, cv_value)
+    if not np.isfinite(factor):
+        return 'CV comparison unavailable', 'unavailable'
+    if factor <= CV_RATIO_MODERATE_THRESHOLD:
+        return 'CV similar to final', 'ok'
+    if factor <= CV_RATIO_SUBSTANTIAL_THRESHOLD:
+        return 'CV moderately worse', 'caution'
+    return 'CV substantially worse', 'warning'
+
+
+def _cv_status_badge(metric, fit_value, cv_value):
+    label, level = _cv_status(metric, fit_value, cv_value)
+    return _cv_badge(label, level), level
+
+
+def _overall_cv_status_badge(levels):
+    if not levels:
+        return _cv_badge('CV comparison unavailable', 'unavailable')
+
+    worst_level = max(levels, key=lambda level: _CV_STATUS_RANK.get(level, 0))
+    if worst_level == 'warning':
+        return _cv_badge('One or more CV metrics substantially worse', 'warning')
+    if worst_level == 'caution':
+        return _cv_badge('One or more CV metrics moderately worse', 'caution')
+    if worst_level == 'unavailable':
+        return _cv_badge('Review raw CV values', 'unavailable')
+    return _cv_badge('No substantial CV degradation identified', 'ok')
 
 
 def _cross_validation_row(model_display_name, stats_row, selected_metrics, dataset_label=None):
@@ -499,6 +597,7 @@ def _cross_validation_row(model_display_name, stats_row, selected_metrics, datas
         row['Dataset'] = dataset_label
 
     has_cv_value = False
+    cv_status_levels = []
     for metric in selected_metrics:
         if metric in CV_SUMMARY_EXCLUDED_METRICS or metric not in metrics:
             continue
@@ -509,17 +608,22 @@ def _cross_validation_row(model_display_name, stats_row, selected_metrics, datas
         cv_value = _finite_float(cv_value)
         if np.isfinite(cv_value):
             has_cv_value = True
+            _, level = _cv_status_badge(metric, fit_value, cv_value)
+            cv_status_levels.append(level)
         row[f'CV {display_name}'] = cv_value
         row[f'Ratio {display_name}'] = ratio
 
-    return row if has_cv_value else None
+    if has_cv_value:
+        row['CV comparison'] = _overall_cv_status_badge(cv_status_levels)
+        return row
+    return None
 
 
 def _cross_validation_table(rows):
     if not rows:
         return '<p class="evidence-note">Cross-validation summary is not available because cross-validation was not run or did not produce finite values for the selected eligible metrics.</p>'
     df = pd.DataFrame(rows)
-    return df.to_html(classes='table table-striped cv-summary-table', index=False, float_format=lambda x: f'{x:.4f}', na_rep='N/A')
+    return df.to_html(classes='table table-striped cv-summary-table', index=False, float_format=lambda x: f'{x:.4f}', na_rep='N/A', escape=False)
 
 
 def _parameter_diagnostic_table(rows):

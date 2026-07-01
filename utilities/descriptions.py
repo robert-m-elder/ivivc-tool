@@ -124,9 +124,9 @@ def format_metric_description_rows(metrics, selected_metrics=None):
         description = METRIC_DESCRIPTIONS.get(metric_key, {}).get('description', '')
         better_direction = metric_info.get('better_direction', '')
         if better_direction == 'higher':
-            direction = 'Higher is generally better'
+            direction = 'Higher is better'
         elif better_direction == 'lower':
-            direction = 'Lower is generally better'
+            direction = 'Lower is better'
         else:
             direction = ''
         rows.append({

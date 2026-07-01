@@ -13,6 +13,7 @@
 
 \setlength{\parindent}{0pt}
 %\setlength{\parskip}{0.55em}
+\usepackage{parskip}
 \setlist[itemize]{leftmargin=*}
 \setlist[enumerate]{leftmargin=*}
 \hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue, citecolor=blue, breaklinks=true}
@@ -34,7 +35,7 @@
 
 \maketitle
 \tableofcontents
-\newpage
+%\newpage
 
 \input{user_guide.tex}
 
@@ -50,7 +51,7 @@
 \newpage
 \addcontentsline{toc}{section}{References}
 \bibliographystyle{unsrt}
-\nocite{*}
+%\nocite{*}
 \bibliography{references}
 
 \end{document}

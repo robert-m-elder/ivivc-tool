@@ -362,12 +362,13 @@ def build_user_guide_tex() -> str:
 
     parts.append(latex_section(1, "Inputs"))
     parts.append(latex_paragraphs("The IVIVC app requires paired in vitro and in vivo degradation data, along with user-selected analysis settings that define how the data are processed, modeled, and summarized. At a high level, the inputs include:"))
-    parts.append(latex_itemize(['an input spreadsheet containing in vitro and in vivo time-course degradation data;',
+    parts.append(latex_itemize(['a spreadsheet containing in vitro and in vivo time-course degradation data for fitting correlations;',
+                                'optionally, a spreadsheet containing in vitro data from which to generate predictions using fitted correlations;',
                                 'selection of one or more IVIVC modeling approaches;',
                                 'selection of candidate models to evaluate, where applicable;',
-                                'preprocessing options, such as normalization, interpolation, or scaling choices;',
+                                'optionally, preprocessing options, such as normalization, interpolation, or scaling choices;',
                                 'selected performance metrics to display in the results and reports',
-                                'cross-validation settings for applicable parametric models; and',
+                                'optionally, cross-validation settings for applicable parametric models; and',
                                 'grid-search settings for model initialization.']))
     parts.append(latex_paragraphs("The sections below provide additional detail on input file structure, required data columns, preprocessing options, model-selection inputs, and optional analysis settings."))
 
