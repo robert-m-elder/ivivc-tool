@@ -12,8 +12,8 @@ CORRELATION_HIGH_THRESHOLD = 0.95
 # Stability is checked on the parameter-correlation matrix rather than the
 # raw covariance matrix so the diagnostic is less sensitive to parameter units
 # or response-scale magnitude.
-CORRELATION_CONDITION_ELEVATED_THRESHOLD = 100.0
-CORRELATION_CONDITION_HIGH_THRESHOLD = 1000.0
+CORRELATION_CONDITION_ELEVATED_THRESHOLD = 1000.0
+CORRELATION_CONDITION_HIGH_THRESHOLD = 10000.0
 
 
 _BADGE_CLASS_BY_LEVEL = {

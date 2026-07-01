@@ -55,10 +55,12 @@
         </ul>
 
         <div id="processing">
+            <!--
             <section class="intro-panel results-intro-panel">
                 <h3>Purpose of this tool</h3>
                 {{ tool_purpose_html | safe }}
             </section>
+            --!>
             <h2>
                 Data Processing
                 <button type="button" class="help-btn" data-modal="data-processing-help">
@@ -101,9 +103,11 @@
                     {% endfor %}
                 </tbody>
             </table>
+            <!--
             <h4>Grid-search initialization</h4>
             {{ grid_search_description_html | safe }}
-<h4>Fitting Data:</h4>
+            --!>
+            <h4>Fitting Data:</h4>
             <div id="plot-processing-raw-data" class="plot-container report-source-plot">
                 {{ raw_data_info['plot'] | safe }}
             </div>

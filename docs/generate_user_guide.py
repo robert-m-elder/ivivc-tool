@@ -297,6 +297,16 @@ def build_readme() -> str:
 
         See [`docs/user_guide.pdf`](docs/user_guide.pdf) for detailed descriptions of inputs, options, methods, and outputs. The main LaTeX content source is [`docs/user_guide.tex`](docs/user_guide.tex), with appendices in [`docs/appendices/`](docs/appendices/) and references in [`docs/references.bib`](docs/references.bib). These files are content-only so they can be copied into an Overleaf project and included from a top-level LaTeX document.
 
+        ## Review packet
+
+        To generate Word review artifacts for non-technical review, run:
+
+        ```bash
+        bash docs/generate_review_packet.sh
+        ```
+
+        This writes review-only `.docx` files to `docs/review/`. Reviewers can use Word comments or tracked changes, but accepted edits should be applied back to the source files.
+
         ## Updating documentation text
 
         User-facing descriptions are centralized in `utilities/descriptions.py`, with routine wording overrides in `utilities/descriptions.yaml`. The main guide content is generated as LaTeX source, long-form appendices are maintained as separate LaTeX files in `docs/appendices/`, and references are maintained in `docs/references.bib`.
