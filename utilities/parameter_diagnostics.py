@@ -228,7 +228,7 @@ def build_parameter_diagnostics_html(params, pcov):
             )
         else:
             summary = (
-                'Review these fitted-parameter diagnostics. They may indicate '
+                'Review these fitted-parameter diagnostics. They may indicate an unsuitable model due to '
                 'large parameter uncertainty, sensitivity to the available data, or '
                 'weakly identified fitted parameters.'
             )

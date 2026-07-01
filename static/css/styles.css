@@ -355,6 +355,21 @@ main {
     border-radius: 4px;
 }
 
+
+.advanced-field-disabled {
+    opacity: 0.55;
+}
+
+.advanced-field-disabled label {
+    color: #666;
+}
+
+.advanced-field-disabled input,
+.advanced-field-disabled select {
+    background-color: #f2f2f2;
+    cursor: not-allowed;
+}
+
 @media (max-width: 1100px) {
     .advanced-parameter-row,
     .advanced-parameter-row:nth-of-type(2) {

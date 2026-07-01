@@ -356,6 +356,10 @@ def build_user_guide_tex() -> str:
 
     parts.append(latex_section(1, "Introduction"))
     parts.append(latex_paragraphs(APP_DESCRIPTION))
+    parts.append(
+        r"For general background on credibility assessment and reporting of computational modeling studies in medical device submissions, see FDA guidance on computational modeling credibility and reporting \cite{fda_modeling_guidance,fda_reporting_guidance}."
+        + "\n\n"
+    )
 
     parts.append(latex_section(1, "What the app does"))
     parts.append(latex_itemize(TOOL_CAPABILITY_SUMMARY))
@@ -425,6 +429,8 @@ def build_user_guide_tex() -> str:
             ["0.16\\textwidth", "0.14\\textwidth", "0.36\\textwidth", "0.26\\textwidth"],
             raw_columns={2},
         ))
+        parts.append(r"\textbf{Mass-loss model source notes}" + "\n\n")
+        parts.append(r"The surface-erosion mass-loss form is based on geometry-controlled surface erosion concepts such as the erodible slab, cylinder, and sphere model \cite{hopfenberg1976}. The one-phase mass-loss model uses a logistic/sigmoidal transition to represent a delayed loss phase \cite{tsoularis2002}. The two-phase mass-loss model combines an early burst-like loss term with a delayed sigmoidal loss phase. Burst and delayed/multiphase behavior in degradable polymer systems is discussed in the polymer erosion and PLGA release literature \cite{gopferich1997,fredenberg2011,allison2008}. The Gompertz mass-loss model uses a modified Gompertz-style sigmoidal form with lag and maximum-rate parameters \cite{zwietering1990}." + "\n\n")
 
     parts.append(latex_section(1, "Preprocessing options"))
     for category in ["normalization", "scaling", "interpolation"]:
@@ -437,6 +443,10 @@ def build_user_guide_tex() -> str:
 
     parts.append(latex_section(1, "Relative model evidence"))
     parts.append(latex_paragraphs(RELATIVE_MODEL_EVIDENCE_TEXT))
+    parts.append(
+        r"For additional background on information criteria, model-selection evidence, and evidence-weight interpretation, see references \cite{akaike1974,schwarz1978,burnham2002,kass1995,wagenmakers2004}."
+        + "\n\n"
+    )
     parts.append(latex_table(
         ["Evidence summary", "Interpretation"],
         [
@@ -449,6 +459,10 @@ def build_user_guide_tex() -> str:
 
     parts.append(latex_section(1, "Cross-validation options"))
     parts.append(latex_paragraphs(CROSS_VALIDATION_DESCRIPTION_HTML))
+    parts.append(
+        r"For background on cross-validation procedures and their use in model assessment and selection, see reference \cite{arlot2010}."
+        + "\n\n"
+    )
     parts.append(latex_table(
         ["Scheme", "Internal key", "Description"],
         [[label, key, CV_SCHEME_DESCRIPTIONS.get(key, "")] for key, label in CV_SCHEME_LABELS.items()],
@@ -481,6 +495,10 @@ def build_user_guide_tex() -> str:
         for metric_key, desc in METRIC_DESCRIPTIONS.items():
             metric_rows.append([metric_key.replace("_", " ").title(), metric_key, "", desc.get("description", "")])
     parts.append(latex_table(["Metric", "Internal key", "Preferred direction", "Description"], metric_rows, ["0.17\\textwidth", "0.18\\textwidth", "0.20\\textwidth", "0.37\\textwidth"]))
+    parts.append(
+        r"For additional background on common error metrics, scale-dependent accuracy measures, and adjusted \(R^2\), see references \cite{hodson2022,hyndman2006,miles2014}."
+        + "\n\n"
+    )
     parts.append(
         r"For AIC\textsubscript{c}, a commonly cited rule of thumb is to prefer AIC\textsubscript{c} over AIC when the ratio of fitted observations to estimated parameters is small, such as \(n/k < 40\), where \(n\) is the number of fitted observations and \(k\) is the number of estimated model parameters \cite{burnham2002}." + "\n\n"
     )

@@ -132,8 +132,30 @@ $('#upload-form').on('submit', function(e) {
     }
 });
 
+
+function updateCrossValidationSettingState() {
+    const scheme = $('#cv_scheme').val();
+    const controls = {
+        nSplits: $('#cv_n_splits'),
+        testSize: $('#cv_test_size'),
+        randomState: $('#cv_random_state')
+    };
+
+    function setFieldState(field, enabled) {
+        field.prop('disabled', !enabled);
+        field.closest('.advanced-field').toggleClass('advanced-field-disabled', !enabled);
+    }
+
+    setFieldState(controls.nSplits, scheme === 'shuffle_split' || scheme === 'kfold');
+    setFieldState(controls.testSize, scheme === 'shuffle_split');
+    setFieldState(controls.randomState, scheme === 'shuffle_split' || scheme === 'kfold');
+}
+
 // Modal functionality
 $(document).ready(function() {
+    updateCrossValidationSettingState();
+    $('#cv_scheme').on('change', updateCrossValidationSettingState);
+
     // Modal content mapping
     const modalContent = {
         'data-help': 'data-help-content',

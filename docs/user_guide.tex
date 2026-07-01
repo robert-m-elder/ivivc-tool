@@ -4,14 +4,16 @@
 
 Establishing an in vitro-in vivo correlation (IVIVC) can support the evaluation of medical devices that include absorbable polymers by relating in vivo changes in material properties over time to corresponding in vitro test results, such as degradation profiles. IVIVCs may help evaluate manufacturing or material changes, support predictions of in vivo performance when modifying an existing device design, and reduce reliance on animal studies during preclinical development. This tool is intended to facilitate IVIVC development. The user supplies paired in vitro and in vivo fitting data, and may optionally supply an in vitro prediction dataset. The app applies selected preprocessing steps, fits and compares multiple correlation approaches and model families, evaluates selected performance metrics and cross-validation results, generates fitting and prediction plots, and produces report-ready summaries that can be reviewed and incorporated into external documentation.
 
+For general background on credibility assessment and reporting of computational modeling studies in medical device submissions, see FDA guidance on computational modeling credibility and reporting \cite{fda_modeling_guidance,fda_reporting_guidance}.
+
 \section{What the app does}
 
 \begin{itemize}
-\item Apply selected normalization, scaling, and interpolation options to prepare fitting and prediction data.
-\item Fit user-selected IVIVC approaches and model families to paired in vitro and in vivo data.
-\item Calculate selected goodness-of-fit, model-comparison, and cross-validation metrics.
-\item Generate fitting, comparison, and prediction plots with uncertainty displays where supported.
-\item Create report-ready HTML and editable Word summaries for user-selected final models or methods.
+\item Applies selected normalization, scaling, and interpolation options to prepare fitting and prediction data.
+\item Fits user-selected IVIVC approaches and model families to paired in vitro and in vivo data.
+\item Calculates selected goodness-of-fit, model-comparison, and cross-validation metrics.
+\item Generates fitting, comparison, and prediction plots with uncertainty displays where supported.
+\item Creates summaries for user-selected final approaches or models.
 \end{itemize}
 
 \section{Inputs}
@@ -111,6 +113,10 @@ Stretched Exponential & Approach 2 & \(y = a e^{b x^{c}}\) & Exponential relatio
 \bottomrule
 \end{longtable}
 
+\textbf{Mass-loss model source notes}
+
+The surface-erosion mass-loss form is based on geometry-controlled surface erosion concepts such as Hopfenberg's erodible slab, cylinder, and sphere model \cite{hopfenberg1976}. The one-phase mass-loss model uses a logistic/sigmoidal transition to represent a delayed loss phase; logistic and related sigmoidal models are reviewed by Tsoularis and Wallace \cite{tsoularis2002}. The two-phase mass-loss model combines an early burst-like loss term with a delayed sigmoidal loss phase; burst and delayed/multiphase behavior in degradable polymer systems is discussed in the polymer erosion and PLGA release literature \cite{gopferich1997,fredenberg2011,allison2008}. The Gompertz mass-loss model uses a modified Gompertz-style sigmoidal form with lag and maximum-rate parameters \cite{zwietering1990}.
+
 \section{Preprocessing options}
 
 \subsection{Normalization}
@@ -166,6 +172,8 @@ Densified interpolation & alternative & Creates additional linearly spaced point
 
 Relative model evidence compares candidate parametric models fitted to the same dataset under the same preprocessing settings and IVIVC approach. The evidence table is based only on the information-criterion metrics selected by the user: AIC, AIC\textsubscript{c}, and/or BIC. These criteria are relative; their absolute values are not interpreted directly, and negative values are allowed. Table definitions: n is the number of fitted observations; k is the number of fitted model parameters; Delta is the difference between a model's criterion value and the lowest value in the displayed candidate set; weight is the normalized relative support for that model under the criterion; and evidence ratio compares the highest weight in the set with the model's weight. Delta values near 0 indicate similar relative support; larger delta values indicate lower support relative to the leading candidate under that criterion. Similar relative evidence does not mean the models are scientifically equivalent. Final model selection should also consider prediction error, cross-validation behavior, residual patterns, parameter uncertainty, model simplicity, and biological or degradation-mechanism plausibility. The app reports these summaries to support user review. It does not select, recommend, or validate a model.
 
+For additional background on information criteria, model-selection evidence, and evidence-weight interpretation, see Akaike, Schwarz, Burnham and Anderson, Kass and Raftery, and Wagenmakers and Farrell \cite{akaike1974,schwarz1978,burnham2002,kass1995,wagenmakers2004}.
+
 \begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.24\textwidth}>{\raggedright\arraybackslash}p{0.68\textwidth}@{}}
 \toprule
 \textbf{Evidence summary} & \textbf{Interpretation} \\
@@ -187,6 +195,8 @@ Interpretation badge & Neutral rule-of-thumb label based on the displayed delta 
 Cross-validation provides an approximate check of how a fitted model performs on held-out data. It is most useful when there are enough observations to fit the model repeatedly while leaving some observations out for evaluation.
 
 The available schemes are Shuffle split, K-fold, Leave-one-out, and None. Shuffle split uses repeated random holdout sets, K-fold uses systematic fold-based holdouts, Leave-one-out holds out one observation at a time, and None disables cross-validation. For small IVIVC datasets, cross-validation summaries should be interpreted as exploratory diagnostics rather than definitive validation results.
+
+For background on cross-validation procedures and their use in model assessment and selection, see Arlot and Celisse \cite{arlot2010}.
 
 \begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.20\textwidth}>{\raggedright\arraybackslash}p{0.20\textwidth}>{\raggedright\arraybackslash}p{0.52\textwidth}@{}}
 \toprule
@@ -265,6 +275,8 @@ AIC\textsubscript{c} & aicc & Lower is better & Corrected Akaike Information Cri
 BIC & bic & Lower is better & Bayesian Information Criterion. BIC balances how well a model fits the data with model complexity, usually applying a stronger penalty for additional parameters than AIC. Among comparable fitted models, a lower BIC value generally indicates a better model representation without unnecessary complexity. Absolute BIC values, including negative values, should not be interpreted as standalone quality grades. \\
 \bottomrule
 \end{longtable}
+
+For additional background on common error metrics, scale-dependent accuracy measures, and adjusted \(R^2\), see Hodson, Hyndman and Koehler, and Miles \cite{hodson2022,hyndman2006,miles2014}.
 
 For AIC\textsubscript{c}, a commonly cited rule of thumb is to prefer AIC\textsubscript{c} over AIC when the ratio of fitted observations to estimated parameters is small, such as \(n/k < 40\), where \(n\) is the number of fitted observations and \(k\) is the number of estimated model parameters \cite{burnham2002}.
 
