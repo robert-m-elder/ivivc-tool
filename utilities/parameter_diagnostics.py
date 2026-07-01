@@ -9,8 +9,11 @@ RSE_ELEVATED_THRESHOLD = 50.0
 RSE_HIGH_THRESHOLD = 100.0
 CORRELATION_ELEVATED_THRESHOLD = 0.90
 CORRELATION_HIGH_THRESHOLD = 0.95
-CONDITION_ELEVATED_THRESHOLD = 1e8
-CONDITION_HIGH_THRESHOLD = 1e12
+# Stability is checked on the parameter-correlation matrix rather than the
+# raw covariance matrix so the diagnostic is less sensitive to parameter units
+# or response-scale magnitude.
+CORRELATION_CONDITION_ELEVATED_THRESHOLD = 100.0
+CORRELATION_CONDITION_HIGH_THRESHOLD = 1000.0
 
 
 _BADGE_CLASS_BY_LEVEL = {
@@ -100,35 +103,62 @@ def _relative_standard_errors(params, covariance, param_names):
     return rse_values
 
 
+def _parameter_correlation_matrix(covariance):
+    diagonal = np.diag(covariance)
+    positive_variance = diagonal > 0
+    if int(np.sum(positive_variance)) < 2:
+        return None, None
+
+    indices = np.where(positive_variance)[0]
+    subset_covariance = covariance[np.ix_(indices, indices)]
+    standard_errors = np.sqrt(np.diag(subset_covariance))
+    denominator = np.outer(standard_errors, standard_errors)
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        correlation = np.divide(
+            subset_covariance,
+            denominator,
+            out=np.full_like(subset_covariance, np.nan, dtype=float),
+            where=denominator > 0,
+        )
+
+    if not np.all(np.isfinite(correlation)):
+        return None, None
+
+    correlation = 0.5 * (correlation + correlation.T)
+    np.fill_diagonal(correlation, 1.0)
+    return correlation, indices
+
+
 def _largest_parameter_correlation(covariance, param_names):
     if len(param_names) < 2:
         return None
 
-    standard_errors = np.sqrt(np.diag(covariance))
-    denominator = np.outer(standard_errors, standard_errors)
-    with np.errstate(divide='ignore', invalid='ignore'):
-        correlation = np.divide(
-            covariance,
-            denominator,
-            out=np.full_like(covariance, np.nan, dtype=float),
-            where=denominator > 0,
-        )
+    correlation, indices = _parameter_correlation_matrix(covariance)
+    if correlation is None:
+        return None
 
     candidates = []
-    for i in range(len(param_names)):
-        for j in range(i + 1, len(param_names)):
+    for i in range(correlation.shape[0]):
+        for j in range(i + 1, correlation.shape[1]):
             value = correlation[i, j]
             if np.isfinite(value):
-                candidates.append((abs(float(value)), float(value), param_names[i], param_names[j]))
+                first_name = param_names[int(indices[i])]
+                second_name = param_names[int(indices[j])]
+                candidates.append((abs(float(value)), float(value), first_name, second_name))
 
     if not candidates:
         return None
     return max(candidates, key=lambda item: item[0])
 
 
-def _covariance_condition_number(covariance):
+def _parameter_correlation_condition_number(covariance):
+    correlation, _indices = _parameter_correlation_matrix(covariance)
+    if correlation is None:
+        return 1.0
+
     try:
-        return float(np.linalg.cond(covariance))
+        return float(np.linalg.cond(correlation))
     except Exception:
         return np.inf
 
@@ -166,14 +196,14 @@ def build_parameter_diagnostics_html(params, pcov):
             f'{escape(_format_percent(largest_rse[1]))}.'
         )
 
-    condition_number = _covariance_condition_number(covariance)
+    correlation_condition_number = _parameter_correlation_condition_number(covariance)
     has_elevated_stability = bool(
-        not np.isfinite(condition_number)
-        or condition_number >= CONDITION_ELEVATED_THRESHOLD
+        not np.isfinite(correlation_condition_number)
+        or correlation_condition_number >= CORRELATION_CONDITION_ELEVATED_THRESHOLD
     )
     has_high_stability = bool(
-        not np.isfinite(condition_number)
-        or condition_number >= CONDITION_HIGH_THRESHOLD
+        not np.isfinite(correlation_condition_number)
+        or correlation_condition_number >= CORRELATION_CONDITION_HIGH_THRESHOLD
     )
     if has_high_stability:
         badges.append(_badge('Parameter stability caution', 'warning'))
