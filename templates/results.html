@@ -383,6 +383,7 @@
                             <h4>Fitted parameter diagnostics</h4>
                             {{ model_results.parameter_diagnostics_html | safe }}
                             <h4>Goodness of fit and validation</h4>
+                            {{ goodness_validation_table_html | safe }}
                             {{ model_results.stats_table | safe }}
                             {% set approach_evidence = evidence_tables.get(option.approach_id, {}) %}
                             {% if approach_evidence.get('fit') %}
@@ -420,6 +421,7 @@
                                 <p class="prediction-skip-reason"><strong>Prediction method not performed:</strong> {{ model_results.prediction_skip_reasons.tau_ratio }}</p>
                             {% endif %}
                             <h4>Goodness of fit and validation</h4>
+                            {{ goodness_validation_table_html | safe }}
                             <h5>In vitro data</h5>
                             {{ model_results.stats_table[0] | safe }}
                             <h5>In vivo data</h5>
