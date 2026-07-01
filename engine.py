@@ -197,6 +197,13 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                     'approach': approaches[approach_id]['display_name']
                 })
                 residuals = y - y_pred
+                residual_plot = create_residual_plotly(
+                    x,
+                    residuals,
+                    f"Residuals for {models[model_name]['display_name']} Fit",
+                    x_axis_title='Time (In Vitro Data)',
+                    marker_color='black',
+                )
                 results[model_key] = {
                     'params': model_result['params'],
                     'uparams': upopt,
@@ -212,6 +219,8 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                         }
                     },
                     'stats_table': stats_table,
+                    'residual_summary_table': create_residual_summary_table(residuals),
+                    'residual_plot': residual_plot,
                     'parameter_diagnostics_html': build_parameter_diagnostics_html(model_result['params'], model_result['pcov']),
                     'plot': plot_image
                 }
@@ -290,6 +299,20 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                 })
                 residuals1 = y1 - y_pred1
                 residuals2 = y2 - y_pred2
+                residual_plot1 = create_residual_plotly(
+                    x1,
+                    residuals1,
+                    f"In Vitro Residuals for {models[model_name]['display_name']} Fit",
+                    x_axis_title='Time',
+                    marker_color=colors['in_vitro'],
+                )
+                residual_plot2 = create_residual_plotly(
+                    x2,
+                    residuals2,
+                    f"In Vivo Residuals for {models[model_name]['display_name']} Fit",
+                    x_axis_title='Time',
+                    marker_color=colors['in_vivo'],
+                )
                 results[model_key] = {
                     'params': [model_result1['params'],model_result2['params']],
                     'uparams': [upopt1,upopt2],
@@ -311,6 +334,11 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                         }
                     },
                     'stats_table': [stats_table1, stats_table2],
+                    'residual_summary_table': [
+                        create_residual_summary_table(residuals1),
+                        create_residual_summary_table(residuals2),
+                    ],
+                    'residual_plot': [residual_plot1, residual_plot2],
                     'parameter_diagnostics_html': [
                         build_parameter_diagnostics_html(model_result1['params'], pcov1),
                         build_parameter_diagnostics_html(model_result2['params'], pcov2)
@@ -503,6 +531,104 @@ CV_RATIO_MODERATE_THRESHOLD = 1.25
 CV_RATIO_SUBSTANTIAL_THRESHOLD = 2.0
 
 CV_SUMMARY_EXCLUDED_METRICS = CV_COMPARISON_EXCLUDED_METRICS
+
+
+def _format_residual_metric(value):
+    value = _finite_float(value)
+    return value if np.isfinite(value) else np.nan
+
+
+def create_residual_summary_table(residuals):
+    """Return a compact residual-summary table for fitted residuals.
+
+    Residuals are defined consistently throughout the app as observed minus
+    predicted. The table intentionally uses simple, plain-language summaries
+    that are easy to pair with a residual-vs-x plot.
+    """
+    residuals = np.asarray(residuals, dtype=float)
+    residuals = residuals[np.isfinite(residuals)]
+
+    if residuals.size == 0:
+        return '<p class="evidence-note">Residual summary is not available because no finite residuals were calculated.</p>'
+
+    rows = [
+        {
+            'Metric': 'Mean residual (bias)',
+            'Value': _format_residual_metric(np.mean(residuals)),
+            'Plain-language interpretation': 'Average signed error. Positive values indicate underprediction; negative values indicate overprediction.',
+        },
+        {
+            'Metric': 'Mean absolute residual',
+            'Value': _format_residual_metric(np.mean(np.abs(residuals))),
+            'Plain-language interpretation': 'Average error size, ignoring direction.',
+        },
+        {
+            'Metric': 'Maximum absolute residual',
+            'Value': _format_residual_metric(np.max(np.abs(residuals))),
+            'Plain-language interpretation': 'Largest single fitted-data error.',
+        },
+    ]
+    return pd.DataFrame(rows).to_html(
+        classes='table table-striped residual-summary-table',
+        index=False,
+        float_format=lambda x: f'{x:.4f}',
+        na_rep='N/A',
+        escape=False,
+    )
+
+
+def create_residual_plotly(x, residuals, title, x_axis_title='Fitting x-axis', marker_color='black'):
+    """Create a residual-vs-x Plotly figure and source-data table."""
+    x = np.asarray(x, dtype=float)
+    residuals = np.asarray(residuals, dtype=float)
+    mask = np.isfinite(x) & np.isfinite(residuals)
+    x = x[mask]
+    residuals = residuals[mask]
+
+    fig = go.Figure()
+    if x.size > 0:
+        order = np.argsort(x)
+        x_plot = x[order]
+        residual_plot = residuals[order]
+        fig.add_trace(go.Scatter(
+            x=x_plot,
+            y=residual_plot,
+            mode='markers',
+            name='Residuals',
+            marker=dict(color=marker_color, size=15, line=dict(color='white', width=2)),
+        ))
+        x_min, x_max = float(np.min(x_plot)), float(np.max(x_plot))
+        if x_min == x_max:
+            x_min -= 0.5
+            x_max += 0.5
+        fig.add_trace(go.Scatter(
+            x=[x_min, x_max],
+            y=[0, 0],
+            mode='lines',
+            name='Zero residual',
+            line=dict(color='black', dash='dash', width=2),
+            hoverinfo='skip',
+        ))
+
+    fig.update_layout(
+        template='plotly_white',
+        autosize=True,
+        title=title,
+        xaxis_title=x_axis_title,
+        yaxis_title='Residual (observed - predicted)',
+        legend=dict(font=dict(size=18)),
+        margin=dict(l=30, r=30, t=30, b=30),
+        font=dict(family='Arial, sans-serif', size=14, color='black'),
+        xaxis=dict(showline=True, linewidth=2, linecolor='#EBF0F8', mirror=True),
+        yaxis=dict(showline=True, linewidth=2, linecolor='#EBF0F8', mirror=True, zeroline=True),
+    )
+    fig.update_xaxes(title_font=dict(size=20), tickfont=dict(size=18))
+    fig.update_yaxes(title_font=dict(size=20), tickfont=dict(size=18))
+
+    table_html = extract_plotly_data_for_table(fig)
+    config = {'responsive': True, 'displaylogo': False}
+    plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
+    return {'plot': plot_html, 'table_html': table_html}
 
 _CV_BADGE_CLASS_BY_LEVEL = {
     'ok': 'evidence-badge-comparable',

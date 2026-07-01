@@ -91,6 +91,13 @@ The app also displays cross-validation comparison badges as interpretive aids. T
 The app does not include adjusted $R^2$ or information criteria (AIC, AIC\textsubscript{c}, and BIC) in cross-validation comparison tables. Adjusted $R^2$ and information criteria depend on the number of observations or fitted parameters, and the final model and cross-validation models are fitted to different subsets of the data. Use adjusted $R^2$ and information criteria for fitted-model review and relative evidence among comparable fitted models, and use eligible cross-validation metrics to evaluate held-out predictive behavior.
 
 
+\subsection{Interpreting residual plots}
+
+Residuals (or prediction errors) are calculated as observed minus predicted values. The app plots residuals against the fitting x-axis and reports simple residual summaries: mean residual, mean absolute residual, and maximum absolute residual.
+
+Residual plots should be reviewed for obvious patterns. Points scattered around zero are more consistent with an appropriate model form, although they do not prove that the model is valid. A clear trend, curvature, clustering, or mostly positive or mostly negative residuals may indicate bias or that the selected model form may not be appropriate for the data. The mean residual summarizes average signed bias, the mean absolute residual summarizes the average error size, and the maximum absolute residual identifies the largest fitted-data error.
+
+
 \subsection{Interpreting parameter uncertainty}
 
 Parameter estimates should be reviewed for scientific plausibility and stability. Large standard errors, wide confidence intervals, unavailable uncertainty estimates, or highly correlated parameters accompanied by other uncertainty diagnostics may indicate that the data do not strongly identify the model parameters.

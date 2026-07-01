@@ -389,6 +389,12 @@
                             <h4>Goodness of fit and validation</h4>
                             {{ goodness_validation_table_html | safe }}
                             {{ model_results.stats_table | safe }}
+                            <h4>Residual diagnostics</h4>
+                            {{ residual_diagnostics_html | safe }}
+                            {{ model_results.residual_summary_table | safe }}
+                            <div class="report-plot-placeholder" data-plot-source="plot-residual-{{ option.model_dom_id }}">
+                                <p class="plot-unavailable">Residual plot is not available.</p>
+                            </div>
                             {% set approach_evidence = evidence_tables.get(option.approach_id, {}) %}
                             {% if approach_evidence.get('fit') %}
                                 <h4>Relative evidence context</h4>
@@ -430,6 +436,18 @@
                             {{ model_results.stats_table[0] | safe }}
                             <h5>In vivo data</h5>
                             {{ model_results.stats_table[1] | safe }}
+                            <h4>Residual diagnostics</h4>
+                            {{ residual_diagnostics_html | safe }}
+                            <h5>In vitro residuals</h5>
+                            {{ model_results.residual_summary_table[0] | safe }}
+                            <div class="report-plot-placeholder" data-plot-source="plot-residual-{{ option.model_dom_id }}-in-vitro">
+                                <p class="plot-unavailable">In vitro residual plot is not available.</p>
+                            </div>
+                            <h5>In vivo residuals</h5>
+                            {{ model_results.residual_summary_table[1] | safe }}
+                            <div class="report-plot-placeholder" data-plot-source="plot-residual-{{ option.model_dom_id }}-in-vivo">
+                                <p class="plot-unavailable">In vivo residual plot is not available.</p>
+                            </div>
                             {% set approach_evidence = evidence_tables.get(option.approach_id, {}) %}
                             {% if approach_evidence %}
                                 <h4>Relative evidence context</h4>
@@ -504,6 +522,20 @@
                                     {{ model_results.parameter_diagnostics_html | safe }}
                                     <h4>Goodness of fit</h4>
                                     {{ model_results.stats_table | safe }}
+                                    <h4>Residual diagnostics</h4>
+                                    {{ residual_diagnostics_html | safe }}
+                                    {{ model_results.residual_summary_table | safe }}
+                                    <div id="plot-residual-{{ model_key|replace(':', '-') }}" class="plot-container report-source-plot">
+                                        {{ model_results.residual_plot.plot | safe }}
+                                    </div>
+                                    <div class="custom-button-container">
+                                        <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach1-{{ model_name }}-residual-table" style="text-decoration: none;">
+                                            <span>Show Data Table</span>
+                                        </button>
+                                    </div>
+                                    <div id="approach1-{{ model_name }}-residual-table-container" class="data-table-container" style="display: none;">
+                                        {{ model_results.residual_plot.table_html | safe }}
+                                    </div>
                                 {% endif %}
                             </div>
                         {% endif %}
@@ -542,6 +574,20 @@
                                     {% endif %}
                                     <h4>Goodness of Fit</h4>
                                     {{ model_results.stats_table[0] | safe }}
+                                    <h4>Residual diagnostics</h4>
+                                    {{ residual_diagnostics_html | safe }}
+                                    {{ model_results.residual_summary_table[0] | safe }}
+                                    <div id="plot-residual-{{ model_key|replace(':', '-') }}-in-vitro" class="plot-container report-source-plot">
+                                        {{ model_results.residual_plot[0].plot | safe }}
+                                    </div>
+                                    <div class="custom-button-container">
+                                        <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach2-{{ model_name }}-residual-table-in-vitro" style="text-decoration: none;">
+                                            <span>Show Data Table</span>
+                                        </button>
+                                    </div>
+                                    <div id="approach2-{{ model_name }}-residual-table-in-vitro-container" class="data-table-container" style="display: none;">
+                                        {{ model_results.residual_plot[0].table_html | safe }}
+                                    </div>
                                     <h4>In Vivo Data</h4>
                                     <h4>Model parameters</h4>
 {% for param, value in model_results.uparams[1].items() %}
@@ -557,6 +603,20 @@
                                     {% endif %}
                                     <h4>Goodness of Fit</h4>
                                     {{ model_results.stats_table[1] | safe }}
+                                    <h4>Residual diagnostics</h4>
+                                    {{ residual_diagnostics_html | safe }}
+                                    {{ model_results.residual_summary_table[1] | safe }}
+                                    <div id="plot-residual-{{ model_key|replace(':', '-') }}-in-vivo" class="plot-container report-source-plot">
+                                        {{ model_results.residual_plot[1].plot | safe }}
+                                    </div>
+                                    <div class="custom-button-container">
+                                        <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach2-{{ model_name }}-residual-table-in-vivo" style="text-decoration: none;">
+                                            <span>Show Data Table</span>
+                                        </button>
+                                    </div>
+                                    <div id="approach2-{{ model_name }}-residual-table-in-vivo-container" class="data-table-container" style="display: none;">
+                                        {{ model_results.residual_plot[1].table_html | safe }}
+                                    </div>
                                 {% endif %}
                             </div>
                         {% endif %}
@@ -742,6 +802,7 @@
                 <li><strong>Model parameters:</strong> coefficients reported as estimate &plusmn; standard error.</li>
                 <li><strong>Fitted parameter diagnostics:</strong> brief badges that flag parameter uncertainty, coupling, or identifiability cautions.</li>
                 <li><strong>Goodness of fit:</strong> selected fitted-data metrics, eligible cross-validation metrics, fit/CV ratios, and CV comparison badges.</li>
+                <li><strong>Residual diagnostics:</strong> residual-vs-x plot and simple residual summaries to help identify bias or patterns.</li>
             </ul>
             <h4>Uncertainty and fitting plot bands</h4>
             {{ approach_descriptions['approach1']['fit_uncertainty_html'] | safe }}
@@ -757,6 +818,7 @@
                 <li><strong>Fitted parameter diagnostics:</strong> brief badges shown separately for the in vitro and in vivo fits.</li>
                 <li><strong>Time constant:</strong> fitted characteristic time scale where available.</li>
                 <li><strong>Goodness of fit:</strong> selected fitted-data metrics, eligible cross-validation metrics, fit/CV ratios, and CV comparison badges for each dataset.</li>
+                <li><strong>Residual diagnostics:</strong> residual-vs-time plots and simple residual summaries shown separately for the in vitro and in vivo fits.</li>
             </ul>
             <h4>Uncertainty and fitting plot bands</h4>
             {{ approach_descriptions['approach2']['fit_uncertainty_html'] | safe }}
