@@ -1128,6 +1128,15 @@ body.modal-open {
     width: 300px;
 }
 
+.settings-table .settings-section-row th {
+    width: auto;
+    background-color: #eef5ff;
+    border-top: 2px solid #007CBA;
+    color: #2c3e50;
+    font-weight: 700;
+    text-align: left;
+}
+
 .final-report-selector {
     margin: 20px 0;
     padding: 15px;

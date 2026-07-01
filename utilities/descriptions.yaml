@@ -10,11 +10,11 @@ tool:
   purpose_text: |
     Establishing an in vitro-in vivo correlation (IVIVC) can support the evaluation of medical devices that include absorbable polymers by relating in vivo changes in material properties over time to corresponding in vitro test results, such as degradation profiles. IVIVCs may help evaluate manufacturing or material changes, support predictions of in vivo performance when modifying an existing device design, and reduce reliance on animal studies during preclinical development. This tool is intended to facilitate IVIVC development. The user supplies paired in vitro and in vivo fitting data, and may optionally supply an in vitro prediction dataset. The app applies selected preprocessing steps, fits and compares multiple correlation approaches and model families, evaluates selected performance metrics and cross-validation results, generates fitting and prediction plots, and produces report-ready summaries that can be reviewed and incorporated into external documentation.
   capability_summary:
-  - Apply selected normalization, scaling, and interpolation options to prepare fitting and prediction data.
-  - Fit user-selected IVIVC approaches and model families to paired in vitro and in vivo data.
-  - Calculate selected goodness-of-fit, model-comparison, and cross-validation metrics.
-  - Generate fitting, comparison, and prediction plots with uncertainty displays where supported.
-  - Create report-ready HTML and editable Word summaries for user-selected final models or methods.
+  - Applies selected normalization, scaling, and interpolation options to prepare fitting and prediction data.
+  - Fits user-selected IVIVC approaches and model families to paired in vitro and in vivo data.
+  - Calculates selected goodness-of-fit, model-comparison, and cross-validation metrics.
+  - Generates fitting, comparison, and prediction plots with uncertainty displays where supported.
+  - Creates summaries for user-selected final approaches or models.
 approaches:
   approach1:
     title: 'Approach 1: Direct Correlation'
@@ -91,7 +91,7 @@ cross_validation_description_html: |-
   <p>Cross-validation provides an approximate check of how a fitted model performs on held-out data. It is most useful when there are enough observations to fit the model repeatedly while leaving some observations out for evaluation.</p>
   <p>The available schemes are Shuffle split, K-fold, Leave-one-out, and None. Shuffle split uses repeated random holdout sets, K-fold uses systematic fold-based holdouts, Leave-one-out holds out one observation at a time, and None disables cross-validation. For small IVIVC datasets, cross-validation summaries should be interpreted as exploratory diagnostics rather than definitive validation results.</p>
 cross_validation_summary_html: |-
-  <p>The Cross-Validation Summary table reports the mean held-out score for each selected eligible metric where cross-validation was run successfully. For each metric, <strong>CV [metric]</strong> is the mean cross-validation score and <strong>Ratio [metric]</strong> is the fitted-model score divided by the cross-validation score. For models with consistent fitted and cross-validation performance, the fit/CV ratio is expected to be near 1. Because metric direction matters, the app evaluates whether CV performance is worse using the metric's preferred direction. As interpretive aids only, CV performance within a factor of 1.25 of the final model is shown as similar, performance worse by 1.25 to 2-fold is shown as moderately worse, and performance worse by more than 2-fold is shown as substantially worse. These badges are not statistical acceptance criteria. Information criteria (AIC, AICc, BIC) are excluded from this table because the final model and cross-validation models are fitted to different (sub)sets of the data, so they cannot be compared.</p>
+  <p>The Cross-Validation Summary table reports mean held-out scores for selected eligible metrics where cross-validation was run successfully. Ratio columns show the fitted-model score divided by the cross-validation score for the same metric, and the CV comparison badge summarizes whether held-out performance may warrant closer review. Adjusted R² and information criteria (AIC, AICc, BIC) are excluded because they are not directly comparable held-out prediction scores. Detailed interpretation guidance is provided in the user guide.</p>
 parameter_diagnostics_comparison_html: |-
   <p>The Fitted Parameter Diagnostics table summarizes the diagnostic badges shown with each individual model fit. These badges help identify models that may warrant closer review for large parameter uncertainty, parameter coupling, or parameter stability concerns. Detailed explanations can be found in the individual fitting results and in the user guide.</p>
 grid_search_description_html: |-
@@ -175,13 +175,12 @@ modal_help:
       <p>For each selected model, the app evaluates the candidate starting values and uses the best candidate as the starting point for the final curve fit. If fitting fails or appears unstable, consider increasing the number of random starts, adjusting the parameter bounds, changing the random seed, or reviewing whether the selected model is appropriate for the data.</p>
   results:
     model_comparison_html: |-
-      <p>This section summarizes how each fitted model performed under the user-selected metrics, cross-validation summary tables, and, where applicable, Relative Model Evidence tables. Use these results together with the fitting plots, prediction plots where available, parameter uncertainty, residual behavior, and scientific expectations for the system.</p>
-      <p>The metric definitions and better/worse direction are shown in the Model Comparison tab itself, so this help box intentionally provides only a high-level interpretation guide.</p>
+      <p>This tab provides side-by-side summaries of the fitted candidate models. It includes selected metric definitions, performance metrics, cross-validation summaries, fitted parameter diagnostic badges, and Relative Model Evidence where information criteria are selected.</p>
+      <p>Use the comparison tables together with the individual fitting plots, parameter diagnostics, residual behavior, cross-validation behavior, and scientific expectations for the system.</p>
       <ul>
-        <li>Error metrics generally summarize the size of residuals.</li>
-        <li>R²-type metrics summarize explained response variability.</li>
-        <li>AIC/AICc/BIC-type metrics support relative comparison among candidate parametric models fitted to the same dataset under comparable assumptions.</li>
-        <li>Cross-validation scores summarize held-out performance from the selected CV scheme. Ratio columns show fitted score divided by CV score for the same metric.</li>
-        <li>Delta values, evidence weights, and evidence ratios are relative summaries; they do not prove that a model is correct, mechanistic, predictive outside the fitted range, or suitable for a regulatory submission.</li>
+        <li><strong>Performance Metrics:</strong> fitted-data metrics selected by the user.</li>
+        <li><strong>Cross-Validation Summary:</strong> held-out scores and fit/CV ratios for eligible prediction metrics.</li>
+        <li><strong>Fitted Parameter Diagnostics:</strong> compact badges that summarize parameter uncertainty, coupling, and stability checks from the individual model fits.</li>
+        <li><strong>Relative Model Evidence:</strong> AIC/AICc/BIC-based relative summaries for comparable parametric models, when selected.</li>
       </ul>
-      <p>The app does not automatically choose a model. The user should review the full set of outputs and select the model or method that is scientifically justified for the intended use.</p>
+      <p>The app does not automatically choose a model. The user should review the full set of outputs and select the approach or model that is scientifically justified for the intended use.</p>

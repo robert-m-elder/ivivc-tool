@@ -139,28 +139,49 @@ def format_metric_description_rows(metrics, selected_metrics=None):
 
 
 def format_analysis_config_rows(config):
-    """Return display-ready (label, value) rows for results and reports."""
+    """Return display-ready analysis settings rows with section headers.
+
+    Cross-validation rows are limited to settings relevant to the selected
+    scheme. Grid-search settings are always shown because they control
+    parametric model initialization.
+    """
     scheme = config.get('cv_scheme', 'shuffle_split')
     rows = []
 
+    def add_section(label):
+        rows.append({'kind': 'section', 'label': label, 'value': ''})
+
+    def add_setting(key, value=None):
+        if value is None:
+            value = config.get(key, '')
+        if key == 'cv_scheme':
+            value = CV_SCHEME_LABELS.get(value, value)
+        elif key == 'grid_search_num_cores' and value in (None, ''):
+            value = 'Auto'
+        rows.append({
+            'kind': 'setting',
+            'label': ANALYSIS_CONFIG_LABELS[key],
+            'value': value,
+        })
+
+    add_section('Cross-validation settings')
+    add_setting('cv_scheme', scheme)
+    if scheme == 'shuffle_split':
+        add_setting('cv_n_splits')
+        add_setting('cv_test_size')
+        add_setting('cv_random_state')
+    elif scheme == 'kfold':
+        add_setting('cv_n_splits')
+        add_setting('cv_random_state')
+
+    add_section('Grid-search settings')
     for key in [
-        'cv_scheme',
-        'cv_n_splits',
-        'cv_test_size',
-        'cv_random_state',
         'grid_search_num_points',
         'grid_search_num_cores',
         'grid_search_param_min',
         'grid_search_param_max',
         'grid_search_random_state',
     ]:
-        value = config.get(key, '')
-        if key == 'cv_scheme':
-            value = CV_SCHEME_LABELS.get(value, value)
-        elif key == 'cv_test_size' and scheme != 'shuffle_split':
-            value = 'N/A'
-        elif key == 'grid_search_num_cores' and value in (None, ''):
-            value = 'Auto'
-        rows.append((ANALYSIS_CONFIG_LABELS[key], value))
+        add_setting(key)
 
     return rows

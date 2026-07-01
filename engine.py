@@ -53,7 +53,7 @@ colors = {
 }
 
 
-CV_COMPARISON_EXCLUDED_METRICS = {'aic', 'aicc', 'bic'}
+CV_COMPARISON_EXCLUDED_METRICS = {'adjusted_r_squared', 'aic', 'aicc', 'bic'}
 
 
 def _goodness_cv_comparison_table(gof, cvs_mean):
@@ -67,8 +67,8 @@ def _goodness_cv_comparison_table(gof, cvs_mean):
         return (
             '<p class="evidence-note">'
             'Goodness-of-fit and cross-validation comparison is not available '
-            'for the selected metrics because AIC, AICc, and BIC are information '
-            'criteria rather than directly comparable held-out prediction scores.'
+            'for the selected metrics because adjusted R² and information criteria '
+            '(AIC, AICc, and BIC) are not directly comparable held-out prediction scores.'
             '</p>'
         )
 
@@ -621,7 +621,7 @@ def _cross_validation_row(model_display_name, stats_row, selected_metrics, datas
 
 def _cross_validation_table(rows):
     if not rows:
-        return '<p class="evidence-note">Cross-validation summary is not available because cross-validation was not run or did not produce finite values for the selected eligible metrics.</p>'
+        return '<p class="evidence-note">Cross-validation summary is not available because cross-validation was not run or did not produce finite values for the selected eligible metrics. Adjusted R² and information criteria (AIC, AICc, BIC) are excluded from this table.</p>'
     df = pd.DataFrame(rows)
     return df.to_html(classes='table table-striped cv-summary-table', index=False, float_format=lambda x: f'{x:.4f}', na_rep='N/A', escape=False)
 

@@ -87,11 +87,17 @@
             <h3>Analysis Settings:</h3>
             <table class="settings-table">
                 <tbody>
-                    {% for label, value in analysis_config_rows %}
-                    <tr>
-                        <th>{{ label }}</th>
-                        <td>{{ value }}</td>
+                    {% for row in analysis_config_rows %}
+                    {% if row.kind == 'section' %}
+                    <tr class="settings-section-row">
+                        <th colspan="2">{{ row.label }}</th>
                     </tr>
+                    {% else %}
+                    <tr>
+                        <th>{{ row.label }}</th>
+                        <td>{{ row.value }}</td>
+                    </tr>
+                    {% endif %}
                     {% endfor %}
                 </tbody>
             </table>
@@ -291,11 +297,17 @@
                             <h4>Analysis settings</h4>
                             <table class="settings-table">
                                 <tbody>
-                                    {% for label, value in analysis_config_rows %}
-                                    <tr>
-                                        <th>{{ label }}</th>
-                                        <td>{{ value }}</td>
+                                    {% for row in analysis_config_rows %}
+                                    {% if row.kind == 'section' %}
+                                    <tr class="settings-section-row">
+                                        <th colspan="2">{{ row.label }}</th>
                                     </tr>
+                                    {% else %}
+                                    <tr>
+                                        <th>{{ row.label }}</th>
+                                        <td>{{ row.value }}</td>
+                                    </tr>
+                                    {% endif %}
                                     {% endfor %}
                                 </tbody>
                             </table>
@@ -717,43 +729,32 @@
         </div>
 <div id="approach1-results-help-content">
             <h4>Approach 1: Direct Correlation Results</h4>
-            <p>Shows results from direct correlation between in vitro and in vivo data:</p>
+            <p>This tab shows each fitted direct-correlation model separately. It includes:</p>
             <ul>
-                <li><strong>Plot:</strong> Scatter plot with fitted model overlay</li>
-                <li><strong>Function:</strong> Mathematical equation of the fitted model</li>
-                <li><strong>Parameters:</strong> Coefficients reported as estimate &plusmn; standard error</li>
-                <li><strong>Goodness of Fit:</strong> Statistical measures and cross-validation results</li>
+                <li><strong>Plot:</strong> matched in vitro and in vivo time points with the fitted model overlay.</li>
+                <li><strong>Function:</strong> mathematical equation of the fitted model.</li>
+                <li><strong>Model parameters:</strong> coefficients reported as estimate &plusmn; standard error.</li>
+                <li><strong>Fitted parameter diagnostics:</strong> brief badges that flag parameter uncertainty, coupling, or stability concerns.</li>
+                <li><strong>Goodness of fit:</strong> selected fitted-data metrics, eligible cross-validation metrics, fit/CV ratios, and CV comparison badges.</li>
             </ul>
             <h4>Uncertainty and fitting plot bands</h4>
             {{ approach_descriptions['approach1']['fit_uncertainty_html'] | safe }}
-            <p><strong>For Model Selection:</strong></p>
-            <ul>
-                <li>Look for <strong>high R² values</strong> and <strong>lower error metrics</strong> (e.g., RMSE)</li>
-                <li>Use <strong>Relative Model Evidence</strong> and information criteria (AIC/AICc/BIC) to compare how well candidate models explain the data while accounting for model complexity under the same approach and preprocessing settings.</li>
-                <li>Consider <strong>parameter uncertainty</strong> - smaller ± values indicate more reliable estimates</li>
-                <li>Compare <strong>cross-validation results</strong> to model performance - similar values of correlation coefficients and error metrics indicate good generalization</li>
-            </ul>
+            <p>Use this tab to review the details of each individual fit. Use the Model Comparison tab for side-by-side performance summaries, cross-validation summaries, and fitted parameter diagnostics.</p>
         </div>
 <div id="approach2-results-help-content">
             <h4>Approach 2: Independent Model Fitting Results</h4>
-            <p>Shows results from independent fitting to each dataset:</p>
+            <p>This tab shows each model family fitted independently to the in vitro and in vivo datasets. It includes:</p>
             <ul>
-                <li><strong>Plot:</strong> Both datasets with separate fitted models</li>
-                <li><strong>Function:</strong> Mathematical equation of the fitted model</li>
-                <li><strong>Parameters:</strong> Coefficients reported as estimate &plusmn; standard error</li>
-                <li><strong>Time Constant (Tau):</strong> Characteristic time scale of the process</li>
-                <li><strong>Goodness of Fit:</strong> Statistical measures and cross-validation results for each dataset</li>
+                <li><strong>Plot:</strong> both datasets with separate fitted model curves.</li>
+                <li><strong>Function:</strong> mathematical equation of the fitted model family.</li>
+                <li><strong>Model parameters:</strong> in vitro and in vivo coefficients reported as estimate &plusmn; standard error.</li>
+                <li><strong>Fitted parameter diagnostics:</strong> brief badges shown separately for the in vitro and in vivo fits.</li>
+                <li><strong>Time constant:</strong> fitted characteristic time scale where available.</li>
+                <li><strong>Goodness of fit:</strong> selected fitted-data metrics, eligible cross-validation metrics, fit/CV ratios, and CV comparison badges for each dataset.</li>
             </ul>
             <h4>Uncertainty and fitting plot bands</h4>
             {{ approach_descriptions['approach2']['fit_uncertainty_html'] | safe }}
-            <p><strong>For Model Selection:</strong></p>
-            <ul>
-                <li>Look for <strong>high R² values</strong> and <strong>lower error metrics</strong> (e.g., RMSE) for both datasets</li>
-                <li>Use <strong>Relative Model Evidence</strong> and information criteria (AIC/AICc/BIC) to compare how well candidate models explain the data while accounting for model complexity under the same approach and preprocessing settings.</li>
-                <li>Consider <strong>parameter uncertainty</strong> - smaller ± values indicate more reliable estimates</li>
-                <li>Compare <strong>time constants</strong> between datasets for consistency with your expectations</li>
-                <li>Compare <strong>cross-validation results</strong> to model performance - similar values of correlation coefficients and error metrics indicate good generalization</li>
-            </ul>
+            <p>Use this tab to review the details of each individual fit. Use the Model Comparison tab for side-by-side performance summaries, cross-validation summaries, and fitted parameter diagnostics.</p>
         </div>
 <div id="approach3-results-help-content">
             <h4>Approach 3: Direct Mapping Results</h4>

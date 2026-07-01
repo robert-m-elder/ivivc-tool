@@ -2,7 +2,7 @@
 
 No single performance metric determines whether an IVIVC model is meaningful. Model selection should consider goodness of fit, prediction error, model complexity, cross-validation behavior, residual patterns, parameter uncertainty, and whether the fitted relationship is scientifically plausible for the polymer degradation mechanism and the intended context of use. For regulatory-facing analyses, the amount and type of supporting evidence should be tied to the model's intended use and credibility needs \cite{fda_modeling_guidance,fda_reporting_guidance}.
 
-The app reports metrics and comparison tables to support user review. It does not select, recommend, validate, or establish regulatory acceptability for any model. Users should document the rationale for the final model or method selected for a specific analysis.
+The app reports metrics and comparison tables to support user review. It does not select, recommend, validate, or establish regulatory acceptability for any model. Users should document the rationale for the final approach or model selected for a specific analysis.
 
 \subsection{Confirm that models are comparable before interpreting metrics}
 
@@ -88,7 +88,7 @@ Fit/CV ratios summarize the relationship between fitted-data and held-out perfor
 
 The app also displays cross-validation comparison badges as interpretive aids. These badges are based on the metric's preferred direction: for lower-is-better error metrics (e.g., RMSE), worse cross-validation performance means the CV value is larger than the final-model value; for higher-is-better metrics (e.g., $R^2$), worse cross-validation performance means the CV value is smaller than the final-model value. As a screening aid, performance within a factor of 1.25 of the final model is labeled as similar, performance worse by 1.25 to 2-fold is labeled as moderately worse, and performance worse by more than 2-fold is labeled as substantially worse. These thresholds are heuristic review aids, not statistical acceptance criteria or regulatory criteria.
 
-The app does not include information criteria (AIC, AIC\textsubscript{c}, and BIC) in the cross-validation scores, because the final model and the cross-validation models are fitted to different subsets of the data and may involve different effective sample sizes. Use information criteria for relative evidence among comparable fitted models, and use cross-validation metrics to evaluate held-out predictive behavior.
+The app does not include adjusted $R^2$ or information criteria (AIC, AIC\textsubscript{c}, and BIC) in cross-validation comparison tables. Adjusted $R^2$ and information criteria depend on the number of observations or fitted parameters, and the final model and cross-validation models are fitted to different subsets of the data. Use adjusted $R^2$ and information criteria for fitted-model review and relative evidence among comparable fitted models, and use eligible cross-validation metrics to evaluate held-out predictive behavior.
 
 
 \subsection{Interpreting parameter uncertainty}
@@ -139,7 +139,7 @@ The intended use should determine the amount and type of supporting evidence nee
 \item Review Relative Model Evidence using AIC, AIC\textsubscript{c}, and/or BIC, where parametric model comparisons are applicable.
 \item Review fitted-parameter estimates, standard errors, covariance diagnostics, and scientific plausibility.
 \item Consider model complexity and whether additional parameters are justified by the data and degradation mechanism.
-\item Select the model or method based on a documented balance of statistical performance, scientific plausibility, and intended use.
+\item Select the approach or method based on a documented balance of statistical performance, scientific plausibility, and intended use.
 \end{enumerate}
 
 \subsection{Example interpretation statements}
