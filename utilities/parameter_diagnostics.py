@@ -11,7 +11,9 @@ CORRELATION_ELEVATED_THRESHOLD = 0.90
 CORRELATION_HIGH_THRESHOLD = 0.95
 # Stability is checked on the parameter-correlation matrix rather than the
 # raw covariance matrix so the diagnostic is less sensitive to parameter units
-# or response-scale magnitude.
+# or response-scale magnitude. This is an internal screening aid only; it can
+# strengthen an identifiability caution when paired with strong parameter
+# coupling, but it is not shown as a separate user-facing badge.
 CORRELATION_CONDITION_ELEVATED_THRESHOLD = 1000.0
 CORRELATION_CONDITION_HIGH_THRESHOLD = 10000.0
 
@@ -178,6 +180,7 @@ def build_parameter_diagnostics_html(params, pcov):
     details = []
     concern_details = []
     coupling_details = []
+    has_identifiability_correlation = False
 
     rse_values = _relative_standard_errors(params, covariance, param_names)
     largest_rse = max(rse_values, key=lambda item: item[1]) if rse_values else None
@@ -205,19 +208,6 @@ def build_parameter_diagnostics_html(params, pcov):
         not np.isfinite(correlation_condition_number)
         or correlation_condition_number >= CORRELATION_CONDITION_HIGH_THRESHOLD
     )
-    if has_high_stability:
-        badges.append(_badge('Parameter stability caution', 'warning'))
-        concern_details.append(
-            'The fitted parameter estimates or their ± uncertainty may be sensitive '
-            'to small changes in the data.'
-        )
-    elif has_elevated_stability:
-        badges.append(_badge('Parameter stability caution', 'caution'))
-        concern_details.append(
-            'The fitted parameter estimates or their ± uncertainty may be sensitive '
-            'to small changes in the data.'
-        )
-
     largest_correlation = _largest_parameter_correlation(covariance, param_names)
     if largest_correlation:
         abs_corr, signed_corr, first_param, second_param = largest_correlation
@@ -228,6 +218,7 @@ def build_parameter_diagnostics_html(params, pcov):
                 f'(signed value {signed_corr:.3f}).'
             )
             if has_elevated_rse or has_elevated_stability:
+                has_identifiability_correlation = True
                 if abs_corr >= CORRELATION_HIGH_THRESHOLD or has_high_rse or has_high_stability:
                     badges.append(_badge('Parameter identifiability caution', 'warning'))
                 else:
@@ -243,31 +234,29 @@ def build_parameter_diagnostics_html(params, pcov):
     if not badges:
         badges.append(_badge('No parameter uncertainty concerns identified', 'ok'))
         summary = (
-            'Screening checks did not identify large parameter uncertainty, strong '
-            'parameter coupling, or signs that parameter estimates may be sensitive '
-            'to small changes in the data. This does not by itself validate the model.'
+            'Screening checks did not identify large parameter uncertainty or strong '
+            'parameter coupling. This does not by itself validate the model.'
         )
     elif concern_details:
-        if coupling_details:
+        if has_identifiability_correlation:
             summary = (
                 'Review these fitted-parameter diagnostics. Correlated parameter '
                 'estimates can occur naturally in nonlinear models, especially when '
                 'parameters control scale, shape, or rate, but correlation accompanied '
-                'by large uncertainty or parameter-stability concerns may indicate '
+                'by large uncertainty or internal numerical-sensitivity checks may indicate '
                 'weakly identified, redundant, or data-sensitive fitted parameters.'
             )
         else:
             summary = (
                 'Review these fitted-parameter diagnostics. They may indicate an unsuitable model due to '
-                'large parameter uncertainty, sensitivity to the available data, or '
-                'weakly identified fitted parameters.'
+                'large parameter uncertainty or weakly identified fitted parameters.'
             )
     else:
         summary = (
             'Correlated parameter estimates were detected. This can occur naturally in '
             'nonlinear models, especially when parameters control scale, shape, or rate. '
-            'Review whether large parameter uncertainty or parameter-stability concerns '
-            'are also present before treating this as an identifiability concern.'
+            'Review whether large parameter uncertainty is also present before treating '
+            'this as an identifiability concern.'
         )
 
     details_html = ''

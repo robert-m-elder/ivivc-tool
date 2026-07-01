@@ -107,12 +107,11 @@ The app summarizes fitted-parameter diagnostics using plain-language badges. The
 \midrule
 \endhead
 Relative standard error & Parameter standard error divided by the absolute parameter estimate, expressed as a percentage. & Large relative standard errors can indicate that a parameter is weakly identified or sensitive to the available data. As a screening aid, the app flags values of at least 50\% as elevated and at least 100\% as large. \\
-Parameter coupling / correlation & Pairwise correlation implied by the parameter-uncertainty calculation. & Correlated parameter estimates can occur naturally in nonlinear models, especially when parameters control scale, shape, or rate. The app reports correlation alone as \emph{parameter coupling noted}; when high correlation is accompanied by elevated relative standard error or parameter stability concerns, the app reports a stronger parameter-identifiability caution. As a screening aid, the app begins noting absolute correlations of at least 0.90, with stronger concern when correlations of at least 0.95 occur together with other uncertainty diagnostics. \\
-Parameter stability & Whether the fitted parameter estimates or their displayed uncertainty may be sensitive to small changes in the data. & A parameter-stability caution means that the fitted values or their \(\pm\) uncertainty may be numerically sensitive for the available dataset and model form. This should be interpreted together with the fitted curve, residuals, prediction performance, and scientific plausibility. The app uses an internal scale-normalized numerical screening check for this diagnostic but does not display the technical numerical quantity in the results. \\
+Parameter coupling / correlation & Pairwise correlation implied by the parameter-uncertainty calculation. & Correlated parameter estimates can occur naturally in nonlinear models, especially when parameters control scale, shape, or rate. The app reports correlation alone as \emph{parameter coupling noted}; when high correlation is accompanied by elevated relative standard error or an internal numerical-sensitivity screening check, the app reports a stronger parameter-identifiability caution. As a screening aid, the app begins noting absolute correlations of at least 0.90, with stronger concern when correlations of at least 0.95 occur together with other uncertainty diagnostics. \\
 \bottomrule
 \end{longtable}
 
-If no parameter uncertainty concerns are identified, this means that the app did not detect large relative standard errors, strong parameter coupling, or parameter stability concerns using these screening checks. It does not by itself validate the model, prove mechanistic correctness, or establish regulatory acceptability. Conversely, a parameter-coupling or warning badge does not automatically invalidate a model; it indicates that the fitted parameters should be reviewed together with the fitted curves, residuals, cross-validation behavior, model complexity, and scientific plausibility.
+If no parameter uncertainty concerns are identified, this means that the app did not detect large relative standard errors or strong parameter coupling using these screening checks. It does not by itself validate the model, prove mechanistic correctness, or establish regulatory acceptability. Conversely, a parameter-coupling or warning badge does not automatically invalidate a model; it indicates that the fitted parameters should be reviewed together with the fitted curves, residuals, cross-validation behavior, model complexity, and scientific plausibility.
 
 Parameter uncertainty is especially important when a fitted model will be interpreted mechanistically, used to support extrapolation, or used to compare degradation behavior across materials, processes, or test conditions. A model with strong fitted metrics but poorly estimated or implausible parameters may be difficult to justify.
 
@@ -170,7 +169,7 @@ The following questions may help users interpret model performance in plain lang
 \item Are the fitted parameter values scientifically plausible?
 \item Are the displayed $\pm$ uncertainties small enough that the parameter estimates appear reasonably precise?
 \item Are any parameters strongly coupled, meaning that different combinations of parameter values could produce similar fitted curves?
-\item If parameter coupling is present, does it occur together with large parameter uncertainty or parameter stability cautions?
+\item If parameter coupling is present, does it occur together with large parameter uncertainty or a parameter identifiability caution?
 \item Is the model being used mainly to describe the curve, or are individual parameter values being interpreted mechanistically?
 \end{itemize}
 

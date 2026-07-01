@@ -95,7 +95,7 @@ cross_validation_summary_html: |-
 goodness_validation_table_html: |-
   <p>This table reports final fitted-model scores and mean held-out cross-validation scores for selected eligible metrics. Ratio rows show the fitted-model score divided by the cross-validation score for the same metric, and the CV comparison row summarizes whether held-out performance may warrant closer review. Adjusted R² and information criteria (AIC, AICc, BIC) are excluded because they are not directly comparable held-out prediction scores. Detailed interpretation guidance is provided in the user guide.</p>
 parameter_diagnostics_comparison_html: |-
-  <p>The Fitted Parameter Diagnostics table summarizes the diagnostic badges shown with each individual model fit. These badges help identify models that may warrant closer review for large parameter uncertainty, parameter coupling, or parameter stability concerns. Detailed explanations can be found in the individual fitting results and in the user guide.</p>
+  <p>The Fitted Parameter Diagnostics table summarizes the diagnostic badges shown with each individual model fit. These badges help identify models that may warrant closer review for large parameter uncertainty, parameter coupling, or parameter-identifiability cautions. Detailed explanations can be found in the individual fitting results and in the user guide.</p>
 grid_search_description_html: |-
   <p>The app conducts an automated grid search to identify suitable starting parameter values for each model before nonlinear least-squares fitting, reducing the need for manual parameter tuning. Candidate values are sampled within the configured parameter bounds and are used only to initialize the final curve fit.</p>
   <p>This initialization step improves convergence and reduces sensitivity to poor starting values. It is not itself the final fitting algorithm and does not guarantee that the final fitted parameters are the global optimum.</p>
@@ -182,7 +182,7 @@ modal_help:
       <ul>
         <li><strong>Performance Metrics:</strong> fitted-data metrics selected by the user.</li>
         <li><strong>Cross-Validation Summary:</strong> held-out scores and fit/CV ratios for eligible prediction metrics.</li>
-        <li><strong>Fitted Parameter Diagnostics:</strong> compact badges that summarize parameter uncertainty, coupling, and stability checks from the individual model fits.</li>
+        <li><strong>Fitted Parameter Diagnostics:</strong> compact badges that summarize parameter uncertainty, coupling, and identifiability checks from the individual model fits.</li>
         <li><strong>Relative Model Evidence:</strong> AIC/AICc/BIC-based relative summaries for comparable parametric models, when selected.</li>
       </ul>
       <p>The app does not automatically choose a model. The user should review the full set of outputs and select the approach or model that is scientifically justified for the intended use.</p>
