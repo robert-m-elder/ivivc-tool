@@ -395,10 +395,6 @@
                             <div class="report-plot-placeholder" data-plot-source="plot-residual-{{ option.model_dom_id }}">
                                 <p class="plot-unavailable">Original-unit residual plot is not available.</p>
                             </div>
-                            <h5>Standardized residuals</h5>
-                            <div class="report-plot-placeholder" data-plot-source="plot-residual-{{ option.model_dom_id }}-standardized">
-                                <p class="plot-unavailable">Standardized residual plot is not available.</p>
-                            </div>
                             {% set approach_evidence = evidence_tables.get(option.approach_id, {}) %}
                             {% if approach_evidence.get('fit') %}
                                 <h4>Relative evidence context</h4>
@@ -446,17 +442,9 @@
                             <div class="report-plot-placeholder" data-plot-source="plot-residual-{{ option.model_dom_id }}-in-vitro">
                                 <p class="plot-unavailable">In vitro original-unit residual plot is not available.</p>
                             </div>
-                            <h5>In vitro residuals: standardized</h5>
-                            <div class="report-plot-placeholder" data-plot-source="plot-residual-{{ option.model_dom_id }}-in-vitro-standardized">
-                                <p class="plot-unavailable">In vitro standardized residual plot is not available.</p>
-                            </div>
                             <h5>In vivo residuals: original-unit, common scale</h5>
                             <div class="report-plot-placeholder" data-plot-source="plot-residual-{{ option.model_dom_id }}-in-vivo">
                                 <p class="plot-unavailable">In vivo original-unit residual plot is not available.</p>
-                            </div>
-                            <h5>In vivo residuals: standardized</h5>
-                            <div class="report-plot-placeholder" data-plot-source="plot-residual-{{ option.model_dom_id }}-in-vivo-standardized">
-                                <p class="plot-unavailable">In vivo standardized residual plot is not available.</p>
                             </div>
                             {% set approach_evidence = evidence_tables.get(option.approach_id, {}) %}
                             {% if approach_evidence %}
@@ -546,18 +534,6 @@
                                     <div id="approach1-{{ model_name }}-residual-table-container" class="data-table-container" style="display: none;">
                                         {{ model_results.residual_plot.table_html | safe }}
                                     </div>
-                                    <h5>Standardized residuals</h5>
-                                            <div id="plot-residual-{{ model_key|replace(':', '-') }}-standardized" class="plot-container report-source-plot">
-                                        {{ model_results.residual_plot_standardized.plot | safe }}
-                                    </div>
-                                    <div class="custom-button-container">
-                                        <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach1-{{ model_name }}-standardized-residual-table" style="text-decoration: none;">
-                                            <span>Show Data Table</span>
-                                        </button>
-                                    </div>
-                                    <div id="approach1-{{ model_name }}-standardized-residual-table-container" class="data-table-container" style="display: none;">
-                                        {{ model_results.residual_plot_standardized.table_html | safe }}
-                                    </div>
                                 {% endif %}
                             </div>
                         {% endif %}
@@ -610,18 +586,6 @@
                                     <div id="approach2-{{ model_name }}-residual-table-in-vitro-container" class="data-table-container" style="display: none;">
                                         {{ model_results.residual_plot[0].table_html | safe }}
                                     </div>
-                                    <h5>Standardized residuals</h5>
-                                            <div id="plot-residual-{{ model_key|replace(':', '-') }}-in-vitro-standardized" class="plot-container report-source-plot">
-                                        {{ model_results.residual_plot_standardized[0].plot | safe }}
-                                    </div>
-                                    <div class="custom-button-container">
-                                        <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach2-{{ model_name }}-standardized-residual-table-in-vitro" style="text-decoration: none;">
-                                            <span>Show Data Table</span>
-                                        </button>
-                                    </div>
-                                    <div id="approach2-{{ model_name }}-standardized-residual-table-in-vitro-container" class="data-table-container" style="display: none;">
-                                        {{ model_results.residual_plot_standardized[0].table_html | safe }}
-                                    </div>
                                     <h4>In Vivo Data</h4>
                                     <h4>Model parameters</h4>
 {% for param, value in model_results.uparams[1].items() %}
@@ -650,18 +614,6 @@
                                     </div>
                                     <div id="approach2-{{ model_name }}-residual-table-in-vivo-container" class="data-table-container" style="display: none;">
                                         {{ model_results.residual_plot[1].table_html | safe }}
-                                    </div>
-                                    <h5>Standardized residuals</h5>
-                                            <div id="plot-residual-{{ model_key|replace(':', '-') }}-in-vivo-standardized" class="plot-container report-source-plot">
-                                        {{ model_results.residual_plot_standardized[1].plot | safe }}
-                                    </div>
-                                    <div class="custom-button-container">
-                                        <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach2-{{ model_name }}-standardized-residual-table-in-vivo" style="text-decoration: none;">
-                                            <span>Show Data Table</span>
-                                        </button>
-                                    </div>
-                                    <div id="approach2-{{ model_name }}-standardized-residual-table-in-vivo-container" class="data-table-container" style="display: none;">
-                                        {{ model_results.residual_plot_standardized[1].table_html | safe }}
                                     </div>
                                 {% endif %}
                             </div>
@@ -848,7 +800,7 @@
                 <li><strong>Model parameters:</strong> coefficients reported as estimate &plusmn; standard error.</li>
                 <li><strong>Fitted parameter diagnostics:</strong> brief badges that flag parameter uncertainty, coupling, or identifiability cautions.</li>
                 <li><strong>Goodness of fit:</strong> selected fitted-data metrics, eligible cross-validation metrics, fit/CV ratios, and CV comparison badges.</li>
-                <li><strong>Residual diagnostics:</strong> residual-vs-x plot with RMSE reference bands to help visually identify possible bias or residual patterns.</li>
+                <li><strong>Residual diagnostics:</strong> residual-vs-x plots with common residual-scale reference bands to help visually identify possible bias or residual patterns.</li>
             </ul>
             <h4>Uncertainty and fitting plot bands</h4>
             {{ approach_descriptions['approach1']['fit_uncertainty_html'] | safe }}
@@ -864,7 +816,7 @@
                 <li><strong>Fitted parameter diagnostics:</strong> brief badges shown separately for the in vitro and in vivo fits.</li>
                 <li><strong>Time constant:</strong> fitted characteristic time scale where available.</li>
                 <li><strong>Goodness of fit:</strong> selected fitted-data metrics, eligible cross-validation metrics, fit/CV ratios, and CV comparison badges for each dataset.</li>
-                <li><strong>Residual diagnostics:</strong> residual-vs-time plots with RMSE reference bands shown separately for the in vitro and in vivo fits.</li>
+                <li><strong>Residual diagnostics:</strong> residual-vs-time plots with common residual-scale reference bands shown separately for the in vitro and in vivo fits.</li>
             </ul>
             <h4>Uncertainty and fitting plot bands</h4>
             {{ approach_descriptions['approach2']['fit_uncertainty_html'] | safe }}

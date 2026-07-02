@@ -95,9 +95,9 @@ The app does not include adjusted $R^2$ or information criteria (AIC, AIC\textsu
 
 Residuals (or prediction errors) are calculated as observed minus predicted values. The app plots residuals against the fitting x-axis so users can look for systematic patterns that may not be obvious from global performance metrics alone.
 
-Two residual plots are shown for each fitted model. The original-unit plot keeps residuals in the same response units as the fitted endpoint and uses a common y-axis scale across comparable models, making it easier to compare residual magnitude visually. The standardized plot divides residuals by the observed response standard deviation, making residual size easier to compare across response scales.
+Residual plots keep residuals in the same response units as the fitted endpoint and use a common y-axis scale across comparable models, making it easier to compare residual magnitude visually.
 
-Both residual plots include a horizontal zero line, a shaded band corresponding to $\pm 1$ observed response standard deviation, and dashed reference lines corresponding to $\pm 2$ observed response standard deviations. These bands provide visual context for the observed response scale. They are not confidence intervals, prediction intervals, acceptance limits, or regulatory criteria.
+Each residual plot includes a horizontal zero line and visual reference bands based on a common residual scale. For each comparable model set, the app calculates the pooled 95th percentile of absolute residuals. The shaded band corresponds to $\pm 25\%$ of that residual scale, and the dashed reference lines correspond to $\pm 50\%$ of that residual scale. These bands provide visual context for comparing residual patterns across models. They are not confidence intervals, prediction intervals, acceptance limits, or regulatory criteria.
 
 Residual plots should be reviewed qualitatively. Points scattered around zero are more consistent with an appropriate model form, although they do not prove that the model is valid. Sustained patterns, curvature, clustering, repeated excursions outside the reference bands, or adjacent time points with residuals mostly on the same side of zero may indicate bias or that the selected model form may not fully capture the data.
 

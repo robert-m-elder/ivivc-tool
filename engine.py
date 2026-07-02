@@ -530,23 +530,25 @@ def _concat_finite(arrays):
         return np.array([], dtype=float)
     return np.concatenate(pieces)
 
-def _observed_response_std(y_values):
-    """Return the observed response standard deviation for residual scaling."""
-    y = _finite_vector(y_values)
-    if y.size < 2:
+def _robust_residual_reference_scale(residual_values, percentile=95.0):
+    """Return a robust common residual scale across comparable models."""
+    vals = np.abs(_finite_vector(residual_values))
+    if vals.size == 0:
         return np.nan
-    std = float(np.std(y, ddof=1))
-    return std if np.isfinite(std) and std > 0 else np.nan
+    scale = float(np.percentile(vals, percentile))
+    if not np.isfinite(scale) or scale <= 0:
+        scale = float(np.max(vals)) if vals.size else np.nan
+    return scale if np.isfinite(scale) and scale > 0 else np.nan
 
 
-def _common_axis_limit(values, reference_scale=None, padding=1.10):
+def _common_axis_limit(values, reference_scale=None, padding=1.20):
     """Return a symmetric y-axis limit that covers residuals and reference bands."""
     vals = _finite_vector(values)
     candidates = []
     if vals.size:
         candidates.append(float(np.max(np.abs(vals))))
     if reference_scale is not None and np.isfinite(reference_scale) and reference_scale > 0:
-        candidates.append(float(2 * reference_scale))
+        candidates.append(float(reference_scale))
     max_value = max(candidates) if candidates else 1.0
     if not np.isfinite(max_value) or max_value <= 0:
         max_value = 1.0
@@ -562,14 +564,12 @@ def create_residual_plotly(
     reference_scale=None,
     reference_label='observed response SD',
     y_axis_limit=None,
-    normalize_by=None,
 ):
-    """Create a residual-vs-x Plotly figure and source-data table.
+    """Create an original-unit residual-vs-x Plotly figure and source-data table.
 
-    Residuals can be shown in original response units or normalized by the
-    observed response standard deviation. Reference bands are based on the
-    observed response scale, not model-specific RMSE, so residual plots are
-    easier to compare across models fitted to the same dataset.
+    Reference bands are based on a robust residual scale computed across
+    comparable models, not model-specific RMSE, so residual plots are easier
+    to compare while staying focused on residual behavior.
     """
     x = np.asarray(x, dtype=float)
     residuals = np.asarray(residuals, dtype=float)
@@ -577,16 +577,16 @@ def create_residual_plotly(
     x = x[mask]
     residuals = residuals[mask]
 
-    scale = 1.0
     y_axis_title = 'Residual (observed - predicted)'
-    if normalize_by is not None and np.isfinite(normalize_by) and normalize_by > 0:
-        scale = float(normalize_by)
-        y_axis_title = 'Residual / observed response SD'
-    residual_values = residuals / scale
+    residual_values = residuals
 
     band_scale = None
+    inner_band = None
+    outer_band = None
     if reference_scale is not None and np.isfinite(reference_scale) and reference_scale > 0:
-        band_scale = float(reference_scale) / scale
+        band_scale = float(reference_scale)
+        inner_band = 0.25 * band_scale
+        outer_band = 0.50 * band_scale
 
     fig = go.Figure()
     if x.size > 0:
@@ -598,15 +598,15 @@ def create_residual_plotly(
             x_min -= 0.5
             x_max += 0.5
 
-        if band_scale is not None and np.isfinite(band_scale) and band_scale > 0:
+        if inner_band is not None and outer_band is not None and np.isfinite(inner_band) and np.isfinite(outer_band) and outer_band > 0:
             fig.add_shape(
                 type='rect',
                 xref='x',
                 yref='y',
                 x0=x_min,
                 x1=x_max,
-                y0=-band_scale,
-                y1=band_scale,
+                y0=-inner_band,
+                y1=inner_band,
                 fillcolor='rgba(128, 128, 128, 0.18)',
                 line=dict(width=0),
                 layer='below',
@@ -617,8 +617,8 @@ def create_residual_plotly(
                 yref='y',
                 x0=x_min,
                 x1=x_max,
-                y0=2 * band_scale,
-                y1=2 * band_scale,
+                y0=outer_band,
+                y1=outer_band,
                 line=dict(color='rgba(80, 80, 80, 0.8)', dash='dot', width=2),
                 layer='below',
             )
@@ -628,17 +628,17 @@ def create_residual_plotly(
                 yref='y',
                 x0=x_min,
                 x1=x_max,
-                y0=-2 * band_scale,
-                y1=-2 * band_scale,
+                y0=-outer_band,
+                y1=-outer_band,
                 line=dict(color='rgba(80, 80, 80, 0.8)', dash='dot', width=2),
                 layer='below',
             )
             fig.add_annotation(
                 x=x_max,
-                y=band_scale,
+                y=inner_band,
                 xref='x',
                 yref='y',
-                text=f'+/- 1 {reference_label}',
+                text=f'+/- 0.25 {reference_label}',
                 showarrow=False,
                 xanchor='right',
                 yanchor='bottom',
@@ -647,10 +647,10 @@ def create_residual_plotly(
             )
             fig.add_annotation(
                 x=x_max,
-                y=2 * band_scale,
+                y=outer_band,
                 xref='x',
                 yref='y',
-                text=f'+/- 2 {reference_label}',
+                text=f'+/- 0.5 {reference_label}',
                 showarrow=False,
                 xanchor='right',
                 yanchor='bottom',
@@ -753,22 +753,17 @@ def _collect_residual_contexts(results):
 
 
 def _attach_residual_plots(results):
-    """Attach original-unit and response-SD-normalized residual plots."""
+    """Attach original-unit residual plots with common robust scaling."""
     for (approach_id, dataset_id), items in _collect_residual_contexts(results).items():
         if not items:
             continue
 
         all_residuals = _concat_finite(item['residuals'] for item in items)
-        all_y = _concat_finite(item['y'] for item in items)
-        response_std = _observed_response_std(all_y)
+        residual_reference_scale = _robust_residual_reference_scale(all_residuals)
         if all_residuals.size == 0:
             continue
 
-        original_axis_limit = _common_axis_limit(all_residuals, reference_scale=response_std)
-        if np.isfinite(response_std) and response_std > 0:
-            normalized_axis_limit = _common_axis_limit(all_residuals / response_std, reference_scale=1.0)
-        else:
-            normalized_axis_limit = None
+        original_axis_limit = _common_axis_limit(all_residuals, reference_scale=residual_reference_scale)
 
         for item in items:
             model_key = item['model_key']
@@ -780,32 +775,17 @@ def _attach_residual_plots(results):
                 f"{item['title_prefix']} for {display_name} Fit (Original Units, Common Scale)",
                 x_axis_title=item['x_axis_title'],
                 marker_color=item['marker_color'],
-                reference_scale=response_std,
-                reference_label='response SD',
+                reference_scale=residual_reference_scale,
+                reference_label='residual scale',
                 y_axis_limit=original_axis_limit,
-            )
-            standardized_plot = create_residual_plotly(
-                item['x'],
-                item['residuals'],
-                f"{item['title_prefix']} for {display_name} Fit (Residual / Response SD)",
-                x_axis_title=item['x_axis_title'],
-                marker_color=item['marker_color'],
-                reference_scale=response_std,
-                reference_label='response SD',
-                y_axis_limit=normalized_axis_limit,
-                normalize_by=response_std,
             )
             if approach_id == 'approach1':
                 model_results['residual_plot'] = original_plot
-                model_results['residual_plot_standardized'] = standardized_plot
             elif approach_id == 'approach2':
                 if 'residual_plot' not in model_results:
                     model_results['residual_plot'] = [None, None]
-                if 'residual_plot_standardized' not in model_results:
-                    model_results['residual_plot_standardized'] = [None, None]
                 idx = 0 if dataset_id == 'in_vitro' else 1
                 model_results['residual_plot'][idx] = original_plot
-                model_results['residual_plot_standardized'][idx] = standardized_plot
 
 
 _CV_BADGE_CLASS_BY_LEVEL = {
