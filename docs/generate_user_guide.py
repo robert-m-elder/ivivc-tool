@@ -392,7 +392,7 @@ def build_user_guide_tex() -> str:
         ["Output", "Description"],
         [
             ["Preprocessing outputs", "Processed data tables and plots showing the data used for fitting and prediction."],
-            ["Model fitting outputs", "Parameter estimates, parameter standard errors where available, fitted plots, and selected performance metrics."],
+            ["Model fitting outputs", "Parameter estimates, parameter standard errors where available, fitted plots, residual (error) plots, and selected performance metrics."],
             ["Model comparison outputs", "Tables comparing selected approaches, models, metrics, and cross-validation summaries."],
             ["Prediction outputs", "Prediction plots and downloadable tables when a prediction dataset is supplied and the selected method can be applied."],
             ["Selected model & summary of outputs", "User-selected report summaries and optional Word report export for incorporation into external documentation."],
