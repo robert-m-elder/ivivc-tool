@@ -95,7 +95,9 @@ cross_validation_summary_html: |-
 goodness_validation_table_html: |-
   <p>This table reports final fitted-model scores and mean held-out cross-validation scores for selected eligible metrics. Ratio rows show the fitted-model score divided by the cross-validation score for the same metric, and the CV comparison row summarizes whether held-out performance may warrant closer review. Adjusted R² and information criteria (AIC, AICc, BIC) are excluded because they are not directly comparable held-out prediction scores. Detailed interpretation guidance is provided in the user guide.</p>
 residual_diagnostics_html: |-
-  <p>Residuals are calculated as observed minus predicted values. Use the residual plot and summary metrics to look for bias or patterns in the fitted errors. Points scattered around zero are more consistent with an appropriate model form, while a clear pattern may indicate that the model may not be appropriate for the data.</p>
+  <p>Residuals are calculated as observed minus predicted values. Use the residual plot and pattern diagnostics to look for bias, x-dependent patterns, or individual points that may warrant closer review. Points scattered around zero are more consistent with an appropriate model form, while a clear pattern may indicate that the model may not be appropriate for the data.</p>
+residual_diagnostics_comparison_html: |-
+  <p>The Residual Pattern Diagnostics table summarizes the residual badges shown with each individual model fit. These badges help identify models that may warrant closer review for residual bias, x-dependent residual patterns, or large individual residuals. Detailed interpretation guidance is provided with the individual fitting results and in the user guide.</p>
 parameter_diagnostics_comparison_html: |-
   <p>The Fitted Parameter Diagnostics table summarizes the diagnostic badges shown with each individual model fit. These badges help identify models that may warrant closer review for large parameter uncertainty, parameter coupling, or parameter-identifiability cautions. Detailed explanations can be found in the individual fitting results and in the user guide.</p>
 grid_search_description_html: |-
@@ -179,12 +181,13 @@ modal_help:
       <p>For each selected model, the app evaluates the candidate starting values and uses the best candidate as the starting point for the final curve fit. If fitting fails or appears unstable, consider increasing the number of random starts, adjusting the parameter bounds, changing the random seed, or reviewing whether the selected model is appropriate for the data.</p>
   results:
     model_comparison_html: |-
-      <p>This tab provides side-by-side summaries of the fitted candidate models. It includes selected metric definitions, performance metrics, cross-validation summaries, fitted parameter diagnostic badges, and Relative Model Evidence where information criteria are selected.</p>
+      <p>This tab provides side-by-side summaries of the fitted candidate models. It includes selected metric definitions, performance metrics, cross-validation summaries, fitted parameter diagnostic badges, residual pattern diagnostic badges, and Relative Model Evidence where information criteria are selected.</p>
       <p>Use the comparison tables together with the individual fitting plots, parameter diagnostics, residual behavior, cross-validation behavior, and scientific expectations for the system.</p>
       <ul>
         <li><strong>Performance Metrics:</strong> fitted-data metrics selected by the user.</li>
         <li><strong>Cross-Validation Summary:</strong> held-out scores and fit/CV ratios for eligible prediction metrics.</li>
         <li><strong>Fitted Parameter Diagnostics:</strong> compact badges that summarize parameter uncertainty, coupling, and identifiability checks from the individual model fits.</li>
+        <li><strong>Residual Pattern Diagnostics:</strong> compact badges that summarize possible residual bias, x-dependent residual patterns, or large individual residuals from the individual model fits.</li>
         <li><strong>Relative Model Evidence:</strong> AIC/AICc/BIC-based relative summaries for comparable parametric models, when selected.</li>
       </ul>
       <p>The app does not automatically choose a model. The user should review the full set of outputs and select the approach or model that is scientifically justified for the intended use.</p>

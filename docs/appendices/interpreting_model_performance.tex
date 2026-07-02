@@ -93,9 +93,11 @@ The app does not include adjusted $R^2$ or information criteria (AIC, AIC\textsu
 
 \subsection{Interpreting residual plots}
 
-Residuals (or prediction errors) are calculated as observed minus predicted values. The app plots residuals against the fitting x-axis and reports simple residual summaries: mean residual, mean absolute residual, and maximum absolute residual.
+Residuals (or prediction errors) are calculated as observed minus predicted values. The app plots residuals against the fitting x-axis and summarizes simple residual-pattern diagnostics.
 
-Residual plots should be reviewed for obvious patterns. Points scattered around zero are more consistent with an appropriate model form, although they do not prove that the model is valid. A clear trend, curvature, clustering, or mostly positive or mostly negative residuals may indicate bias or that the selected model form may not be appropriate for the data. The mean residual summarizes average signed bias, the mean absolute residual summarizes the average error size, and the maximum absolute residual identifies the largest fitted-data error.
+Residual plots should be reviewed for obvious patterns. Points scattered around zero are more consistent with an appropriate model form, although they do not prove that the model is valid. A clear trend, curvature, clustering, or mostly positive or mostly negative residuals may indicate bias or that the selected model form may not be appropriate for the data.
+
+The residual-pattern diagnostics are normalized to the model's fitted RMSE so that they are easier to compare across models and response scales. The mean residual divided by RMSE summarizes possible signed bias, the fitted residual trend across the x-axis divided by RMSE summarizes possible x-dependent residual structure, and the largest absolute residual divided by RMSE identifies whether one fitted point is unusually large relative to the model's typical residual size. These diagnostics are heuristic review aids, not statistical acceptance criteria.
 
 
 \subsection{Interpreting parameter uncertainty}

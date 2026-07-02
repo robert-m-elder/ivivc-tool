@@ -182,6 +182,9 @@
                 <h4>Fitted Parameter Diagnostics</h4>
                 {{ parameter_diagnostics_comparison_html | safe }}
                 {{ parameter_diagnostic_tables.get("approach1", "") | safe }}
+                <h4>Residual Pattern Diagnostics</h4>
+                {{ residual_diagnostics_comparison_html | safe }}
+                {{ residual_diagnostic_tables.get("approach1", "") | safe }}
                 {% set approach1_evidence = evidence_tables.get('approach1', {}).get('fit') %}
                 {% if approach1_evidence %}
                     <h4>Relative Model Evidence</h4>
@@ -203,6 +206,9 @@
                 <h4>Fitted Parameter Diagnostics</h4>
                 {{ parameter_diagnostics_comparison_html | safe }}
                 {{ parameter_diagnostic_tables.get("approach2", "") | safe }}
+                <h4>Residual Pattern Diagnostics</h4>
+                {{ residual_diagnostics_comparison_html | safe }}
+                {{ residual_diagnostic_tables.get("approach2", "") | safe }}
                 <h4>Relative Model Evidence</h4>
                 {{ relative_model_evidence_html | safe }}
                 {% set approach2_evidence = evidence_tables.get('approach2', {}) %}
@@ -802,7 +808,7 @@
                 <li><strong>Model parameters:</strong> coefficients reported as estimate &plusmn; standard error.</li>
                 <li><strong>Fitted parameter diagnostics:</strong> brief badges that flag parameter uncertainty, coupling, or identifiability cautions.</li>
                 <li><strong>Goodness of fit:</strong> selected fitted-data metrics, eligible cross-validation metrics, fit/CV ratios, and CV comparison badges.</li>
-                <li><strong>Residual diagnostics:</strong> residual-vs-x plot and simple residual summaries to help identify bias or patterns.</li>
+                <li><strong>Residual diagnostics:</strong> residual-vs-x plot and normalized pattern diagnostics to help identify possible bias or residual patterns.</li>
             </ul>
             <h4>Uncertainty and fitting plot bands</h4>
             {{ approach_descriptions['approach1']['fit_uncertainty_html'] | safe }}
@@ -818,7 +824,7 @@
                 <li><strong>Fitted parameter diagnostics:</strong> brief badges shown separately for the in vitro and in vivo fits.</li>
                 <li><strong>Time constant:</strong> fitted characteristic time scale where available.</li>
                 <li><strong>Goodness of fit:</strong> selected fitted-data metrics, eligible cross-validation metrics, fit/CV ratios, and CV comparison badges for each dataset.</li>
-                <li><strong>Residual diagnostics:</strong> residual-vs-time plots and simple residual summaries shown separately for the in vitro and in vivo fits.</li>
+                <li><strong>Residual diagnostics:</strong> residual-vs-time plots and normalized pattern diagnostics shown separately for the in vitro and in vivo fits.</li>
             </ul>
             <h4>Uncertainty and fitting plot bands</h4>
             {{ approach_descriptions['approach2']['fit_uncertainty_html'] | safe }}

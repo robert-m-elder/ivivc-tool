@@ -219,7 +219,8 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                         }
                     },
                     'stats_table': stats_table,
-                    'residual_summary_table': create_residual_summary_table(residuals),
+                    'residual_summary_table': create_residual_pattern_table(x, residuals),
+                    'residual_diagnostic_badges_html': _badge_join(calculate_residual_pattern_diagnostics(x, residuals)['badges']),
                     'residual_plot': residual_plot,
                     'parameter_diagnostics_html': build_parameter_diagnostics_html(model_result['params'], model_result['pcov']),
                     'plot': plot_image
@@ -335,10 +336,14 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                     },
                     'stats_table': [stats_table1, stats_table2],
                     'residual_summary_table': [
-                        create_residual_summary_table(residuals1),
-                        create_residual_summary_table(residuals2),
+                        create_residual_pattern_table(x1, residuals1),
+                        create_residual_pattern_table(x2, residuals2),
                     ],
                     'residual_plot': [residual_plot1, residual_plot2],
+                    'residual_diagnostic_badges_html': [
+                        _badge_join(calculate_residual_pattern_diagnostics(x1, residuals1)['badges']),
+                        _badge_join(calculate_residual_pattern_diagnostics(x2, residuals2)['badges']),
+                    ],
                     'parameter_diagnostics_html': [
                         build_parameter_diagnostics_html(model_result1['params'], pcov1),
                         build_parameter_diagnostics_html(model_result2['params'], pcov2)
@@ -533,45 +538,167 @@ CV_RATIO_SUBSTANTIAL_THRESHOLD = 2.0
 CV_SUMMARY_EXCLUDED_METRICS = CV_COMPARISON_EXCLUDED_METRICS
 
 
+RESIDUAL_BIAS_RATIO_THRESHOLD = 0.5
+RESIDUAL_TREND_RATIO_THRESHOLD = 1.0
+RESIDUAL_LARGE_POINT_RATIO_THRESHOLD = 3.0
+
+_RESIDUAL_BADGE_CLASS_BY_LEVEL = {
+    'ok': 'evidence-badge-comparable',
+    'caution': 'evidence-badge-lower',
+    'warning': 'evidence-badge-minimal',
+    'unavailable': 'evidence-badge-lower',
+}
+
+
 def _format_residual_metric(value):
     value = _finite_float(value)
     return value if np.isfinite(value) else np.nan
 
 
-def create_residual_summary_table(residuals):
-    """Return a compact residual-summary table for fitted residuals.
+def _residual_badge(label, level):
+    badge_class = _RESIDUAL_BADGE_CLASS_BY_LEVEL.get(level, 'evidence-badge-lower')
+    return (
+        f'<span class="evidence-badge {badge_class}">'
+        f'{escape(label)}'
+        '</span>'
+    )
 
-    Residuals are defined consistently throughout the app as observed minus
-    predicted. The table intentionally uses simple, plain-language summaries
-    that are easy to pair with a residual-vs-x plot.
+
+def _badge_join(badges):
+    return ' '.join(badges)
+
+
+def calculate_residual_pattern_diagnostics(x, residuals):
+    """Return normalized residual-pattern diagnostics for a fitted model.
+
+    The diagnostics are screening aids. They normalize simple residual summaries
+    by the model RMSE so that the values are easier to compare across fitted
+    models and response scales. Residuals are observed minus predicted.
     """
+    x = np.asarray(x, dtype=float)
     residuals = np.asarray(residuals, dtype=float)
-    residuals = residuals[np.isfinite(residuals)]
+    mask = np.isfinite(x) & np.isfinite(residuals)
+    x = x[mask]
+    residuals = residuals[mask]
 
     if residuals.size == 0:
-        return '<p class="evidence-note">Residual summary is not available because no finite residuals were calculated.</p>'
+        return {
+            'badges': [_residual_badge('Residual diagnostics unavailable', 'unavailable')],
+            'levels': ['unavailable'],
+            'metrics': {},
+            'notes': ['No finite residuals were available for this fit.'],
+        }
+
+    rmse = float(np.sqrt(np.mean(residuals ** 2)))
+    metrics_out = {
+        'rmse': rmse,
+        'mean_residual': float(np.mean(residuals)),
+        'max_abs_residual': float(np.max(np.abs(residuals))),
+    }
+
+    if rmse == 0:
+        return {
+            'badges': [_residual_badge('No clear residual pattern identified', 'ok')],
+            'levels': ['ok'],
+            'metrics': {
+                **metrics_out,
+                'bias_ratio': 0.0,
+                'trend_ratio': 0.0,
+                'largest_residual_ratio': 0.0,
+            },
+            'notes': ['The fitted residuals are zero within the displayed precision.'],
+        }
+
+    bias_ratio_signed = float(np.mean(residuals) / rmse)
+    largest_residual_ratio = float(np.max(np.abs(residuals)) / rmse)
+
+    trend_ratio_signed = np.nan
+    finite_unique_x = np.unique(x[np.isfinite(x)])
+    if residuals.size >= 2 and finite_unique_x.size >= 2:
+        x_centered = x - np.mean(x)
+        denominator = float(np.sum(x_centered ** 2))
+        if denominator > 0:
+            slope = float(np.sum(x_centered * residuals) / denominator)
+            x_range = float(np.max(x) - np.min(x))
+            trend_ratio_signed = float((slope * x_range) / rmse)
+
+    badges = []
+    levels = []
+    notes = []
+    if abs(bias_ratio_signed) >= RESIDUAL_BIAS_RATIO_THRESHOLD:
+        badges.append(_residual_badge('Possible residual bias', 'caution'))
+        levels.append('caution')
+        direction = 'underpredicts' if bias_ratio_signed > 0 else 'overpredicts'
+        notes.append(f'The average residual suggests the model may systematically {direction} the observed data.')
+
+    if np.isfinite(trend_ratio_signed) and abs(trend_ratio_signed) >= RESIDUAL_TREND_RATIO_THRESHOLD:
+        badges.append(_residual_badge('Possible x-dependent residual pattern', 'caution'))
+        levels.append('caution')
+        notes.append('Residuals appear to change across the fitting x-axis, which may indicate a pattern not captured by the model form.')
+
+    if largest_residual_ratio >= RESIDUAL_LARGE_POINT_RATIO_THRESHOLD:
+        badges.append(_residual_badge('Large individual residual noted', 'caution'))
+        levels.append('caution')
+        notes.append("One fitted point has a residual much larger than the model's typical residual size.")
+
+    if not badges:
+        badges = [_residual_badge('No clear residual pattern identified', 'ok')]
+        levels = ['ok']
+        notes = ['No large normalized residual bias, x-dependent trend, or individual residual was flagged by these screening checks.']
+
+    return {
+        'badges': badges,
+        'levels': levels,
+        'metrics': {
+            **metrics_out,
+            'bias_ratio': bias_ratio_signed,
+            'trend_ratio': trend_ratio_signed,
+            'largest_residual_ratio': largest_residual_ratio,
+        },
+        'notes': notes,
+    }
+
+
+def create_residual_pattern_table(x, residuals):
+    """Return a compact residual-pattern diagnostic table for fitted residuals."""
+    diagnostics = calculate_residual_pattern_diagnostics(x, residuals)
+    badges_html = _badge_join(diagnostics['badges'])
+    metric_values = diagnostics['metrics']
+
+    if not metric_values:
+        return (
+            '<div class="diagnostic-badge-container">'
+            f'{badges_html}'
+            '</div>'
+            '<p class="evidence-note">Residual diagnostics are not available because no finite residuals were calculated.</p>'
+        )
 
     rows = [
         {
-            'Metric': 'Mean residual (bias)',
-            'Value': _format_residual_metric(np.mean(residuals)),
-            'Plain-language interpretation': 'Average signed error. Positive values indicate underprediction; negative values indicate overprediction.',
+            'Diagnostic': 'Residual pattern screen',
+            'Value': badges_html,
+            'Plain-language interpretation': 'Summary of whether the residuals show simple bias, x-dependent trend, or large-point patterns that may warrant closer review.',
         },
         {
-            'Metric': 'Mean absolute residual',
-            'Value': _format_residual_metric(np.mean(np.abs(residuals))),
-            'Plain-language interpretation': 'Average error size, ignoring direction.',
+            'Diagnostic': 'Mean residual / RMSE',
+            'Value': _format_residual_metric(metric_values.get('bias_ratio')),
+            'Plain-language interpretation': 'Average signed residual normalized to typical fitted error. Positive values indicate underprediction; negative values indicate overprediction.',
         },
         {
-            'Metric': 'Maximum absolute residual',
-            'Value': _format_residual_metric(np.max(np.abs(residuals))),
-            'Plain-language interpretation': 'Largest single fitted-data error.',
+            'Diagnostic': 'Residual trend across x range / RMSE',
+            'Value': _format_residual_metric(metric_values.get('trend_ratio')),
+            'Plain-language interpretation': 'Approximate change in residuals across the fitting x-axis, normalized to typical fitted error. Values farther from 0 suggest a possible x-dependent pattern.',
+        },
+        {
+            'Diagnostic': 'Largest absolute residual / RMSE',
+            'Value': _format_residual_metric(metric_values.get('largest_residual_ratio')),
+            'Plain-language interpretation': 'Largest fitted-data residual normalized to typical fitted error. Larger values may indicate an individual point that warrants review.',
         },
     ]
     return pd.DataFrame(rows).to_html(
         classes='table table-striped residual-summary-table',
         index=False,
-        float_format=lambda x: f'{x:.4f}',
+        float_format=lambda value: f'{value:.4f}',
         na_rep='N/A',
         escape=False,
     )
@@ -757,6 +884,55 @@ def _parameter_diagnostic_table(rows):
         return '<p class="evidence-note">Fitted parameter diagnostics are not available for this approach.</p>'
     df = pd.DataFrame(rows)
     return df.to_html(classes='table table-striped parameter-diagnostics-summary-table', index=False, escape=False)
+
+
+def _residual_diagnostic_table(rows):
+    if not rows:
+        return '<p class="evidence-note">Residual diagnostics are not available for this approach.</p>'
+    df = pd.DataFrame(rows)
+    return df.to_html(classes='table table-striped residual-diagnostics-summary-table', index=False, escape=False)
+
+
+def create_residual_diagnostics_summary(results, approach):
+    """Create a compact model-comparison table of residual diagnostic badges."""
+    if approach not in ('approach1', 'approach2'):
+        return '<p class="evidence-note">Residual diagnostics are not applicable because no parametric model is used.</p>'
+
+    rows = []
+    for model_key, model_results in results.items():
+        if len(model_key.split(':')) > 1:
+            approach_id, model_name = model_key.split(':')
+        else:
+            approach_id = model_key
+        if approach_id != approach:
+            continue
+
+        model_display_name = models[model_name]['display_name']
+        if model_results.get('error'):
+            unavailable = _residual_badge('Residual diagnostics unavailable', 'unavailable')
+            if approach == 'approach1':
+                rows.append({'Model': model_display_name, 'Residual diagnostics': unavailable})
+            else:
+                rows.append({'Model': model_display_name, 'Dataset': 'In Vitro', 'Residual diagnostics': unavailable})
+                rows.append({'Model': model_display_name, 'Dataset': 'In Vivo', 'Residual diagnostics': unavailable})
+            continue
+
+        if approach == 'approach1':
+            rows.append({
+                'Model': model_display_name,
+                'Residual diagnostics': model_results.get('residual_diagnostic_badges_html') or _residual_badge('Residual diagnostics unavailable', 'unavailable'),
+            })
+        elif approach == 'approach2':
+            diagnostics = model_results.get('residual_diagnostic_badges_html') or []
+            for i, dataset_label in enumerate(['In Vitro', 'In Vivo']):
+                diagnostics_html = diagnostics[i] if i < len(diagnostics) else ''
+                rows.append({
+                    'Model': model_display_name,
+                    'Dataset': dataset_label,
+                    'Residual diagnostics': diagnostics_html or _residual_badge('Residual diagnostics unavailable', 'unavailable'),
+                })
+
+    return _residual_diagnostic_table(rows)
 
 
 def create_parameter_diagnostics_summary(results, approach):

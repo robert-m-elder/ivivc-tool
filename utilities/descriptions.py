@@ -52,6 +52,7 @@ CROSS_VALIDATION_SUMMARY_HTML = _required(_DESCRIPTION_CONTENT, 'cross_validatio
 GOODNESS_VALIDATION_TABLE_HTML = _required(_DESCRIPTION_CONTENT, 'goodness_validation_table_html')
 RESIDUAL_DIAGNOSTICS_HTML = _required(_DESCRIPTION_CONTENT, 'residual_diagnostics_html')
 PARAMETER_DIAGNOSTICS_COMPARISON_HTML = _required(_DESCRIPTION_CONTENT, 'parameter_diagnostics_comparison_html')
+RESIDUAL_DIAGNOSTICS_COMPARISON_HTML = _required(_DESCRIPTION_CONTENT, 'residual_diagnostics_comparison_html')
 GRID_SEARCH_DESCRIPTION_HTML = _required(_DESCRIPTION_CONTENT, 'grid_search_description_html')
 CV_SCHEMES = _required(_DESCRIPTION_CONTENT, 'cv_schemes')
 ANALYSIS_PARAMETERS = _required(_DESCRIPTION_CONTENT, 'analysis_parameters')

@@ -1344,6 +1344,26 @@ button.dt-button2:disabled {
     vertical-align: middle;
 }
 
+/* Residual diagnostics summaries */
+.residual-diagnostics-summary-table,
+.residual-summary-table {
+    margin-top: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.residual-diagnostics-summary-table th,
+.residual-diagnostics-summary-table td,
+.residual-summary-table th,
+.residual-summary-table td {
+    vertical-align: middle;
+}
+
+.residual-diagnostics-summary-table .evidence-badge,
+.residual-summary-table .evidence-badge {
+    margin-right: 0.25rem;
+    margin-bottom: 0.2rem;
+}
+
 /* Fitted parameter diagnostics */
 
 .parameter-diagnostics-summary-table {
