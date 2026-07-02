@@ -93,11 +93,11 @@ The app does not include adjusted $R^2$ or information criteria (AIC, AIC\textsu
 
 \subsection{Interpreting residual plots}
 
-Residuals (or prediction errors) are calculated as observed minus predicted values. The app plots residuals against the fitting x-axis and summarizes simple residual-pattern diagnostics.
+Residuals (or prediction errors) are calculated as observed minus predicted values. The app plots residuals against the fitting x-axis in the original response units so that the size and direction of the errors can be interpreted in the same scale as the fitted endpoint.
 
-Residual plots should be reviewed for obvious patterns. Points scattered around zero are more consistent with an appropriate model form, although they do not prove that the model is valid. A clear trend, curvature, clustering, or mostly positive or mostly negative residuals may indicate bias or that the selected model form may not be appropriate for the data.
+The residual plot includes a horizontal zero line, a shaded band corresponding to $\pm 1$ fitted RMSE, and dashed reference lines corresponding to $\pm 2$ fitted RMSE. These bands provide visual context for the model's typical fitted error. They are not confidence intervals, prediction intervals, acceptance limits, or regulatory criteria.
 
-The residual-pattern diagnostics are normalized to the model's fitted RMSE so that they are easier to compare across models and response scales. The mean residual divided by RMSE summarizes possible signed bias, the fitted residual trend across the x-axis divided by RMSE summarizes possible x-dependent residual structure, and the largest absolute residual divided by RMSE identifies whether one fitted point is unusually large relative to the model's typical residual size. These diagnostics are heuristic review aids, not statistical acceptance criteria.
+Residual plots should be reviewed qualitatively. Points scattered around zero are more consistent with an appropriate model form, although they do not prove that the model is valid. Sustained patterns, curvature, clustering, repeated excursions outside the reference bands, or mostly positive or mostly negative residuals may indicate bias or that the selected model form may not fully capture the data.
 
 
 \subsection{Interpreting parameter uncertainty}
