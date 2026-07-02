@@ -93,11 +93,13 @@ The app does not include adjusted $R^2$ or information criteria (AIC, AIC\textsu
 
 \subsection{Interpreting residual plots}
 
-Residuals (or prediction errors) are calculated as observed minus predicted values. The app plots residuals against the fitting x-axis in the original response units so that the size and direction of the errors can be interpreted in the same scale as the fitted endpoint.
+Residuals (or prediction errors) are calculated as observed minus predicted values. The app plots residuals against the fitting x-axis so users can look for systematic patterns that may not be obvious from global performance metrics alone.
 
-The residual plot includes a horizontal zero line, a shaded band corresponding to $\pm 1$ fitted RMSE, and dashed reference lines corresponding to $\pm 2$ fitted RMSE. These bands provide visual context for the model's typical fitted error. They are not confidence intervals, prediction intervals, acceptance limits, or regulatory criteria.
+Two residual plots are shown for each fitted model. The original-unit plot keeps residuals in the same response units as the fitted endpoint and uses a common y-axis scale across comparable models, making it easier to compare residual magnitude visually. The standardized plot divides residuals by the observed response standard deviation, making residual size easier to compare across response scales.
 
-Residual plots should be reviewed qualitatively. Points scattered around zero are more consistent with an appropriate model form, although they do not prove that the model is valid. Sustained patterns, curvature, clustering, repeated excursions outside the reference bands, or mostly positive or mostly negative residuals may indicate bias or that the selected model form may not fully capture the data.
+Both residual plots include a horizontal zero line, a shaded band corresponding to $\pm 1$ observed response standard deviation, and dashed reference lines corresponding to $\pm 2$ observed response standard deviations. These bands provide visual context for the observed response scale. They are not confidence intervals, prediction intervals, acceptance limits, or regulatory criteria.
+
+Residual plots should be reviewed qualitatively. Points scattered around zero are more consistent with an appropriate model form, although they do not prove that the model is valid. Sustained patterns, curvature, clustering, repeated excursions outside the reference bands, or adjacent time points with residuals mostly on the same side of zero may indicate bias or that the selected model form may not fully capture the data.
 
 
 \subsection{Interpreting parameter uncertainty}
