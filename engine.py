@@ -555,6 +555,10 @@ def _common_axis_limit(values, reference_scale=None, padding=1.20):
     return padding * max_value
 
 
+
+
+
+
 def create_residual_plotly(
     x,
     residuals,
@@ -1042,39 +1046,40 @@ def create_comparison(results, approach):
     metrics_table = df.to_html(classes='table table-striped', index=False, float_format=lambda x: f'{x:.4f}')
 
     # Create pairwise comparison table using KS test
-    n_models = len(model_keys)
-    if approach == 'approach1':
-        ks_matrix = np.zeros((n_models, n_models))
-        np.fill_diagonal(ks_matrix, 1)
-        for i in range(n_models):
-            for j in range(i+1, n_models):
-                try:
-                    _, p_value = sp.stats.ks_2samp(results[model_keys[i]]['predictions'], results[model_keys[j]]['predictions'])
-                except Exception as e:
-                    print(f"Error processing prediction: {e}")
-                    p_value = np.nan
-                ks_matrix[i, j] = ks_matrix[j, i] = p_value
-        df_ks = pd.DataFrame(ks_matrix, index=model_display_names, columns=model_display_names)
-        ks_table = df_ks.to_html(classes='table table-striped', float_format=lambda x: f'{x:.4f}')
-        ks_tables = [ks_table]
-    elif approach == 'approach2':
-        ks_tables = []
-        for r in [1,2]:
-            ks_matrix = np.zeros((n_models, n_models))
-            np.fill_diagonal(ks_matrix, 1)
-            for i in range(n_models):
-                for j in range(i+1, n_models):
-                    try:
-                        _, p_value = sp.stats.ks_2samp(results[model_keys[i]]['predictions'][r-1], results[model_keys[j]]['predictions'][r-1])
-                    except Exception as e:
-                        print(f"Error processing prediction: {e}")
-                        p_value = np.nan
-                    ks_matrix[i, j] = ks_matrix[j, i] = p_value
-            df_ks = pd.DataFrame(ks_matrix, index=model_display_names, columns=model_display_names)
-            ks_table = df_ks.to_html(classes='table table-striped', float_format=lambda x: f'{x:.4f}')
-            ks_tables.append(ks_table)
-    elif approach == 'approach3':
-        ks_tables = [None]
+#    n_models = len(model_keys)
+#    if approach == 'approach1':
+#        ks_matrix = np.zeros((n_models, n_models))
+#        np.fill_diagonal(ks_matrix, 1)
+#        for i in range(n_models):
+#            for j in range(i+1, n_models):
+#                try:
+#                    _, p_value = sp.stats.ks_2samp(results[model_keys[i]]['predictions'], results[model_keys[j]]['predictions'])
+#                except Exception as e:
+#                    print(f"Error processing prediction: {e}")
+#                    p_value = np.nan
+#                ks_matrix[i, j] = ks_matrix[j, i] = p_value
+#        df_ks = pd.DataFrame(ks_matrix, index=model_display_names, columns=model_display_names)
+#        ks_table = df_ks.to_html(classes='table table-striped', float_format=lambda x: f'{x:.4f}')
+#        ks_tables = [ks_table]
+#    elif approach == 'approach2':
+#        ks_tables = []
+#        for r in [1,2]:
+#            ks_matrix = np.zeros((n_models, n_models))
+#            np.fill_diagonal(ks_matrix, 1)
+#            for i in range(n_models):
+#                for j in range(i+1, n_models):
+#                    try:
+#                        _, p_value = sp.stats.ks_2samp(results[model_keys[i]]['predictions'][r-1], results[model_keys[j]]['predictions'][r-1])
+#                    except Exception as e:
+#                        print(f"Error processing prediction: {e}")
+#                        p_value = np.nan
+#                    ks_matrix[i, j] = ks_matrix[j, i] = p_value
+#            df_ks = pd.DataFrame(ks_matrix, index=model_display_names, columns=model_display_names)
+#            ks_table = df_ks.to_html(classes='table table-striped', float_format=lambda x: f'{x:.4f}')
+#            ks_tables.append(ks_table)
+#    elif approach == 'approach3':
+#        ks_tables = [None]
+    ks_tables = [None]
 
     return metrics_table, ks_tables
 

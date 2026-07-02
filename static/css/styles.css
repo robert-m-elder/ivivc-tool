@@ -1404,3 +1404,53 @@ button.dt-button2:disabled {
 .parameter-diagnostics ul {
     margin: 0.35rem 0 0.15rem 1.2rem;
 }
+
+/* Clearer grouping for model-comparison approach sections */
+.comparison-approach-block {
+    margin: 28px 0;
+    padding: 18px 20px;
+    border: 1px solid #b7d7eb;
+    border-radius: 6px;
+    background: #fbfdff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+}
+
+.comparison-approach-block > h3 {
+    margin: -18px -20px 18px -20px;
+    padding: 12px 18px;
+    border-bottom: 1px solid #b7d7eb;
+    border-radius: 6px 6px 0 0;
+    background: #eaf4fb;
+    color: #222c67;
+}
+
+/* Clearer grouping for the two datasets in Approach 2 fitting results */
+.approach2-dataset-section {
+    margin: 22px 0;
+    padding: 16px 18px;
+    border: 1px solid #d7e4ec;
+    border-left: 6px solid #007cba;
+    border-radius: 6px;
+    background: #f8fbfd;
+}
+
+.approach2-dataset-in-vivo {
+    border-left-color: #8B3A6B;
+    background: #fdf8fb;
+}
+
+.approach2-dataset-heading {
+    margin-top: 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #d7e4ec;
+    color: #222c67;
+    font-size: 1.2rem;
+}
+
+
+.diagnostic-detail {
+    display: inline-block;
+    margin-top: 4px;
+    color: #555;
+    font-size: 0.9rem;
+}

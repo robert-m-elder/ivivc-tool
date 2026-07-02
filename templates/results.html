@@ -173,57 +173,61 @@
                 </tbody>
             </table>
 {% if "approach1" in selected_approaches %}
-                <h3>{{ approaches["approach1"].display_name }}</h3>
-                <h4>Performance Metrics</h4>
-                {{ comparisons["approach1"] | safe }}
-                <h4>Cross-Validation Summary</h4>
-                {{ cross_validation_summary_html | safe }}
-                {{ cv_summary_tables.get("approach1", "") | safe }}
-                <h4>Fitted Parameter Diagnostics</h4>
-                {{ parameter_diagnostics_comparison_html | safe }}
-                {{ parameter_diagnostic_tables.get("approach1", "") | safe }}
-                {% set approach1_evidence = evidence_tables.get('approach1', {}).get('fit') %}
-                {% if approach1_evidence %}
-                    <h4>Relative Model Evidence</h4>
-                    {{ relative_model_evidence_html | safe }}
-                    {{ approach1_evidence.html | safe }}
-                {% endif %}
-                <!--
-                <h4>Pairwise Model Comparison (Kolmogorov-Smirnov Test p-values)</h4>
-                {{ ks_tables["approach1"][0] | safe}}
-                --!>
+                <section class="comparison-approach-block comparison-approach1">
+                    <h3>{{ approaches["approach1"].display_name }}</h3>
+                    <h4>Performance Metrics</h4>
+                    {{ comparisons["approach1"] | safe }}
+                    <h4>Cross-Validation Summary</h4>
+                    {{ cross_validation_summary_html | safe }}
+                    {{ cv_summary_tables.get("approach1", "") | safe }}
+                    <h4>Fitted Parameter Diagnostics</h4>
+                    {{ parameter_diagnostics_comparison_html | safe }}
+                    {{ parameter_diagnostic_tables.get("approach1", "") | safe }}
+                    {% set approach1_evidence = evidence_tables.get('approach1', {}).get('fit') %}
+                    {% if approach1_evidence %}
+                        <h4>Relative Model Evidence</h4>
+                        {{ relative_model_evidence_html | safe }}
+                        {{ approach1_evidence.html | safe }}
+                    {% endif %}
+                    <!--
+                    <h4>Pairwise Model Comparison (Kolmogorov-Smirnov Test p-values)</h4>
+                    {{ ks_tables["approach1"][0] | safe}}
+                    --!>
+                </section>
             {% endif %}
             {% if "approach2" in selected_approaches %}
-                <h3>{{ approaches["approach2"].display_name }}</h3>
-                <h4>Performance Metrics</h4>
-                {{ comparisons["approach2"] | safe }}
-                <h4>Cross-Validation Summary</h4>
-                {{ cross_validation_summary_html | safe }}
-                {{ cv_summary_tables.get("approach2", "") | safe }}
-                <h4>Fitted Parameter Diagnostics</h4>
-                {{ parameter_diagnostics_comparison_html | safe }}
-                {{ parameter_diagnostic_tables.get("approach2", "") | safe }}
-                <h4>Relative Model Evidence</h4>
-                {{ relative_model_evidence_html | safe }}
-                {% set approach2_evidence = evidence_tables.get('approach2', {}) %}
-                {% if approach2_evidence.get('combined') %}
-                    <h5>Combined in vitro + in vivo evidence</h5>
-                    {{ approach2_evidence.get('combined').html | safe }}
-                {% endif %}
-                {% if approach2_evidence.get('in_vitro') %}
-                    <h5>In vitro fit evidence</h5>
-                    {{ approach2_evidence.get('in_vitro').html | safe }}
-                {% endif %}
-                {% if approach2_evidence.get('in_vivo') %}
-                    <h5>In vivo fit evidence</h5>
-                    {{ approach2_evidence.get('in_vivo').html | safe }}
-                {% endif %}
-                <!--
-                <h4>Pairwise Model Comparison (Kolmogorov-Smirnov Test p-values), In Vitro Data</h4>
-                {{ ks_tables["approach2"][0] | safe}}
-                <h4>Pairwise Model Comparison (Kolmogorov-Smirnov Test p-values), In Vivo Data</h4>
-                {{ ks_tables["approach2"][1] | safe}}
-                --!>
+                <section class="comparison-approach-block comparison-approach2">
+                    <h3>{{ approaches["approach2"].display_name }}</h3>
+                    <h4>Performance Metrics</h4>
+                    {{ comparisons["approach2"] | safe }}
+                    <h4>Cross-Validation Summary</h4>
+                    {{ cross_validation_summary_html | safe }}
+                    {{ cv_summary_tables.get("approach2", "") | safe }}
+                    <h4>Fitted Parameter Diagnostics</h4>
+                    {{ parameter_diagnostics_comparison_html | safe }}
+                    {{ parameter_diagnostic_tables.get("approach2", "") | safe }}
+                    <h4>Relative Model Evidence</h4>
+                    {{ relative_model_evidence_html | safe }}
+                    {% set approach2_evidence = evidence_tables.get('approach2', {}) %}
+                    {% if approach2_evidence.get('combined') %}
+                        <h5>Combined in vitro + in vivo evidence</h5>
+                        {{ approach2_evidence.get('combined').html | safe }}
+                    {% endif %}
+                    {% if approach2_evidence.get('in_vitro') %}
+                        <h5>In vitro fit evidence</h5>
+                        {{ approach2_evidence.get('in_vitro').html | safe }}
+                    {% endif %}
+                    {% if approach2_evidence.get('in_vivo') %}
+                        <h5>In vivo fit evidence</h5>
+                        {{ approach2_evidence.get('in_vivo').html | safe }}
+                    {% endif %}
+                    <!--
+                    <h4>Pairwise Model Comparison (Kolmogorov-Smirnov Test p-values), In Vitro Data</h4>
+                    {{ ks_tables["approach2"][0] | safe}}
+                    <h4>Pairwise Model Comparison (Kolmogorov-Smirnov Test p-values), In Vivo Data</h4>
+                    {{ ks_tables["approach2"][1] | safe}}
+                    --!>
+                </section>
             {% endif %}
         </div>
 <div id="final-model-report">
@@ -557,36 +561,39 @@
                                     </div>
 <h4>Function</h4>
                                     <p>\[{{ model_results.function }}\]</p>
-                                    <h4>In Vitro Data</h4>
-                                    <h4>Model parameters</h4>
+                                    <section class="approach2-dataset-section approach2-dataset-in-vitro">
+                                        <h4 class="approach2-dataset-heading">In Vitro Data</h4>
+                                        <h4>Model parameters</h4>
 {% for param, value in model_results.uparams[0].items() %}
-                                    <p>{{ param }}: {{ value.n | round(4) }} &plusmn; {{ value.s | round(4) }}</p>
-                                    {% endfor %}
-                                    <h4>Fitted parameter diagnostics</h4>
-                                    {{ model_results.parameter_diagnostics_html[0] | safe }}
-                                    <h4>Time constant</h4>
-                                    {% if model_results.tau[0].n > 0 %}
-                                        <p>Tau: {{  model_results.tau[0].n | round(4) }} &plusmn; {{ model_results.tau[0].s |round(4) }}</p>
-                                    {% else %}
-                                        <p>Tau: N/A</p>
-                                    {% endif %}
-                                    <h4>Goodness of Fit</h4>
-                                    {{ model_results.stats_table[0] | safe }}
-                                    <h4>Residual diagnostics</h4>
-                                    {{ residual_diagnostics_html | safe }}
-                                    <h5>Original-unit residuals, common scale</h5>
-                                            <div id="plot-residual-{{ model_key|replace(':', '-') }}-in-vitro" class="plot-container report-source-plot">
-                                        {{ model_results.residual_plot[0].plot | safe }}
-                                    </div>
-                                    <div class="custom-button-container">
-                                        <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach2-{{ model_name }}-residual-table-in-vitro" style="text-decoration: none;">
-                                            <span>Show Data Table</span>
-                                        </button>
-                                    </div>
-                                    <div id="approach2-{{ model_name }}-residual-table-in-vitro-container" class="data-table-container" style="display: none;">
-                                        {{ model_results.residual_plot[0].table_html | safe }}
-                                    </div>
-                                    <h4>In Vivo Data</h4>
+                                        <p>{{ param }}: {{ value.n | round(4) }} &plusmn; {{ value.s | round(4) }}</p>
+                                        {% endfor %}
+                                        <h4>Fitted parameter diagnostics</h4>
+                                        {{ model_results.parameter_diagnostics_html[0] | safe }}
+                                        <h4>Time constant</h4>
+                                        {% if model_results.tau[0].n > 0 %}
+                                            <p>Tau: {{  model_results.tau[0].n | round(4) }} &plusmn; {{ model_results.tau[0].s |round(4) }}</p>
+                                        {% else %}
+                                            <p>Tau: N/A</p>
+                                        {% endif %}
+                                        <h4>Goodness of Fit</h4>
+                                        {{ model_results.stats_table[0] | safe }}
+                                        <h4>Residual diagnostics</h4>
+                                        {{ residual_diagnostics_html | safe }}
+                                        <h5>Original-unit residuals, common scale</h5>
+                                        <div id="plot-residual-{{ model_key|replace(':', '-') }}-in-vitro" class="plot-container report-source-plot">
+                                            {{ model_results.residual_plot[0].plot | safe }}
+                                        </div>
+                                        <div class="custom-button-container">
+                                            <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach2-{{ model_name }}-residual-table-in-vitro" style="text-decoration: none;">
+                                                <span>Show Data Table</span>
+                                            </button>
+                                        </div>
+                                        <div id="approach2-{{ model_name }}-residual-table-in-vitro-container" class="data-table-container" style="display: none;">
+                                            {{ model_results.residual_plot[0].table_html | safe }}
+                                        </div>
+                                    </section>
+                                    <section class="approach2-dataset-section approach2-dataset-in-vivo">
+                                        <h4 class="approach2-dataset-heading">In Vivo Data</h4>
                                     <h4>Model parameters</h4>
 {% for param, value in model_results.uparams[1].items() %}
                                     <p>{{ param }}: {{ value.n | round(4) }} &plusmn; {{ value.s | round(4) }}</p>
@@ -615,6 +622,7 @@
                                     <div id="approach2-{{ model_name }}-residual-table-in-vivo-container" class="data-table-container" style="display: none;">
                                         {{ model_results.residual_plot[1].table_html | safe }}
                                     </div>
+                                    </section>
                                 {% endif %}
                             </div>
                         {% endif %}

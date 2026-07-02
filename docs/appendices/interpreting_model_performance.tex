@@ -93,14 +93,13 @@ The app does not include adjusted $R^2$ or information criteria (AIC, AIC\textsu
 
 \subsection{Interpreting residual plots}
 
-Residuals (or prediction errors) are calculated as observed minus predicted values. The app plots residuals against the fitting x-axis so users can look for systematic patterns that may not be obvious from global performance metrics alone.
+Residuals (or prediction errors) are calculated as observed minus predicted values. Residual plots are commonly used as graphical diagnostics to assess whether model errors show systematic patterns, nonconstant variance, or other departures from model assumptions \cite{kutner2005}. The app plots residuals against the fitting x-axis so users can look for systematic patterns that may not be obvious from global performance metrics alone. 
 
 Residual plots keep residuals in the same response units as the fitted endpoint and use a common y-axis scale across comparable models, making it easier to compare residual magnitude visually.
 
-Each residual plot includes a horizontal zero line and visual reference bands based on a common residual scale. For each comparable model set, the app calculates the pooled 95th percentile of absolute residuals. The shaded band corresponds to $\pm 25\%$ of that residual scale, and the dashed reference lines correspond to $\pm 50\%$ of that residual scale. These bands provide visual context for comparing residual patterns across models. They are not confidence intervals, prediction intervals, acceptance limits, or regulatory criteria.
+Each residual plot includes a horizontal zero line and visual reference bands based on a common residual scale. For all comparable models (i.e., models in Approach 1, models in Approach 2), the app calculates the pooled 95th percentile of absolute residuals. The shaded band corresponds to $\pm 25\%$ of that residual scale, and the dashed reference lines correspond to $\pm 50\%$ of that residual scale. These bands provide visual context for comparing residual patterns across models. They are not confidence intervals, prediction intervals, acceptance limits, or regulatory criteria. The common residual scale will depend on the models selected for the Approach. 
 
 Residual plots should be reviewed qualitatively. Points scattered around zero are more consistent with an appropriate model form, although they do not prove that the model is valid. Sustained patterns, curvature, clustering, repeated excursions outside the reference bands, or adjacent time points with residuals mostly on the same side of zero may indicate bias or that the selected model form may not fully capture the data.
-
 
 \subsection{Interpreting parameter uncertainty}
 
@@ -142,7 +141,7 @@ The intended use should determine the amount and type of supporting evidence nee
 
 \begin{enumerate}
 \item Confirm that the dataset, preprocessing choices, and selected response variables are appropriate.
-\item Review fitted curves and uncertainty bands for each candidate model.
+\item Review fitted curves, uncertainty bands, and residual plots for each candidate model.
 \item Compare fitted-data metrics, such as \(R^2\) and RMSE.
 \item Review prediction-error metrics in the context of assay variability, endpoint importance, and intended use.
 \item Review cross-validation performance and fit/CV ratios, where cross-validation is applicable.
