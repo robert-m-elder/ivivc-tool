@@ -423,56 +423,6 @@
         </div>
     </div>
 
-<script>
-(function () {
-    function setDisabled(field, disabled) {
-        if (!field) return;
-        field.disabled = disabled;
-        var container = field.closest('.advanced-field');
-        if (container) {
-            container.classList.toggle('advanced-field-disabled', disabled);
-        }
-    }
-
-    function updateCvControls() {
-        var scheme = document.getElementById('cv_scheme');
-        var splits = document.getElementById('cv_n_splits');
-        var splitsLabel = document.getElementById('cv_n_splits_label');
-        var testSize = document.getElementById('cv_test_size');
-        var randomState = document.getElementById('cv_random_state');
-        if (!scheme) return;
-
-        var value = scheme.value;
-        var useSplits = value === 'shuffle_split' || value === 'kfold' || value === 'leave_contiguous_block_out';
-        var useTestSize = value === 'shuffle_split';
-        var useRandom = value === 'shuffle_split';
-
-        if (splitsLabel) {
-            if (value === 'leave_contiguous_block_out') {
-                splitsLabel.textContent = 'Block size';
-            } else if (value === 'kfold') {
-                splitsLabel.textContent = 'Folds';
-            } else if (value === 'shuffle_split') {
-                splitsLabel.textContent = 'Splits';
-            } else {
-                splitsLabel.textContent = 'Splits/folds/block size';
-            }
-        }
-
-        setDisabled(splits, !useSplits);
-        setDisabled(testSize, !useTestSize);
-        setDisabled(randomState, !useRandom);
-    }
-
-    document.addEventListener('DOMContentLoaded', function () {
-        var scheme = document.getElementById('cv_scheme');
-        if (scheme) {
-            scheme.addEventListener('change', updateCvControls);
-            updateCvControls();
-        }
-    });
-})();
-</script>
 
 </body>
 </html>

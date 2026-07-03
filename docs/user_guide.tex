@@ -194,11 +194,11 @@ Interpretation badge & Neutral rule-of-thumb label based on the displayed delta 
 
 Cross-validation provides an approximate check of how a fitted model performs on held-out data. It is most useful when there are enough observations to fit the model repeatedly while leaving some observations out for evaluation.
 
-The available schemes are Leave-one-timepoint-out, Leave-contiguous-block-out, Shuffle split, K-fold, and None. Leave-one-timepoint-out holds out one observation at a time, Leave-contiguous-block-out holds out adjacent time points, Shuffle split uses repeated random holdout sets, K-fold uses ordered fold-based holdouts, and None disables cross-validation. For small IVIVC datasets, cross-validation summaries should be interpreted as exploratory diagnostics rather than definitive validation results.
+The available schemes are Leave-one-timepoint-out, Leave-contiguous-block-out, Shuffle split, K-fold, and None. Leave-one-timepoint-out holds out one observation at a time, Leave-contiguous-block-out holds out adjacent time points, Shuffle split uses repeated random holdout sets, K-fold uses ordered fold-based holdouts, and None disables cross-validation. The block-size setting for Leave-contiguous-block-out controls how many consecutive observations are held out in each split. Larger blocks may leave too few observations for stable fitting, especially in small datasets. For small datasets, cross-validation summaries should be interpreted as exploratory diagnostics rather than definitive validation results.
 
 Leave-one-timepoint-out is the default cross-validation scheme. It is a practical starting point for small time-course datasets because each split uses all but one observation for fitting. Leave-contiguous-block-out and K-fold can be used as more demanding time-region holdout checks, while Shuffle split is retained as a familiar exploratory option.
 
-For background on cross-validation procedures and their use in model assessment and selection, see reference \cite{arlot2010}.
+For background on cross-validation procedures and their use in model assessment and selection, particularly for for time series, see references \cite{arlot2010, bergmeir2012, roberts2017, bergmeir2018}.
 
 \begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.20\textwidth}>{\raggedright\arraybackslash}p{0.20\textwidth}>{\raggedright\arraybackslash}p{0.52\textwidth}@{}}
 \toprule
@@ -210,7 +210,7 @@ For background on cross-validation procedures and their use in model assessment 
 \midrule
 \endhead
 Leave-one-timepoint-out & leave\_one\_timepoint\_out & Holds out one time point at a time and fits the model using all remaining time points. This is the default because it uses as much data as possible for fitting while still providing a held-out prediction diagnostic for small time-course datasets. \\
-Leave-contiguous-block-out & leave\_contiguous\_block\_out & Holds out adjacent time points as a block in x-axis order. The block-size setting controls how many adjacent observations are held out in each split. This can help reveal whether a model can bridge missing time regions. \\
+Leave-contiguous-block-out & leave\_contiguous\_block\_out & Holds out adjacent time points as a block in x-axis order. The block-size setting controls how many adjacent observations are held out in each split. The maximum useful block size depends on the number of observations. Larger blocks may leave too few observations for stable fitting, especially in small datasets. \\
 Shuffle split & shuffle\_split & Repeatedly creates random training and holdout subsets. This can be useful as an exploratory sensitivity check when the dataset has enough observations to support repeated resampling. The splits, test-size, and random-seed settings control the repeated random holdouts. \\
 K-fold & kfold & Divides the ordered dataset into a specified number of folds, fits the model on all but one fold, and evaluates on the held-out fold. With small k, this can act as a more demanding time-region holdout test. \\
 None & none & Disables cross-validation. This may be appropriate when the dataset is too small for meaningful holdout validation or when only fitted-model summaries are needed. \\
@@ -227,7 +227,7 @@ None & none & Disables cross-validation. This may be appropriate when the datase
 \midrule
 \endhead
 Cross-validation scheme & cv\_scheme & Selects the splitting method used to estimate held-out performance for fitted parametric models. Leave-one-timepoint-out is the default. \\
-CV splits/folds & cv\_n\_splits & For Shuffle split, the number of repeated random train/test splits. For K-fold, the number of folds. For Leave-contiguous-block-out, the number of adjacent time points held out per split. This setting is not used for Leave-one-timepoint-out or None. \\
+CV splits/folds/block size & cv\_n\_splits & For Shuffle split, the number of repeated random train/test splits. For K-fold, the number of folds. For Leave-contiguous-block-out, the number of adjacent time points held out per split. The setup page does not enforce a maximum block size because the uploaded data are not read until Analyze is selected; larger blocks may leave too few observations for stable fitting. This setting is not used for Leave-one-timepoint-out or None. \\
 Shuffle split test size & cv\_test\_size & The fraction of observations held out for testing in each Shuffle split repeat. Smaller values leave more observations for fitting; larger values make the holdout test more demanding but leave fewer observations for training. \\
 CV random seed & cv\_random\_state & Seed used to make randomized cross-validation splits reproducible. This applies to Shuffle split. \\
 \bottomrule

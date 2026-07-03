@@ -471,7 +471,7 @@ def build_user_guide_tex() -> str:
     parts.append(latex_paragraphs(CROSS_VALIDATION_DESCRIPTION_HTML))
     parts.append(latex_paragraphs("Leave-one-timepoint-out is the default cross-validation scheme. It is a practical starting point for small time-course datasets because each split uses all but one observation for fitting. Leave-contiguous-block-out and K-fold can be used as more demanding time-region holdout checks, while Shuffle split is retained as a familiar exploratory option."))
     parts.append(
-        r"For background on cross-validation procedures and their use in model assessment and selection, see reference \cite{arlot2010}."
+        r"For background on cross-validation procedures and their use in model assessment and selection, particularly for for time series, see references \cite{arlot2010, bergmeir2012, roberts2017, bergmeir2018}."
         + "\n\n"
     )
     parts.append(latex_table(

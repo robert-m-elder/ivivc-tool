@@ -137,6 +137,7 @@ function updateCrossValidationSettingState() {
     const scheme = $('#cv_scheme').val();
     const controls = {
         nSplits: $('#cv_n_splits'),
+        nSplitsLabel: $('#cv_n_splits_label'),
         testSize: $('#cv_test_size'),
         randomState: $('#cv_random_state')
     };
@@ -146,9 +147,20 @@ function updateCrossValidationSettingState() {
         field.closest('.advanced-field').toggleClass('advanced-field-disabled', !enabled);
     }
 
-    setFieldState(controls.nSplits, scheme === 'shuffle_split' || scheme === 'kfold');
-    setFieldState(controls.testSize, scheme === 'shuffle_split');
-    setFieldState(controls.randomState, scheme === 'shuffle_split' || scheme === 'kfold');
+    const usesSplitsField = scheme === 'shuffle_split' || scheme === 'kfold' || scheme === 'leave_contiguous_block_out';
+    const usesTestSize = scheme === 'shuffle_split';
+    const usesRandomState = scheme === 'shuffle_split';
+
+    const splitLabels = {
+        'shuffle_split': 'Splits',
+        'kfold': 'Folds',
+        'leave_contiguous_block_out': 'Block size'
+    };
+    controls.nSplitsLabel.text(splitLabels[scheme] || 'Splits/folds/block size');
+
+    setFieldState(controls.nSplits, usesSplitsField);
+    setFieldState(controls.testSize, usesTestSize);
+    setFieldState(controls.randomState, usesRandomState);
 }
 
 // Modal functionality
