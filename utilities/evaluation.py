@@ -12,27 +12,64 @@ from metrics import calculate_metric
 from joblib import Parallel, delayed
 import multiprocessing
 
+
+class LeaveContiguousBlockOut:
+    """Hold out contiguous blocks in x-axis order.
+
+    The block size is interpreted as the number of adjacent observations to hold
+    out. Splits are generated with stride 1, so a 10-point dataset and block size
+    2 produces 9 train/test splits.
+    """
+
+    def __init__(self, block_size=2):
+        self.block_size = max(1, int(block_size))
+
+    def split(self, X, y=None, groups=None):
+        X = np.asarray(X)
+        n = len(X)
+        if n == 0:
+            return
+        order = np.argsort(X)
+        block_size = min(self.block_size, max(1, n - 1))
+        all_indices = np.arange(n)
+        for start in range(0, n - block_size + 1):
+            test_index = order[start:start + block_size]
+            train_mask = np.ones(n, dtype=bool)
+            train_mask[test_index] = False
+            train_index = all_indices[train_mask]
+            if len(train_index) == 0 or len(test_index) == 0:
+                continue
+            yield train_index, test_index
+
+    def get_n_splits(self, X=None, y=None, groups=None):
+        if X is None:
+            return None
+        n = len(X)
+        block_size = min(self.block_size, max(1, n - 1))
+        return max(n - block_size + 1, 0)
+
 def make_cross_validator(config, approach_id=None):
     """Create a scikit-learn cross-validator from user/app configuration."""
-    scheme = config.get('cv_scheme', 'shuffle_split')
-    n_splits = int(config.get('cv_n_splits', 20))
+    scheme = config.get('cv_scheme', 'leave_one_timepoint_out')
+    n_splits = int(config.get('cv_n_splits', 2))
     random_state = config.get('cv_random_state', 12345)
     random_state = None if random_state in (None, '') else int(random_state)
 
     if scheme == 'shuffle_split':
         return sklearn.model_selection.ShuffleSplit(
             n_splits=n_splits,
-            test_size=float(config.get('cv_test_size', 0.5)),
+            test_size=float(config.get('cv_test_size', 0.25)),
             random_state=random_state,
         )
     if scheme == 'kfold':
         return sklearn.model_selection.KFold(
             n_splits=n_splits,
-            shuffle=True,
-            random_state=random_state,
+            shuffle=False,
         )
-    if scheme == 'leave_one_out':
+    if scheme in ('leave_one_timepoint_out', 'leave_one_out'):
         return sklearn.model_selection.LeaveOneOut()
+    if scheme == 'leave_contiguous_block_out':
+        return LeaveContiguousBlockOut(block_size=n_splits)
     if scheme == 'none':
         return None
 
@@ -192,11 +229,14 @@ def cross_validation_curve_fit(x_data, y_data, model_function, cv, selected_metr
     for train_index, test_index in cv.split(x_data):
         x_train, x_test = x_data[train_index], x_data[test_index]
         y_train, y_test = y_data[train_index], y_data[test_index]
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore', category=RuntimeWarning)
-            popt, pcov = sp.optimize.curve_fit(model_function, x_train, y_train, p0, **kwargs)
-        y_pred = model_function(x_test, *popt)
-        tmp_scores = {metric: calculate_metric(metric, y_test, y_pred, num_params) for metric in selected_metrics}
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', category=RuntimeWarning)
+                popt, pcov = sp.optimize.curve_fit(model_function, x_train, y_train, p0, **kwargs)
+            y_pred = model_function(x_test, *popt)
+            tmp_scores = {metric: calculate_metric(metric, y_test, y_pred, num_params) for metric in selected_metrics}
+        except Exception:
+            tmp_scores = {metric: np.nan for metric in selected_metrics}
         #tmp_scores = evaluate_goodness_of_fit(y_test, y_pred)
         for k,v in tmp_scores.items():
             scores[k].append(v)

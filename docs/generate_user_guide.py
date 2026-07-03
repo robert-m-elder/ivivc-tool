@@ -381,7 +381,7 @@ def build_user_guide_tex() -> str:
                                 'selection of one or more IVIVC modeling approaches;',
                                 'selection of candidate models to evaluate, where applicable;',
                                 'optionally, preprocessing options, such as normalization, interpolation, or scaling choices;',
-                                'selected performance metrics to display in the results and reports',
+                                'selected performance metrics to display in the results and reports; by default, the app selects R², RMSE, and AICc as a simple starting set that has been useful in internal testing with real datasets but may not be optimal for every analysis',
                                 'optionally, cross-validation settings for applicable parametric models; and',
                                 'grid-search settings for model initialization.']))
     parts.append(latex_paragraphs("The sections below provide additional detail on input file structure, required data columns, preprocessing options, model-selection inputs, and optional analysis settings."))
@@ -469,6 +469,7 @@ def build_user_guide_tex() -> str:
 
     parts.append(latex_section(1, "Cross-validation options"))
     parts.append(latex_paragraphs(CROSS_VALIDATION_DESCRIPTION_HTML))
+    parts.append(latex_paragraphs("Leave-one-timepoint-out is the default cross-validation scheme. It is a practical starting point for small time-course datasets because each split uses all but one observation for fitting. Leave-contiguous-block-out and K-fold can be used as more demanding time-region holdout checks, while Shuffle split is retained as a familiar exploratory option."))
     parts.append(
         r"For background on cross-validation procedures and their use in model assessment and selection, see reference \cite{arlot2010}."
         + "\n\n"
@@ -493,6 +494,7 @@ def build_user_guide_tex() -> str:
     parts.append(latex_table(["Parameter", "Internal key", "Description"], grid_rows, ["0.24\\textwidth", "0.24\\textwidth", "0.44\\textwidth"]))
 
     parts.append(latex_section(1, "Performance metrics"))
+    parts.append(latex_paragraphs("By default, the app selects R², RMSE, and AICc. This compact default set has been simple and useful in internal testing with real datasets, but it is not necessarily the best set for every dataset or intended use. Users may select additional metrics when they provide useful context for a specific analysis."))
     metric_rows = []
     for metric_key, metric_info in metrics.items():
         metric_rows.append([

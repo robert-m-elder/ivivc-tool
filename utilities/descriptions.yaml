@@ -67,6 +67,8 @@ metrics:
     description: Mean squared error between observed and fitted values. Lower values indicate smaller average squared residuals.
   rmse:
     description: Root mean squared error, in the same response units as the fitted data. Lower values indicate smaller typical residuals.
+  mae:
+    description: Mean absolute error, in the same response units as the fitted data. Lower values indicate smaller average absolute residuals.
   nrmse:
     description: RMSE normalized by the response standard deviation. Lower values indicate smaller error relative to response variability.
   mnrmse:
@@ -89,11 +91,11 @@ relative_model_evidence_text: |-
   Relative model evidence compares candidate parametric models fitted to the same dataset under the same preprocessing settings and IVIVC approach. The evidence table is based only on the information-criterion metrics selected by the user: AIC, AICc, and/or BIC. These criteria are relative; their absolute values are not interpreted directly, and negative values are allowed. Table definitions: n is the number of fitted observations; k is the number of fitted model parameters; Delta is the difference between a model's criterion value and the lowest value in the displayed candidate set; weight is the normalized relative support for that model under the criterion; and evidence ratio compares the highest weight in the set with the model's weight. Delta values near 0 indicate similar relative support; larger delta values indicate lower support relative to the leading candidate under that criterion. Similar relative evidence does not mean the models are scientifically equivalent. Final model selection should also consider prediction error, cross-validation behavior, residual patterns, parameter uncertainty, model simplicity, and biological or degradation-mechanism plausibility. The app reports these summaries to support user review. It does not select, recommend, or validate a model.
 cross_validation_description_html: |-
   <p>Cross-validation provides an approximate check of how a fitted model performs on held-out data. It is most useful when there are enough observations to fit the model repeatedly while leaving some observations out for evaluation.</p>
-  <p>The available schemes are Shuffle split, K-fold, Leave-one-out, and None. Shuffle split uses repeated random holdout sets, K-fold uses systematic fold-based holdouts, Leave-one-out holds out one observation at a time, and None disables cross-validation. For small IVIVC datasets, cross-validation summaries should be interpreted as exploratory diagnostics rather than definitive validation results.</p>
+  <p>The available schemes are Leave-one-timepoint-out, Leave-contiguous-block-out, Shuffle split, K-fold, and None. Leave-one-timepoint-out holds out one observation at a time, Leave-contiguous-block-out holds out adjacent time points, Shuffle split uses repeated random holdout sets, K-fold uses ordered fold-based holdouts, and None disables cross-validation. For small IVIVC datasets, cross-validation summaries should be interpreted as exploratory diagnostics rather than definitive validation results.</p>
 cross_validation_summary_html: |-
-  <p>The Cross-Validation Summary table reports mean held-out scores for selected eligible metrics where cross-validation was run successfully. Ratio columns show the fitted-model score divided by the cross-validation score for the same metric, and the CV comparison badge summarizes whether held-out performance may warrant closer review. Adjusted R² and information criteria (AIC, AICc, BIC) are excluded because they are not directly comparable held-out prediction scores. Detailed interpretation guidance is provided in the user guide.</p>
+  <p>The Cross-Validation Summary table reports mean held-out scores for selected eligible metrics where cross-validation was run successfully. Ratio columns show the fitted-model score divided by the cross-validation score for the same metric, and the CV comparison badge summarizes whether held-out performance may warrant closer review. Adjusted R² and information criteria (AIC, AICc, BIC) are excluded because the final model and cross-validation models are fitted using different data subsets. Detailed interpretation guidance is provided in the user guide.</p>
 goodness_validation_table_html: |-
-  <p>This table reports final fitted-model scores and mean held-out cross-validation scores for selected eligible metrics. Ratio rows show the fitted-model score divided by the cross-validation score for the same metric, and the CV comparison row summarizes whether held-out performance may warrant closer review. Adjusted R² and information criteria (AIC, AICc, BIC) are excluded because they are not directly comparable held-out prediction scores. Detailed interpretation guidance is provided in the user guide.</p>
+  <p>This table reports final fitted-model scores for all selected metrics and mean held-out cross-validation scores for eligible prediction metrics. Ratio rows show the fitted-model score divided by the cross-validation score for the same metric where that comparison is meaningful. Adjusted R² and information criteria (AIC, AICc, BIC) are shown for the final model but are not given CV values or ratios because the final model and cross-validation models are fitted using different data subsets. Detailed interpretation guidance is provided in the user guide.</p>
 residual_diagnostics_html: |-
   <p>Residuals are calculated as observed minus predicted values and are shown in the original response units. Residual plots use a common y-axis scale across comparable models so residual magnitude and patterns can be compared visually. The plot scale and reference bands are based on the pooled 95th percentile of absolute residuals across comparable models; the shaded band shows ±25% of that residual scale and the dashed reference lines show ±50%. These bands provide visual context for comparing residual patterns; they are not confidence intervals or acceptance limits.</p> 
   <p>Residual plots should be reviewed qualitatively. Points scattered around zero are more consistent with an appropriate model form, although they do not prove that the model is valid. Sustained patterns, curvature, clustering, repeated excursions outside the reference bands, or adjacent time points with residuals mostly on the same side of zero may indicate bias or that the selected model form may not fully capture the data.</p>
@@ -103,31 +105,34 @@ grid_search_description_html: |-
   <p>The app conducts an automated grid search to identify suitable starting parameter values for each model before nonlinear least-squares fitting, reducing the need for manual parameter tuning. Candidate values are sampled within the configured parameter bounds and are used only to initialize the final curve fit.</p>
   <p>This initialization step improves convergence and reduces sensitivity to poor starting values. It is not itself the final fitting algorithm and does not guarantee that the final fitted parameters are the global optimum.</p>
 cv_schemes:
+  leave_one_timepoint_out:
+    display_name: Leave-one-timepoint-out
+    description: Holds out one time point at a time and fits the model using all remaining time points. This is the default because it uses as much data as possible for fitting while still providing a held-out prediction diagnostic for small time-course datasets.
+  leave_contiguous_block_out:
+    display_name: Leave-contiguous-block-out
+    description: Holds out adjacent time points as a block in x-axis order. The block-size setting controls how many adjacent observations are held out in each split. This can help reveal whether a model can bridge missing time regions.
   shuffle_split:
     display_name: Shuffle split
-    description: Repeatedly creates random training and holdout subsets. This can be useful when the dataset has enough observations to support repeated resampling. The test-size parameter controls the fraction held out in each split, and the random seed makes the random splits reproducible.
+    description: Repeatedly creates random training and holdout subsets. This can be useful as an exploratory sensitivity check when the dataset has enough observations to support repeated resampling. The splits, test-size, and random-seed settings control the repeated random holdouts.
   kfold:
     display_name: K-fold
-    description: Divides the dataset into a specified number of folds, fits the model on all but one fold, and evaluates on the held-out fold. Each fold is used once as the holdout set. The splits/folds parameter controls the number of folds. The data are randomly shuffled before splitting into folds (e.g., to avoid folds with only short-time data being used to predict long-time data), and the random seed makes the shuffling reproducible.
-  leave_one_out:
-    display_name: Leave-one-out
-    description: Uses one observation as the holdout set and fits the model on all remaining observations, repeating until each observation has been held out once. This can be useful for very small datasets, but the results can be variable and computationally slower.
+    description: Divides the ordered dataset into a specified number of folds, fits the model on all but one fold, and evaluates on the held-out fold. With small k, this can act as a more demanding time-region holdout test.
   none:
     display_name: None
     description: Disables cross-validation. This may be appropriate when the dataset is too small for meaningful holdout validation or when only fitted-model summaries are needed.
 analysis_parameters:
   cv_scheme:
     display_name: Cross-validation scheme
-    description: Selects the splitting method used to estimate held-out performance for fitted parametric models.
+    description: Selects the splitting method used to estimate held-out performance for fitted parametric models. Leave-one-timepoint-out is the default.
   cv_n_splits:
     display_name: CV splits/folds
-    description: For Shuffle split, the number of repeated random train/test splits. For K-fold, the number of folds. This setting is not used for Leave-one-out or None.
+    description: For Shuffle split, the number of repeated random train/test splits. For K-fold, the number of folds. For Leave-contiguous-block-out, the number of adjacent time points held out per split. This setting is not used for Leave-one-timepoint-out or None.
   cv_test_size:
-    display_name: ShuffleSplit test size
+    display_name: Shuffle split test size
     description: The fraction of observations held out for testing in each Shuffle split repeat. Smaller values leave more observations for fitting; larger values make the holdout test more demanding but leave fewer observations for training.
   cv_random_state:
     display_name: CV random seed
-    description: Seed used to make randomized cross-validation splits reproducible. This applies to Shuffle split and shuffled K-fold.
+    description: Seed used to make randomized cross-validation splits reproducible. This applies to Shuffle split.
   grid_search_num_points:
     display_name: Grid-search random starts
     description: Number of candidate starting parameter sets evaluated before nonlinear least-squares fitting. Higher values may improve robustness but increase runtime.
@@ -163,9 +168,10 @@ modal_help:
     cross_validation_html: |-
       <p>Cross-validation estimates how selected fitted models perform on held-out data. It is used for Approaches 1 and 2, where parametric models are fitted.</p>
       <ul>
-        <li><strong>Shuffle split:</strong> repeatedly makes random training and holdout subsets. Use <strong>splits/folds</strong> for the number of repeats, <strong>test size</strong> for the held-out fraction, and <strong>random seed</strong> for reproducibility.</li>
-        <li><strong>K-fold:</strong> divides the data into the selected number of folds and holds out each fold once. Use <strong>splits/folds</strong> for the number of folds. The random seed controls the shuffled fold assignment.</li>
-        <li><strong>Leave-one-out:</strong> holds out one observation at a time and fits on all remaining observations. This can be useful when datasets are very small, but results can be variable and fitting can be slower.</li>
+        <li><strong>Leave-one-timepoint-out:</strong> default scheme. Holds out one time point at a time and fits on all remaining observations.</li>
+        <li><strong>Leave-contiguous-block-out:</strong> holds out adjacent time points in x-axis order. Use <strong>block size</strong> to choose how many adjacent observations are held out per split.</li>
+        <li><strong>Shuffle split:</strong> repeatedly makes random training and holdout subsets. Use <strong>splits</strong> for the number of repeats, <strong>test size</strong> for the held-out fraction, and <strong>random seed</strong> for reproducibility.</li>
+        <li><strong>K-fold:</strong> divides the ordered data into the selected number of folds and holds out each fold once. With small k, this can serve as a time-region holdout stress test.</li>
         <li><strong>None:</strong> skips cross-validation. This may be appropriate when there are too few observations for meaningful holdout validation or when only fitted-model summaries are needed.</li>
       </ul>
       <p>Cross-validation results for small IVIVC datasets should be treated as exploratory diagnostics. They complement, but do not replace, review of fitted plots, residual behavior, parameter uncertainty, and scientific plausibility.</p>

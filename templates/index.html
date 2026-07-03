@@ -193,7 +193,7 @@
             <div class="checkbox-grid">
                 {% for metric_name, metric_info in metrics.items() %}
                 <label class="checkbox-item">
-                    <input type="checkbox" name="metrics" value="{{ metric_name }}" checked>
+                    <input type="checkbox" name="metrics" value="{{ metric_name }}" {% if metric_name in ["r_squared", "rmse", "aicc"] %}checked{% endif %}>
                     <span>{{ metric_info.display_name }}</span>
                 </label>
                 {% endfor %}
@@ -213,15 +213,16 @@
                 <div class="advanced-field">
                     <label for="cv_scheme">Scheme</label>
                     <select name="cv_scheme" id="cv_scheme">
-                        <option value="shuffle_split" selected>Shuffle split</option>
+                        <option value="leave_one_timepoint_out" selected>Leave-one-timepoint-out</option>
+                        <option value="leave_contiguous_block_out">Leave-contiguous-block-out</option>
+                        <option value="shuffle_split">Shuffle split</option>
                         <option value="kfold">K-fold</option>
-                        <option value="leave_one_out">Leave-one-out</option>
                         <option value="none">None</option>
                     </select>
                 </div>
                 <div class="advanced-field">
-                    <label for="cv_n_splits">Splits/folds</label>
-                    <input type="number" name="cv_n_splits" id="cv_n_splits" value="20" min="2">
+                    <label for="cv_n_splits" id="cv_n_splits_label">Splits/folds/block size</label>
+                    <input type="number" name="cv_n_splits" id="cv_n_splits" value="2" min="2">
                 </div>
                 <div class="advanced-field">
                     <label for="cv_test_size">Test size</label>
@@ -421,6 +422,58 @@
             --!>
         </div>
     </div>
+
+<script>
+(function () {
+    function setDisabled(field, disabled) {
+        if (!field) return;
+        field.disabled = disabled;
+        var container = field.closest('.advanced-field');
+        if (container) {
+            container.classList.toggle('advanced-field-disabled', disabled);
+        }
+    }
+
+    function updateCvControls() {
+        var scheme = document.getElementById('cv_scheme');
+        var splits = document.getElementById('cv_n_splits');
+        var splitsLabel = document.getElementById('cv_n_splits_label');
+        var testSize = document.getElementById('cv_test_size');
+        var randomState = document.getElementById('cv_random_state');
+        if (!scheme) return;
+
+        var value = scheme.value;
+        var useSplits = value === 'shuffle_split' || value === 'kfold' || value === 'leave_contiguous_block_out';
+        var useTestSize = value === 'shuffle_split';
+        var useRandom = value === 'shuffle_split';
+
+        if (splitsLabel) {
+            if (value === 'leave_contiguous_block_out') {
+                splitsLabel.textContent = 'Block size';
+            } else if (value === 'kfold') {
+                splitsLabel.textContent = 'Folds';
+            } else if (value === 'shuffle_split') {
+                splitsLabel.textContent = 'Splits';
+            } else {
+                splitsLabel.textContent = 'Splits/folds/block size';
+            }
+        }
+
+        setDisabled(splits, !useSplits);
+        setDisabled(testSize, !useTestSize);
+        setDisabled(randomState, !useRandom);
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        var scheme = document.getElementById('cv_scheme');
+        if (scheme) {
+            scheme.addEventListener('change', updateCvControls);
+            updateCvControls();
+        }
+    });
+})();
+</script>
+
 </body>
 </html>
 

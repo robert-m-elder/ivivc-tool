@@ -56,31 +56,38 @@ colors = {
 CV_COMPARISON_EXCLUDED_METRICS = {'adjusted_r_squared', 'aic', 'aicc', 'bic'}
 
 
-def _goodness_cv_comparison_table(gof, cvs_mean):
-    """Build the final-model vs CV table for prediction-score metrics only."""
-    comparable_metrics = [
-        metric for metric in gof
-        if metric not in CV_COMPARISON_EXCLUDED_METRICS and metric in metrics
-    ]
+def _not_meaningful_badge():
+    return '<span class="evidence-badge evidence-badge-neutral">CV comparison not meaningful</span>'
 
-    if not comparable_metrics:
-        return (
-            '<p class="evidence-note">'
-            'Goodness-of-fit and cross-validation comparison is not available '
-            'for the selected metrics because adjusted R² and information criteria '
-            '(AIC, AICc, and BIC) are not directly comparable held-out prediction scores.'
-            '</p>'
-        )
+
+def _goodness_cv_comparison_table(gof, cvs_mean):
+    """Build the final-model vs CV table while preserving final fitted metrics.
+
+    Adjusted R² and information criteria are shown for the final model, but their
+    CV values and ratios are intentionally not shown because the final model and
+    CV models are fitted to different data subsets.
+    """
+    displayed_metrics = [metric for metric in gof if metric in metrics]
+
+    if not displayed_metrics:
+        return '<p class="evidence-note">Goodness-of-fit results are not available for the selected metrics.</p>'
 
     final_row = {}
     cv_row = {}
     ratio_row = {}
     comparison_row = {}
-    for metric in comparable_metrics:
+    for metric in displayed_metrics:
         display_name = metrics[metric]['display_name']
         fit_value = gof[metric]
-        cv_value = cvs_mean.get(metric, np.nan)
         final_row[display_name] = fit_value
+
+        if metric in CV_COMPARISON_EXCLUDED_METRICS:
+            cv_row[display_name] = 'Not shown'
+            ratio_row[display_name] = 'Not shown'
+            comparison_row[display_name] = _not_meaningful_badge()
+            continue
+
+        cv_value = cvs_mean.get(metric, np.nan)
         cv_row[display_name] = _finite_float(cv_value)
         ratio_row[display_name] = _fit_cv_ratio(fit_value, cv_value)
         comparison_row[display_name] = _cv_status_badge(metric, fit_value, cv_value)[0]

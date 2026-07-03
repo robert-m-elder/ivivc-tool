@@ -147,7 +147,7 @@ def format_analysis_config_rows(config):
     scheme. Grid-search settings are always shown because they control
     parametric model initialization.
     """
-    scheme = config.get('cv_scheme', 'shuffle_split')
+    scheme = config.get('cv_scheme', 'leave_one_timepoint_out')
     rows = []
 
     def add_section(label):
@@ -172,9 +172,8 @@ def format_analysis_config_rows(config):
         add_setting('cv_n_splits')
         add_setting('cv_test_size')
         add_setting('cv_random_state')
-    elif scheme == 'kfold':
+    elif scheme in ('kfold', 'leave_contiguous_block_out'):
         add_setting('cv_n_splits')
-        add_setting('cv_random_state')
 
     add_section('Grid-search settings')
     for key in [

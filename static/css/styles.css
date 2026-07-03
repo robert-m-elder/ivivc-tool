@@ -1454,3 +1454,7 @@ button.dt-button2:disabled {
     color: #555;
     font-size: 0.9rem;
 }
+
+.evidence-badge-neutral {
+    background: #f7f7f7;
+}

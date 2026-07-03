@@ -26,7 +26,7 @@ The IVIVC app requires paired in vitro and in vivo degradation data, along with 
 \item selection of one or more IVIVC modeling approaches;
 \item selection of candidate models to evaluate, where applicable;
 \item optionally, preprocessing options, such as normalization, interpolation, or scaling choices;
-\item selected performance metrics to display in the results and reports
+\item selected performance metrics to display in the results and reports; by default, the app selects \(R^2\), RMSE, and AIC\textsubscript{c} as a simple starting set that has been useful in internal testing with real datasets but may not be optimal for every analysis
 \item optionally, cross-validation settings for applicable parametric models; and
 \item grid-search settings for model initialization.
 \end{itemize}
@@ -47,7 +47,7 @@ The IVIVC app generates interactive results and downloadable reports that summar
 \midrule
 \endhead
 Preprocessing outputs & Processed data tables and plots showing the data used for fitting and prediction. \\
-Model fitting outputs & Parameter estimates, parameter standard errors where available, fitted plots, and selected performance metrics. \\
+Model fitting outputs & Parameter estimates, parameter standard errors where available, fitted plots, residual (error) plots, and selected performance metrics. \\
 Model comparison outputs & Tables comparing selected approaches, models, metrics, and cross-validation summaries. \\
 Prediction outputs & Prediction plots and downloadable tables when a prediction dataset is supplied and the selected method can be applied. \\
 Selected model \& summary of outputs & User-selected report summaries and optional Word report export for incorporation into external documentation. \\
@@ -194,7 +194,9 @@ Interpretation badge & Neutral rule-of-thumb label based on the displayed delta 
 
 Cross-validation provides an approximate check of how a fitted model performs on held-out data. It is most useful when there are enough observations to fit the model repeatedly while leaving some observations out for evaluation.
 
-The available schemes are Shuffle split, K-fold, Leave-one-out, and None. Shuffle split uses repeated random holdout sets, K-fold uses systematic fold-based holdouts, Leave-one-out holds out one observation at a time, and None disables cross-validation. For small IVIVC datasets, cross-validation summaries should be interpreted as exploratory diagnostics rather than definitive validation results.
+The available schemes are Leave-one-timepoint-out, Leave-contiguous-block-out, Shuffle split, K-fold, and None. Leave-one-timepoint-out holds out one observation at a time, Leave-contiguous-block-out holds out adjacent time points, Shuffle split uses repeated random holdout sets, K-fold uses ordered fold-based holdouts, and None disables cross-validation. For small IVIVC datasets, cross-validation summaries should be interpreted as exploratory diagnostics rather than definitive validation results.
+
+Leave-one-timepoint-out is the default cross-validation scheme. It is a practical starting point for small time-course datasets because each split uses all but one observation for fitting. Leave-contiguous-block-out and K-fold can be used as more demanding time-region holdout checks, while Shuffle split is retained as a familiar exploratory option.
 
 For background on cross-validation procedures and their use in model assessment and selection, see reference \cite{arlot2010}.
 
@@ -207,9 +209,10 @@ For background on cross-validation procedures and their use in model assessment 
 \textbf{Scheme} & \textbf{Internal key} & \textbf{Description} \\
 \midrule
 \endhead
-Shuffle split & shuffle\_split & Repeatedly creates random training and holdout subsets. This can be useful when the dataset has enough observations to support repeated resampling. The test-size parameter controls the fraction held out in each split, and the random seed makes the random splits reproducible. \\
-K-fold & kfold & Divides the dataset into a specified number of folds, fits the model on all but one fold, and evaluates on the held-out fold. Each fold is used once as the holdout set. The splits/folds parameter controls the number of folds. The data are randomly shuffled before splitting into folds (e.g., to avoid folds with only short-time data being used to predict long-time data), and the random seed makes the shuffling reproducible. \\
-Leave-one-out & leave\_one\_out & Uses one observation as the holdout set and fits the model on all remaining observations, repeating until each observation has been held out once. This can be useful for very small datasets, but the results can be variable and computationally slower. \\
+Leave-one-timepoint-out & leave\_one\_timepoint\_out & Holds out one time point at a time and fits the model using all remaining time points. This is the default because it uses as much data as possible for fitting while still providing a held-out prediction diagnostic for small time-course datasets. \\
+Leave-contiguous-block-out & leave\_contiguous\_block\_out & Holds out adjacent time points as a block in x-axis order. The block-size setting controls how many adjacent observations are held out in each split. This can help reveal whether a model can bridge missing time regions. \\
+Shuffle split & shuffle\_split & Repeatedly creates random training and holdout subsets. This can be useful as an exploratory sensitivity check when the dataset has enough observations to support repeated resampling. The splits, test-size, and random-seed settings control the repeated random holdouts. \\
+K-fold & kfold & Divides the ordered dataset into a specified number of folds, fits the model on all but one fold, and evaluates on the held-out fold. With small k, this can act as a more demanding time-region holdout test. \\
 None & none & Disables cross-validation. This may be appropriate when the dataset is too small for meaningful holdout validation or when only fitted-model summaries are needed. \\
 \bottomrule
 \end{longtable}
@@ -223,10 +226,10 @@ None & none & Disables cross-validation. This may be appropriate when the datase
 \textbf{Parameter} & \textbf{Internal key} & \textbf{Description} \\
 \midrule
 \endhead
-Cross-validation scheme & cv\_scheme & Selects the splitting method used to estimate held-out performance for fitted parametric models. \\
-CV splits/folds & cv\_n\_splits & For Shuffle split, the number of repeated random train/test splits. For K-fold, the number of folds. This setting is not used for Leave-one-out or None. \\
-ShuffleSplit test size & cv\_test\_size & The fraction of observations held out for testing in each Shuffle split repeat. Smaller values leave more observations for fitting; larger values make the holdout test more demanding but leave fewer observations for training. \\
-CV random seed & cv\_random\_state & Seed used to make randomized cross-validation splits reproducible. This applies to Shuffle split and shuffled K-fold. \\
+Cross-validation scheme & cv\_scheme & Selects the splitting method used to estimate held-out performance for fitted parametric models. Leave-one-timepoint-out is the default. \\
+CV splits/folds & cv\_n\_splits & For Shuffle split, the number of repeated random train/test splits. For K-fold, the number of folds. For Leave-contiguous-block-out, the number of adjacent time points held out per split. This setting is not used for Leave-one-timepoint-out or None. \\
+Shuffle split test size & cv\_test\_size & The fraction of observations held out for testing in each Shuffle split repeat. Smaller values leave more observations for fitting; larger values make the holdout test more demanding but leave fewer observations for training. \\
+CV random seed & cv\_random\_state & Seed used to make randomized cross-validation splits reproducible. This applies to Shuffle split. \\
 \bottomrule
 \end{longtable}
 
@@ -255,6 +258,8 @@ Grid-search random seed & grid\_search\_random\_state & Seed used to make random
 
 \section{Performance metrics}
 
+By default, the app selects \(R^2\), RMSE, and AIC\textsubscript{c}. This compact default set has been simple and useful in internal testing with real datasets, but it is not necessarily the best set for every dataset or intended use. Users may select additional metrics when they provide useful context for a specific analysis.
+
 \begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.17\textwidth}>{\raggedright\arraybackslash}p{0.18\textwidth}>{\raggedright\arraybackslash}p{0.20\textwidth}>{\raggedright\arraybackslash}p{0.37\textwidth}@{}}
 \toprule
 \textbf{Metric} & \textbf{Internal key} & \textbf{Preferred direction} & \textbf{Description} \\
@@ -268,6 +273,7 @@ Grid-search random seed & grid\_search\_random\_state & Seed used to make random
 Adjusted \(R^2\) & adjusted\_r\_squared & Higher is better & \(R^2\) adjusted for the number of fitted parameters, which can penalize unnecessary model complexity. \\
 MSE & mse & Lower is better & Mean squared error between observed and fitted values. Lower values indicate smaller average squared residuals. \\
 RMSE & rmse & Lower is better & Root mean squared error, in the same response units as the fitted data. Lower values indicate smaller typical residuals. \\
+MAE & mae & Lower is better & Mean absolute error, in the same response units as the fitted data. Lower values indicate smaller average absolute residuals. \\
 NRMSE (mean) & mnrmse & Lower is better & RMSE normalized by the response mean. Lower values indicate smaller error relative to the response magnitude. \\
 NRMSE (std. dev.) & nrmse & Lower is better & RMSE normalized by the response standard deviation. Lower values indicate smaller error relative to response variability. \\
 AIC & aic & Lower is better & Akaike Information Criterion. Information-criterion metrics balance how well a model fits the data with model complexity (the number of fitted parameters). Among comparable fitted models, a lower AIC value generally indicates a better model representation: the model explains the data well without unnecessary complexity. Absolute AIC values, including negative values, should not be interpreted as standalone quality grades. \\
