@@ -72,7 +72,7 @@ Common rules of thumb for AIC-family comparisons are: delta values from 0 to 2 s
 
 For a given information criterion, the evidence weight for model $i$ can be calculated from the model's delta value:
 \begin{equation}
-w_i = \frac{\exp\left(-\frac{1}{2}\Delta_i\right)} {\sum_{j=1}^{J} \exp\left(-\frac{1}{2}\Delta_r\right)}
+w_i = \frac{\exp\left(-\frac{1}{2}\Delta_i\right)} {\sum_{j=1}^{J} \exp\left(-\frac{1}{2}\Delta_j\right)}
 \end{equation}
 where $\Delta_i$ is the difference between model $i$'s information criterion value and the lowest value among the $J$ candidate models being compared. Larger weights indicate stronger relative support within the candidate model set \cite{burnham2002,wagenmakers2004}.
 
@@ -80,11 +80,21 @@ Relative evidence does not prove that a model is correct, mechanistic, predictiv
 
 \subsection{Interpreting cross-validation performance}
 
-Cross-validation estimates how a fitted model performs on held-out data. It is useful for assessing whether fitted-data performance appears to generalize beyond the observations used for parameter estimation.
+Cross-validation estimates how a fitted model performs on held-out data. It is useful for assessing whether fitted-data performance appears to generalize beyond the observations used for parameter estimation. The practical question is not only ``how good is the score?'' but also ``what kind of data did the model have to predict?''
 
-Cross-validation results depend on the selected validation method, number of folds or splits, random seed, test-set size, sample size, and data distribution \cite{arlot2010}. For small IVIVC datasets, cross-validation should usually be treated as an exploratory diagnostic rather than a definitive validation result. Leave-one-timepoint-out cross-validation can be useful when datasets are small because each split uses all but one observation for fitting, but it may be sensitive to individual observations. Leave-contiguous-block-out and ordered K-fold schemes can act as more demanding time-region holdout checks, while Shuffle split can be useful as a familiar exploratory sensitivity check when there are enough observations to create meaningful training and holdout sets.
+Time-course data require extra care because observations are ordered. Adjacent time points may be similar, residual errors may be related across time, and early, middle, and late portions of a degradation profile may represent different behavior. A random split can leave training observations immediately before and after a held-out observation. In that case, the cross-validation result may mostly test interpolation within the observed curve, and it may look more favorable than a test that withholds an entire time region. Standard cross-validation procedures are reviewed in \cite{arlot2010}; additional considerations for temporally ordered or dependent data are discussed in \cite{bergmeir2012,roberts2017,bergmeir2018}.
 
-Fit/CV ratios summarize the relationship between fitted-data and held-out performance for the same metric. Ratios near 1 indicate that fitted and cross-validation scores are similar. Ratios far from 1 may suggest reduced generalizability, overfitting, model instability, or sensitivity to the validation scheme. The direction of concern depends on the metric and context, so the ratio should be interpreted together with the raw fit and CV values.
+For small IVIVC datasets, cross-validation should usually be treated as an exploratory diagnostic or sensitivity analysis rather than a definitive validation result. A practical way to choose among schemes is:
+
+\begin{itemize}
+\item \textbf{Leave-one-timepoint-out:} use as the default starting point for small time-course datasets. Each split uses all but one observation for fitting, which preserves as much fitting information as possible. The limitation is that the held-out observation may be close to observations used for fitting, so this can be a relatively gentle test.
+\item \textbf{Leave-contiguous-block-out:} use when you want a stricter time-region check. This is helpful when adjacent observations are likely related or when you want to know whether the model can tolerate withholding a short part of the profile. Start with a small block size. Larger blocks are more demanding but may leave too few observations for stable fitting.
+\item \textbf{Ordered K-fold:} use as a familiar fold-based diagnostic when there are enough observations to form meaningful folds. Smaller values of $k$ create larger held-out regions, while larger values of $k$ move the behavior closer to leave-one-timepoint-out. In this app, K-fold is not shuffled, so the random seed is not used.
+\item \textbf{Shuffle split:} use mainly as an exploratory sensitivity check across random partitions. It can be useful when there are enough observations to form repeated training and holdout sets, but it may break temporal structure and can be optimistic for time-course data.
+\item \textbf{None:} use when there are too few observations for meaningful held-out fitting, when repeated fits are unstable, or when the analysis is focused only on fitted-model behavior.
+\end{itemize}
+
+Fit/CV ratios summarize the relationship between fitted-data and held-out performance for the same metric. Ratios near 1 indicate that fitted and cross-validation scores are similar. Ratios far from 1 may suggest reduced generalizability, overfitting, model instability, or sensitivity to the validation scheme. The direction of concern depends on the metric and context, so the ratio should be interpreted together with the raw fit and CV values, the selected validation scheme, and the fitted plots.
 
 The app also displays cross-validation comparison badges as interpretive aids. These badges are based on the metric's preferred direction: for lower-is-better error metrics (e.g., RMSE), worse cross-validation performance means the CV value is larger than the final-model value; for higher-is-better metrics (e.g., $R^2$), worse cross-validation performance means the CV value is smaller than the final-model value. As a screening aid, performance within a factor of 1.25 of the final model is labeled as similar, performance worse by 1.25 to 2-fold is labeled as moderately worse, and performance worse by more than 2-fold is labeled as substantially worse. These thresholds are heuristic review aids, not statistical acceptance criteria or regulatory criteria.
 

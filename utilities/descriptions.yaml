@@ -90,8 +90,25 @@ relative_model_evidence_html: |-
 relative_model_evidence_text: |-
   Relative model evidence compares candidate parametric models fitted to the same dataset under the same preprocessing settings and IVIVC approach. The evidence table is based only on the information-criterion metrics selected by the user: AIC, AICc, and/or BIC. These criteria are relative; their absolute values are not interpreted directly, and negative values are allowed. Table definitions: n is the number of fitted observations; k is the number of fitted model parameters; Delta is the difference between a model's criterion value and the lowest value in the displayed candidate set; weight is the normalized relative support for that model under the criterion; and evidence ratio compares the highest weight in the set with the model's weight. Delta values near 0 indicate similar relative support; larger delta values indicate lower support relative to the leading candidate under that criterion. Similar relative evidence does not mean the models are scientifically equivalent. Final model selection should also consider prediction error, cross-validation behavior, residual patterns, parameter uncertainty, model simplicity, and biological or degradation-mechanism plausibility. The app reports these summaries to support user review. It does not select, recommend, or validate a model.
 cross_validation_description_html: |-
-  <p>Cross-validation provides an approximate check of how a fitted model performs on held-out data. It is most useful when there are enough observations to fit the model repeatedly while leaving some observations out for evaluation.</p>
-  <p>The available schemes are Leave-one-timepoint-out, Leave-contiguous-block-out, Shuffle split, K-fold, and None. Leave-one-timepoint-out holds out one observation at a time, Leave-contiguous-block-out holds out adjacent time points, Shuffle split uses repeated random holdout sets, K-fold uses ordered fold-based holdouts, and None disables cross-validation. The block-size setting for Leave-contiguous-block-out controls how many consecutive observations are held out in each split. Larger blocks may leave too few observations for stable fitting, especially in small datasets. For small datasets, cross-validation summaries should be interpreted as exploratory diagnostics rather than definitive validation results.</p>
+  <p>Cross-validation provides an approximate check of how a fitted model performs on held-out data. Instead of judging only how closely a model follows the observations used for fitting, it repeatedly withholds part of the dataset, fits the model to the remaining observations, and evaluates prediction error on the withheld observations.</p>
+  <p>Time-course data require extra care because observations are ordered and nearby time points may contain related information. In an absorbable-polymer degradation dataset, early, middle, and late regions may reflect different parts of the degradation process. A random holdout may leave training observations immediately before and after a withheld observation, which often tests interpolation within the observed curve rather than prediction of an unobserved time region. This can make held-out performance look more favorable when adjacent observations are strongly related, residuals are correlated, or the process changes over time.</p>
+  <p>The available schemes are Leave-one-timepoint-out, Leave-contiguous-block-out, Shuffle split, K-fold, and None. Leave-one-timepoint-out holds out one observation at a time, Leave-contiguous-block-out holds out adjacent time points, Shuffle split uses repeated random holdout sets, K-fold uses ordered fold-based holdouts, and None disables cross-validation. The block-size setting for Leave-contiguous-block-out controls how many consecutive observations are held out in each split. Larger blocks may leave too few observations for stable fitting, especially in small datasets. For small datasets, cross-validation summaries should be interpreted as exploratory diagnostics and sensitivity checks rather than definitive validation results.</p>
+cross_validation_selection_guidance:
+  - scheme: Leave-one-timepoint-out
+    use_when: Use as the default starting point for small time-course datasets, especially when retaining nearly all observations for each repeated fit is important.
+    caution: Because only one observation is withheld, the test point may be close to observations used for fitting. It may miss problems that appear when an entire time region is withheld.
+  - scheme: Leave-contiguous-block-out
+    use_when: Use when you want a stricter time-region check, especially if adjacent time points are likely related or if early, middle, and late degradation regions may behave differently. Start with a small block size and increase only when enough observations remain for stable fitting.
+    caution: Larger blocks reduce the observations available for fitting and may cause unstable or failed fits in small datasets. The setup page does not enforce a maximum block size because uploaded data are not read until Analyze is selected.
+  - scheme: K-fold
+    use_when: Use as a familiar fold-based diagnostic when there are enough observations to divide the ordered dataset into several meaningful folds. Smaller k values create larger held-out time regions; larger k values are closer to leave-one-timepoint-out.
+    caution: K-fold is ordered and not shuffled, so the random seed has no effect. Results can still depend on how the ordered observations fall into folds.
+  - scheme: Shuffle split
+    use_when: Use as an exploratory sensitivity check when there are enough observations to create repeated random training and holdout sets. It can help show whether conclusions change across random partitions.
+    caution: For time-course data, random splits can break the temporal structure and may give optimistic held-out scores when nearby observations are strongly related. Avoid treating Shuffle split as the main evidence when temporal dependence is important.
+  - scheme: None
+    use_when: Use when there are too few observations for meaningful repeated refitting, when cross-validation fits are unstable, or when only final fitted-model summaries are needed.
+    caution: No held-out performance estimate is produced; rely more heavily on fitted plots, residual behavior, parameter diagnostics, and scientific plausibility.
 cross_validation_summary_html: |-
   <p>The Cross-Validation Summary table reports mean held-out scores for selected eligible metrics where cross-validation was run successfully. Ratio columns show the fitted-model score divided by the cross-validation score for the same metric, and the CV comparison badge summarizes whether held-out performance may warrant closer review. Adjusted R² and information criteria (AIC, AICc, BIC) are excluded because the final model and cross-validation models are fitted using different data subsets. Detailed interpretation guidance is provided in the user guide.</p>
 goodness_validation_table_html: |-
@@ -107,19 +124,19 @@ grid_search_description_html: |-
 cv_schemes:
   leave_one_timepoint_out:
     display_name: Leave-one-timepoint-out
-    description: Holds out one time point at a time and fits the model using all remaining time points. This is the default because it uses as much data as possible for fitting while still providing a held-out prediction diagnostic for small time-course datasets.
+    description: Holds out one time point at a time and fits the model using all remaining time points. This is the default because it uses as much data as possible for fitting while still providing a held-out prediction diagnostic for small time-course datasets. It is a gentle diagnostic and may be less demanding when adjacent time points are highly related.
   leave_contiguous_block_out:
     display_name: Leave-contiguous-block-out
-    description: Holds out adjacent time points as a block in x-axis order. The block-size setting controls how many adjacent observations are held out in each split. The maximum useful block size depends on the number of observations. Larger blocks may leave too few observations for stable fitting, especially in small datasets.
+    description: Holds out adjacent time points as a block in x-axis order. The block-size setting controls how many adjacent observations are held out in each split. This is useful when the goal is to test a small time region rather than a single point. The maximum useful block size depends on the number of observations. Larger blocks may leave too few observations for stable fitting, especially in small datasets.
   shuffle_split:
     display_name: Shuffle split
-    description: Repeatedly creates random training and holdout subsets. This can be useful as an exploratory sensitivity check when the dataset has enough observations to support repeated resampling. The splits, test-size, and random-seed settings control the repeated random holdouts.
+    description: Repeatedly creates random training and holdout subsets. This can be useful as an exploratory sensitivity check when the dataset has enough observations to support repeated resampling. For time-course data, random splits may break temporal structure and can be optimistic when nearby observations are strongly related. The splits, test-size, and random-seed settings control the repeated random holdouts.
   kfold:
     display_name: K-fold
-    description: Divides the ordered dataset into a specified number of folds, fits the model on all but one fold, and evaluates on the held-out fold. With small k, this can act as a more demanding time-region holdout test.
+    description: Divides the ordered dataset into a specified number of folds, fits the model on all but one fold, and evaluates on the held-out fold. With small k, this can act as a more demanding time-region holdout test. K-fold is not shuffled, so the random seed is not used.
   none:
     display_name: None
-    description: Disables cross-validation. This may be appropriate when the dataset is too small for meaningful holdout validation or when only fitted-model summaries are needed.
+    description: Disables cross-validation. This may be appropriate when the dataset is too small for meaningful holdout validation, when repeated fitting is unstable, or when only fitted-model summaries are needed.
 analysis_parameters:
   cv_scheme:
     display_name: Cross-validation scheme
@@ -167,14 +184,15 @@ modal_help:
       <p>The defaults are intended as reasonable starting points. Adjust these settings when datasets are small, fits are unstable, runtime is excessive, or a reproducible analysis configuration is needed.</p>
     cross_validation_html: |-
       <p>Cross-validation estimates how selected fitted models perform on held-out data. It is used for Approaches 1 and 2, where parametric models are fitted.</p>
+      <p>For time-course data, the main question is what kind of holdout should be treated as "new" data. Holding out one point is a gentle check, holding out a contiguous block is a stricter check of a time region, and random splits are familiar but can be optimistic when neighboring time points are strongly related.</p>
       <ul>
-        <li><strong>Leave-one-timepoint-out:</strong> default scheme. Holds out one time point at a time and fits on all remaining observations.</li>
-        <li><strong>Leave-contiguous-block-out:</strong> holds out adjacent time points in x-axis order. Use <strong>block size</strong> to choose how many adjacent observations are held out per split. The setup page does not enforce a maximum block size because the uploaded data are not read until Analyze is selected; larger blocks may leave too few observations for stable fitting, especially in small datasets.</li>
-        <li><strong>Shuffle split:</strong> repeatedly makes random training and holdout subsets. Use <strong>splits</strong> for the number of repeats, <strong>test size</strong> for the held-out fraction, and <strong>random seed</strong> for reproducibility.</li>
-        <li><strong>K-fold:</strong> divides the ordered data into the selected number of folds and holds out each fold once. K-fold is not shuffled, so the random seed field is not used for this scheme. With small k, this can serve as a time-region holdout stress test.</li>
-        <li><strong>None:</strong> skips cross-validation. This may be appropriate when there are too few observations for meaningful holdout validation or when only fitted-model summaries are needed.</li>
+        <li><strong>Leave-one-timepoint-out:</strong> default scheme. Best starting point for small datasets because each fit uses all but one observation.</li>
+        <li><strong>Leave-contiguous-block-out:</strong> use when you want a stricter time-region holdout. Use <strong>block size</strong> to choose how many adjacent observations are held out per split. Start with a small block size; larger blocks may leave too few observations for stable fitting. The setup page does not enforce a maximum block size because the uploaded data are not read until Analyze is selected.</li>
+        <li><strong>K-fold:</strong> divides the ordered data into the selected number of folds and holds out each fold once. Useful as a familiar ordered fold diagnostic when there are enough observations. K-fold is not shuffled, so the random seed field is not used for this scheme.</li>
+        <li><strong>Shuffle split:</strong> repeatedly makes random training and holdout subsets. Use mainly as an exploratory sensitivity check. It can break temporal structure, so interpret cautiously for time-course data.</li>
+        <li><strong>None:</strong> skips cross-validation. This may be appropriate when there are too few observations for meaningful holdout validation, when repeated fitting is unstable, or when only fitted-model summaries are needed.</li>
       </ul>
-      <p>Cross-validation results for small IVIVC datasets should be treated as exploratory diagnostics. They complement, but do not replace, review of fitted plots, residual behavior, parameter uncertainty, and scientific plausibility.</p>
+      <p>Cross-validation results for small IVIVC datasets should be treated as exploratory diagnostics and sensitivity checks. They complement, but do not replace, review of fitted plots, residual behavior, parameter uncertainty, and scientific plausibility.</p>
     grid_search_html: |-
       <p>The grid search identifies suitable starting parameter values before nonlinear least-squares fitting. It randomly samples parameter space according to the parameters below, conducts least-squares fitting for each parameter set, and then uses the best-performing parameter set for the final fit. This reduces the need for manual parameter tuning.</p>
       <ul>

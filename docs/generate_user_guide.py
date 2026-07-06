@@ -49,6 +49,7 @@ from utilities.descriptions import (  # noqa: E402
     ANALYSIS_PARAMETER_DESCRIPTIONS,
     APPROACH_DESCRIPTIONS,
     CROSS_VALIDATION_DESCRIPTION_HTML,
+    CROSS_VALIDATION_SELECTION_GUIDANCE,
     CV_SCHEME_DESCRIPTIONS,
     CV_SCHEME_LABELS,
     GRID_SEARCH_DESCRIPTION_HTML,
@@ -469,15 +470,30 @@ def build_user_guide_tex() -> str:
 
     parts.append(latex_section(1, "Cross-validation options"))
     parts.append(latex_paragraphs(CROSS_VALIDATION_DESCRIPTION_HTML))
-    parts.append(latex_paragraphs("Leave-one-timepoint-out is the default cross-validation scheme. It is a practical starting point for small time-course datasets because each split uses all but one observation for fitting. Leave-contiguous-block-out and K-fold can be used as more demanding time-region holdout checks, while Shuffle split is retained as a familiar exploratory option."))
+    parts.append(latex_paragraphs(
+        "There is no universally best cross-validation scheme for every IVIVC dataset. "
+        "The most useful choice depends on the practical question being asked: whether the model can predict one missing time point, a small time region, or a random subset of observations. "
+        "When results change substantially across schemes, treat that as a signal to review the fitted plots, residuals, parameter uncertainty, and scientific plausibility rather than as an automatic reason to accept or reject a model."
+    ))
     parts.append(
-        r"For background on cross-validation procedures and their use in model assessment and selection, particularly for for time series, see references \cite{arlot2010, bergmeir2012, roberts2017, bergmeir2018}."
+        r"For background on cross-validation procedures and their use in model assessment and selection, including issues that arise with temporally ordered data, see references \cite{arlot2010, bergmeir2012, roberts2017, bergmeir2018}."
         + "\n\n"
     )
+    guidance_rows = [
+        [row.get("scheme", ""), row.get("use_when", ""), row.get("caution", "")]
+        for row in CROSS_VALIDATION_SELECTION_GUIDANCE
+    ]
+    if guidance_rows:
+        parts.append(latex_section(2, "Choosing a cross-validation scheme"))
+        parts.append(latex_table(
+            ["Scheme", "Use when", "Main caution"],
+            guidance_rows,
+            ["0.20\\textwidth", "0.36\\textwidth", "0.36\\textwidth"],
+        ))
     parts.append(latex_table(
         ["Scheme", "Internal key", "Description"],
         [[label, key, CV_SCHEME_DESCRIPTIONS.get(key, "")] for key, label in CV_SCHEME_LABELS.items()],
-        ["0.20\\textwidth", "0.20\\textwidth", "0.52\\textwidth"],
+        ["0.20\\textwidth", "0.28\\textwidth", "0.44\\textwidth"],
     ))
     cv_rows = []
     for key, label in ANALYSIS_CONFIG_LABELS.items():

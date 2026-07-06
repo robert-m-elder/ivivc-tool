@@ -3,8 +3,20 @@ set -euo pipefail
 
 python generate_user_guide.py
 
+if command -v bibtex >/dev/null 2>&1 && bibtex --version >/dev/null 2>&1; then
+  BIBTEX_CMD=bibtex
+elif command -v bibtex.original >/dev/null 2>&1; then
+  BIBTEX_CMD=bibtex.original
+else
+  BIBTEX_CMD=""
+fi
+
 pdflatex -interaction=nonstopmode -halt-on-error user_guide_pdf.tex
-bibtex user_guide_pdf || true
+if [ -n "$BIBTEX_CMD" ]; then
+  "$BIBTEX_CMD" user_guide_pdf || true
+else
+  echo "Warning: BibTeX command not found; citations may remain unresolved." >&2
+fi
 pdflatex -interaction=nonstopmode -halt-on-error user_guide_pdf.tex
 pdflatex -interaction=nonstopmode -halt-on-error user_guide_pdf.tex
 

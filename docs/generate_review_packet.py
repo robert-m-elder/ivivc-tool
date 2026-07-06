@@ -43,6 +43,7 @@ from utilities.descriptions import (  # noqa: E402
     ANALYSIS_PARAMETER_DESCRIPTIONS,
     APPROACH_DESCRIPTIONS,
     CROSS_VALIDATION_DESCRIPTION_HTML,
+    CROSS_VALIDATION_SELECTION_GUIDANCE,
     CROSS_VALIDATION_SUMMARY_HTML,
     CV_SCHEME_DESCRIPTIONS,
     CV_SCHEME_LABELS,
@@ -207,6 +208,13 @@ def build_app_content_docx(path: Path) -> None:
     doc.add_heading("Advanced analysis settings", level=2)
     doc.add_heading("Cross-validation", level=3)
     add_paragraphs(doc, html_to_text(CROSS_VALIDATION_DESCRIPTION_HTML))
+    guidance_rows = [
+        [row.get("scheme", ""), row.get("use_when", ""), row.get("caution", "")]
+        for row in CROSS_VALIDATION_SELECTION_GUIDANCE
+    ]
+    if guidance_rows:
+        doc.add_heading("Choosing a cross-validation scheme", level=4)
+        add_table(doc, ["Scheme", "Use when", "Main caution"], guidance_rows)
     add_table(
         doc,
         ["Scheme", "Internal key", "Description"],
