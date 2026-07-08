@@ -57,7 +57,7 @@ CV_COMPARISON_EXCLUDED_METRICS = {'adjusted_r_squared', 'aic', 'aicc', 'bic', 'n
 
 
 def _not_meaningful_badge():
-    return '<span class="evidence-badge evidence-badge-neutral">CV comparison not meaningful</span>'
+    return '<span class="evidence-badge evidence-badge-neutral">Not meaningful</span>'
 
 
 def _goodness_cv_comparison_table(gof, cvs_mean):
@@ -961,7 +961,7 @@ def _cv_worse_factor(metric, fit_value, cv_value):
 def _cv_status(metric, fit_value, cv_value):
     factor = _cv_worse_factor(metric, fit_value, cv_value)
     if not np.isfinite(factor):
-        return 'CV comparison unavailable', 'unavailable'
+        return 'Unavailable', 'unavailable'
     if factor <= CV_RATIO_MODERATE_THRESHOLD:
         return 'CV similar to final', 'ok'
     if factor <= CV_RATIO_SUBSTANTIAL_THRESHOLD:
@@ -976,7 +976,7 @@ def _cv_status_badge(metric, fit_value, cv_value):
 
 def _overall_cv_status_badge(levels):
     if not levels:
-        return _cv_badge('CV comparison unavailable', 'unavailable')
+        return _cv_badge('Unavailable', 'unavailable')
 
     worst_level = max(levels, key=lambda level: _CV_STATUS_RANK.get(level, 0))
     if worst_level == 'warning':
