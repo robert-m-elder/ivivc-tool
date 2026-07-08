@@ -105,6 +105,69 @@ def _goodness_cv_comparison_table(gof, cvs_mean):
         escape=False
     )
 
+
+
+def _ci_multiplier_95(n_obs, n_params):
+    """Return a two-sided 95% t multiplier for approximate parameter intervals."""
+    try:
+        dof = int(n_obs) - int(n_params)
+    except (TypeError, ValueError):
+        dof = 0
+    if dof > 0:
+        multiplier = sp.stats.t.ppf(1 - 0.05 / 2, dof)
+        if np.isfinite(multiplier):
+            return float(multiplier)
+    return 1.96
+
+
+def _format_interval_number(value):
+    value = _finite_float(value)
+    return f'{value:.4f}' if np.isfinite(value) else 'N/A'
+
+
+def _interval_rows_from_uparams(uparams, multiplier, confidence_label='95% CI'):
+    """Format uncertainty-aware values as estimate with approximate confidence interval."""
+    rows = []
+    for name, value in uparams.items():
+        estimate = _finite_float(getattr(value, 'n', np.nan))
+        std_uncertainty = _finite_float(getattr(value, 's', np.nan))
+        row = {
+            'name': name,
+            'estimate': _format_interval_number(estimate),
+            'confidence_label': confidence_label,
+            'is_available': bool(np.isfinite(estimate) and np.isfinite(std_uncertainty) and std_uncertainty >= 0),
+        }
+        if row['is_available']:
+            half_width = multiplier * std_uncertainty
+            row['lower'] = _format_interval_number(estimate - half_width)
+            row['upper'] = _format_interval_number(estimate + half_width)
+        else:
+            row['lower'] = 'N/A'
+            row['upper'] = 'N/A'
+        rows.append(row)
+    return rows
+
+
+def _tau_interval_row(tau_value, multiplier, label='Tau'):
+    """Format a propagated tau value as an approximate 95% confidence interval."""
+    estimate = _finite_float(getattr(tau_value, 'n', np.nan))
+    std_uncertainty = _finite_float(getattr(tau_value, 's', np.nan))
+    is_available = bool(estimate > 0 and np.isfinite(std_uncertainty) and std_uncertainty >= 0)
+    row = {
+        'label': label,
+        'estimate': _format_interval_number(estimate),
+        'confidence_label': '95% CI',
+        'is_available': is_available,
+    }
+    if is_available:
+        half_width = multiplier * std_uncertainty
+        row['lower'] = _format_interval_number(estimate - half_width)
+        row['upper'] = _format_interval_number(estimate + half_width)
+    else:
+        row['lower'] = 'N/A'
+        row['upper'] = 'N/A'
+    return row
+
 def preprocess_data(t1, m1, t2, m2, selected_interpolation=None, selected_scalings=None, selected_normalizations=None):
     selected_interpolation = selected_interpolation or []
     selected_scalings = selected_scalings or []
@@ -194,6 +257,8 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                 popt, pcov = list(model_result['params'].values()), model_result['pcov']
                 upopt = unc.correlated_values(popt, pcov)
                 upopt = dict(zip(model_result['params'].keys(),upopt))
+                parameter_ci_multiplier = _ci_multiplier_95(len(y), len(popt))
+                parameter_intervals = _interval_rows_from_uparams(upopt, parameter_ci_multiplier)
                 # outputs
                 plot_image = create_plotly_a1(x, y, {
                     'model_name': models[model_name]['display_name'],
@@ -207,6 +272,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                 results[model_key] = {
                     'params': model_result['params'],
                     'uparams': upopt,
+                    'parameter_intervals': parameter_intervals,
                     'pcov': model_result['pcov'],
                     'residuals': residuals,
                     'residual_x': x,
@@ -251,12 +317,15 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                 popt1, pcov1 = list(model_result1['params'].values()), model_result1['pcov']
                 upopt1 = unc.correlated_values(popt1, pcov1)
                 upopt1 = dict(zip(model_result1['params'].keys(),upopt1))
+                parameter_ci_multiplier1 = _ci_multiplier_95(len(y1), len(popt1))
+                parameter_intervals1 = _interval_rows_from_uparams(upopt1, parameter_ci_multiplier1)
                 tau1 = calculate_tau_with_uncertainty(models[model_name]['model_function'], popt1, pcov1)
                 # deal with integration failure
                 if tau1[0]>0 and np.isfinite(tau1[0]):
                     tau1 = unc.ufloat(*tau1)
                 else:
                     tau1 = unc.ufloat(0,1)
+                tau_interval1 = _tau_interval_row(tau1, parameter_ci_multiplier1)
                 # Dataset 2
                 # get rough initial estimate of parameters
                 with warnings.catch_warnings():
@@ -279,12 +348,15 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                 popt2, pcov2 = list(model_result2['params'].values()), model_result2['pcov']
                 upopt2 = unc.correlated_values(popt2, pcov2)
                 upopt2 = dict(zip(model_result2['params'].keys(),upopt2))
+                parameter_ci_multiplier2 = _ci_multiplier_95(len(y2), len(popt2))
+                parameter_intervals2 = _interval_rows_from_uparams(upopt2, parameter_ci_multiplier2)
                 tau2 = calculate_tau_with_uncertainty(models[model_name]['model_function'], popt2, pcov2)
                 # deal with integration failure
                 if tau2[0]>0 and np.isfinite(tau2[0]):
                     tau2 = unc.ufloat(*tau2)
                 else:
                     tau2 = unc.ufloat(0,1)
+                tau_interval2 = _tau_interval_row(tau2, parameter_ci_multiplier2)
                 # outputs
                 plot_image = create_plotly_a2(x1, y1, x2, y2, {
                     'model_name': models[model_name]['display_name'],
@@ -302,7 +374,9 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                 results[model_key] = {
                     'params': [model_result1['params'],model_result2['params']],
                     'uparams': [upopt1,upopt2],
+                    'parameter_intervals': [parameter_intervals1, parameter_intervals2],
                     'tau': [tau1,tau2],
+                    'tau_intervals': [tau_interval1, tau_interval2],
                     'stats': [stats1,stats2],
                     'predictions': [y_pred1,y_pred2],
                     'pcov': [pcov1,pcov2],
