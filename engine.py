@@ -876,7 +876,7 @@ def _attach_residual_plots(results):
             original_plot = create_residual_plotly(
                 item['x'],
                 item['residuals'],
-                f"{item['title_prefix']} for {display_name} Fit (Original Units, Common Scale)",
+                f"{item['title_prefix']} for {display_name} Fit",
                 x_axis_title=item['x_axis_title'],
                 marker_color=item['marker_color'],
                 reference_scale=residual_reference_scale,
@@ -885,7 +885,7 @@ def _attach_residual_plots(results):
             )
             qq_plot = create_residual_qq_plotly(
                 item['residuals'],
-                f"Normal Q-Q Plot for {display_name} Fit",
+                f"{item['title_prefix']} Normal Q-Q Plot for {display_name} Fit",
                 marker_color=item['marker_color'],
             )
             if approach_id == 'approach1':

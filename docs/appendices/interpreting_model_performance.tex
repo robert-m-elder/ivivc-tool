@@ -50,15 +50,15 @@ A prediction error may be numerically small but practically important if the rel
 
 \subsection{Interpreting relative model evidence}
 
-Relative Model Evidence tables summarize information-criterion comparisons among candidate parametric models fitted under comparable conditions. These tables may include AIC, AIC\textsubscript{c}, BIC, delta values, evidence weights, and evidence ratios.
+Relative Model Evidence tables summarize information-criterion comparisons among candidate parametric models fitted under comparable conditions. In this context, empirical support means support, within the displayed candidate set, that a model best balances fit quality and complexity. These tables may include AIC, AIC\textsubscript{c}, BIC, delta values, evidence weights, and evidence ratios.
 
 \begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.24\textwidth}>{\raggedright\arraybackslash}p{0.68\textwidth}@{}}
 \toprule
-\textbf{Evidence quantity} & \textbf{Interpretation} \\
+\textbf{Support quantity} & \textbf{Interpretation} \\
 \midrule
 \endfirsthead
 \toprule
-\textbf{Evidence quantity} & \textbf{Interpretation} \\
+\textbf{Support quantity} & \textbf{Interpretation} \\
 \midrule
 \endhead
 AIC, AIC\textsubscript{c}, or BIC & Information criterion value. Lower values indicate a better balance of fit quality and model complexity within the displayed candidate set. The absolute value is not interpreted directly. \\
@@ -68,7 +68,7 @@ Evidence ratio & Ratio of the highest evidence weight to the model's evidence we
 \bottomrule
 \end{longtable}
 
-Common rules of thumb for AIC-family comparisons are: delta values from 0 to 2 suggest similar or substantial empirical support; values from 4 to 7 suggest considerably less support; and values greater than 10 suggest essentially no support relative to the leading candidate in that model set \cite{burnham2002}. Common rules of thumb for BIC-family comparisons are: delta values from 0 to 2 suggest weak differences; 2 to 6 suggest positive evidence against the higher-BIC model; 6 to 10 suggest strong evidence; and values greater than 10 suggest very strong evidence \cite{kass1995}. These are interpretive conventions, not regulatory acceptance criteria.
+Common rules of thumb for AIC-family comparisons are: delta values from 0 to 2 suggest similar or substantial empirical support; values from 4 to 7 suggest considerably less support; and values greater than 10 suggest essentially no support relative to the leading candidate in that model set \cite{burnham2002}. Common rules of thumb for BIC-family comparisons can also be expressed in support language: delta values from 0 to 2 suggest similar BIC support; values from 2 to 6 suggest lower BIC support; values from 6 to 10 suggest substantially lower BIC support; and values greater than 10 suggest minimal BIC support relative to the leading candidate in that model set \cite{kass1995}. These are interpretive conventions, not regulatory acceptance criteria.
 
 For a given information criterion, the evidence weight for model $i$ can be calculated from the model's delta value:
 \begin{equation}
@@ -76,7 +76,7 @@ w_i = \frac{\exp\left(-\frac{1}{2}\Delta_i\right)} {\sum_{j=1}^{J} \exp\left(-\f
 \end{equation}
 where $\Delta_i$ is the difference between model $i$'s information criterion value and the lowest value among the $J$ candidate models being compared. Larger weights indicate stronger relative support within the candidate model set \cite{burnham2002,wagenmakers2004}.
 
-Relative evidence does not prove that a model is correct, mechanistic, predictive outside the observed range, or suitable for a regulatory submission. If multiple models have similar relative support, users should also consider simplicity, parameter plausibility, residual behavior, cross-validation behavior, and scientific interpretability.
+Empirical support does not prove that a model is correct, mechanistic, predictive outside the observed range, or suitable for a regulatory submission. If multiple models have similar relative support, users should also consider simplicity, parameter plausibility, residual behavior, cross-validation behavior, and scientific interpretability.
 
 \subsection{Interpreting cross-validation performance}
 
@@ -90,7 +90,7 @@ Fit/CV ratios summarize the relationship between fitted-data and held-out perfor
 
 The app also displays cross-validation comparison badges as interpretive aids. These badges are based on the metric's preferred direction: for lower-is-better error metrics (e.g., RMSE), worse cross-validation performance means the CV value is larger than the final-model value; for higher-is-better metrics (e.g., $R^2$), worse cross-validation performance means the CV value is smaller than the final-model value. As a screening aid, performance within a factor of 1.25 of the final model is labeled as similar, performance worse by 1.25 to 2-fold is labeled as moderately worse, and performance worse by more than 2-fold is labeled as substantially worse. These thresholds are heuristic review aids, not statistical acceptance criteria or regulatory criteria.
 
-The app does not include adjusted $R^2$, information criteria (AIC, AIC\textsubscript{c}, and BIC), or normalized RMSE (NRMSE) in cross-validation comparison tables. Adjusted $R^2$ and information criteria depend on the number of observations or fitted parameters, and the final model and cross-validation models are fitted to different subsets of the data. NRMSE is also excluded because its normalization factor may depend on the subset of observations being evaluated, so final-fit and held-out values may not use the same denominator. Use adjusted $R^2$, information criteria, and NRMSE for fitted-model review and relative evidence among comparable fitted models, and use eligible cross-validation metrics to evaluate held-out predictive behavior.
+The app does not include adjusted $R^2$, information criteria (AIC, AIC\textsubscript{c}, and BIC), or normalized RMSE (NRMSE) in cross-validation comparison tables. Adjusted $R^2$ and information criteria depend on the number of observations or fitted parameters, and the final model and cross-validation models are fitted to different subsets of the data. NRMSE is also excluded because its normalization factor may depend on the subset of observations being evaluated, so final-fit and held-out values may not use the same denominator. Use adjusted $R^2$, information criteria, and NRMSE for fitted-model review and relative empirical support among comparable fitted models, and use eligible cross-validation metrics to evaluate held-out predictive behavior.
 
 
 \subsection{Interpreting residual diagnostics}
@@ -131,7 +131,7 @@ Parameter uncertainty is especially important when a fitted model will be interp
 
 More complex models can often fit observed data more closely, but they may overfit small datasets or produce unstable parameter estimates. Adjusted \(R^2\), AIC, AIC\textsubscript{c}, BIC, cross-validation metrics, and residual diagnostics can help evaluate whether additional complexity is justified \cite{heinze2018}.
 
-When two models have similar fitted performance and similar relative evidence, the simpler and more interpretable model may be easier to justify, provided it is scientifically plausible and performs adequately for the intended use. Model complexity should be supported by data density, degradation-mechanism expectations, and the intended context of use.
+When two models have similar fitted performance and similar empirical support, the simpler and more interpretable model may be easier to justify, provided it is scientifically plausible and performs adequately for the intended use. Model complexity should be supported by data density, degradation-mechanism expectations, and the intended context of use.
 
 \subsection{Scientific plausibility and intended use}
 
@@ -216,7 +216,7 @@ A statistically competitive model may still be difficult to justify if its shape
 \item Would an independent reviewer understand why this model or method was selected over reasonable alternatives?
 \end{itemize}
 
-The selected model should be supported by a documented balance of fitted performance, prediction error, cross-validation behavior, relative evidence, parameter diagnostics, residual behavior, scientific plausibility, and intended use.
+The selected model should be supported by a documented balance of fitted performance, prediction error, cross-validation behavior, relative empirical support, parameter diagnostics, residual behavior, scientific plausibility, and intended use.
 
 \subsection{Example interpretation statements}
 
@@ -226,7 +226,7 @@ The following examples illustrate wording that may be adapted for reports. Users
 \item Model A had the lowest RMSE and highest adjusted $R^2$ among the evaluated models, indicating strong performance under the selected preprocessing conditions.
 \item Model B had similar AIC\textsubscript{c} support to Model A, with Delta AIC\textsubscript{c} less than 2, suggesting that the two models were not clearly distinguished by AIC\textsubscript{c} within this candidate set.
 \item Although Model C had strong fitted-data performance, its cross-validation error was substantially higher than its fitted error, suggesting possible sensitivity to the validation procedure or reduced generalizability.
-\item The selected model was chosen based on a balance of fitted performance, cross-validation behavior, relative evidence, parameter plausibility, and scientific interpretability.
+\item The selected model was chosen based on a balance of fitted performance, cross-validation behavior, relative empirical support, parameter plausibility, and scientific interpretability.
 \end{itemize}
 
 \subsection{Limitations}

@@ -21,17 +21,16 @@ CRITERION_LABELS = {
 INTERPRETATION_PREFERENCE = ("aicc", "aic", "bic")
 
 
-BADGE_CLASSES = {
-    "Comparable support": "evidence-badge-comparable",
-    "Somewhat lower support": "evidence-badge-lower",
-    "Considerably lower support": "evidence-badge-lower",
-    "Substantially lower support": "evidence-badge-minimal",
-    "Minimal relative support": "evidence-badge-minimal",
-    "Weak BIC difference": "evidence-badge-comparable",
-    "Positive BIC evidence difference": "evidence-badge-lower",
-    "Strong BIC evidence difference": "evidence-badge-minimal",
-    "Very strong BIC evidence difference": "evidence-badge-minimal",
-}
+def _badge_class(label):
+    """Return a display class for interpretation badge labels."""
+    label_lower = str(label).lower()
+    if label_lower.startswith(("highest", "similar")):
+        return "evidence-badge-comparable"
+    if "minimal" in label_lower or "substantially" in label_lower:
+        return "evidence-badge-minimal"
+    if "lower" in label_lower:
+        return "evidence-badge-lower"
+    return ""
 
 
 def selected_information_criteria(selected_metrics):
@@ -88,7 +87,7 @@ def _format_ratio(value):
 
 
 def _badge(label):
-    css_class = BADGE_CLASSES.get(label, "")
+    css_class = _badge_class(label)
     class_attr = f"evidence-badge {css_class}".strip()
     return f'<span class="{class_attr}">{label}</span>'
 
@@ -192,32 +191,41 @@ def add_relative_evidence(rows, criterion):
     return rows
 
 
-def aic_support_label(delta):
+def _criterion_support_label(delta, criterion_label, thresholds):
     delta = _as_float(delta)
     if not isfinite(delta):
         return "N/A"
-    if delta <= 2:
-        return "Comparable support"
-    if delta < 4:
-        return "Somewhat lower support"
-    if delta <= 7:
-        return "Considerably lower support"
-    if delta <= 10:
-        return "Substantially lower support"
-    return "Minimal relative support"
+    if abs(delta) <= 1e-12:
+        return f"Highest {criterion_label} support"
+    for threshold, label in thresholds:
+        if delta <= threshold:
+            return f"{label} {criterion_label} support"
+    return f"Minimal {criterion_label} support"
+
+
+def aic_support_label(delta, criterion_label="AIC"):
+    return _criterion_support_label(
+        delta,
+        criterion_label,
+        (
+            (2, "Similar"),
+            (4, "Lower"),
+            (7, "Considerably lower"),
+            (10, "Substantially lower"),
+        ),
+    )
 
 
 def bic_support_label(delta):
-    delta = _as_float(delta)
-    if not isfinite(delta):
-        return "N/A"
-    if delta <= 2:
-        return "Weak BIC difference"
-    if delta <= 6:
-        return "Positive BIC evidence difference"
-    if delta <= 10:
-        return "Strong BIC evidence difference"
-    return "Very strong BIC evidence difference"
+    return _criterion_support_label(
+        delta,
+        "BIC",
+        (
+            (2, "Similar"),
+            (6, "Lower"),
+            (10, "Substantially lower"),
+        ),
+    )
 
 
 def _primary_criterion(rows, criteria):
@@ -236,7 +244,7 @@ def _sort_rows(rows, criteria):
 
 def _interpretation(row, primary=None):
     if primary in ("aicc", "aic"):
-        return aic_support_label(row.get(f"delta_{primary}"))
+        return aic_support_label(row.get(f"delta_{primary}"), CRITERION_LABELS[primary])
     if primary == "bic":
         return bic_support_label(row.get("delta_bic"))
     return "N/A"
