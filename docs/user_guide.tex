@@ -99,40 +99,38 @@ Preprocessing prepares the uploaded data for comparison, fitting, and prediction
 
 \section{Cross-validation options}
 
-Cross-validation provides an approximate check of how a fitted model performs on held-out data. Instead of judging only how closely a model follows the observations used for fitting, it repeatedly withholds part of the dataset, fits the model to the remaining observations, and evaluates prediction error on the withheld observations.
+Cross-validation (CV) estimates how a fitted parametric model predicts observations that were not used for fitting. CV repeatedly splits the data into training/test sets to evaluate performance of models fitted to the training data and evaluated on the held-out test data. In this app, the cross-validation result is best interpreted as a sensitivity diagnostic based on held-out prediction error under the selected splitting pattern. It is not a confidence interval or a parameter uncertainty estimate. When final-fit error from the model fitted to the entire dataset and cross-validation error are similar, this provides some reassurance that the fitted relationship is not overly dependent on the particular observations used for fitting. When cross-validation error is much worse, the model may be more sensitive to the available data, the selected holdout scheme, or the number and placement of time points.
 
-\subsection{Cross-validation schemes available in the app}
+For time-course data, the holdout pattern matters. Holding out one time point, a short contiguous time window, or a random subset represents a different artificial prediction task. Nearby observations may contain related information, and early, middle, and late regions of an absorbable-polymer degradation profile may reflect different parts of the degradation process. A split that leaves training observations immediately before and after a held-out observation may mainly test interpolation within the observed curve, while a contiguous-block holdout asks whether the model can bridge a missing region.
 
-\input{includes/generated/cv_scheme_reference_table.tex}
+There is no universally best cross-validation scheme for every IVIVC dataset. The most useful choice depends on the practical question being asked and on whether enough observations remain for stable fitting. When results change substantially across schemes, treat that as a signal to review fitted plots, residuals, parameter uncertainty, model complexity, and scientific plausibility rather than as an automatic reason to accept or reject a model.
+
+For background on cross-validation procedures and their use in model assessment and selection, including issues that arise with temporally ordered data, see references \cite{arlot2010, bergmeir2012, roberts2017, bergmeir2018}.
+
+\subsection{Choosing a cross-validation scheme}
+
+The table below summarizes the schemes available in the app. The ``held-out error'' column describes the type of prediction error or sensitivity each scheme most directly evaluates.
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.18\textwidth}>{\raggedright\arraybackslash}p{0.29\textwidth}>{\raggedright\arraybackslash}p{0.25\textwidth}>{\raggedright\arraybackslash}p{0.20\textwidth}@{}}
+\toprule
+\textbf{Scheme} & \textbf{Held-out error describes} & \textbf{Useful when} & \textbf{Main caution} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Scheme} & \textbf{Held-out error describes} & \textbf{Useful when} & \textbf{Main caution} \\
+\midrule
+\endhead
+Leave-one-timepoint-out & Single-timepoint prediction error; sensitivity to removing one observation at a time. & Default starting point for small time-course datasets because each repeated fit retains nearly all observations. & May be a gentle test when neighboring time points strongly constrain the omitted point. \\
+Leave-contiguous-block-out & Local time-window prediction error; sensitivity to withholding a short adjacent region of the profile. & Main time-aware sensitivity check when adjacent observations may be related or when a missing time region is a concern. & Larger blocks are more demanding but may leave too few observations. \\
+K-fold & Ordered fold-holdout error; sensitivity to withholding larger ordered portions of the dataset. & Familiar fold-based diagnostic when there are enough observations to form meaningful folds. Smaller $k$ values create larger held-out regions. & Training data for a held-out fold may include time points on either side of it. Results can depend on fold boundaries. \\
+Shuffle split & Random-subset prediction error; sensitivity to repeated random training and holdout partitions. & Exploratory robustness check when temporal ordering is not central or when conclusions should be compared across random subsets. & Least time-aware option; can give optimistic scores when nearby observations are strongly related. \\
+None & No cross-validation error is calculated; final fitted-model summaries are reported without a held-out prediction diagnostic. & Appropriate when there are too few observations for meaningful holdout fitting, repeated fits are unstable, or only fitted-model behavior is needed. & Removes one robustness diagnostic; rely more heavily on fitted profiles, residuals, final metrics, parameter diagnostics, and scientific plausibility. \\
+\bottomrule
+\end{longtable}
 
 \subsection{Cross-validation parameters}
 
 \input{includes/generated/cv_parameter_reference_table.tex}
-
-\subsection{Choosing a cross-validation scheme}
-
-Time-course data require extra care because observations are ordered and nearby time points may contain related information. In an absorbable-polymer degradation dataset, early, middle, and late regions may reflect different parts of the degradation process. A random holdout may leave training observations immediately before and after a withheld observation, which often tests interpolation within the observed curve rather than prediction of an unobserved time region. This can make held-out performance look more favorable when adjacent observations are strongly related, residuals are correlated, or the process changes over time.
-
-There is no universally best cross-validation scheme for every IVIVC dataset. The most useful choice depends on the practical question being asked: whether the model can predict one missing time point, a small time region, or a random subset of observations. When results change substantially across schemes, treat that as a signal to review the fitted plots, residuals, parameter uncertainty, and scientific plausibility rather than as an automatic reason to accept or reject a model.
-
-For small datasets, cross-validation summaries should be interpreted as exploratory diagnostics and sensitivity checks rather than definitive validation results. For background on cross-validation procedures and their use in model assessment and selection, including issues that arise with temporally ordered data, see references \cite{arlot2010, bergmeir2012, roberts2017, bergmeir2018}.
-
-\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.20\textwidth}>{\raggedright\arraybackslash}p{0.36\textwidth}>{\raggedright\arraybackslash}p{0.36\textwidth}@{}}
-\toprule
-\textbf{Scheme} & \textbf{Use when} & \textbf{Main caution} \\
-\midrule
-\endfirsthead
-\toprule
-\textbf{Scheme} & \textbf{Use when} & \textbf{Main caution} \\
-\midrule
-\endhead
-Leave-one-timepoint-out & Use as the default starting point for small time-course datasets, especially when retaining nearly all observations for each repeated fit is important. & Because only one observation is withheld, the test point may be close to observations used for fitting. It may miss problems that appear when an entire time region is withheld. \\
-Leave-contiguous-block-out & Use when you want a stricter time-region check, especially if adjacent time points are likely related or if early, middle, and late degradation regions may behave differently. Start with a small block size and increase only when enough observations remain for stable fitting. & Larger blocks reduce the observations available for fitting and may cause unstable or failed fits in small datasets. The setup page does not enforce a maximum block size because uploaded data are not read until Analyze is selected. \\
-K-fold & Use as a familiar fold-based diagnostic when there are enough observations to divide the ordered dataset into several meaningful folds. Smaller k values create larger held-out time regions; larger k values are closer to leave-one-timepoint-out. & K-fold is ordered and not shuffled, so the random seed has no effect. Results can still depend on how the ordered observations fall into folds. \\
-Shuffle split & Use as an exploratory sensitivity check when there are enough observations to create repeated random training and holdout sets. It can help show whether conclusions change across random partitions. & For time-course data, random splits can break the temporal structure and may give optimistic held-out scores when nearby observations are strongly related. Avoid treating Shuffle split as the main evidence when temporal dependence is important. \\
-None & Use when there are too few observations for meaningful repeated refitting, when cross-validation fits are unstable, or when only final fitted-model summaries are needed. & No held-out performance estimate is produced; rely more heavily on fitted plots, residual behavior, parameter diagnostics, and scientific plausibility. \\
-\bottomrule
-\end{longtable}
 
 \section{Grid-search initialization}
 

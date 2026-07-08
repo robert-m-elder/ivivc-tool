@@ -53,7 +53,7 @@ colors = {
 }
 
 
-CV_COMPARISON_EXCLUDED_METRICS = {'adjusted_r_squared', 'aic', 'aicc', 'bic'}
+CV_COMPARISON_EXCLUDED_METRICS = {'adjusted_r_squared', 'aic', 'aicc', 'bic', 'nrmse', 'mnrmse'}
 
 
 def _not_meaningful_badge():
