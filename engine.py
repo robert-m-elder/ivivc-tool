@@ -713,6 +713,99 @@ def create_residual_plotly(
     return {'plot': plot_html, 'table_html': table_html}
 
 
+
+def create_residual_qq_plotly(
+    residuals,
+    title,
+    marker_color='black',
+):
+    """Create a normal Q-Q Plotly figure for standardized residuals."""
+    residuals = _finite_vector(residuals)
+    n = residuals.size
+
+    fig = go.Figure()
+    annotation_text = None
+
+    if n < 2:
+        annotation_text = 'Q-Q plot unavailable: fewer than two finite residuals are available.'
+    else:
+        residual_sd = float(np.std(residuals, ddof=1))
+        if not np.isfinite(residual_sd) or residual_sd <= 0:
+            annotation_text = 'Q-Q plot unavailable: residual variance is zero.'
+        else:
+            standardized = (residuals - float(np.mean(residuals))) / residual_sd
+            ordered_residuals = np.sort(standardized)
+            probabilities = (np.arange(1, n + 1, dtype=float) - 0.5) / n
+            theoretical_quantiles = sp.stats.norm.ppf(probabilities)
+
+            finite_mask = np.isfinite(theoretical_quantiles) & np.isfinite(ordered_residuals)
+            theoretical_quantiles = theoretical_quantiles[finite_mask]
+            ordered_residuals = ordered_residuals[finite_mask]
+
+            if theoretical_quantiles.size < 2:
+                annotation_text = 'Q-Q plot unavailable: too few finite quantiles are available.'
+            else:
+                combined = np.concatenate([theoretical_quantiles, ordered_residuals])
+                axis_min = float(np.min(combined))
+                axis_max = float(np.max(combined))
+                if axis_min == axis_max:
+                    axis_min -= 0.5
+                    axis_max += 0.5
+                padding = 0.08 * (axis_max - axis_min)
+                axis_min -= padding
+                axis_max += padding
+
+                fig.add_trace(go.Scatter(
+                    x=[axis_min, axis_max],
+                    y=[axis_min, axis_max],
+                    mode='lines',
+                    name='Normal reference line',
+                    line=dict(color='rgba(80, 80, 80, 0.85)', dash='dash', width=2),
+                ))
+                fig.add_trace(go.Scatter(
+                    x=theoretical_quantiles,
+                    y=ordered_residuals,
+                    mode='markers',
+                    name='Standardized residuals',
+                    marker=dict(color=marker_color, size=15, line=dict(color='white', width=2)),
+                ))
+                fig.update_xaxes(range=[axis_min, axis_max])
+                fig.update_yaxes(range=[axis_min, axis_max])
+
+    if annotation_text:
+        fig.add_annotation(
+            text=annotation_text,
+            xref='paper',
+            yref='paper',
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+            align='center',
+            font=dict(size=14, color='rgba(80, 80, 80, 0.95)'),
+            bgcolor='rgba(255, 255, 255, 0.8)',
+        )
+
+    fig.update_layout(
+        template='plotly_white',
+        autosize=True,
+        title=title,
+        xaxis_title='Theoretical normal quantile',
+        yaxis_title='Ordered standardized residual',
+        showlegend=True,
+        margin=dict(l=30, r=30, t=30, b=30),
+        font=dict(family='Arial, sans-serif', size=14, color='black'),
+        xaxis=dict(showline=True, linewidth=2, linecolor='#EBF0F8', mirror=True, zeroline=False),
+        yaxis=dict(showline=True, linewidth=2, linecolor='#EBF0F8', mirror=True, zeroline=False, scaleanchor='x', scaleratio=1),
+    )
+    fig.update_xaxes(title_font=dict(size=20), tickfont=dict(size=18))
+    fig.update_yaxes(title_font=dict(size=20), tickfont=dict(size=18))
+
+    table_html = extract_plotly_data_for_table(fig)
+    config = {'responsive': True, 'displaylogo': False}
+    plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
+    return {'plot': plot_html, 'table_html': table_html}
+
+
 def _collect_residual_contexts(results):
     """Group residual data so plots can share scaling across comparable models."""
     contexts = {
@@ -790,13 +883,22 @@ def _attach_residual_plots(results):
                 reference_label='residual scale',
                 y_axis_limit=original_axis_limit,
             )
+            qq_plot = create_residual_qq_plotly(
+                item['residuals'],
+                f"Normal Q-Q Plot for {display_name} Fit",
+                marker_color=item['marker_color'],
+            )
             if approach_id == 'approach1':
                 model_results['residual_plot'] = original_plot
+                model_results['residual_qq_plot'] = qq_plot
             elif approach_id == 'approach2':
                 if 'residual_plot' not in model_results:
                     model_results['residual_plot'] = [None, None]
+                if 'residual_qq_plot' not in model_results:
+                    model_results['residual_qq_plot'] = [None, None]
                 idx = 0 if dataset_id == 'in_vitro' else 1
                 model_results['residual_plot'][idx] = original_plot
+                model_results['residual_qq_plot'][idx] = qq_plot
 
 
 _CV_BADGE_CLASS_BY_LEVEL = {

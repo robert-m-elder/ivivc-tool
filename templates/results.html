@@ -399,6 +399,10 @@
                             <div class="report-plot-placeholder" data-plot-source="plot-residual-{{ option.model_dom_id }}">
                                 <p class="plot-unavailable">Original-unit residual plot is not available.</p>
                             </div>
+                            <h5>Normal Q-Q plot of residuals</h5>
+                            <div class="report-plot-placeholder" data-plot-source="plot-residual-qq-{{ option.model_dom_id }}">
+                                <p class="plot-unavailable">Normal Q-Q residual plot is not available.</p>
+                            </div>
                             {% set approach_evidence = evidence_tables.get(option.approach_id, {}) %}
                             {% if approach_evidence.get('fit') %}
                                 <h4>Relative evidence context</h4>
@@ -446,9 +450,17 @@
                             <div class="report-plot-placeholder" data-plot-source="plot-residual-{{ option.model_dom_id }}-in-vitro">
                                 <p class="plot-unavailable">In vitro original-unit residual plot is not available.</p>
                             </div>
+                            <h5>In vitro residuals: normal Q-Q plot</h5>
+                            <div class="report-plot-placeholder" data-plot-source="plot-residual-qq-{{ option.model_dom_id }}-in-vitro">
+                                <p class="plot-unavailable">In vitro normal Q-Q residual plot is not available.</p>
+                            </div>
                             <h5>In vivo residuals: original-unit, common scale</h5>
                             <div class="report-plot-placeholder" data-plot-source="plot-residual-{{ option.model_dom_id }}-in-vivo">
                                 <p class="plot-unavailable">In vivo original-unit residual plot is not available.</p>
+                            </div>
+                            <h5>In vivo residuals: normal Q-Q plot</h5>
+                            <div class="report-plot-placeholder" data-plot-source="plot-residual-qq-{{ option.model_dom_id }}-in-vivo">
+                                <p class="plot-unavailable">In vivo normal Q-Q residual plot is not available.</p>
                             </div>
                             {% set approach_evidence = evidence_tables.get(option.approach_id, {}) %}
                             {% if approach_evidence %}
@@ -538,6 +550,18 @@
                                     <div id="approach1-{{ model_name }}-residual-table-container" class="data-table-container" style="display: none;">
                                         {{ model_results.residual_plot.table_html | safe }}
                                     </div>
+                                    <h5>Normal Q-Q plot of residuals</h5>
+                                    <div id="plot-residual-qq-{{ model_key|replace(':', '-') }}" class="plot-container report-source-plot">
+                                        {{ model_results.residual_qq_plot.plot | safe }}
+                                    </div>
+                                    <div class="custom-button-container">
+                                        <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach1-{{ model_name }}-residual-qq-table" style="text-decoration: none;">
+                                            <span>Show Data Table</span>
+                                        </button>
+                                    </div>
+                                    <div id="approach1-{{ model_name }}-residual-qq-table-container" class="data-table-container" style="display: none;">
+                                        {{ model_results.residual_qq_plot.table_html | safe }}
+                                    </div>
                                 {% endif %}
                             </div>
                         {% endif %}
@@ -591,6 +615,18 @@
                                         <div id="approach2-{{ model_name }}-residual-table-in-vitro-container" class="data-table-container" style="display: none;">
                                             {{ model_results.residual_plot[0].table_html | safe }}
                                         </div>
+                                        <h5>Normal Q-Q plot of residuals</h5>
+                                        <div id="plot-residual-qq-{{ model_key|replace(':', '-') }}-in-vitro" class="plot-container report-source-plot">
+                                            {{ model_results.residual_qq_plot[0].plot | safe }}
+                                        </div>
+                                        <div class="custom-button-container">
+                                            <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach2-{{ model_name }}-residual-qq-table-in-vitro" style="text-decoration: none;">
+                                                <span>Show Data Table</span>
+                                            </button>
+                                        </div>
+                                        <div id="approach2-{{ model_name }}-residual-qq-table-in-vitro-container" class="data-table-container" style="display: none;">
+                                            {{ model_results.residual_qq_plot[0].table_html | safe }}
+                                        </div>
                                     </section>
                                     <section class="approach2-dataset-section approach2-dataset-in-vivo">
                                         <h4 class="approach2-dataset-heading">In Vivo Data</h4>
@@ -621,6 +657,18 @@
                                     </div>
                                     <div id="approach2-{{ model_name }}-residual-table-in-vivo-container" class="data-table-container" style="display: none;">
                                         {{ model_results.residual_plot[1].table_html | safe }}
+                                    </div>
+                                    <h5>Normal Q-Q plot of residuals</h5>
+                                    <div id="plot-residual-qq-{{ model_key|replace(':', '-') }}-in-vivo" class="plot-container report-source-plot">
+                                        {{ model_results.residual_qq_plot[1].plot | safe }}
+                                    </div>
+                                    <div class="custom-button-container">
+                                        <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach2-{{ model_name }}-residual-qq-table-in-vivo" style="text-decoration: none;">
+                                            <span>Show Data Table</span>
+                                        </button>
+                                    </div>
+                                    <div id="approach2-{{ model_name }}-residual-qq-table-in-vivo-container" class="data-table-container" style="display: none;">
+                                        {{ model_results.residual_qq_plot[1].table_html | safe }}
                                     </div>
                                     </section>
                                 {% endif %}
