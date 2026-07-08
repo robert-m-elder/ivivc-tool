@@ -42,8 +42,6 @@ from utilities.descriptions import (  # noqa: E402
     ANALYSIS_CONFIG_LABELS,
     ANALYSIS_PARAMETER_DESCRIPTIONS,
     APPROACH_DESCRIPTIONS,
-    CROSS_VALIDATION_DESCRIPTION_HTML,
-    CROSS_VALIDATION_SELECTION_GUIDANCE,
     CROSS_VALIDATION_SUMMARY_HTML,
     CV_SCHEME_DESCRIPTIONS,
     CV_SCHEME_LABELS,
@@ -52,7 +50,7 @@ from utilities.descriptions import (  # noqa: E402
     MODAL_HELP,
     PARAMETER_DIAGNOSTICS_COMPARISON_HTML,
     PREPROCESSING_DESCRIPTIONS,
-    RELATIVE_MODEL_EVIDENCE_TEXT,
+    RELATIVE_MODEL_EVIDENCE_HTML,
     TOOL_CAPABILITY_SUMMARY,
     TOOL_PURPOSE_TEXT,
 )
@@ -207,14 +205,6 @@ def build_app_content_docx(path: Path) -> None:
 
     doc.add_heading("Advanced analysis settings", level=2)
     doc.add_heading("Cross-validation", level=3)
-    add_paragraphs(doc, html_to_text(CROSS_VALIDATION_DESCRIPTION_HTML))
-    guidance_rows = [
-        [row.get("scheme", ""), row.get("use_when", ""), row.get("caution", "")]
-        for row in CROSS_VALIDATION_SELECTION_GUIDANCE
-    ]
-    if guidance_rows:
-        doc.add_heading("Choosing a cross-validation scheme", level=4)
-        add_table(doc, ["Scheme", "Use when", "Main caution"], guidance_rows)
     add_table(
         doc,
         ["Scheme", "Internal key", "Description"],
@@ -254,7 +244,7 @@ def build_app_content_docx(path: Path) -> None:
 
     doc.add_heading("Results and report explanatory text", level=1)
     doc.add_heading("Relative model evidence", level=2)
-    add_paragraphs(doc, RELATIVE_MODEL_EVIDENCE_TEXT)
+    add_paragraphs(doc, html_to_text(RELATIVE_MODEL_EVIDENCE_HTML))
     doc.add_heading("Cross-validation summary", level=2)
     add_paragraphs(doc, html_to_text(CROSS_VALIDATION_SUMMARY_HTML))
     doc.add_heading("Fitted parameter diagnostics comparison", level=2)
@@ -332,9 +322,22 @@ def add_latex_table(doc: Document, block: list[str]) -> None:
     add_table(doc, headers, data_rows)
 
 
-def render_latex_file(doc: Document, path: Path, heading_prefix: str | None = None) -> None:
+def render_latex_file(
+    doc: Document,
+    path: Path,
+    heading_prefix: str | None = None,
+    active_inputs: set[Path] | None = None,
+) -> None:
     if heading_prefix:
         doc.add_heading(heading_prefix, level=1)
+
+    path = path.resolve()
+    active_inputs = active_inputs or set()
+    if path in active_inputs:
+        doc.add_paragraph(f"[Skipped recursive LaTeX input: {path.name}]")
+        return
+    active_inputs.add(path)
+
     lines = path.read_text(encoding="utf-8").splitlines()
     paragraph_buffer: list[str] = []
     in_itemize = False
@@ -353,6 +356,19 @@ def render_latex_file(doc: Document, path: Path, heading_prefix: str | None = No
         stripped = line.strip()
         if not stripped or stripped.startswith("%"):
             flush_paragraph()
+            continue
+
+        input_match = re.match(r"\\input\{([^{}]+)\}", stripped)
+        if input_match:
+            flush_paragraph()
+            input_target = input_match.group(1)
+            input_path = path.parent / input_target
+            if input_path.suffix != ".tex":
+                input_path = input_path.with_suffix(".tex")
+            if input_path.exists():
+                render_latex_file(doc, input_path, active_inputs=active_inputs)
+            else:
+                doc.add_paragraph(f"[Missing LaTeX input: {input_target}]")
             continue
 
         if table_block is not None:
@@ -401,6 +417,7 @@ def render_latex_file(doc: Document, path: Path, heading_prefix: str | None = No
         paragraph_buffer.append(stripped)
 
     flush_paragraph()
+    active_inputs.remove(path)
 
 
 def parse_bib_entries(path: Path) -> list[dict[str, str]]:

@@ -87,28 +87,6 @@ relative_model_evidence_html: |-
   <p><strong>Table definitions:</strong> <strong>n</strong> is the number of fitted observations; <strong>k</strong> is the number of fitted model parameters; <strong>Delta</strong> is the difference between a model's criterion value and the lowest value in the displayed candidate set; <strong>weight</strong> is the normalized relative support for that model under the criterion; and <strong>evidence ratio</strong> compares the highest weight in the set with the model's weight. Delta values near 0 indicate similar relative support; larger delta values indicate lower support relative to the leading candidate under that criterion.</p>
   <p>Similar relative evidence does not mean the models are scientifically equivalent. Final model selection should also consider prediction error, cross-validation behavior, residual patterns, parameter uncertainty, model simplicity, and biological or degradation-mechanism plausibility.</p>
   <p>The app reports these summaries to support user review. It does not select, recommend, or validate a model.</p>
-relative_model_evidence_text: |-
-  Relative model evidence compares candidate parametric models fitted to the same dataset under the same preprocessing settings and IVIVC approach. The evidence table is based only on the information-criterion metrics selected by the user: AIC, AICc, and/or BIC. These criteria are relative; their absolute values are not interpreted directly, and negative values are allowed. Table definitions: n is the number of fitted observations; k is the number of fitted model parameters; Delta is the difference between a model's criterion value and the lowest value in the displayed candidate set; weight is the normalized relative support for that model under the criterion; and evidence ratio compares the highest weight in the set with the model's weight. Delta values near 0 indicate similar relative support; larger delta values indicate lower support relative to the leading candidate under that criterion. Similar relative evidence does not mean the models are scientifically equivalent. Final model selection should also consider prediction error, cross-validation behavior, residual patterns, parameter uncertainty, model simplicity, and biological or degradation-mechanism plausibility. The app reports these summaries to support user review. It does not select, recommend, or validate a model.
-cross_validation_description_html: |-
-  <p>Cross-validation provides an approximate check of how a fitted model performs on held-out data. Instead of judging only how closely a model follows the observations used for fitting, it repeatedly withholds part of the dataset, fits the model to the remaining observations, and evaluates prediction error on the withheld observations.</p>
-  <p>Time-course data require extra care because observations are ordered and nearby time points may contain related information. In an absorbable-polymer degradation dataset, early, middle, and late regions may reflect different parts of the degradation process. A random holdout may leave training observations immediately before and after a withheld observation, which often tests interpolation within the observed curve rather than prediction of an unobserved time region. This can make held-out performance look more favorable when adjacent observations are strongly related, residuals are correlated, or the process changes over time.</p>
-  <p>The available schemes are Leave-one-timepoint-out, Leave-contiguous-block-out, Shuffle split, K-fold, and None. Leave-one-timepoint-out holds out one observation at a time, Leave-contiguous-block-out holds out adjacent time points, Shuffle split uses repeated random holdout sets, K-fold uses ordered fold-based holdouts, and None disables cross-validation. The block-size setting for Leave-contiguous-block-out controls how many consecutive observations are held out in each split. Larger blocks may leave too few observations for stable fitting, especially in small datasets. For small datasets, cross-validation summaries should be interpreted as exploratory diagnostics and sensitivity checks rather than definitive validation results.</p>
-cross_validation_selection_guidance:
-  - scheme: Leave-one-timepoint-out
-    use_when: Use as the default starting point for small time-course datasets, especially when retaining nearly all observations for each repeated fit is important.
-    caution: Because only one observation is withheld, the test point may be close to observations used for fitting. It may miss problems that appear when an entire time region is withheld.
-  - scheme: Leave-contiguous-block-out
-    use_when: Use when you want a stricter time-region check, especially if adjacent time points are likely related or if early, middle, and late degradation regions may behave differently. Start with a small block size and increase only when enough observations remain for stable fitting.
-    caution: Larger blocks reduce the observations available for fitting and may cause unstable or failed fits in small datasets. The setup page does not enforce a maximum block size because uploaded data are not read until Analyze is selected.
-  - scheme: K-fold
-    use_when: Use as a familiar fold-based diagnostic when there are enough observations to divide the ordered dataset into several meaningful folds. Smaller k values create larger held-out time regions; larger k values are closer to leave-one-timepoint-out.
-    caution: K-fold is ordered and not shuffled, so the random seed has no effect. Results can still depend on how the ordered observations fall into folds.
-  - scheme: Shuffle split
-    use_when: Use as an exploratory sensitivity check when there are enough observations to create repeated random training and holdout sets. It can help show whether conclusions change across random partitions.
-    caution: For time-course data, random splits can break the temporal structure and may give optimistic held-out scores when nearby observations are strongly related. Avoid treating Shuffle split as the main evidence when temporal dependence is important.
-  - scheme: None
-    use_when: Use when there are too few observations for meaningful repeated refitting, when cross-validation fits are unstable, or when only final fitted-model summaries are needed.
-    caution: No held-out performance estimate is produced; rely more heavily on fitted plots, residual behavior, parameter diagnostics, and scientific plausibility.
 cross_validation_summary_html: |-
   <p>The Cross-Validation Summary table reports mean held-out scores for selected eligible metrics where cross-validation was run successfully. Ratio columns show the fitted-model score divided by the cross-validation score for the same metric, and the CV comparison badge summarizes whether held-out performance may warrant closer review. Adjusted R² and information criteria (AIC, AICc, BIC) are excluded because the final model and cross-validation models are fitted using different data subsets. Detailed interpretation guidance is provided in the user guide.</p>
 goodness_validation_table_html: |-
@@ -119,7 +97,7 @@ residual_diagnostics_html: |-
 parameter_diagnostics_comparison_html: |-
   <p>The Fitted Parameter Diagnostics table summarizes the diagnostic badges shown with each individual model fit. These badges help identify models that may warrant closer review for large parameter uncertainty, parameter coupling, or parameter-identifiability cautions. Detailed explanations can be found in the individual fitting results and in the user guide.</p>
 grid_search_description_html: |-
-  <p>The app conducts an automated grid search to identify suitable starting parameter values for each model before nonlinear least-squares fitting, reducing the need for manual parameter tuning. Candidate values are sampled within the configured parameter bounds and are used only to initialize the final curve fit.</p>
+  <p>The app conducts an automated grid search to identify suitable starting parameter values for each model before nonlinear least-squares fitting, eliminating the need for manual tuning of initial parameters. Candidate values are sampled within the configured parameter bounds and are used only to initialize the final curve fit.</p>
   <p>This initialization step improves convergence and reduces sensitivity to poor starting values. It is not itself the final fitting algorithm and does not guarantee that the final fitted parameters are the global optimum.</p>
 cv_schemes:
   leave_one_timepoint_out:
@@ -155,7 +133,7 @@ analysis_parameters:
     description: Number of candidate starting parameter sets evaluated before nonlinear least-squares fitting. Higher values may improve robustness but increase runtime.
   grid_search_num_cores:
     display_name: Grid-search CPU cores
-    description: Number of CPU cores used for the starting-point search. Blank or Auto uses the app default.
+    description: Number of CPU cores used for the starting-point search. Only available via command-line interface.
   grid_search_param_min:
     display_name: Grid-search parameter minimum
     description: Lower bound for randomly sampled candidate starting parameter values.
