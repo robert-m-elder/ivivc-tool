@@ -126,7 +126,7 @@ def _format_interval_number(value):
 
 
 def _interval_rows_from_uparams(uparams, multiplier, confidence_label='95% CI'):
-    """Format uncertainty-aware values as estimate with approximate confidence interval."""
+    """Format uncertainty-aware values as estimate plus/minus approximate CI half-width."""
     rows = []
     for name, value in uparams.items():
         estimate = _finite_float(getattr(value, 'n', np.nan))
@@ -139,17 +139,15 @@ def _interval_rows_from_uparams(uparams, multiplier, confidence_label='95% CI'):
         }
         if row['is_available']:
             half_width = multiplier * std_uncertainty
-            row['lower'] = _format_interval_number(estimate - half_width)
-            row['upper'] = _format_interval_number(estimate + half_width)
+            row['half_width'] = _format_interval_number(half_width)
         else:
-            row['lower'] = 'N/A'
-            row['upper'] = 'N/A'
+            row['half_width'] = 'N/A'
         rows.append(row)
     return rows
 
 
 def _tau_interval_row(tau_value, multiplier, label='Tau'):
-    """Format a propagated tau value as an approximate 95% confidence interval."""
+    """Format a propagated tau value as estimate plus/minus approximate CI half-width."""
     estimate = _finite_float(getattr(tau_value, 'n', np.nan))
     std_uncertainty = _finite_float(getattr(tau_value, 's', np.nan))
     is_available = bool(estimate > 0 and np.isfinite(std_uncertainty) and std_uncertainty >= 0)
@@ -161,11 +159,9 @@ def _tau_interval_row(tau_value, multiplier, label='Tau'):
     }
     if is_available:
         half_width = multiplier * std_uncertainty
-        row['lower'] = _format_interval_number(estimate - half_width)
-        row['upper'] = _format_interval_number(estimate + half_width)
+        row['half_width'] = _format_interval_number(half_width)
     else:
-        row['lower'] = 'N/A'
-        row['upper'] = 'N/A'
+        row['half_width'] = 'N/A'
     return row
 
 def preprocess_data(t1, m1, t2, m2, selected_interpolation=None, selected_scalings=None, selected_normalizations=None):

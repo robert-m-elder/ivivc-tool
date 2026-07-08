@@ -386,7 +386,7 @@
                             <p class="report-equation" data-report-equation="{{ model_results.function }}">\[{{ model_results.function }}\]</p>
                             <h4>Model parameters</h4>
                             {% for row in model_results.parameter_intervals %}
-                                <p>{{ row.name }}: {{ row.estimate }}{% if row.is_available %} (95% CI: {{ row.lower }} to {{ row.upper }}){% else %} (95% CI: N/A){% endif %}</p>
+                                <p>{{ row.name }}: {{ row.estimate }}{% if row.is_available %} ± {{ row.half_width }}{% else %} ± N/A{% endif %}</p>
                             {% endfor %}
                             <h4>Fitted parameter diagnostics</h4>
                             {{ model_results.parameter_diagnostics_html | safe }}
@@ -414,26 +414,26 @@
                             <p class="report-equation" data-report-equation="{{ model_results.function }}">\[{{ model_results.function }}\]</p>
                             <h4>In vitro model parameters</h4>
                             {% for row in model_results.parameter_intervals[0] %}
-                                <p>{{ row.name }}: {{ row.estimate }}{% if row.is_available %} (95% CI: {{ row.lower }} to {{ row.upper }}){% else %} (95% CI: N/A){% endif %}</p>
+                                <p>{{ row.name }}: {{ row.estimate }}{% if row.is_available %} ± {{ row.half_width }}{% else %} ± N/A{% endif %}</p>
                             {% endfor %}
                             <h4>In vitro fitted parameter diagnostics</h4>
                             {{ model_results.parameter_diagnostics_html[0] | safe }}
                             <h4>In vivo model parameters</h4>
                             {% for row in model_results.parameter_intervals[1] %}
-                                <p>{{ row.name }}: {{ row.estimate }}{% if row.is_available %} (95% CI: {{ row.lower }} to {{ row.upper }}){% else %} (95% CI: N/A){% endif %}</p>
+                                <p>{{ row.name }}: {{ row.estimate }}{% if row.is_available %} ± {{ row.half_width }}{% else %} ± N/A{% endif %}</p>
                             {% endfor %}
                             <h4>In vivo fitted parameter diagnostics</h4>
                             {{ model_results.parameter_diagnostics_html[1] | safe }}
                             <h4>Time constants</h4>
                             {% set tau_row = model_results.tau_intervals[0] %}
                             {% if tau_row.is_available %}
-                                <p>In vitro tau: {{ tau_row.estimate }} (95% CI: {{ tau_row.lower }} to {{ tau_row.upper }})</p>
+                                <p>In vitro tau: {{ tau_row.estimate }} ± {{ tau_row.half_width }}</p>
                             {% else %}
                                 <p>In vitro tau: N/A</p>
                             {% endif %}
                             {% set tau_row = model_results.tau_intervals[1] %}
                             {% if tau_row.is_available %}
-                                <p>In vivo tau: {{ tau_row.estimate }} (95% CI: {{ tau_row.lower }} to {{ tau_row.upper }})</p>
+                                <p>In vivo tau: {{ tau_row.estimate }} ± {{ tau_row.half_width }}</p>
                             {% else %}
                                 <p>In vivo tau: N/A</p>
                             {% endif %}
@@ -532,7 +532,7 @@
                                     <p>\[{{ model_results.function }}\]</p>
                                     <h4>Model parameters</h4>
 {% for row in model_results.parameter_intervals %}
-                                    <p>{{ row.name }}: {{ row.estimate }}{% if row.is_available %} (95% CI: {{ row.lower }} to {{ row.upper }}){% else %} (95% CI: N/A){% endif %}</p>
+                                    <p>{{ row.name }}: {{ row.estimate }}{% if row.is_available %} ± {{ row.half_width }}{% else %} ± N/A{% endif %}</p>
                                     {% endfor %}
                                     <h4>Fitted parameter diagnostics</h4>
                                     {{ model_results.parameter_diagnostics_html | safe }}
@@ -591,14 +591,14 @@
                                         <h4 class="approach2-dataset-heading">In Vitro Data</h4>
                                         <h4>Model parameters</h4>
 {% for row in model_results.parameter_intervals[0] %}
-                                        <p>{{ row.name }}: {{ row.estimate }}{% if row.is_available %} (95% CI: {{ row.lower }} to {{ row.upper }}){% else %} (95% CI: N/A){% endif %}</p>
+                                        <p>{{ row.name }}: {{ row.estimate }}{% if row.is_available %} ± {{ row.half_width }}{% else %} ± N/A{% endif %}</p>
                                         {% endfor %}
                                         <h4>Fitted parameter diagnostics</h4>
                                         {{ model_results.parameter_diagnostics_html[0] | safe }}
                                         <h4>Time constant</h4>
                                         {% set tau_row = model_results.tau_intervals[0] %}
                                         {% if tau_row.is_available %}
-                                            <p>Tau: {{ tau_row.estimate }} (95% CI: {{ tau_row.lower }} to {{ tau_row.upper }})</p>
+                                            <p>Tau: {{ tau_row.estimate }} ± {{ tau_row.half_width }}</p>
                                         {% else %}
                                             <p>Tau: N/A</p>
                                         {% endif %}
@@ -635,14 +635,14 @@
                                         <h4 class="approach2-dataset-heading">In Vivo Data</h4>
                                     <h4>Model parameters</h4>
 {% for row in model_results.parameter_intervals[1] %}
-                                    <p>{{ row.name }}: {{ row.estimate }}{% if row.is_available %} (95% CI: {{ row.lower }} to {{ row.upper }}){% else %} (95% CI: N/A){% endif %}</p>
+                                    <p>{{ row.name }}: {{ row.estimate }}{% if row.is_available %} ± {{ row.half_width }}{% else %} ± N/A{% endif %}</p>
                                     {% endfor %}
                                     <h4>Fitted parameter diagnostics</h4>
                                     {{ model_results.parameter_diagnostics_html[1] | safe }}
                                     <h4>Time constant</h4>
                                     {% set tau_row = model_results.tau_intervals[1] %}
                                     {% if tau_row.is_available %}
-                                        <p>Tau: {{ tau_row.estimate }} (95% CI: {{ tau_row.lower }} to {{ tau_row.upper }})</p>
+                                        <p>Tau: {{ tau_row.estimate }} ± {{ tau_row.half_width }}</p>
                                     {% else %}
                                         <p>Tau: N/A</p>
                                     {% endif %}
@@ -857,7 +857,7 @@
             <ul>
                 <li><strong>Plot:</strong> matched in vitro and in vivo time points with the fitted model overlay.</li>
                 <li><strong>Function:</strong> mathematical equation of the fitted model.</li>
-                <li><strong>Model parameters:</strong> coefficients reported with approximate 95% confidence intervals.</li>
+                <li><strong>Model parameters:</strong> coefficients reported as estimate ± approximate 95% confidence-interval half-width.</li>
                 <li><strong>Fitted parameter diagnostics:</strong> brief badges that flag parameter uncertainty, coupling, or identifiability cautions.</li>
                 <li><strong>Goodness of fit:</strong> selected fitted-data metrics, eligible cross-validation metrics, fit/CV ratios, and CV comparison badges.</li>
                 <li><strong>Residual diagnostics:</strong> residual-vs-x plots with common residual-scale reference bands to help visually identify possible bias or residual patterns, plus normal Q-Q plots for a qualitative residual-normality check.</li>
@@ -872,7 +872,7 @@
             <ul>
                 <li><strong>Plot:</strong> both datasets with separate fitted model curves.</li>
                 <li><strong>Function:</strong> mathematical equation of the fitted model family.</li>
-                <li><strong>Model parameters:</strong> in vitro and in vivo coefficients reported with approximate 95% confidence intervals.</li>
+                <li><strong>Model parameters:</strong> in vitro and in vivo coefficients reported as estimate ± approximate 95% confidence-interval half-width.</li>
                 <li><strong>Fitted parameter diagnostics:</strong> brief badges shown separately for the in vitro and in vivo fits.</li>
                 <li><strong>Time constant:</strong> fitted characteristic time scale where available.</li>
                 <li><strong>Goodness of fit:</strong> selected fitted-data metrics, eligible cross-validation metrics, fit/CV ratios, and CV comparison badges for each dataset.</li>
