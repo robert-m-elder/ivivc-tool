@@ -25,7 +25,7 @@ The IVIVC app requires paired in vitro and in vivo degradation data, along with 
 \item optionally, preprocessing options, such as normalization, interpolation, or scaling choices;
 \item selected performance metrics to display in the results and reports; by default, the app selects \(R^2\), RMSE, and AIC\textsubscript{c} as a simple starting set that has been useful in internal testing with real datasets but may not be optimal for every analysis;
 \item optionally, cross-validation settings for applicable parametric models; and
-\item grid-search settings for model initialization.
+\item grid-search settings for model initialization, where the options can usually be left to their default values.
 \end{itemize}
 
 The sections below provide additional detail on input file structure, required data columns, preprocessing options, model-selection inputs, and optional analysis settings.
@@ -69,7 +69,7 @@ Prediction dataset & Optional two-column in vitro dataset used after fitting to 
 \bottomrule
 \end{longtable}
 
-For Excel workbooks, select the sheet containing the relevant data. For CSV files, the first columns are read directly in the order described above.
+Acceptable formats are spreadsheets in Excel format (xls, xlsx) or comma-separated values format (csv). For Excel workbooks, select the sheet containing the relevant data. For CSV files, the first columns are read directly in the order described above.
 
 \section{Analysis approaches and models}
 
@@ -97,15 +97,27 @@ Preprocessing prepares the uploaded data for comparison, fitting, and prediction
 
 \input{includes/generated/preprocessing_options.tex}
 
+\section{Performance metrics}
+
+Performance metrics are summary measures that help describe how closely a fitted model matches the observed data, how large the prediction errors are, and, for some metrics, how well a model balances fit quality with model complexity. The following performance metrics are included in the app.
+
+\input{includes/generated/performance_metrics_table.tex}
+
+For additional background on common error metrics, scale-dependent accuracy measures, and adjusted \(R^2\), see references \cite{hodson2022,hyndman2006,miles2014}.
+
+For AIC\textsubscript{c}, a commonly cited rule of thumb is to prefer AIC\textsubscript{c} over AIC when the ratio of fitted observations to estimated parameters is small, such as \(n/k < 40\), where \(n\) is the number of fitted observations and \(k\) is the number of model parameters \cite{burnham2002}.
+
+By default, the app selects \(R^2\), RMSE, and AIC\textsubscript{c}. This compact default set has been simple and useful in internal testing with real datasets, but it is not necessarily the best set for every dataset or intended use. Users may select additional metrics when they provide useful context for a specific analysis. The default set gives three complementary views of model performance. \(R^2\) is widely recognized and describes how well the fitted curve follows the observed response pattern. RMSE reports typical error in the original response units, making it easier to judge whether the error is practically large or small. AIC\textsubscript{c} supports comparison among fitted candidate models by balancing fit quality with a penalty for unnecessary model complexity, with a correction that is useful for smaller datasets.
+
 \section{Cross-validation options}
 
-Cross-validation (CV) estimates how a fitted parametric model predicts observations that were not used to fit that model. To do this, the app repeatedly sets aside part of the data as test data, fits the model using the remaining training data, and then compares the model predictions with the test data. In this app, the cross-validation result is best interpreted as a sensitivity diagnostic based on prediction error under the selected splitting pattern. It is not a confidence interval or a parameter uncertainty estimate. When final-fit error from the model fitted to the entire dataset and cross-validation error are similar, this provides some reassurance that the fitted relationship is not overly dependent on the particular observations used for fitting. When cross-validation error is much worse, the model may be more sensitive to the available data, the selected splitting scheme, or the number and placement of time points.
+When developing a model, we want to know how well it will perform on new data it has not seen before. Cross-validation (CV) estimates how a fitted model predicts observations that were not used to fit that model. To do this, the app repeatedly sets aside part of the data as test data, fits the model using the remaining training data, and then compares the model predictions with the test data. In this app, the cross-validation result is best interpreted as a sensitivity diagnostic based on prediction error under the selected splitting pattern. It is not a confidence interval or a parameter uncertainty estimate. When final-fit error from the model fitted to the entire dataset and cross-validation error are similar, this provides some reassurance that the fitted relationship is not overly dependent on the particular observations used for fitting. When cross-validation error is much worse, the model may be more sensitive to the available data, the selected splitting scheme, or the number and placement of time points.
 
 For time-course data, the splitting pattern matters. Setting aside one time point, a short contiguous time window, or a random subset represents a different artificial prediction task. Nearby observations may contain related information, and early, middle, and late regions of an absorbable-polymer degradation profile may reflect different parts of the degradation process. A split that leaves training observations immediately before and after an omitted observation may mainly test interpolation within the observed curve, while a contiguous-block split asks whether the model can bridge a missing region.
 
-There is no universally best cross-validation scheme for every IVIVC dataset. The most useful choice depends on the practical question being asked and on whether enough observations remain for stable fitting. When results change substantially across schemes, treat that as a signal to review fitted plots, residuals, parameter uncertainty, model complexity, and scientific plausibility rather than as an automatic reason to accept or reject a model.
+There is no universally best cross-validation scheme for every dataset. The most useful choice depends on the practical question being asked and on whether enough observations remain for stable fitting. When results change substantially across schemes, treat that as a signal to review fitted plots, residuals, parameter uncertainty, model complexity, and scientific plausibility rather than as an automatic reason to accept or reject a model.
 
-For background on cross-validation procedures and their use in model assessment and selection, including issues that arise with temporally ordered data, see references \cite{arlot2010, bergmeir2012, roberts2017, bergmeir2018}.
+For background on cross-validation procedures and their use in model assessment and selection, including issues that arise with time series, see references \cite{arlot2010, bergmeir2012, roberts2017, bergmeir2018}.
 
 \subsection{Choosing a cross-validation scheme}
 
@@ -123,7 +135,7 @@ The table below summarizes the schemes available in the app. The ``CV error desc
 Leave-one-timepoint-out & Single-timepoint prediction error; sensitivity to removing one observation at a time. & Default starting point for small time-course datasets because each repeated fit retains nearly all observations. & May be a gentle test when neighboring time points strongly constrain the omitted point. \\
 Leave-contiguous-block-out & Local time-window prediction error; sensitivity to omitting a short adjacent region of the profile. & Main time-aware sensitivity check when adjacent observations may be related or when a missing time region is a concern. & Larger blocks are more demanding but may leave too few observations. \\
 K-fold & Ordered fold prediction error; sensitivity to setting aside larger ordered portions of the dataset. & Familiar fold-based diagnostic when there are enough observations to form meaningful folds. Smaller $k$ values create larger test regions. & Training data for a test fold may include time points on either side of it. Results can depend on fold boundaries. \\
-Shuffle split & Random-subset prediction error; sensitivity to repeated random training/test splits. & Exploratory robustness check when temporal ordering is not central or when conclusions should be compared across random subsets. & Least time-aware option; can give optimistic scores when nearby observations are strongly related. \\
+Shuffle split & Random-subset prediction error; sensitivity to repeated random training/test splits. & Robustness check when temporal ordering is not central or when conclusions should be compared across random subsets. & Least time-aware option; can give optimistic scores when nearby observations are strongly related. \\
 None & No cross-validation error is calculated; final fitted-model summaries are reported without a repeated prediction check. & Appropriate when there are too few observations for meaningful CV, repeated fits are unstable, or only fitted-model behavior is needed. & Removes one robustness diagnostic; rely more heavily on fitted profiles, residuals, final metrics, parameter diagnostics, and scientific plausibility. \\
 \bottomrule
 \end{longtable}
@@ -139,18 +151,6 @@ None & No cross-validation error is calculated; final fitted-model summaries are
 The default grid-search settings can usually be left unchanged. Consider adjusting these settings when fits are unstable, runtime is excessive, or a reproducible analysis configuration is needed.
 
 \input{includes/generated/grid_search_parameter_table.tex}
-
-\section{Performance metrics}
-
-By default, the app selects \(R^2\), RMSE, and AIC\textsubscript{c}. This compact default set has been simple and useful in internal testing with real datasets, but it is not necessarily the best set for every dataset or intended use. Users may select additional metrics when they provide useful context for a specific analysis.
-
-The default set gives three complementary views of model performance. \(R^2\) is widely recognized and describes how well the fitted curve follows the observed response pattern. RMSE reports typical error in the original response units, making it easier to judge whether the error is practically large or small. AIC\textsubscript{c} supports comparison among fitted candidate models by balancing fit quality with a penalty for unnecessary model complexity, with a correction that is useful for smaller datasets.
-
-\input{includes/generated/performance_metrics_table.tex}
-
-For additional background on common error metrics, scale-dependent accuracy measures, and adjusted \(R^2\), see references \cite{hodson2022,hyndman2006,miles2014}.
-
-For AIC\textsubscript{c}, a commonly cited rule of thumb is to prefer AIC\textsubscript{c} over AIC when the ratio of fitted observations to estimated parameters is small, such as \(n/k < 40\), where \(n\) is the number of fitted observations and \(k\) is the number of model parameters \cite{burnham2002}.
 
 \section{Relative model evidence}
 

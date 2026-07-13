@@ -84,7 +84,7 @@ metrics:
       Akaike Information Criterion. AIC compares fitted models by considering both fit quality and the number of fitted parameters. Among comparable fitted models, a lower AIC value generally indicates better empirical support for a model that fits the data without unnecessary complexity. Absolute AIC values, including negative values, should not be interpreted as standalone quality grades.
   aicc:
     description: >-
-      Corrected Akaike Information Criterion. AICc is AIC with an added small-sample correction and is often preferred when the number of fitted observations (n) is limited relative to the number of fitted parameters (k), with n/k < 40 commonly used as a rule of thumb. Among comparable fitted models, a lower AICc value generally indicates better empirical support for a model that balances fit quality and complexity; AICc is undefined when there are too few observations relative to the number of parameters.
+      Corrected Akaike Information Criterion. AICc is AIC with an added small-sample correction and is often preferred when the number of fitted observations is limited relative to the number of fitted parameters. See the user guide for additional information. Among comparable fitted models, a lower AICc value generally indicates better empirical support for a model that balances fit quality and complexity; AICc is undefined when there are too few observations relative to the number of parameters.
   bic:
     description: >-
       Bayesian Information Criterion. BIC compares fitted models by considering both fit quality and the number of fitted parameters, usually applying a stronger penalty for extra parameters than AIC. Among comparable fitted models, a lower BIC value generally indicates better empirical support for a model that fits the data without unnecessary complexity. Absolute BIC values, including negative values, should not be interpreted as standalone quality grades.
@@ -104,8 +104,7 @@ residual_diagnostics_html: |-
 parameter_diagnostics_comparison_html: |-
   <p>The Fitted Parameter Diagnostics table summarizes the diagnostic badges shown with each individual model fit. These badges help identify models that may warrant closer review for large parameter uncertainty, parameter coupling, or parameter-identifiability cautions. Detailed explanations can be found in the individual fitting results and in the user guide.</p>
 grid_search_description_html: |-
-  <p>The app uses grid-search initialization to help each nonlinear model start fitting from reasonable parameter values. It tries many candidate starting-value sets within the configured bounds and uses the best-performing candidate to start the final curve fit.</p>
-  <p>This step reduces the need for manual parameter tuning and can make fitting more stable, but it is not itself the final fitting algorithm and does not guarantee that the final fitted parameters are the global optimum.</p>
+  <p>When the app tries to fit a mathematical curve to your data, it needs an initial guess for the shape of that curve. A poor starting guess can cause the fitting process to produce a bad result. To avoid this, the app automatically tries out many different starting guesses before committing to a final answer. This process is called a grid search. Instead of starting from just one random spot, the app starts at many different spots first, figures out which one seems most promising, and then starts the careful fitting from there. This makes it much more likely you'll find a genuinely good fit. Once the best starting point is identified, the app runs the actual curve-fitting process (called nonlinear least-squares fitting) to fine-tune the result</p>
 cv_schemes:
   leave_one_timepoint_out:
     display_name: Leave-one-timepoint-out
@@ -179,7 +178,7 @@ modal_help:
       </ul>
       <p>Cross-validation results for small IVIVC datasets should be treated as exploratory diagnostics and sensitivity checks. They complement, but do not replace, review of fitted plots, residual behavior, parameter uncertainty, and scientific plausibility.</p>
     grid_search_html: |-
-      <p>The grid search helps the app find reasonable starting values before nonlinear least-squares fitting. It tries many candidate starting values within the selected bounds, fits the model from those starting values, and then uses the best-performing candidate to start the final fit. This reduces the need for manual parameter tuning.</p>
+      <p>The grid search helps the app find reasonable starting parameter values before model fitting. It tries many candidate starting values within the selected bounds, fits the model from those starting values, and then uses the best-performing candidate to start the final fit. This reduces the need for manual parameter tuning.</p>
       <ul>
         <li><strong>Random starts:</strong> number of candidate starting-value sets to try for each selected model. Higher values may improve robustness but increase runtime.</li>
         <li><strong>Parameter min:</strong> lower bound for candidate starting values.</li>
