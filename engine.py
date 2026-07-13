@@ -1143,7 +1143,7 @@ def create_parameter_diagnostics_summary(results, approach):
 
 
 def create_cross_validation_summary(results, approach, selected_metrics):
-    """Create compact model-comparison tables for held-out CV scores.
+    """Create compact model-comparison tables for CV scores.
 
     The table reports mean cross-validation scores that were already calculated
     during fitting, plus a neutral fit/CV ratio for each selected metric.

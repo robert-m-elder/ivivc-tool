@@ -318,50 +318,50 @@
         </div>
 <div id="approaches-help-content">
             <h4>Analysis Approaches</h4>
-            <p>Choose from different mathematical approaches for establishing IVIVC:</p>
+            <p>Choose the overall way the app should relate the in vitro and in vivo datasets:</p>
             <ul>
-                <li><strong>Approach 1:</strong> Direct time correlation between datasets</li>
-                <li><strong>Approach 2:</strong> Independent rate equation-like model fitting</li>
-                <li><strong>Approach 3:</strong> Direct mapping analysis</li>
+                <li><strong>Approach 1:</strong> directly relate matched in vitro and in vivo time points.</li>
+                <li><strong>Approach 2:</strong> fit the same type of curve separately to each dataset.</li>
+                <li><strong>Approach 3:</strong> create a direct data-based mapping without fitting a parametric model.</li>
             </ul>
-            <p>Each approach uses different mathematical methods and assumptions. Approaches 1 and 2 use cross-validation to validate the models.</p>
+            <p>Approaches 1 and 2 use cross-validation as a sensitivity diagnostic. The app does not use cross-validation to automatically validate or select a model.</p>
         </div>
 
         <div id="approach1-help-content">
             <h4>Approach 1: Direct Correlation</h4>
-            <p>Establishes a direct mathematical relationship between in vitro and in vivo data points.</p>
+            <p>Directly relates matched in vitro and in vivo time points, then uses the fitted relationship to map in vitro time to predicted in vivo time.</p>
             <p><strong>Method:</strong></p>
             <ul>
-                <li>Fits models directly in vitro vs. in vivo time</li>
-                <li>Predicts in vivo time as a function of in vitro time</li>
-                <li>Requires matched time points or the use of interpolation</li>
+                <li>Fits a model to paired in vitro and in vivo time points.</li>
+                <li>Requires matched time points or interpolation to create matched pairs.</li>
+                <li>Uses the fitted relationship as a time-scaling function.</li>
             </ul>
-            <p><strong>Best for:</strong> When you have well-matched time points between datasets or use interpolation.</p>
+            <p><strong>Useful when:</strong> the two datasets have matching time points, or interpolation can create matched pairs, and the main question is how in vitro time corresponds to in vivo time.</p>
         </div>
 
         <div id="approach2-help-content">
             <h4>Approach 2: Independent Model Fitting</h4>
-            <p>Fits separate models to in vitro and in vivo data, then uses their ratio for predictions.</p>
+            <p>Fits the same model family separately to the in vitro and in vivo datasets, then compares the two fitted curves for prediction.</p>
             <p><strong>Method:</strong></p>
             <ul>
-                <li>Fits rate equation-like (e.g., exponential decay) models independently to each dataset</li>
-                <li>Calculates predictions using model ratios</li>
-                <li>Provides effective time constants for in vitro and in vivo</li>
+                <li>Fits the selected model form independently to each dataset.</li>
+                <li>Can calculate predictions using fitted response ratios or fitted time constants, when available.</li>
+                <li>Does not require the original time points to match exactly.</li>
             </ul>
-            <p><strong>Best for:</strong> When datasets have different time scales or sampling patterns, or when you want to fit a particular rate equation to the datasets.</p>
+            <p><strong>Useful when:</strong> datasets have different time scales or sampling schedules, or when a specific degradation-curve shape is scientifically meaningful for both datasets.</p>
         </div>
 
         <div id="approach3-help-content">
             <h4>Approach 3: Direct Mapping</h4>
-            <p>Creates direct mappings between interpolated datasets without model fitting.</p>
+            <p>Creates direct mappings between the datasets without fitting a parametric model.</p>
             <p><strong>Method:</strong></p>
             <ul>
-                <li>Uses interpolated data for direct comparison</li>
-                <li>Provides two scaling options for predictions</li>
-                <li>No parametric model assumptions</li>
-                <li>Requires matched time points or the use of interpolation</li>
+                <li>Uses interpolation-based ratios or mappings calculated from the supplied data.</li>
+                <li>Provides two scaling options for predictions.</li>
+                <li>Does not assume a specific equation for the degradation pattern.</li>
+                <li>Requires matched values or interpolation to create comparable points.</li>
             </ul>
-            <p><strong>Best for:</strong> Exploratory analysis or when model assumptions may not hold.</p>
+            <p><strong>Useful when:</strong> the analysis is exploratory, a simple equation does not describe the observed pattern well, or a direct data-based mapping is preferred.</p>
         </div>
 <div id="preprocessing-help-content">
             <h4>Data Preprocessing</h4>
@@ -411,7 +411,8 @@
         </div>
 <div id="metrics-help-content">
             <h4>Performance Metrics</h4>
-            <p>Choose metrics to evaluate model performance. The selected metric definitions are included in the report.</p>
+            <p>Choose metrics that match the question you want the results to answer. The selected metric definitions are included in the report.</p>
+            <p>The default set gives a compact starting point: <strong>R²</strong> is familiar and summarizes how closely the fitted curve follows the observed pattern; <strong>RMSE</strong> reports typical error in the original response units; and <strong>AICc</strong> helps compare fitted candidate models while penalizing unnecessary complexity, with a correction that is useful for smaller datasets.</p>
             <ul>
                 {% for metric in metric_description_rows %}
                 <li><strong>{{ metric.name }}:</strong> {{ metric.description }} {% if metric.direction %}<em>{{ metric.direction }}.</em>{% endif %}</li>
