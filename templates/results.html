@@ -837,7 +837,7 @@
 <div id="modal-content-definitions" style="display: none;">
 <div id="data-processing-help-content">
             <h4>Data Processing</h4>
-            <p>This section shows how your data was preprocessed before model fitting and prediction.</p>
+            <p>This section shows how your data were preprocessed before model fitting and prediction.</p>
             <ul>
                 {% for row in preprocessing_rows %}
                 <li><strong>{{ row.category }} - {{ row.name }}:</strong> {{ row.description }}</li>
@@ -845,7 +845,7 @@
             </ul>
             <h4>Grid-search initialization</h4>
             {{ grid_search_description_html | safe }}
-            <p><strong>For Model Selection:</strong> Review the plots to ensure data quality. For example, poor interpolation may indicate the need for different preprocessing options.</p>
+            <p><strong>For model review:</strong> Review the plots to ensure data quality. For example, poor interpolation may indicate the need for different preprocessing options.</p>
         </div>
 <div id="model-comparison-help-content">
             <h4>Model Comparison</h4>
@@ -857,7 +857,7 @@
             <ul>
                 <li><strong>Plot:</strong> matched in vitro and in vivo time points with the fitted model overlay.</li>
                 <li><strong>Function:</strong> mathematical equation of the fitted model.</li>
-                <li><strong>Model parameters:</strong> coefficients reported as estimate ± approximate 95% confidence-interval half-width.</li>
+                <li><strong>Model parameters:</strong> coefficients reported as estimate ± 95% confidence interval.</li>
                 <li><strong>Fitted parameter diagnostics:</strong> brief badges that flag parameter uncertainty, coupling, or identifiability cautions.</li>
                 <li><strong>Goodness of fit:</strong> selected fitted-data metrics, eligible cross-validation metrics, fit/CV ratios, and CV comparison badges.</li>
                 <li><strong>Residual diagnostics:</strong> residual-vs-x plots with common residual-scale reference bands to help visually identify possible bias or residual patterns, plus normal Q-Q plots for a qualitative residual-normality check.</li>
@@ -872,7 +872,7 @@
             <ul>
                 <li><strong>Plot:</strong> both datasets with separate fitted model curves.</li>
                 <li><strong>Function:</strong> mathematical equation of the fitted model family.</li>
-                <li><strong>Model parameters:</strong> in vitro and in vivo coefficients reported as estimate ± approximate 95% confidence-interval half-width.</li>
+                <li><strong>Model parameters:</strong> in vitro and in vivo coefficients reported as estimate ± 95% confidence interval.</li>
                 <li><strong>Fitted parameter diagnostics:</strong> brief badges shown separately for the in vitro and in vivo fits.</li>
                 <li><strong>Time constant:</strong> fitted characteristic time scale where available.</li>
                 <li><strong>Goodness of fit:</strong> selected fitted-data metrics, eligible cross-validation metrics, fit/CV ratios, and CV comparison badges for each dataset.</li>

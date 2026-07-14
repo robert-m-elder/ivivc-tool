@@ -126,7 +126,7 @@ def _format_interval_number(value):
 
 
 def _interval_rows_from_uparams(uparams, multiplier, confidence_label='95% CI'):
-    """Format uncertainty-aware values as estimate plus/minus approximate CI half-width."""
+    """Format uncertainty-aware values as estimate plus/minus CI value."""
     rows = []
     for name, value in uparams.items():
         estimate = _finite_float(getattr(value, 'n', np.nan))
@@ -147,7 +147,7 @@ def _interval_rows_from_uparams(uparams, multiplier, confidence_label='95% CI'):
 
 
 def _tau_interval_row(tau_value, multiplier, label='Tau'):
-    """Format a propagated tau value as estimate plus/minus approximate CI half-width."""
+    """Format a propagated tau value as estimate plus/minus CI value."""
     estimate = _finite_float(getattr(tau_value, 'n', np.nan))
     std_uncertainty = _finite_float(getattr(tau_value, 's', np.nan))
     is_available = bool(estimate > 0 and np.isfinite(std_uncertainty) and std_uncertainty >= 0)
