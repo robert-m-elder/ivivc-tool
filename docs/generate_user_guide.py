@@ -412,7 +412,7 @@ def build_uncertainty_by_approach() -> str:
         title = desc.get("title", approach_key)
         fit_text = html_to_text(desc.get("fit_uncertainty_html", ""))
         prediction_text = html_to_text(desc.get("prediction_error_html", ""))
-        parts.append(latex_section(2, title))
+        parts.append(latex_section(3, title))
         if fit_text:
             parts.append(r"\textbf{Fitting uncertainty}" + "\n\n")
             parts.append(latex_paragraphs(fit_text))

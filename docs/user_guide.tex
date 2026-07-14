@@ -22,38 +22,17 @@ The IVIVC app requires paired in vitro and in vivo degradation data, along with 
 \item optionally, a spreadsheet containing in vitro data from which to generate predictions using fitted correlations;
 \item selection of one or more IVIVC modeling approaches;
 \item selection of candidate models to evaluate, where applicable;
-\item optionally, preprocessing options, such as normalization, interpolation, or scaling choices;
-\item selected performance metrics to display in the results and reports; by default, the app selects \(R^2\), RMSE, and AIC\textsubscript{c} as a simple starting set that has been useful in internal testing with real datasets but may not be optimal for every analysis;
-\item optionally, cross-validation settings for applicable parametric models; and
+\item optionally, preprocessing options, such as normalization, interpolation, and scaling;
+\item selected performance metrics to display in the results and reports;
+\item optionally, cross-validation settings for applicable approaches; and
 \item grid-search settings for model initialization, where the options can usually be left to their default values.
 \end{itemize}
 
-The sections below provide additional detail on input file structure, required data columns, preprocessing options, model-selection inputs, and optional analysis settings.
+The sections below provide additional detail on input file structure, required data columns, preprocessing options, model selection, and optional analysis settings.
 
-\section{Outputs}
+\subsection{Input datasets}
 
-The IVIVC app generates interactive results and downloadable reports that summarize fitted model behavior, model-comparison metrics, diagnostic information, and user-selected analysis settings. Output availability depends on the selected approaches, whether fitting succeeds, and whether a prediction dataset was supplied.
-
-\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.24\textwidth}>{\raggedright\arraybackslash}p{0.68\textwidth}@{}}
-\toprule
-\textbf{Output} & \textbf{Description} \\
-\midrule
-\endfirsthead
-\toprule
-\textbf{Output} & \textbf{Description} \\
-\midrule
-\endhead
-Preprocessing outputs & Processed data tables and plots showing the data used for fitting and prediction. \\
-Model fitting outputs & Parameter estimates reported as estimate $\pm$ approximate 95\% confidence-interval half-width where available, fitted plots, residual-vs-time plots, residual Q-Q plots, and selected performance metrics. \\
-Model comparison outputs & Tables comparing selected approaches, models, metrics, and cross-validation summaries. \\
-Prediction outputs & Prediction plots and downloadable tables when a prediction dataset is supplied and the selected method can be applied. \\
-Selected model \& summary of outputs & User-selected report summaries and optional Word report export for incorporation into external documentation. \\
-\bottomrule
-\end{longtable}
-
-\section{Input datasets}
-
-The app uses separate fitting and prediction datasets. The fitting dataset is required because it provides the paired in vitro and in vivo data used to establish the IVIVC relationship; the prediction dataset is optional and is used only when applying a fitted relationship to new in vitro observations.
+The app uses separate fitting and prediction datasets. The fitting dataset is required because it provides the paired in vitro and in vivo data used to establish the IVIVC relationship. The prediction dataset is optional and is used only when applying a fitted relationship to new in vitro observations in order to predict the corresponding in vivo behavior.
 
 \begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.24\textwidth}>{\raggedright\arraybackslash}p{0.68\textwidth}@{}}
 \toprule
@@ -69,19 +48,19 @@ Prediction dataset & Optional two-column in vitro dataset used after fitting to 
 \bottomrule
 \end{longtable}
 
-Acceptable formats are spreadsheets in Excel format (xls, xlsx) or comma-separated values format (csv). For Excel workbooks, select the sheet containing the relevant data. For CSV files, the first columns are read directly in the order described above.
+Acceptable formats are spreadsheets in Excel format (xls, xlsx) or comma-separated values format (csv). For Excel workbooks, select the sheet containing the relevant data. For csv files, the first columns are read directly in the order described above.
 
-\section{Analysis approaches and models}
+\subsection{Analysis approaches and models}
 
-In this app, an analysis approach is the overarching method used to establish or evaluate an in vitro/in vivo correlation. A model is the mathematical form used within an approach when a fitted equation is needed to describe the relationship.
+In this app, an analysis \textbf{approach} is the overarching method used to establish or evaluate an in vitro/in vivo correlation. A \textbf{model} is the mathematical form used within an approach when an equation is needed to describe the relationship.
 
-\subsection{Approaches}
+\subsubsection{Approaches}
 
 Approaches differ in how the in vitro and in vivo time courses are related to one another. 
 
 \input{includes/generated/approach_model_table.tex}
 
-\subsection{Models}
+\subsubsection{Models}
 
 Candidate models are the mathematical equations available for fitting within the applicable approaches. Different model forms represent different assumptions about the shape of the degradation relationship, such as linear behavior, power-law behavior, or sigmoidal transition behavior.
 
@@ -89,39 +68,41 @@ Candidate models are the mathematical equations available for fitting within the
 
 \textbf{Mass loss model notes}
 
-The surface-erosion mass-loss form is based on geometry-controlled surface erosion concepts such as the erodible slab, cylinder, and sphere model \cite{hopfenberg1976}. The one-phase mass-loss model uses a logistic/sigmoidal transition to represent a delayed loss phase \cite{tsoularis2002}. The two-phase mass-loss model combines an early burst-like loss term with a delayed sigmoidal loss phase. Burst and delayed/multiphase behavior in degradable polymer systems is discussed in the polymer erosion and PLGA release literature \cite{gopferich1997,fredenberg2011,allison2008}. The Gompertz mass-loss model uses a modified Gompertz-style sigmoidal form with lag and maximum-rate parameters \cite{zwietering1990}.
+The surface erosion mass loss form is based on geometry-controlled surface erosion concepts from the erodible slab, cylinder, and sphere model \cite{hopfenberg1976}. The one-phase mass loss model uses a logistic/sigmoidal transition to represent a delayed loss phase \cite{tsoularis2002}. The two-phase mass loss model combines an early burst-like loss term with a delayed sigmoidal loss phase. Burst and delayed/multiphase behavior in degradable polymer systems is discussed in the polymer erosion and PLGA release literature \cite{gopferich1997,fredenberg2011,allison2008}. The Gompertz mass loss model uses a modified Gompertz-style sigmoidal form with lag and maximum-rate parameters \cite{zwietering1990}.
 
-\section{Preprocessing options}
+\subsection{Preprocessing options}
 
 Preprocessing prepares the uploaded data for comparison, fitting, and prediction. Normalization expresses values relative to a reference value so datasets can be compared on a common relative scale. Scaling changes the units or magnitude of a variable without changing the underlying pattern. Interpolation estimates values at time points that were not directly observed, which may be useful when an approach requires matching in vitro and in vivo time points (i.e., Approach 1, Approach 3).
 
 \input{includes/generated/preprocessing_options.tex}
 
-\section{Performance metrics}
+\subsection{Performance metrics}
 
-Performance metrics are summary measures that help describe how closely a fitted model matches the observed data, how large the prediction errors are, and, for some metrics, how well a model balances fit quality with model complexity. The following performance metrics are included in the app.
+Performance metrics are summary measures that help describe how closely a fitted model matches the observed data (e.g., $R^2$), how large the prediction errors are (e.g., RMSE), and, for some metrics, how well a model balances fit quality with model complexity (e.g., information criteria). The following performance metrics are included in the app.
 
 \input{includes/generated/performance_metrics_table.tex}
 
 For additional background on common error metrics, scale-dependent accuracy measures, and adjusted \(R^2\), see references \cite{hodson2022,hyndman2006,miles2014}.
 
-For AIC\textsubscript{c}, a commonly cited rule of thumb is to prefer AIC\textsubscript{c} over AIC when the ratio of fitted observations to estimated parameters is small, such as \(n/k < 40\), where \(n\) is the number of fitted observations and \(k\) is the number of model parameters \cite{burnham2002}.
+For AIC\textsubscript{c}, a rule of thumb is to prefer AIC\textsubscript{c} over AIC when the ratio of fitted observations to estimated parameters is small, such as \(n/k < 40\), where \(n\) is the number of fitted observations and \(k\) is the number of model parameters \cite{burnham2002}, which we have found to be the case for typical IVIVC datasets.
 
-By default, the app selects \(R^2\), RMSE, and AIC\textsubscript{c}. This compact default set has been simple and useful in internal testing with real datasets, but it is not necessarily the best set for every dataset or intended use. Users may select additional metrics when they provide useful context for a specific analysis. The default set gives three complementary views of model performance. \(R^2\) is widely recognized and describes how well the fitted curve follows the observed response pattern. RMSE reports typical error in the original response units, making it easier to judge whether the error is practically large or small. AIC\textsubscript{c} supports comparison among fitted candidate models by balancing fit quality with a penalty for unnecessary model complexity, with a correction that is useful for smaller datasets.
+By default, the app selects \(R^2\), RMSE, and AIC\textsubscript{c}. This default set has been useful in internal testing with real datasets, but it is not necessarily the best set for every dataset or intended use. Users may select additional metrics when they provide useful context for a specific analysis. The default set gives three complementary views of model performance. \(R^2\) is widely known and describes how well the fitted curve follows the observed response pattern. RMSE reports typical error in the original response units, making it easier to judge whether the error is practically large or small. AIC\textsubscript{c} supports comparison among fitted candidate models by balancing fit quality with a penalty for unnecessary model complexity, with a correction that is useful for smaller datasets.
 
-\section{Cross-validation options}
+\subsection{Cross-validation options}
 
-When developing a model, we want to know how well it will perform on new data it has not seen before. Cross-validation (CV) estimates how a fitted model predicts observations that were not used to fit that model. To do this, the app repeatedly sets aside part of the data as test data, fits the model using the remaining training data, and then compares the model predictions with the test data. In this app, the cross-validation result is best interpreted as a sensitivity diagnostic based on prediction error under the selected splitting pattern. It is not a confidence interval or a parameter uncertainty estimate. When final-fit error from the model fitted to the entire dataset and cross-validation error are similar, this provides some reassurance that the fitted relationship is not overly dependent on the particular observations used for fitting. When cross-validation error is much worse, the model may be more sensitive to the available data, the selected splitting scheme, or the number and placement of time points.
+When developing an IVIVC, it is natural to ask: \textit{how well would this model perform on data it has never seen?} Cross-validation (CV) is a practical way to get at that question. Instead of waiting for new data, the app simulates the situation by repeatedly hiding part of the existing data, fitting the model to what remains, and then checking how well the model predicts the hidden portion. This process is repeated across different subsets so that every observation gets a turn as ``hidden'' data.
 
-For time-course data, the splitting pattern matters. Setting aside one time point, a short contiguous time window, or a random subset represents a different artificial prediction task. Nearby observations may contain related information, and early, middle, and late regions of an absorbable-polymer degradation profile may reflect different parts of the degradation process. A split that leaves training observations immediately before and after an omitted observation may mainly test interpolation within the observed curve, while a contiguous-block split asks whether the model can bridge a missing region.
+The cross-validation error reported by the app is best understood as a \textbf{sensitivity diagnostic}. It tells you how much the model's predictions change depending on which observations were used for fitting. It is not a confidence interval and does not directly quantify uncertainty in the model parameters. When the cross-validation error is similar to the error from fitting the full dataset, this is a reassuring sign that the fitted relationship does not depend too heavily on any single observation or subset. When the cross-validation error is noticeably worse, it suggests the model may be more sensitive to which data points are included, which could be due to the dataset being small, the time points being unevenly spaced, or the model being more complex than the data can reliably support.
 
-There is no universally best cross-validation scheme for every dataset. The most useful choice depends on the practical question being asked and on whether enough observations remain for stable fitting. When results change substantially across schemes, treat that as a signal to review fitted plots, residuals, parameter uncertainty, model complexity, and scientific plausibility rather than as an automatic reason to accept or reject a model.
+For time-course data (measurements taken at a series of time points), the way the data is split matters. Hiding one time point at a time is a relatively gentle test, especially when neighboring time points bracket the hidden one and give the model a strong hint about what the answer should be. Hiding a whole block of consecutive time points is a harder test: it asks whether the model can bridge an entire missing region of the profile. Hiding randomly selected time points ignores time order entirely, which can make the model look more reliable than it truly is when nearby measurements tend to be similar to one another.
+
+There is no single best cross-validation scheme for every situation. The right choice depends on the question being asked and on whether enough data points remain for the model to be fit stably after some are set aside. In this app, the primary goal is usually to assess whether a mathematical curve captures the overall pattern of degradation or correlation, not to forecast future time points from earlier ones. Even so, time ordering still matters, because adjacent time points in a degradation profile often carry overlapping information. When results change substantially across different CV schemes, treat that as a prompt to take a closer look at the fitted plots, residuals, model complexity, and scientific plausibility, rather than as an automatic pass or fail for the model.
 
 For background on cross-validation procedures and their use in model assessment and selection, including issues that arise with time series, see references \cite{arlot2010, bergmeir2012, roberts2017, bergmeir2018}.
 
-\subsection{Choosing a cross-validation scheme}
+\subsubsection{Choosing a cross-validation scheme}
 
-The table below summarizes the schemes available in the app. The ``CV error describes'' column describes the type of prediction error or sensitivity each scheme most directly evaluates.
+The table below summarizes the schemes available in the app. The ``CV error describes'' column explains what kind of prediction sensitivity each scheme is most directly measuring.
 
 \begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.18\textwidth}>{\raggedright\arraybackslash}p{0.29\textwidth}>{\raggedright\arraybackslash}p{0.25\textwidth}>{\raggedright\arraybackslash}p{0.20\textwidth}@{}}
 \toprule
@@ -132,49 +113,77 @@ The table below summarizes the schemes available in the app. The ``CV error desc
 \textbf{Scheme} & \textbf{CV error describes} & \textbf{Useful when} & \textbf{Main caution} \\
 \midrule
 \endhead
-Leave-one-timepoint-out & Single-timepoint prediction error; sensitivity to removing one observation at a time. & Default starting point for small time-course datasets because each repeated fit retains nearly all observations. & May be a gentle test when neighboring time points strongly constrain the omitted point. \\
-Leave-contiguous-block-out & Local time-window prediction error; sensitivity to omitting a short adjacent region of the profile. & Main time-aware sensitivity check when adjacent observations may be related or when a missing time region is a concern. & Larger blocks are more demanding but may leave too few observations. \\
-K-fold & Ordered fold prediction error; sensitivity to setting aside larger ordered portions of the dataset. & Familiar fold-based diagnostic when there are enough observations to form meaningful folds. Smaller $k$ values create larger test regions. & Training data for a test fold may include time points on either side of it. Results can depend on fold boundaries. \\
-Shuffle split & Random-subset prediction error; sensitivity to repeated random training/test splits. & Robustness check when temporal ordering is not central or when conclusions should be compared across random subsets. & Least time-aware option; can give optimistic scores when nearby observations are strongly related. \\
-None & No cross-validation error is calculated; final fitted-model summaries are reported without a repeated prediction check. & Appropriate when there are too few observations for meaningful CV, repeated fits are unstable, or only fitted-model behavior is needed. & Removes one robustness diagnostic; rely more heavily on fitted profiles, residuals, final metrics, parameter diagnostics, and scientific plausibility. \\
+Leave-one-timepoint-out & How well the model predicts a single hidden time point at a time; how sensitive the fit is to removing one observation. & A good default starting point for small datasets, because each repeated fit still uses nearly all of the available data. & This can be a gentle test: if the time points on either side of the hidden one are close together, they may largely determine the prediction, making the model appear more robust than it is. \\
+Leave-contiguous-block-out & How well the model predicts an entire missing time window; sensitivity to a gap in the observed profile. & The primary time-aware sensitivity check, especially when adjacent observations are likely to be related or when a missing time region is a practical concern. & Larger blocks make the test harder but may leave too few points for the model to fit stably. Start with small blocks and increase cautiously. \\
+K-fold & How predictions change when larger ordered portions of the dataset are set aside; sensitivity to removing whole folds of time-ordered data. & A familiar fold-based diagnostic when there are enough observations to form meaningful folds. Smaller values of $k$ create larger test regions and a harder test. & The training data for a given test fold may include time points both before and after it. Results can be sensitive to where the fold boundaries happen to fall. \\
+Shuffle split & How robust overall curve predictions are to repeated random selections of training and test points. & A general robustness check of overall curve shape when time ordering is not the primary concern. & Because it ignores time order, this scheme can make a model appear more reliable than it is when nearby time points carry similar information. Leave-one-timepoint-out or contiguous-block CV is usually more informative for time-course data. \\
+None & No cross-validation is performed; only the model fitted to the full dataset is summarized. & Appropriate when there are too few observations to split meaningfully, repeated fits are numerically unstable, or the goal is simply to examine the fitted model itself. & Removes one diagnostic tool. When CV is skipped, rely more carefully on fitted plots, residuals, final-fit metrics, parameter diagnostics, and scientific plausibility. \\
 \bottomrule
 \end{longtable}
 
-\subsection{Cross-validation parameters}
+\subsubsection{Cross-validation parameters}
 
 \input{includes/generated/cv_parameter_reference_table.tex}
 
-\section{Grid-search initialization}
+\subsection{Grid-search initialization}
 
 \input{includes/generated/grid_search_description.tex}
 
-The default grid-search settings can usually be left unchanged. Consider adjusting these settings when fits are unstable, runtime is excessive, or a reproducible analysis configuration is needed.
+The default grid-search settings can usually be left unchanged. If fitting fails or appears unstable, consider increasing the number of random starts, adjusting the parameter bounds, changing the random seed, or reviewing whether the selected model is appropriate for the data.
 
 \input{includes/generated/grid_search_parameter_table.tex}
 
-\section{Relative model evidence}
+\section{Outputs}
 
-\input{includes/generated/relative_model_evidence_description.tex}
-
-For additional background on information criteria, empirical support, and evidence-weight interpretation, see references \cite{akaike1974,schwarz1978,burnham2002,kass1995,wagenmakers2004}.
+The IVIVC app generates interactive results and downloadable reports that summarize fitted model behavior, model-comparison metrics, diagnostic information, and user-selected analysis settings. Output availability depends on the selected approaches, whether fitting succeeds, and whether a prediction dataset was supplied.
 
 \begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.24\textwidth}>{\raggedright\arraybackslash}p{0.68\textwidth}@{}}
 \toprule
-\textbf{Support summary} & \textbf{Interpretation} \\
+\textbf{Output} & \textbf{Description} \\
 \midrule
 \endfirsthead
 \toprule
-\textbf{Support summary} & \textbf{Interpretation} \\
+\textbf{Output} & \textbf{Description} \\
 \midrule
 \endhead
-Delta & Difference from the lowest value in the displayed candidate set. Values near 0 indicate similar relative support; larger values indicate lower support relative to the leading candidate under that criterion. \\
-Weight & Normalized relative-support value across the candidate models in the displayed evidence table. Weights are relative, not absolute probabilities that a model is true. \\
-Evidence ratio & Ratio of the highest evidence weight to the model's evidence weight. Larger ratios indicate less relative support compared with the highest-weighted model in the set. \\
-Interpretation badge & Neutral rule-of-thumb label based on the displayed delta values. The label supports user review and is not an app recommendation. \\
+Preprocessing outputs & Processed data tables and plots showing the data used for fitting and prediction. \\
+Model fitting outputs & Parameter estimates reported as estimate $\pm$ 95\% confidence interval where available, fitted plots with error bars, residual plots, and selected performance metrics. \\
+Model comparison outputs & Tables comparing selected approaches, models, metrics, relative model evidence, and cross-validation summaries. \\
+Prediction outputs & Prediction plots and downloadable tables when a prediction dataset is supplied and the selected method can be applied. \\
+Selected model \& summary of outputs & User-selected report summaries and optional report export for incorporation into external documentation. \\
 \bottomrule
 \end{longtable}
 
-\section{Uncertainty and error bars}
+
+\subsection{Relative model evidence}
+
+Relative model evidence tables compare candidate parametric models using information criteria (i.e., AIC, AIC\textsubscript{c}, and/or BIC), showing which models have more support from the observed data after balancing fit quality against model complexity. These comparisons are only meaningful among models fitted to the same data, with the same preprocessing settings, and within the same IVIVC approach.
+
+These tables are shown only when one or more information criteria are selected as metrics. If more than one criterion is selected, review each separately---AIC, AIC\textsubscript{c}, and BIC can occasionally rank the same models differently. See the appendix for interpretation guidance, rules of thumb, and limitations.
+
+The relative model evidence tables contain the following quantities. 
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.24\textwidth}>{\raggedright\arraybackslash}p{0.68\textwidth}@{}}
+\toprule
+\textbf{Table output} & \textbf{What it means} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Table output} & \textbf{What it means} \\
+\midrule
+\endhead
+\(n\) & Number of observations used to fit the model. \\
+\(k\) & Number of fitted model parameters. Models with more parameters can fit more flexible shapes, so information criteria include a complexity penalty. \\
+AIC, AIC\textsubscript{c}, or BIC & Information-criterion value for the fitted model. Lower values indicate stronger relative support within the candidate set. \\
+Delta & Difference between a model's criterion value and the lowest value in the candidate set. Values near 0 indicate similar support to the leading model; larger values indicate less support. \\
+Weight & Normalized relative-support score across the candidate set. Weights are comparative summaries, not absolute probabilities that a model is correct. \\
+Evidence ratio & Ratio of the highest weight in the candidate set to the model's weight. Larger values indicate less relative support compared with the leading model. \\
+Support badge & Rule-of-thumb label based on the delta value. Intended to aid user review, not to recommend a model. \\
+\bottomrule
+\end{longtable}
+
+
+\subsection{Uncertainty and error bars}
 
 The following descriptions summarize how fitted-parameter uncertainty, fitting-plot bands, and prediction error bars are calculated or interpreted for each approach.
 
