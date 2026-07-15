@@ -292,9 +292,10 @@
             <p><strong>Required format:</strong></p>
             <ul>
                 <li>4 columns: Time1, Value1, Time2, Value2</li>
-                <li>Time1/Value1: In vitro data</li>
-                <li>Time2/Value2: In vivo data</li>
+                <li>Time1/Value1: In vitro time and response value</li>
+                <li>Time2/Value2: In vivo time and response value</li>
             </ul>
+            <p>In these examples, <strong>Value</strong> means the response value measured at each time point, such as mass remaining, molecular weight, strength, or another degradation-related measurement.</p>
             <p>This data will be used to establish the correlation between in vitro and in vivo measurements.</p>
         </div>
 
@@ -310,6 +311,7 @@
                 <li>2 columns: Time, Value</li>
                 <li>Contains in vitro data for which you want to predict in vivo outcomes</li>
             </ul>
+            <p><strong>Value</strong> means the in vitro response value measured at each time point.</p>
             <p>The fitted models will be applied to this data to generate in vivo predictions.</p>
         </div>
 
@@ -358,7 +360,7 @@
                 <li>Uses interpolation-based ratios or mappings calculated from the supplied data.</li>
                 <li>Provides two scaling options for predictions.</li>
                 <li>Does not assume a specific equation for the degradation pattern.</li>
-                <li>Requires matched values or interpolation to create comparable points.</li>
+                <li>Requires matched response values or interpolation to create comparable points.</li>
             </ul>
             <p><strong>Useful when:</strong> the analysis is exploratory, a simple equation does not describe the observed pattern well, or a direct data-based mapping is preferred.</p>
         </div>
@@ -389,7 +391,7 @@
 
         <div id="interpolation-help-content">
             <h4>Interpolation Options</h4>
-            <p>Use interpolation between the provided data to create matched time and response grids for fitting, comparison, and direct mapping. A common set of observed time points for the two datasets are needed if paired values are to be compared or modeled (i.e., Approach 1, Approach 3).</p>
+            <p>Use interpolation between the provided data to estimate response values at shared time points for fitting, comparison, and direct mapping. A common set of observed time points for the two datasets is needed if paired response values are to be compared or modeled (i.e., Approach 1, Approach 3).</p>
             <ul>
                 {% for option_key, option_info in preprocessing_descriptions['interpolation'].items() %}
                 <li><strong>{{ option_info.display_name }}:</strong> {{ option_info.description }}</li>

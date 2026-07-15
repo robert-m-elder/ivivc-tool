@@ -751,7 +751,7 @@
                                     <div class="model-result">
                                         <h3>Model: {{ models[model_name].display_name }}</h3>
                                         {% if 'plot' in pred_result %}
-                                            <h4>Value ratio rescaling</h4>
+                                            <h4>Response-value ratio rescaling</h4>
 <div id="plot-prediction-{{ approach_id }}-{{ model_name }}-value" class="plot-container report-source-plot">
                                                 {{ pred_result.plot.plot | safe }}
                                             </div>
@@ -886,8 +886,8 @@
             <h4>Approach 3: Direct Mapping Results</h4>
             <p>Shows direct comparison between interpolated datasets:</p>
             <ul>
-                <li><strong>Value vs. Time Plot:</strong> Difference between dataset values over time</li>
-                <li><strong>Time vs. Value Plot:</strong> Ratio of dataset times across value ranges</li>
+                <li><strong>Response Value vs. Time Plot:</strong> Difference between in vitro and in vivo response values over time</li>
+                <li><strong>Time vs. Response Value Plot:</strong> Ratio of dataset times across response-value ranges</li>
             </ul>
             <h4>Uncertainty and fitting plot bands</h4>
             {{ approach_descriptions['approach3']['fit_uncertainty_html'] | safe }}
@@ -915,7 +915,7 @@
                 <li><strong>Input Data:</strong> Your in vitro prediction dataset</li>
                 <li><strong>Predicted Data:</strong> In vivo predictions where the in vitro time in the prediction dataset has been scaled using either:
                     <ul>
-                        <li>the ratio of the in vivo/in vitro times from the fitted models that correspond to the in vitro prediction values; or</li>
+                        <li>the ratio of the in vivo/in vitro times from the fitted models that correspond to the in vitro prediction response values; or</li>
                         <li>the ratio of the time constants, if available.</li>
                     </ul>
                 </li>
@@ -932,7 +932,7 @@
                 <li><strong>Input Data:</strong> Your in vitro prediction dataset</li>
                 <li><strong>Predicted Data:</strong> In vivo predictions where the in vitro time in the prediction dataset has been directly scaled by the ratio of in vivo/in vitro times in the fitting datasets</li>
                 <li><strong>Connection Lines:</strong> Show the time scaling transformation</li>
-            <p>Points in the in vitro prediction dataset that are outside the range of the fitting datasets (time range when scaling by value, or value range when scaling by time) are excluded.</p>
+            <p>Points in the in vitro prediction dataset that are outside the range of the fitting datasets (time range when scaling by response value, or response-value range when scaling by time) are excluded.</p>
             </ul>
             <h4>Error propagation and uncertainty</h4>
             {{ approach_descriptions['approach3']['prediction_error_html'] | safe }}
@@ -943,7 +943,7 @@
             <ul>
                 <li><strong>User selection:</strong> the app does not rank or recommend a model in this tab. The first option is only the initial UI default.</li>
                 <li><strong>Fit-only reports:</strong> if no prediction dataset was supplied, the selector lists only approach/model combinations and omits prediction-method choices.</li>
-                <li><strong>Prediction reports:</strong> if prediction data were supplied, the selector also lists available prediction methods such as value-ratio or time-constant-ratio rescaling.</li>
+                <li><strong>Prediction reports:</strong> if prediction data were supplied, the selector also lists available prediction methods such as response-value ratio or time-constant-ratio rescaling.</li>
                 <li><strong>Report summary:</strong> includes preprocessing choices, analysis settings, method description, relevant plots, parameter estimates, goodness-of-fit statistics, and uncertainty/error-bar assumptions.</li>
                 <li><strong>Word export:</strong> creates an editable .docx from the selected report content. Plotly figures are exported as static images and embedded in the Word file.</li>
                 <li><strong>Manual review:</strong> confirm that plots, residuals, parameter uncertainty, cross-validation behavior, and scientific expectations support the chosen model.</li>

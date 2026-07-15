@@ -1,4 +1,5 @@
 \section{How to Interpret Model Performance}
+\label{app:model-performance}
 
 No single metric determines whether an IVIVC model is meaningful. A complete evaluation should consider goodness of fit, prediction error, model complexity, cross-validation behavior, residual patterns, parameter uncertainty, and whether the fitted relationship is scientifically plausible for the polymer degradation mechanism and intended use. Performance metrics are descriptive and comparative tools, not acceptance criteria. Small datasets can produce unstable estimates, and similar metric values do not necessarily indicate equivalent scientific validity. For analyses intended to support regulatory submissions, the depth of supporting evidence should be proportionate to the model's intended use and credibility requirements \cite{fda_modeling_guidance,fda_reporting_guidance}.
 
@@ -28,7 +29,7 @@ In particular, do not compare AIC, AIC\textsubscript{c}, or BIC values across di
     MAE & Lower is better. Units match the response units. & Mean absolute error on the response scale \cite{scikit_regression_metrics}. Interpret relative to assay variability, measurement uncertainty, and the intended use. \\ 
     MSE & Lower is better. Units are squared response units. & Mean squared prediction error \cite{hodson2022, scikit_regression_metrics}. Useful computationally, but less intuitive than RMSE because the units are squared. \\ 
     RMSE & Lower is better. Units match the response units. & Root mean squared error, the typical prediction error on the response scale \cite{hodson2022, scikit_regression_metrics}. Interpret relative to assay variability, measurement uncertainty, and the intended use. Penalizes larger errors more heavily than MAE. \\
-    NRMSE & Lower is better. Normalized to allow more meaningful comparison across response scales. & RMSE prediction error expressed relative to a normalization quantity such as the response mean or standard deviation. Interpretation depends on the normalization method used. \\
+    NRMSE & Lower is better. Normalized to allow more meaningful comparison across response scales. & RMSE prediction error expressed relative to a normalization factor such as the response mean or standard deviation. Interpretation depends on the normalization method used. \\
     AIC & Lower is better, but only relative to other comparable models. No fixed bounds; negative values are allowed. & Balances goodness of fit against model complexity \cite{akaike1974,burnham2002,wagenmakers2004}. A lower value indicates a model that explains the data well without unnecessary parameters. Absolute values are not standalone quality grades. \\
     AIC\textsubscript{c} & Lower is better, but only relative to other comparable models. Undefined when there are too few observations relative to the number of fitted parameters. & A small-sample correction to AIC \cite{hurvich1989, burnham2002, wagenmakers2004}. Generally preferred when the observation-to-parameter ratio is low; \(n/k < 40\) is a commonly cited rule of thumb \cite{burnham2002}. \\
     BIC & Lower is better, but only relative to other comparable models. No fixed bounds; negative values are allowed. & Balances goodness of fit against model complexity, typically applying a stronger penalty for additional parameters than AIC \cite{schwarz1978,burnham2002,wagenmakers2004}. \\
@@ -202,7 +203,7 @@ The intended use should also guide how much supporting evidence is needed. Explo
 \subsection{Suggested model review workflow}
 
 \begin{enumerate}
-    \item Confirm that the dataset, preprocessing choices, and selected response variables are appropriate for the intended analysis.
+    \item Confirm that the dataset, preprocessing choices, and selected response values (the measured values being modeled) are appropriate for the intended analysis.
     \item Review fitted curves and residual plots for each candidate model, checking for systematic patterns or implausible fitted shapes.
     \item Compare goodness-of-fit metrics such as \(R^2\) and RMSE in the context of assay variability, endpoint importance, and intended use.
     \item Review cross-validation performance and fit/CV ratios to assess sensitivity to the available data.

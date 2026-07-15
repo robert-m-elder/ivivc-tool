@@ -31,12 +31,12 @@ approaches:
       <p>This approach can be useful when the two datasets were measured on different time schedules, when each dataset is expected to follow the same type of degradation curve, or when a specific model form is scientifically meaningful for both datasets.</p>
     fit_uncertainty_html: "\n            <p><strong>Parameter estimates:</strong> each in vitro and in vivo model parameter is reported as estimate ± 95% confidence interval. The plus-minus value is calculated from the corresponding nonlinear least-squares covariance matrix as t(0.975, residual degrees of freedom) multiplied by the parameter standard error, with fitted-parameter correlations retained in uncertainty-aware values.</p>\n            <p><strong>Time constants:</strong> tau values, when available, are calculated from the fitted model and parameter covariance. Reported tau values are shown as tau ± 95% confidence interval. The plus-minus value is calculated as t(0.975, residual degrees of freedom) multiplied by the propagated standard uncertainty.</p>\n            <p><strong>Fitting plot bands:</strong> the in vitro and in vivo shaded 95% prediction bands are generated separately. For each fitted model, the app Monte Carlo samples the fitted parameter covariance matrix, combines sampled model variance with residual variance, and converts the resulting standard uncertainty to a two-sided interval using a t multiplier when residual degrees of freedom are\
       \ available.</p>\n        "
-    prediction_error_html: "\n            <p><strong>Value-ratio prediction error bars:</strong> uncertainty is propagated from both fitted models. The app samples each model's parameter covariance matrix, calculates the in vivo/in vitro response ratio for each sample, combines ratio variance with residual-based ratio uncertainty, and converts that uncertainty to a two-sided 95% interval. The plotted vertical error bars are scaled from the resulting ratio interval at each prediction time.</p>\n            <p><strong>Time-constant-ratio prediction error bars:</strong> when both tau values are valid, uncertainty in each tau is propagated through the tau ratio using uncertainty-aware arithmetic. The standard uncertainty of the scaled prediction time is multiplied by a t value, where available, and plotted as a symmetric horizontal error bar.</p>\n            <p>Ratio-based uncertainty can become unstable when the denominator model prediction or denominator time constant is near zero. Predictions\
+    prediction_error_html: "\n            <p><strong>Response-value-ratio prediction error bars:</strong> uncertainty is propagated from both fitted models. The app samples each model's parameter covariance matrix, calculates the in vivo/in vitro response-value ratio for each sample, combines variance in that ratio with residual-based ratio uncertainty, and converts that uncertainty to a two-sided 95% interval. The plotted vertical error bars are scaled from the resulting ratio interval at each prediction time.</p>\n            <p><strong>Time-constant-ratio prediction error bars:</strong> when both tau values are valid, uncertainty in each tau is propagated through the tau ratio using uncertainty-aware arithmetic. The standard uncertainty of the scaled prediction time is multiplied by a t value, where available, and plotted as a symmetric horizontal error bar.</p>\n            <p>Response-value ratio uncertainty can become unstable when the denominator model prediction or denominator time constant is near zero. Predictions\
       \ in those regions should be interpreted cautiously.</p>\n        "
   approach3:
     title: 'Approach 3: Direct Mapping'
     method_html: |-
-      <p>Approach 3 uses direct interpolation-based mappings between datasets rather than fitting a parametric model. It can describe value-ratio behavior over time and time-ratio behavior over value ranges. When prediction data are supplied, those mappings can be used to scale in vitro values or in vitro times to the corresponding in vivo quantity.</p>
+      <p>Approach 3 uses direct interpolation-based mappings between datasets rather than fitting a parametric model. It can describe response-value ratios over time and time ratios across response-value ranges. When prediction data are supplied, those mappings can be used to map in vitro response values or in vitro times to the corresponding in vivo response values or times.</p>
       <p>This approach can be useful for exploratory comparisons, for datasets where a simple equation does not describe the observed pattern well, or when the user wants a direct data-based mapping rather than a fitted model.</p>
     fit_uncertainty_html: "\n            <p><strong>Parameter uncertainty:</strong> Approach 3 does not fit a parametric model, so there is no fitted-parameter covariance matrix, no parameter confidence intervals, and no model-based 95% prediction band.</p>\n            <p><strong>Fitting plots:</strong> the plots show interpolation-based ratios/mappings calculated from the preprocessed datasets. They should be interpreted as deterministic mappings from the supplied data and preprocessing choices, not as statistical uncertainty bands.</p>\n        "
     prediction_error_html: "\n            <p><strong>Prediction plot error bars:</strong> Approach 3 does not generate formal propagated error bars for prediction outputs because no parametric covariance model is fitted.</p>\n            <p>Uncertainty is therefore limited to the quality of the input data, preprocessing, interpolation, and the assumption that the observed mapping remains valid for the prediction dataset. Extrapolated points outside the interpolation range are excluded or returned as unavailable.</p>\n        "
@@ -58,13 +58,13 @@ preprocessing:
   interpolation:
     none:
       display_name: No interpolation
-      description: Uses only the original measured points. Values between measurements are not estimated, so unmatched positions are marked as missing.
+      description: Uses only the original measured points. Response values between measurements are not estimated, so unmatched positions are marked as missing.
     default:
       display_name: Shared-time interpolation
-      description: Uses linear interpolation to estimate both datasets at a shared set of experimental time points. Values outside the measured range are marked as unavailable.
+      description: Uses linear interpolation to estimate response values for both datasets at a shared set of experimental time points. Estimates outside the measured time range are marked as unavailable.
     alternative:
       display_name: Densified interpolation
-      description: Adds extra evenly spaced points between adjacent observations before interpolation. This can smooth displays and make fitting more stable, but the added points are estimated rather than directly measured and can affect metric values.
+      description: Adds extra evenly spaced points between adjacent observations before interpolation. This can smooth displays and make fitting more stable, but the added response values are estimated rather than directly measured and can affect metric values.
 metrics:
   r_squared:
     description: Coefficient of determination. Higher values indicate that the fitted curve follows more of the observed response pattern.
@@ -156,9 +156,9 @@ modal_help:
     preprocessing_overview_html: |-
       <p>Preprocessing changes how the uploaded data are prepared before fitting, comparison, or prediction. The selected preprocessing choices are included in the results and downloadable report.</p>
       <ul>
-        <li><strong>Normalization:</strong> expresses response values relative to a reference value, such as the first value or the observed range.</li>
+        <li><strong>Normalization:</strong> expresses response values relative to a reference value, such as the first response value or the observed range.</li>
         <li><strong>Scaling:</strong> changes the numerical scale of time or response values, such as using a log scale, to help display or fit certain patterns.</li>
-        <li><strong>Interpolation:</strong> estimates values between measured time points, which can be useful when an approach needs matched in vitro and in vivo time points.</li>
+        <li><strong>Interpolation:</strong> estimates response values between measured time points, which can be useful when an approach needs matched in vitro and in vivo time points.</li>
       </ul>
       <p>More information about each preprocessing option is available from the help buttons next to Normalization, Scaling, and Interpolation.</p>
     advanced_analysis_overview_html: |-
@@ -167,7 +167,7 @@ modal_help:
         <li><strong>Cross-validation:</strong> how the app checks prediction performance by repeatedly setting aside part of the data and fitting to the rest.</li>
         <li><strong>Grid search:</strong> how the app searches for suitable starting parameter values before nonlinear least-squares fitting.</li>
       </ul>
-      <p>The defaults are intended as reasonable starting points. You may want to adjust these settings when datasets are small, fits are unstable, or runtime is excessive.</p>
+      <p>The default settings are intended as reasonable starting points. You may want to adjust these settings when datasets are small, fits or cross-validation appear unstable, or runtime is excessive.</p>
     cross_validation_html: |-
       <p>Cross-validation checks how selected fitted models predict data that were not used to fit that model. It may be used for Approaches 1 and 2, where parametric models are fitted.</p>
       <p>For time-course data, the main question is what kind of data should be set aside for the prediction check. This app usually evaluates whether a fitted curve captures the overall response pattern, not whether early time points can forecast later time points. Even so, time order matters because nearby observations may be strongly related. Omitting one point is a gentle check, omitting a contiguous block is a stricter check of a time region, and shuffled splits do not preserve time order but are useful as a check of the overall robustness of the fit.</p>
@@ -188,7 +188,7 @@ modal_help:
         <li><strong>Parameter max:</strong> upper bound for candidate starting values.</li>
         <li><strong>Random seed:</strong> makes the random sampling of candidate starting values reproducible. Changing the seed can help if a fit appears unreasonable, because different seeds will lead to different candidate starting value sets.</li>
       </ul>
-      <p>For each selected model, the app evaluates the candidate starting values and uses the best candidate as the starting point for the final curve fit. If fitting fails or appears unstable, consider increasing the number of random starts, adjusting the parameter bounds, changing the random seed, or reviewing whether the selected model is appropriate for the data.</p>
+      <p>The default settings are intended as reasonable starting points. You may want to adjust these settings when datasets are small, fits appear unstable, or runtime is excessive.</p>
   results:
     model_comparison_html: |-
       <p>This tab provides side-by-side summaries of the fitted candidate models. It includes selected metric definitions, performance metrics, cross-validation summaries, fitted parameter diagnostic badges and Relative Model Evidence where information criteria are selected.</p>

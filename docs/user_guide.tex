@@ -7,7 +7,9 @@
 
 \input{includes/generated/app_purpose.tex}
 
-For general background on credibility assessment and reporting of computational modeling studies in medical device submissions, see FDA guidance on computational modeling credibility and reporting \cite{fda_modeling_guidance,fda_reporting_guidance}.
+For general background on credibility assessment and reporting of computational modeling studies in medical device submissions, see FDA guidance on computational modeling credibility and reporting \cite{fda_modeling_guidance,fda_reporting_guidance}. 
+
+For additional discussion of model performance, cross-validation results, uncertainty, residual diagnostics, and model selection considerations, see Appendix~\ref{app:model-performance}.
 
 \section{What the app does}
 
@@ -34,6 +36,8 @@ The sections below provide additional detail on input file structure, required d
 
 The app uses separate fitting and prediction datasets. The fitting dataset is required because it provides the paired in vitro and in vivo data used to establish the IVIVC relationship. The prediction dataset is optional and is used only when applying a fitted relationship to new in vitro observations in order to predict the corresponding in vivo behavior.
 
+In this guide, \textbf{response value} means the measured y-axis value that changes with time, such as mass remaining, molecular weight, strength, or another degradation-related endpoint. In the input files, these are the in vitro and in vivo value columns.
+
 \begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.24\textwidth}>{\raggedright\arraybackslash}p{0.68\textwidth}@{}}
 \toprule
 \textbf{Input} & \textbf{Description} \\
@@ -43,8 +47,8 @@ The app uses separate fitting and prediction datasets. The fitting dataset is re
 \textbf{Input} & \textbf{Description} \\
 \midrule
 \endhead
-Fitting dataset & Required four-column dataset used to establish the in vitro/in vivo relationship. Columns are interpreted as in vitro time, in vitro value, in vivo time, and in vivo value. \\
-Prediction dataset & Optional two-column in vitro dataset used after fitting to generate in vivo predictions. Columns are interpreted as in vitro time and in vitro value. \\
+Fitting dataset & Required four-column dataset used to establish the in vitro/in vivo relationship. Columns are interpreted as in vitro time, in vitro response value, in vivo time, and in vivo response value. \\
+Prediction dataset & Optional two-column in vitro dataset used after fitting to generate in vivo predictions. Columns are interpreted as in vitro time and in vitro response value. \\
 \bottomrule
 \end{longtable}
 
@@ -72,7 +76,7 @@ The surface erosion mass loss form is based on geometry-controlled surface erosi
 
 \subsection{Preprocessing options}
 
-Preprocessing prepares the uploaded data for comparison, fitting, and prediction. Normalization expresses values relative to a reference value so datasets can be compared on a common relative scale. Scaling changes the units or magnitude of a variable without changing the underlying pattern. Interpolation estimates values at time points that were not directly observed, which may be useful when an approach requires matching in vitro and in vivo time points (i.e., Approach 1, Approach 3).
+Preprocessing prepares the uploaded data for comparison, fitting, and prediction. Normalization expresses response values relative to a reference value so datasets can be compared on a common relative scale. Scaling changes the numerical scale of time or response values without changing the underlying pattern. Interpolation estimates response values at time points that were not directly observed, which may be useful when an approach requires matching in vitro and in vivo time points (i.e., Approach 1, Approach 3).
 
 \input{includes/generated/preprocessing_options.tex}
 

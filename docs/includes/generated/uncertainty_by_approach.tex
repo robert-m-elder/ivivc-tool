@@ -29,11 +29,11 @@ Fitting plot bands: the in vitro and in vivo shaded 95\% prediction bands are ge
 
 \textbf{Prediction uncertainty}
 
-Value-ratio prediction error bars: uncertainty is propagated from both fitted models. The app samples each model's parameter covariance matrix, calculates the in vivo/in vitro response ratio for each sample, combines ratio variance with residual-based ratio uncertainty, and converts that uncertainty to a two-sided 95\% interval. The plotted vertical error bars are scaled from the resulting ratio interval at each prediction time.
+Response-value-ratio prediction error bars: uncertainty is propagated from both fitted models. The app samples each model's parameter covariance matrix, calculates the in vivo/in vitro response-value ratio for each sample, combines variance in that ratio with residual-based ratio uncertainty, and converts that uncertainty to a two-sided 95\% interval. The plotted vertical error bars are scaled from the resulting ratio interval at each prediction time.
 
 Time-constant-ratio prediction error bars: when both tau values are valid, uncertainty in each tau is propagated through the tau ratio using uncertainty-aware arithmetic. The standard uncertainty of the scaled prediction time is multiplied by a t value, where available, and plotted as a symmetric horizontal error bar.
 
-Ratio-based uncertainty can become unstable when the denominator model prediction or denominator time constant is near zero. Predictions in those regions should be interpreted cautiously.
+Response-value ratio uncertainty can become unstable when the denominator model prediction or denominator time constant is near zero. Predictions in those regions should be interpreted cautiously.
 
 \subsubsection{Approach 3: Direct Mapping}
 
