@@ -169,7 +169,7 @@ modal_help:
       </ul>
       <p>The defaults are intended as reasonable starting points. You may want to adjust these settings when datasets are small, fits are unstable, or runtime is excessive.</p>
     cross_validation_html: |-
-      <p>Cross-validation checks how selected fitted models predict data that were not used to fit that model. It is used for Approaches 1 and 2, where parametric models are fitted.</p>
+      <p>Cross-validation checks how selected fitted models predict data that were not used to fit that model. It may be used for Approaches 1 and 2, where parametric models are fitted.</p>
       <p>For time-course data, the main question is what kind of data should be set aside for the prediction check. This app usually evaluates whether a fitted curve captures the overall response pattern, not whether early time points can forecast later time points. Even so, time order matters because nearby observations may be strongly related. Omitting one point is a gentle check, omitting a contiguous block is a stricter check of a time region, and shuffled splits do not preserve time order but are useful as a check of the overall robustness of the fit.</p>
       <ul>
         <li><strong>Leave-one-timepoint-out:</strong> default scheme. Reasonable starting point for small datasets because each fit uses all but one observation.</li>

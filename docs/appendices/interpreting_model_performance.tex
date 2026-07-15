@@ -1,6 +1,6 @@
 \section{How to Interpret Model Performance}
 
-No single metric determines whether an IVIVC model is meaningful. A complete evaluation should consider goodness of fit, prediction error, model complexity, cross-validation behavior, residual patterns, parameter uncertainty, and whether the fitted relationship is scientifically plausible for the polymer degradation mechanism and intended use. Performance metrics are descriptive and comparative tools, not acceptance criteria. Small datasets can produce unstable estimates, and similar metric values do not necessarily indicate equivalent scientific validity. For analyses intended to support regulatory documentation, the depth of supporting evidence should be proportionate to the model's intended use and credibility requirements \cite{fda_modeling_guidance,fda_reporting_guidance}.
+No single metric determines whether an IVIVC model is meaningful. A complete evaluation should consider goodness of fit, prediction error, model complexity, cross-validation behavior, residual patterns, parameter uncertainty, and whether the fitted relationship is scientifically plausible for the polymer degradation mechanism and intended use. Performance metrics are descriptive and comparative tools, not acceptance criteria. Small datasets can produce unstable estimates, and similar metric values do not necessarily indicate equivalent scientific validity. For analyses intended to support regulatory submissions, the depth of supporting evidence should be proportionate to the model's intended use and credibility requirements \cite{fda_modeling_guidance,fda_reporting_guidance}.
 
 The app reports metrics and comparison tables to support user review. It does not select, recommend, validate, or establish regulatory acceptability for any model. Users should document preprocessing assumptions, fitting settings, model selection rationale, limitations, and any planned use of the model outside the fitted data range.
 
@@ -160,7 +160,7 @@ When any of these patterns appear, consider whether a different model form, addi
 
 \subsection{Interpreting parameter uncertainty}
 
-It is important to check whether the available data can estimate model parameters reliably. The app reports each parameter estimate $\pm$ 95\% confidence interval. The plus-minus value represents the confidence-interval half-width around the estimate. In practical terms, a wide interval means the data do not pin down that parameter precisely; a narrow interval means the estimate is more stable.
+It is important to check whether the available data can estimate model parameters reliably. The app reports each parameter estimate $\pm$ 95\% confidence interval. The plus-minus value represents the confidence-interval half-width around the estimate. In practical terms, a wide interval means the data do not pin down that parameter precisely, while a narrow interval means the estimate is more stable.
 
 The interval is calculated from the nonlinear least-squares covariance matrix and residual degrees of freedom. It summarizes parameter uncertainty implied by the fitted model and should be interpreted cautiously, especially for nonlinear models and small datasets.
 
