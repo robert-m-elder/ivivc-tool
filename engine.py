@@ -56,6 +56,143 @@ colors = {
 CV_COMPARISON_EXCLUDED_METRICS = {'adjusted_r_squared', 'aic', 'aicc', 'bic', 'nrmse', 'mnrmse'}
 
 
+UNCERTAINTY_RANGE_MATERIAL_MARGIN_SPANS = 0.10
+UNCERTAINTY_RANGE_FAR_MARGIN_SPANS = 2.0
+UNCERTAINTY_RANGE_FRACTION_THRESHOLD = 0.10
+
+
+def _uncertainty_unavailable_warning(series_label=None, reason='calculation_failed'):
+    """Return user-facing metadata when a requested uncertainty band is unavailable."""
+    prefix = f'{series_label}: ' if series_label else ''
+    if reason == 'covariance_unavailable':
+        detail = f'{prefix}the fitted parameter covariance matrix was unavailable.'
+    else:
+        detail = f'{prefix}the uncertainty-band calculation did not produce displayable bounds.'
+    return {
+        'code': 'invalid',
+        'level': 'warning',
+        'badge_label': 'Some uncertainty bands unavailable',
+        'message': (
+            'One or more uncertainty bands could not be calculated or displayed. '
+            'Review the fitted parameter diagnostics.'
+        ),
+        'detail': detail,
+        'reason': reason,
+    }
+
+
+def _assess_uncertainty_band_visibility(lower, upper, axis_range, series_label=None):
+    """Identify nonfinite or materially off-scale uncertainty intervals.
+
+    The initial fitting-plot range is intentionally based on the observed data and
+    fitted curve rather than the uncertainty band. This helper flags intervals that
+    may therefore be invisible at the initial scale without changing that scale.
+    """
+    lower_values = np.asarray(lower, dtype=float).reshape(-1)
+    upper_values = np.asarray(upper, dtype=float).reshape(-1)
+    n_total = min(lower_values.size, upper_values.size)
+    if n_total == 0:
+        return [_uncertainty_unavailable_warning(series_label)]
+
+    lower_values = lower_values[:n_total]
+    upper_values = upper_values[:n_total]
+    finite_mask = np.isfinite(lower_values) & np.isfinite(upper_values)
+    n_invalid = int(np.count_nonzero(~finite_mask))
+    warnings_out = []
+    prefix = f'{series_label}: ' if series_label else ''
+
+    if n_invalid:
+        warnings_out.append({
+            'code': 'invalid',
+            'level': 'warning',
+            'badge_label': 'Some uncertainty bands unavailable',
+            'message': (
+                'One or more calculated uncertainty bounds were nonfinite and could not be displayed. '
+                'Review the fitted parameter diagnostics.'
+            ),
+            'detail': f'{prefix}{n_invalid} of {n_total} intervals had nonfinite bounds.',
+            'reason': 'nonfinite_bounds',
+            'n_total': n_total,
+            'n_invalid': n_invalid,
+        })
+
+    n_finite = int(np.count_nonzero(finite_mask))
+    if n_finite == 0:
+        return warnings_out
+
+    try:
+        axis_min, axis_max = (float(axis_range[0]), float(axis_range[1]))
+    except (TypeError, ValueError, IndexError):
+        return warnings_out
+
+    axis_span = axis_max - axis_min
+    if not np.isfinite(axis_span) or axis_span <= 0:
+        return warnings_out
+
+    finite_lower = lower_values[finite_mask]
+    finite_upper = upper_values[finite_mask]
+    material_margin = UNCERTAINTY_RANGE_MATERIAL_MARGIN_SPANS * axis_span
+    far_margin = UNCERTAINTY_RANGE_FAR_MARGIN_SPANS * axis_span
+
+    materially_outside = (
+        (finite_lower < axis_min - material_margin)
+        | (finite_upper > axis_max + material_margin)
+    )
+    far_outside = (
+        (finite_lower < axis_min - far_margin)
+        | (finite_upper > axis_max + far_margin)
+    )
+    n_outside = int(np.count_nonzero(materially_outside))
+    outside_fraction = n_outside / n_finite
+
+    if np.any(far_outside) or outside_fraction >= UNCERTAINTY_RANGE_FRACTION_THRESHOLD:
+        warnings_out.append({
+            'code': 'outside_initial_range',
+            'level': 'info',
+            'badge_label': 'Large uncertainty outside plot range',
+            'message': (
+                'Some uncertainty bands extend beyond the initial plot range and may not be visible. '
+                'Zoom out or autoscale to view them. Review the fitted parameter diagnostics.'
+            ),
+            'detail': (
+                f'{prefix}{n_outside} of {n_finite} finite intervals extend materially '
+                'beyond the initial y-axis range.'
+            ),
+            'reason': 'outside_initial_range',
+            'n_total': n_total,
+            'n_finite': n_finite,
+            'n_outside': n_outside,
+        })
+
+    return warnings_out
+
+
+def _merge_uncertainty_warnings(warnings_in):
+    """Combine repeated warning types while retaining dataset-specific details."""
+    merged = []
+    by_code = {}
+    for warning in warnings_in:
+        code = warning.get('code', 'unknown')
+        if code not in by_code:
+            item = dict(warning)
+            item['_details'] = [warning.get('detail')] if warning.get('detail') else []
+            by_code[code] = item
+            merged.append(item)
+            continue
+
+        item = by_code[code]
+        if warning.get('detail'):
+            item['_details'].append(warning['detail'])
+        for key in ('n_total', 'n_finite', 'n_invalid', 'n_outside'):
+            if key in warning:
+                item[key] = int(item.get(key, 0)) + int(warning[key])
+
+    for item in merged:
+        details = item.pop('_details', [])
+        item['detail'] = ' '.join(details)
+    return merged
+
+
 def _not_meaningful_badge():
     return '<span class="evidence-badge evidence-badge-neutral">Not meaningful</span>'
 
@@ -1603,6 +1740,7 @@ def create_plotly_a1(x, y, model_info, include_bands=True):
     trace_fit = go.Scatter(x=x_smooth, y=y_smooth, mode='lines', name=f"{model_info['model_name']} Fit", line=dict(color='black', dash='dash', width=3), zorder=9)
 
     traces = [trace_data, trace_fit]
+    uncertainty_warnings = []
 
     # manual axis range
     x_range_data = [min(np.concatenate([x, x_smooth])), max(np.concatenate([x, x_smooth]))]
@@ -1614,42 +1752,55 @@ def create_plotly_a1(x, y, model_info, include_bands=True):
     y_range = [y_range_data[0] - y_padding, y_range_data[1] + y_padding]
     
     # Add prediction bands if requested and covariance matrix is available
-    if include_bands and 'pcov' in model_info and model_info['pcov'] is not None:
-        try:
-            bands = generate_prediction_bands(
-                model_info['model_function'], 
-                x_smooth, 
-                model_info['params'], 
-                model_info['pcov'],
-                model_info['residuals']
+    if include_bands:
+        if 'pcov' not in model_info or model_info['pcov'] is None:
+            uncertainty_warnings.append(
+                _uncertainty_unavailable_warning(reason='covariance_unavailable')
             )
-            
-            # Add confidence band
-            trace_upper = go.Scatter(
-                x=x_smooth, y=bands['upper'],
-                mode='lines',
-                line=dict(width=0),
-                showlegend=False,
-                hoverinfo='skip',
-                zorder=0
-            )
-            
-            trace_lower = go.Scatter(
-                x=x_smooth, y=bands['lower'],
-                mode='lines',
-                fill='tonexty',
-                fillcolor='rgba(128,128,128,0.3)',
-                line=dict(width=0),
-                name='95% Prediction Band',
-                hoverinfo='skip',
-                zorder=0
-            )
-            
-            # Insert bands before the fit line for proper layering
-            traces = [trace_data, trace_upper, trace_lower, trace_fit]
-            
-        except Exception as e:
-            print(f"Warning: Could not generate prediction bands: {e}")
+        else:
+            try:
+                bands = generate_prediction_bands(
+                    model_info['model_function'],
+                    x_smooth,
+                    model_info['params'],
+                    model_info['pcov'],
+                    model_info['residuals']
+                )
+                uncertainty_warnings.extend(
+                    _assess_uncertainty_band_visibility(
+                        bands['lower'], bands['upper'], y_range
+                    )
+                )
+
+                finite_band_mask = np.isfinite(bands['lower']) & np.isfinite(bands['upper'])
+                if np.any(finite_band_mask):
+                    # Add confidence band. Nonfinite points remain gaps in the Plotly trace.
+                    trace_upper = go.Scatter(
+                        x=x_smooth, y=bands['upper'],
+                        mode='lines',
+                        line=dict(width=0),
+                        showlegend=False,
+                        hoverinfo='skip',
+                        zorder=0
+                    )
+
+                    trace_lower = go.Scatter(
+                        x=x_smooth, y=bands['lower'],
+                        mode='lines',
+                        fill='tonexty',
+                        fillcolor='rgba(128,128,128,0.3)',
+                        line=dict(width=0),
+                        name='95% Prediction Band',
+                        hoverinfo='skip',
+                        zorder=0
+                    )
+
+                    # Insert bands before the fit line for proper layering
+                    traces = [trace_data, trace_upper, trace_lower, trace_fit]
+
+            except Exception as e:
+                print(f"Warning: Could not generate prediction bands: {e}")
+                uncertainty_warnings.append(_uncertainty_unavailable_warning())
 
     # Create the figure and add the traces
     fig = go.Figure(data=traces)
@@ -1704,7 +1855,11 @@ def create_plotly_a1(x, y, model_info, include_bands=True):
     }
     # Convert the figure to HTML
     plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
-    return {'plot':plot_html, 'table_html': table_html}
+    return {
+        'plot': plot_html,
+        'table_html': table_html,
+        'uncertainty_warnings': _merge_uncertainty_warnings(uncertainty_warnings),
+    }
 
 def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
     # Create traces for the datasets
@@ -1755,81 +1910,105 @@ def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
     y_range = [y_range_data[0] - y_padding, y_range_data[1] + y_padding]
 
     traces = [trace1, trace2]
+    uncertainty_warnings = []
     
-    # Add prediction bands for dataset 1 (In Vitro) if requested and covariance matrix is available
-    if include_bands and 'pcov1' in model_info and model_info['pcov1'] is not None:
-        try:
-            bands1 = generate_prediction_bands(
-                model_info['model_function'], 
-                x_smooth, 
-                model_info['params1'], 
-                model_info['pcov1'],
-                model_info['residuals1']
+    # Add prediction bands for dataset 1 (In Vitro) if requested.
+    if include_bands:
+        if 'pcov1' not in model_info or model_info['pcov1'] is None:
+            uncertainty_warnings.append(
+                _uncertainty_unavailable_warning('In vitro', 'covariance_unavailable')
             )
-            
-            # Add confidence band for dataset 1
-            trace1_upper = go.Scatter(
-                x=x_smooth, y=bands1['upper'],
-                mode='lines',
-                line=dict(width=0),
-                showlegend=False,
-                hoverinfo='skip',
-                zorder=0
-            )
-            
-            trace1_lower = go.Scatter(
-                x=x_smooth, y=bands1['lower'],
-                mode='lines',
-                fill='tonexty',
-                fillcolor=hex_to_rgba(colors['in_vitro'],0.2),  # Blue with transparency
-                #fillcolor='rgba(0,0,255,0.2)',  # Blue with transparency
-                line=dict(width=0),
-                name='95% Prediction Band (In Vitro)',
-                hoverinfo='skip',
-                zorder=0
-            )
-            
-            traces.extend([trace1_upper, trace1_lower])
-            
-        except Exception as e:
-            print(f"Warning: Could not generate prediction bands for dataset 1: {e}")
+        else:
+            try:
+                bands1 = generate_prediction_bands(
+                    model_info['model_function'],
+                    x_smooth,
+                    model_info['params1'],
+                    model_info['pcov1'],
+                    model_info['residuals1']
+                )
+                uncertainty_warnings.extend(
+                    _assess_uncertainty_band_visibility(
+                        bands1['lower'], bands1['upper'], y_range, 'In vitro'
+                    )
+                )
 
-    # Add prediction bands for dataset 2 (In Vivo) if requested and covariance matrix is available
-    if include_bands and 'pcov2' in model_info and model_info['pcov2'] is not None:
-        try:
-            bands2 = generate_prediction_bands(
-                model_info['model_function'], 
-                x_smooth, 
-                model_info['params2'], 
-                model_info['pcov2'],
-                model_info['residuals2']
+                finite_band_mask1 = np.isfinite(bands1['lower']) & np.isfinite(bands1['upper'])
+                if np.any(finite_band_mask1):
+                    trace1_upper = go.Scatter(
+                        x=x_smooth, y=bands1['upper'],
+                        mode='lines',
+                        line=dict(width=0),
+                        showlegend=False,
+                        hoverinfo='skip',
+                        zorder=0
+                    )
+
+                    trace1_lower = go.Scatter(
+                        x=x_smooth, y=bands1['lower'],
+                        mode='lines',
+                        fill='tonexty',
+                        fillcolor=hex_to_rgba(colors['in_vitro'], 0.2),
+                        line=dict(width=0),
+                        name='95% Prediction Band (In Vitro)',
+                        hoverinfo='skip',
+                        zorder=0
+                    )
+
+                    traces.extend([trace1_upper, trace1_lower])
+
+            except Exception as e:
+                print(f"Warning: Could not generate prediction bands for dataset 1: {e}")
+                uncertainty_warnings.append(_uncertainty_unavailable_warning('In vitro'))
+
+    # Add prediction bands for dataset 2 (In Vivo) if requested.
+    if include_bands:
+        if 'pcov2' not in model_info or model_info['pcov2'] is None:
+            uncertainty_warnings.append(
+                _uncertainty_unavailable_warning('In vivo', 'covariance_unavailable')
             )
-            
-            # Add confidence band for dataset 2
-            trace2_upper = go.Scatter(
-                x=x_smooth, y=bands2['upper'],
-                mode='lines',
-                line=dict(width=0),
-                showlegend=False,
-                hoverinfo='skip',
-                zorder=0
-            )
-            
-            trace2_lower = go.Scatter(
-                x=x_smooth, y=bands2['lower'],
-                mode='lines',
-                fill='tonexty',
-                fillcolor=hex_to_rgba(colors['in_vivo'],0.2),  # Red with transparency
-                line=dict(width=0),
-                name='95% Prediction Band (In Vivo)',
-                hoverinfo='skip',
-                zorder=0
-            )
-            
-            traces.extend([trace2_upper, trace2_lower])
-            
-        except Exception as e:
-            print(f"Warning: Could not generate prediction bands for dataset 2: {e}")
+        else:
+            try:
+                bands2 = generate_prediction_bands(
+                    model_info['model_function'],
+                    x_smooth,
+                    model_info['params2'],
+                    model_info['pcov2'],
+                    model_info['residuals2']
+                )
+                uncertainty_warnings.extend(
+                    _assess_uncertainty_band_visibility(
+                        bands2['lower'], bands2['upper'], y_range, 'In vivo'
+                    )
+                )
+
+                finite_band_mask2 = np.isfinite(bands2['lower']) & np.isfinite(bands2['upper'])
+                if np.any(finite_band_mask2):
+                    trace2_upper = go.Scatter(
+                        x=x_smooth, y=bands2['upper'],
+                        mode='lines',
+                        line=dict(width=0),
+                        showlegend=False,
+                        hoverinfo='skip',
+                        zorder=0
+                    )
+
+                    trace2_lower = go.Scatter(
+                        x=x_smooth, y=bands2['lower'],
+                        mode='lines',
+                        fill='tonexty',
+                        fillcolor=hex_to_rgba(colors['in_vivo'], 0.2),
+                        line=dict(width=0),
+                        name='95% Prediction Band (In Vivo)',
+                        hoverinfo='skip',
+                        zorder=0
+                    )
+
+                    traces.extend([trace2_upper, trace2_lower])
+
+            except Exception as e:
+                print(f"Warning: Could not generate prediction bands for dataset 2: {e}")
+                uncertainty_warnings.append(_uncertainty_unavailable_warning('In vivo'))
 
 
     trace3 = go.Scatter(
@@ -1903,7 +2082,11 @@ def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
     }
     # Convert the figure to HTML
     plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
-    return {'plot':plot_html, 'table_html': table_html}
+    return {
+        'plot': plot_html,
+        'table_html': table_html,
+        'uncertainty_warnings': _merge_uncertainty_warnings(uncertainty_warnings),
+    }
 
 def create_plotly_a3(x, y1, y2, ptype='v'):
     if ptype == 'v':

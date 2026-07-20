@@ -1,4 +1,16 @@
 
+{% macro render_uncertainty_warnings(warnings) -%}
+    {% for warning in warnings or [] %}
+        <p class="uncertainty-plot-alert uncertainty-plot-alert-{{ warning.level }}">
+            <span class="evidence-badge uncertainty-plot-badge">{{ warning.badge_label }}</span>
+            <span class="uncertainty-plot-message">{{ warning.message }}</span>
+            {#
+            {% if warning.detail %}<span class="uncertainty-plot-detail">{{ warning.detail }}</span>{% endif %}
+            #}
+        </p>
+    {% endfor %}
+{%- endmacro %}
+
 <!DOCTYPE html>
 <html>
 <head>
@@ -366,6 +378,9 @@
                         <h4>Model fitting plot{% if option.fit_plot_sources|length > 1 %}s{% endif %}</h4>
                         {% for plot_source in option.fit_plot_sources %}
                             <h5>{{ plot_source.title }}</h5>
+                            {% if loop.first and option.approach_id in ['approach1', 'approach2'] %}
+                                {{ render_uncertainty_warnings(model_results['plot'].get('uncertainty_warnings', [])) }}
+                            {% endif %}
                             <div class="report-plot-placeholder" data-plot-source="{{ plot_source.source_id }}">
                                 <p class="plot-unavailable">{{ plot_source.title }} is not available.</p>
                             </div>
@@ -516,6 +531,7 @@
                                 {% if model_results.error %}
                                     <p class="error">Error: {{ model_results.error }}</p>
                                 {% else %}
+                                    {{ render_uncertainty_warnings(model_results['plot'].get('uncertainty_warnings', [])) }}
 <div id="plot-fit-{{ model_key|replace(':', '-') }}" class="plot-container report-source-plot">
                                         {{ model_results['plot']['plot'] | safe }}
                                     </div>
@@ -574,6 +590,7 @@
                                 {% if model_results.error %}
                                     <p class="error">Error: {{ model_results.error }}</p>
                                 {% else %}
+                                    {{ render_uncertainty_warnings(model_results['plot'].get('uncertainty_warnings', [])) }}
 <div id="plot-fit-{{ model_key|replace(':', '-') }}" class="plot-container report-source-plot">
                                         {{ model_results['plot']['plot'] | safe }}
                                     </div>

@@ -1309,6 +1309,41 @@ button.dt-button2:disabled {
     border-left: 4px solid #f0ad4e;
 }
 
+.uncertainty-plot-alert {
+    margin: 10px 0 12px;
+    padding: 10px 12px;
+    line-height: 1.45;
+    border-left: 4px solid #5b88b2;
+    background-color: #eef5fb;
+}
+
+.uncertainty-plot-alert-warning {
+    border-left-color: #f0ad4e;
+    background-color: #fff8e1;
+}
+
+.uncertainty-plot-badge {
+    margin-right: 0.45rem;
+    background: #e4eff8;
+    border-color: #aac4da;
+}
+
+.uncertainty-plot-alert-warning .uncertainty-plot-badge {
+    background: #fff0c7;
+    border-color: #dfbd68;
+}
+
+.uncertainty-plot-message {
+    font-weight: 600;
+}
+
+.uncertainty-plot-detail {
+    display: block;
+    margin-top: 0.25rem;
+    color: #4a4a4a;
+    font-size: 0.95rem;
+}
+
 /* Relative model evidence summaries */
 .evidence-note {
     max-width: 1100px;

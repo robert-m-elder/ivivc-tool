@@ -190,6 +190,8 @@ Support badge & Rule-of-thumb label based on the delta value. Intended to aid us
 
 These displays show how much fitted curves or predictions may vary based on the fitted model, residual error, and preprocessing choices. They are intended to support review of uncertainty, not to define acceptance limits.
 
+Very large uncertainty bands may extend beyond the initial plot range and may not be visible until the plot is rescaled. When this occurs, the app displays an informational badge near the affected fitting plot. A separate warning is shown if one or more uncertainty bounds are nonfinite or the uncertainty band cannot be calculated. The badge describes the display condition but does not identify its cause; review the fitted parameter diagnostics, model form, and available data when it appears.
+
 The following descriptions summarize how fitted-parameter uncertainty, fitting-plot bands, and prediction error bars are calculated or interpreted for each approach.
 
 \input{includes/generated/uncertainty_by_approach.tex}
