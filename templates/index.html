@@ -115,7 +115,7 @@
                     {% for approach_id, approach in approaches.items() %}
                     <td>
                         {% for model_name in approach.models %}
-                        <label>
+                        <label class="model-option-label">
                             <input type="checkbox" name="models" value="{{ approach_id }}:{{ model_name }}" checked>
                             {{ models[model_name].display_name }}
 </label><br>
@@ -213,16 +213,15 @@
                 <div class="advanced-field">
                     <label for="cv_scheme">Scheme</label>
                     <select name="cv_scheme" id="cv_scheme">
-                        <option value="leave_one_timepoint_out" selected>Leave-one-timepoint-out</option>
+                        <option value="shuffle_split" selected>Shuffle split</option>
+                        <option value="leave_one_timepoint_out">Leave-one-timepoint-out</option>
                         <option value="leave_contiguous_block_out">Leave-contiguous-block-out</option>
-                        <option value="shuffle_split">Shuffle split</option>
-                        <option value="kfold">K-fold</option>
                         <option value="none">None</option>
                     </select>
                 </div>
                 <div class="advanced-field">
-                    <label for="cv_n_splits" id="cv_n_splits_label">Splits/folds/block size</label>
-                    <input type="number" name="cv_n_splits" id="cv_n_splits" value="2" min="2">
+                    <label for="cv_n_splits" id="cv_n_splits_label">Splits/block size</label>
+                    <input type="number" name="cv_n_splits" id="cv_n_splits" value="20" min="2">
                 </div>
                 <div class="advanced-field">
                     <label for="cv_test_size">Test size</label>

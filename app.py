@@ -76,8 +76,8 @@ def parse_analysis_config():
     grid_cores_raw = request.form.get('grid_search_num_cores', '')
 
     return {
-        'cv_scheme': request.form.get('cv_scheme', 'leave_one_timepoint_out'),
-        'cv_n_splits': _form_int('cv_n_splits', 2),
+        'cv_scheme': request.form.get('cv_scheme', 'shuffle_split'),
+        'cv_n_splits': _form_int('cv_n_splits', 20),
         'cv_test_size': _form_float('cv_test_size', 0.25),
         'cv_random_state': _form_int('cv_random_state', 12345),
         'grid_search_num_points': _form_int('grid_search_num_points', default_grid_points),

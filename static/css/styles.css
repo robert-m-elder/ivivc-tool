@@ -438,6 +438,22 @@ input[type="checkbox"]:hover {
     accent-color: #222c67;
 }
 
+input[type="checkbox"]:disabled {
+    accent-color: #8a8a8a;
+    cursor: not-allowed;
+    opacity: 0.75;
+}
+
+.model-option-label.checkbox-disabled {
+    color: #666;
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.model-option-label.checkbox-disabled input[type="checkbox"] {
+    cursor: not-allowed;
+}
+
 /*.checkbox-item span {
     font-size: 14px;
 }*/

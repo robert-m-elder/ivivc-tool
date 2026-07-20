@@ -50,8 +50,8 @@ class LeaveContiguousBlockOut:
 
 def make_cross_validator(config, approach_id=None):
     """Create a scikit-learn cross-validator from user/app configuration."""
-    scheme = config.get('cv_scheme', 'leave_one_timepoint_out')
-    n_splits = int(config.get('cv_n_splits', 2))
+    scheme = config.get('cv_scheme', 'shuffle_split')
+    n_splits = int(config.get('cv_n_splits', 20))
     random_state = config.get('cv_random_state', 12345)
     random_state = None if random_state in (None, '') else int(random_state)
 
@@ -60,11 +60,6 @@ def make_cross_validator(config, approach_id=None):
             n_splits=n_splits,
             test_size=float(config.get('cv_test_size', 0.25)),
             random_state=random_state,
-        )
-    if scheme == 'kfold':
-        return sklearn.model_selection.KFold(
-            n_splits=n_splits,
-            shuffle=False,
         )
     if scheme in ('leave_one_timepoint_out', 'leave_one_out'):
         return sklearn.model_selection.LeaveOneOut()

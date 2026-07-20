@@ -228,7 +228,7 @@ def main():
     parser.add_argument("--scaling", dest="scalings", action="append", choices=sorted(preprocessing_options["scaling"]), default=[])
     parser.add_argument("--normalization", dest="normalizations", action="append", choices=sorted(preprocessing_options["normalization"]), default=[])
 
-    parser.add_argument("--cv-scheme", choices=["shuffle_split", "kfold", "leave_one_out", "none"], default="shuffle_split")
+    parser.add_argument("--cv-scheme", choices=["shuffle_split", "leave_one_timepoint_out", "leave_one_out", "leave_contiguous_block_out", "none"], default="shuffle_split")
     parser.add_argument("--cv-n-splits", type=int, default=20)
     parser.add_argument("--cv-test-size", type=float, default=0.25)
     parser.add_argument("--cv-random-state", type=int, default=12345)

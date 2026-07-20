@@ -117,6 +117,7 @@ $('input[name="approaches"]').change(function() {
     $('input[name="models"]').each(function() {
         if ($(this).val().startsWith(approach + ':')) {
             $(this).prop('disabled', !isChecked);
+            $(this).closest('label').toggleClass('checkbox-disabled', !isChecked);
             if (!isChecked) {
                 $(this).prop('checked', false);
             }
@@ -133,7 +134,7 @@ $('#upload-form').on('submit', function(e) {
 });
 
 
-function updateCrossValidationSettingState() {
+function updateCrossValidationSettingState(resetValues = false) {
     const scheme = $('#cv_scheme').val();
     const controls = {
         nSplits: $('#cv_n_splits'),
@@ -147,16 +148,25 @@ function updateCrossValidationSettingState() {
         field.closest('.advanced-field').toggleClass('advanced-field-disabled', !enabled);
     }
 
-    const usesSplitsField = scheme === 'shuffle_split' || scheme === 'kfold' || scheme === 'leave_contiguous_block_out';
+    if (resetValues) {
+        if (scheme === 'shuffle_split') {
+            controls.nSplits.val('20');
+            controls.testSize.val('0.25');
+        } else if (scheme === 'leave_contiguous_block_out') {
+            controls.nSplits.val('3');
+            controls.testSize.val('0.25');
+        }
+    }
+
+    const usesSplitsField = scheme === 'shuffle_split' || scheme === 'leave_contiguous_block_out';
     const usesTestSize = scheme === 'shuffle_split';
     const usesRandomState = scheme === 'shuffle_split';
 
     const splitLabels = {
         'shuffle_split': 'Splits',
-        'kfold': 'Folds',
         'leave_contiguous_block_out': 'Block size'
     };
-    controls.nSplitsLabel.text(splitLabels[scheme] || 'Splits/folds/block size');
+    controls.nSplitsLabel.text(splitLabels[scheme] || 'Splits/block size');
 
     setFieldState(controls.nSplits, usesSplitsField);
     setFieldState(controls.testSize, usesTestSize);
@@ -166,7 +176,7 @@ function updateCrossValidationSettingState() {
 // Modal functionality
 $(document).ready(function() {
     updateCrossValidationSettingState();
-    $('#cv_scheme').on('change', updateCrossValidationSettingState);
+    $('#cv_scheme').on('change', function() { updateCrossValidationSettingState(true); });
 
     // Modal content mapping
     const modalContent = {
