@@ -2,6 +2,7 @@ import os
 import traceback
 import warnings
 from html import escape
+from uuid import uuid4
 
 import numpy as np
 import pandas as pd
@@ -895,7 +896,7 @@ def create_residual_plotly(
             marker=dict(color=marker_color, size=15, line=dict(color='white', width=2)),
         ))
 
-    yaxis_kwargs = dict(showline=True, linewidth=2, linecolor='#EBF0F8', mirror=True, zeroline=False)
+    yaxis_kwargs = dict(showline=True, linewidth=2, linecolor='#767676', mirror=True, zeroline=False)
     if y_axis_limit is not None and np.isfinite(y_axis_limit) and y_axis_limit > 0:
         yaxis_kwargs['range'] = [-float(y_axis_limit), float(y_axis_limit)]
 
@@ -908,7 +909,7 @@ def create_residual_plotly(
         showlegend=False,
         margin=dict(l=30, r=30, t=30, b=30),
         font=dict(family='Arial, sans-serif', size=14, color='black'),
-        xaxis=dict(showline=True, linewidth=2, linecolor='#EBF0F8', mirror=True),
+        xaxis=dict(showline=True, linewidth=2, linecolor='#767676', mirror=True),
         yaxis=yaxis_kwargs,
     )
     fig.update_xaxes(title_font=dict(size=20), tickfont=dict(size=18))
@@ -1001,8 +1002,8 @@ def create_residual_qq_plotly(
         showlegend=True,
         margin=dict(l=30, r=30, t=30, b=30),
         font=dict(family='Arial, sans-serif', size=14, color='black'),
-        xaxis=dict(showline=True, linewidth=2, linecolor='#EBF0F8', mirror=True, zeroline=False),
-        yaxis=dict(showline=True, linewidth=2, linecolor='#EBF0F8', mirror=True, zeroline=False, scaleanchor='x', scaleratio=1),
+        xaxis=dict(showline=True, linewidth=2, linecolor='#767676', mirror=True, zeroline=False),
+        yaxis=dict(showline=True, linewidth=2, linecolor='#767676', mirror=True, zeroline=False, scaleanchor='x', scaleratio=1),
     )
     fig.update_xaxes(title_font=dict(size=20), tickfont=dict(size=18))
     fig.update_yaxes(title_font=dict(size=20), tickfont=dict(size=18))
@@ -1431,13 +1432,13 @@ def create_initial_plotly(t1, m1, t2, m2):
         xaxis=dict(
             showline=True,
             linewidth=2,
-            linecolor='#EBF0F8',
+            linecolor='#767676',
             mirror=True
         ),
         yaxis=dict(
             showline=True,
             linewidth=2,
-            linecolor='#EBF0F8',
+            linecolor='#767676',
             mirror=True
         )
     )
@@ -1503,13 +1504,13 @@ def create_interpolation_plotly(t1, m1, t2, m2, tt, mi1, mi2):
         xaxis=dict(
             showline=True,
             linewidth=2,
-            linecolor='#EBF0F8',
+            linecolor='#767676',
             mirror=True
         ),
         yaxis=dict(
             showline=True,
             linewidth=2,
-            linecolor='#EBF0F8',
+            linecolor='#767676',
             mirror=True
         )
     )
@@ -1575,13 +1576,13 @@ def create_interpolation_plotly_new(t1, m1, t2, m2, mm, ti1, ti2):
         xaxis=dict(
             showline=True,
             linewidth=2,
-            linecolor='#EBF0F8',
+            linecolor='#767676',
             mirror=True
         ),
         yaxis=dict(
             showline=True,
             linewidth=2,
-            linecolor='#EBF0F8',
+            linecolor='#767676',
             mirror=True
         )
     )
@@ -1631,13 +1632,13 @@ def create_prediction_interpolation_plotly(t1, m1):
         xaxis=dict(
             showline=True,
             linewidth=2,
-            linecolor='#EBF0F8',
+            linecolor='#767676',
             mirror=True
         ),
         yaxis=dict(
             showline=True,
             linewidth=2,
-            linecolor='#EBF0F8',
+            linecolor='#767676',
             mirror=True
         )
     )
@@ -1720,7 +1721,7 @@ def extract_plotly_data_for_table(fig):
     # Convert to HTML table with DataTables-compatible structure
     table_html = combined_df.to_html(
         classes='table table-striped',
-        table_id='data-table',
+        table_id=f'plot-data-{uuid4().hex}',
         index=False,
         float_format=lambda x: f'{x:.4f}' if pd.notnull(x) else '',
         escape=False,
@@ -1823,15 +1824,17 @@ def create_plotly_a1(x, y, model_info, include_bands=True):
             range=x_range,  # Manual range
             showline=True,
             linewidth=2,
-            linecolor='#EBF0F8',
-            mirror=True
+            linecolor='black',
+            mirror=True,
+            layer='above traces'
         ),
         yaxis=dict(
             range=y_range,  # Manual range
             showline=True,
             linewidth=2,
-            linecolor='#EBF0F8',
-            mirror=True
+            linecolor='black',
+            mirror=True,
+            layer='above traces'
         )
     )
     # Update axes with relative font sizes
@@ -1842,6 +1845,22 @@ def create_plotly_a1(x, y, model_info, include_bands=True):
     fig.update_yaxes(
         title_font=dict(size=20),  # Slightly larger than base font
         tickfont=dict(size=18)
+    )
+    # Draw an explicit border around the plotting area. Mirrored axis lines can
+    # be obscured by filled prediction-band traces in some Plotly/browser
+    # combinations, whereas a paper-referenced shape remains visible above all
+    # traces and matches the boxed appearance of the diagnostic plots.
+    fig.add_shape(
+        type='rect',
+        xref='paper',
+        yref='paper',
+        x0=0,
+        y0=0,
+        x1=1,
+        y1=1,
+        line=dict(color='#767676', width=2),
+        fillcolor='rgba(0, 0, 0, 0)',
+        layer='above'
     )
     # Write data to Excel file
     #output_filename = f'data_approach1_{model_info["model_name"]}.xlsx'
@@ -2049,15 +2068,17 @@ def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
             range=x_range,  # Manual range
             showline=True,
             linewidth=2,
-            linecolor='#EBF0F8',
-            mirror=True
+            linecolor='black',
+            mirror=True,
+            layer='above traces'
         ),
         yaxis=dict(
             range=y_range,  # Manual range
             showline=True,
             linewidth=2,
-            linecolor='#EBF0F8',
-            mirror=True
+            linecolor='black',
+            mirror=True,
+            layer='above traces'
         )
     )
 
@@ -2072,6 +2093,20 @@ def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
     fig.update_yaxes(
         title_font=dict(size=20),  # Slightly larger than base font
         tickfont=dict(size=18)
+    )
+    # Draw an explicit border around the plotting area so the filled
+    # prediction bands cannot hide the top or right edge of the plot box.
+    fig.add_shape(
+        type='rect',
+        xref='paper',
+        yref='paper',
+        x0=0,
+        y0=0,
+        x1=1,
+        y1=1,
+        line=dict(color='#767676', width=2),
+        fillcolor='rgba(0, 0, 0, 0)',
+        layer='above'
     )
     # Extract data as HTML table
     table_html = extract_plotly_data_for_table(fig)
@@ -2136,13 +2171,13 @@ def create_plotly_a3(x, y1, y2, ptype='v'):
         xaxis=dict(
             showline=True,
             linewidth=2,
-            linecolor='#EBF0F8',
+            linecolor='#767676',
             mirror=True
         ),
         yaxis=dict(
             showline=True,
             linewidth=2,
-            linecolor='#EBF0F8',
+            linecolor='#767676',
             mirror=True
         )
     )
@@ -2260,8 +2295,8 @@ def create_prediction_plot_a1(data, t_pred, m_pred, t_pred_vivo, model_info, inc
         legend=dict(font=dict(size=18)),
         margin=dict(l=30, r=30, t=30, b=30),
         font=dict(family="Arial, sans-serif", size=14, color="black"),
-        xaxis=dict(showline=True, linewidth=2, linecolor='#EBF0F8', mirror=True),
-        yaxis=dict(showline=True, linewidth=2, linecolor='#EBF0F8', mirror=True)
+        xaxis=dict(showline=True, linewidth=2, linecolor='#767676', mirror=True),
+        yaxis=dict(showline=True, linewidth=2, linecolor='#767676', mirror=True)
     )
 
     fig.update_xaxes(title_font=dict(size=20), tickfont=dict(size=18))
@@ -2432,8 +2467,8 @@ def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, m
         legend=dict(font=dict(size=18)),
         margin=dict(l=30, r=30, t=30, b=30),
         font=dict(family="Arial, sans-serif", size=14, color="black"),
-        xaxis=dict(showline=True, linewidth=2, linecolor='#EBF0F8', mirror=True),
-        yaxis=dict(showline=True, linewidth=2, linecolor='#EBF0F8', mirror=True)
+        xaxis=dict(showline=True, linewidth=2, linecolor='#767676', mirror=True),
+        yaxis=dict(showline=True, linewidth=2, linecolor='#767676', mirror=True)
     )
 
     fig.update_xaxes(title_font=dict(size=20), tickfont=dict(size=18))
@@ -2505,8 +2540,8 @@ def create_prediction_plot_a3(data, t_pred, m_pred, var_pred_scaled, ptype='v'):
             legend=dict(font=dict(size=18)),
             margin=dict(l=30, r=30, t=30, b=30),
             font=dict(family="Arial, sans-serif", size=14, color="black"),
-            xaxis=dict(showline=True, linewidth=2, linecolor='#EBF0F8', mirror=True),
-            yaxis=dict(showline=True, linewidth=2, linecolor='#EBF0F8', mirror=True)
+            xaxis=dict(showline=True, linewidth=2, linecolor='#767676', mirror=True),
+            yaxis=dict(showline=True, linewidth=2, linecolor='#767676', mirror=True)
         )
     elif ptype == 't':
         plot_string = 'predicted time scaled by time ratio'
@@ -2563,8 +2598,8 @@ def create_prediction_plot_a3(data, t_pred, m_pred, var_pred_scaled, ptype='v'):
             legend=dict(font=dict(size=18)),
             margin=dict(l=30, r=30, t=30, b=30),
             font=dict(family="Arial, sans-serif", size=14, color="black"),
-            xaxis=dict(showline=True, linewidth=2, linecolor='#EBF0F8', mirror=True),
-            yaxis=dict(showline=True, linewidth=2, linecolor='#EBF0F8', mirror=True)
+            xaxis=dict(showline=True, linewidth=2, linecolor='#767676', mirror=True),
+            yaxis=dict(showline=True, linewidth=2, linecolor='#767676', mirror=True)
         )
 
     fig.update_xaxes(title_font=dict(size=20), tickfont=dict(size=18))

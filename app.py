@@ -70,6 +70,32 @@ def _form_float(name, default):
     value = request.form.get(name, '')
     return default if value == '' else float(value)
 
+
+def _index_template_context(form_errors=None):
+    errors = form_errors or []
+    return {
+        'models': models,
+        'approaches': approaches,
+        'preprocessing_options': preprocessing_options,
+        'metrics': metrics,
+        'preprocessing_descriptions': PREPROCESSING_DESCRIPTIONS,
+        'metric_descriptions': METRIC_DESCRIPTIONS,
+        'metric_description_rows': format_metric_description_rows(metrics),
+        'grid_search_description_html': GRID_SEARCH_DESCRIPTION_HTML,
+        'tool_purpose_html': TOOL_PURPOSE_HTML,
+        'modal_help': MODAL_HELP,
+        'default_grid_search_num_points': (10 if IS_PRODUCTION else 200),
+        'default_grid_search_param_min': '-1000000',
+        'default_grid_search_param_max': '1000000',
+        'default_grid_search_random_state': '12345',
+        'form_errors': errors,
+        'error_field_ids': {error.get('field_id') for error in errors if error.get('field_id')},
+    }
+
+
+def _render_index(form_errors=None, status=200):
+    return render_template('index.html', **_index_template_context(form_errors)), status
+
 def parse_analysis_config():
     default_grid_points = 10 if IS_PRODUCTION else 200
     default_grid_cores = 1 if IS_PRODUCTION else None
@@ -90,7 +116,7 @@ def parse_analysis_config():
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
-        file = request.files['file']
+        file = request.files.get('file')
         prediction_file = request.files.get('prediction_file')
         selected_models = request.form.getlist('models')
         selected_approaches = request.form.getlist('approaches')
@@ -98,7 +124,39 @@ def index():
         selected_scalings = request.form.getlist('scalings')
         selected_interpolation = request.form.getlist('interpolation')
         selected_metrics = request.form.getlist('metrics')
-        analysis_config = parse_analysis_config()
+        try:
+            analysis_config = parse_analysis_config()
+        except (TypeError, ValueError):
+            return _render_index([
+                {'message': 'Enter valid numeric values for the advanced analysis parameters.', 'field_id': 'advanced-analysis-group'}
+            ], status=400)
+
+        validation_errors = []
+        if not file or not file.filename:
+            validation_errors.append({'message': 'Upload a fitting dataset.', 'field_id': 'file'})
+        if not selected_approaches:
+            validation_errors.append({'message': 'Select at least one analysis approach.', 'field_id': 'approaches-group'})
+        if any(approach_id != 'approach3' for approach_id in selected_approaches) and not selected_models:
+            validation_errors.append({'message': 'Select at least one model for the selected parametric approach.', 'field_id': 'approaches-group'})
+        if not selected_metrics:
+            validation_errors.append({'message': 'Select at least one performance metric.', 'field_id': 'metrics-group'})
+
+        filename = file.filename if file and file.filename else ''
+        file_extension = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+        if filename and file_extension not in {'csv', 'xls', 'xlsx'}:
+            validation_errors.append({'message': 'Upload the fitting dataset as a CSV or Excel file.', 'field_id': 'file'})
+        if file_extension in {'xls', 'xlsx'} and not request.form.get('sheet'):
+            validation_errors.append({'message': 'Re-upload the fitting Excel file and select a worksheet.', 'field_id': 'file'})
+
+        prediction_filename = prediction_file.filename if prediction_file and prediction_file.filename else ''
+        prediction_extension = prediction_filename.rsplit('.', 1)[-1].lower() if '.' in prediction_filename else ''
+        if prediction_filename and prediction_extension not in {'csv', 'xls', 'xlsx'}:
+            validation_errors.append({'message': 'Upload the prediction dataset as a CSV or Excel file.', 'field_id': 'prediction_file'})
+        if prediction_extension in {'xls', 'xlsx'} and not request.form.get('prediction_sheet'):
+            validation_errors.append({'message': 'Re-upload the prediction Excel file and select a worksheet.', 'field_id': 'prediction_file'})
+
+        if validation_errors:
+            return _render_index(validation_errors, status=400)
 
         human_readable_functions = {
             model_name: models[model_name].get('latex_equation') or get_human_readable_function(models[model_name]['model_function'])
@@ -109,20 +167,17 @@ def index():
         if 'approach3' in selected_approaches:
             selected_models.append('approach3')
 
-        if not file or not selected_models or not selected_approaches or not selected_metrics:
-            return "Please upload a file, select at least one model, one approach, and one metric", 400
-
         # Read data
-        filename = file.filename
-        file_extension = filename.rsplit('.', 1)[1].lower()
-
-        if file_extension == 'csv':
-            df = pd.read_csv(file)
-        else:
-            sheet_name = request.form.get('sheet')
-            if not sheet_name:
-                return "Please select a sheet for Excel files", 400
-            df = pd.read_excel(file, sheet_name=sheet_name)
+        try:
+            if file_extension == 'csv':
+                df = pd.read_csv(file)
+            else:
+                df = pd.read_excel(file, sheet_name=request.form.get('sheet'))
+        except Exception as exc:
+            print(f"Error reading fitting dataset: {exc}")
+            return _render_index([
+                {'message': 'The fitting dataset could not be read. Check the file format and selected worksheet.', 'field_id': 'file'}
+            ], status=400)
         t1,m1,t2,m2 = df.values.T
         
         # Apply preprocessing
@@ -184,8 +239,6 @@ def index():
                     pred_df = pd.read_csv(prediction_file)
                 else:
                     pred_sheet_name = request.form.get('prediction_sheet')
-                    if not pred_sheet_name:
-                        return "Please select a sheet for prediction Excel files", 400
                     pred_df = pd.read_excel(prediction_file, sheet_name=pred_sheet_name)
                 
                 # Assuming prediction file has 2 columns: time, value
@@ -229,17 +282,7 @@ def index():
                                evidence_tables=evidence_tables, evidence_lookup=evidence_lookup,
                                include_prediction_methods=include_prediction_methods,
                                approach_descriptions=APPROACH_DESCRIPTIONS)
-    return render_template('index.html', models=models, approaches=approaches, preprocessing_options=preprocessing_options, 
-                           metrics=metrics,
-                           preprocessing_descriptions=PREPROCESSING_DESCRIPTIONS, metric_descriptions=METRIC_DESCRIPTIONS,
-                           metric_description_rows=format_metric_description_rows(metrics),
-                           grid_search_description_html=GRID_SEARCH_DESCRIPTION_HTML,
-                           tool_purpose_html=TOOL_PURPOSE_HTML,
-                           modal_help=MODAL_HELP,
-                           default_grid_search_num_points=(10 if IS_PRODUCTION else 200),
-                           default_grid_search_param_min='-1000000',
-                           default_grid_search_param_max='1000000',
-                           default_grid_search_random_state='12345')
+    return _render_index()
 
 @app.route('/get_sheets', methods=['POST'])
 def get_sheets():

@@ -12,8 +12,10 @@
 {%- endmacro %}
 
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <title>IVIVC Results for Absorbable Polymers</title>
     <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
     <script type="text/javascript" charset="utf8" src="https://code.jquery.com/jquery-3.7.1.js"></script>
@@ -34,11 +36,13 @@
     <script type="text/javascript" src="https://cdn.datatables.net/colreorder/2.1.1/js/dataTables.colReorder.js"></script>
     <script type="text/javascript" src="https://cdn.datatables.net/colreorder/2.1.1/js/colReorder.dataTables.js"></script>
 
+    <script src="{{ url_for('static', filename='js/accessibility.js') }}" defer></script>
     <script src="{{ url_for('static', filename='js/results.js') }}" defer></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
     <link rel="shortcut icon" href="{{ url_for('static', filename='images/favicon-32.ico') }}">
 </head>
 <body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
     <header class="site-header">
         <div class="header-inner">
             <div class="header-image">
@@ -49,6 +53,9 @@
         </div>
     </header>
 
+    <main id="main-content" class="results-main" tabindex="-1">
+        <div id="results-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+        <div id="results-alert" class="error-summary compact-error-summary" role="alert" tabindex="-1" hidden></div>
     <div id="vertical-tabs">
         <ul>
             <li><a href="#processing">Data Processing</a></li>
@@ -72,11 +79,11 @@
                 <h3>Purpose of this tool</h3>
                 {{ tool_purpose_html | safe }}
             </section>
-            --!>
+            -->
             <h2>
                 Data Processing
-                <button type="button" class="help-btn" data-modal="data-processing-help">
-                    <span class="help-icon">?</span>
+                <button type="button" class="help-btn" data-modal="data-processing-help" aria-label="Help for data processing results" aria-haspopup="dialog" aria-controls="help-modal">
+                    <span class="help-icon" aria-hidden="true">?</span>
                 </button>
             </h2>
             <h3>Preprocessing Applied:</h3>
@@ -118,13 +125,13 @@
             <!--
             <h4>Grid-search initialization</h4>
             {{ grid_search_description_html | safe }}
-            --!>
+            -->
             <h4>Fitting Data:</h4>
             <div id="plot-processing-raw-data" class="plot-container report-source-plot">
                 {{ raw_data_info['plot'] | safe }}
             </div>
             <div class="custom-button-container">
-                <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="raw-data-table" style="text-decoration: none;">
+                <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="raw-data-table" style="text-decoration: none;">
                     <span>Show Data Table</span>
                 </button>
             </div>
@@ -135,7 +142,7 @@
                 {{ interpolation_info['plot'] | safe }}
             </div>
             <div class="custom-button-container">
-                <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="interpolation-table" style="text-decoration: none;">
+                <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="interpolation-table" style="text-decoration: none;">
                     <span>Show Data Table</span>
                 </button>
             </div>
@@ -149,7 +156,7 @@
                     {{ prediction_interpolation_info['plot'] | safe }}
                 </div>
                 <div class="custom-button-container">
-                    <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="prediction-interpolation-table" style="text-decoration: none;">
+                    <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="prediction-interpolation-table" style="text-decoration: none;">
                         <span>Show Data Table</span>
                     </button>
                 </div>
@@ -161,8 +168,8 @@
 <div id="comparison">
             <h2>
                 Model Comparison
-                <button type="button" class="help-btn" data-modal="model-comparison-help">
-                    <span class="help-icon">?</span>
+                <button type="button" class="help-btn" data-modal="model-comparison-help" aria-label="Help for model comparison results" aria-haspopup="dialog" aria-controls="help-modal">
+                    <span class="help-icon" aria-hidden="true">?</span>
                 </button>
             </h2>
             <h3>Selected metric descriptions</h3>
@@ -204,7 +211,7 @@
                     <!--
                     <h4>Pairwise Model Comparison (Kolmogorov-Smirnov Test p-values)</h4>
                     {{ ks_tables["approach1"][0] | safe}}
-                    --!>
+                    -->
                 </section>
             {% endif %}
             {% if "approach2" in selected_approaches %}
@@ -238,15 +245,15 @@
                     {{ ks_tables["approach2"][0] | safe}}
                     <h4>Pairwise Model Comparison (Kolmogorov-Smirnov Test p-values), In Vivo Data</h4>
                     {{ ks_tables["approach2"][1] | safe}}
-                    --!>
+                    -->
                 </section>
             {% endif %}
         </div>
 <div id="final-model-report">
             <h2>
                 Model Selection & Summary
-                <button type="button" class="help-btn" data-modal="final-model-report-help">
-                    <span class="help-icon">?</span>
+                <button type="button" class="help-btn" data-modal="final-model-report-help" aria-label="Help for model selection and report summary" aria-haspopup="dialog" aria-controls="help-modal">
+                    <span class="help-icon" aria-hidden="true">?</span>
                 </button>
             </h2>
 
@@ -257,22 +264,22 @@
                 <p>Select the model to generate a report-ready summary. No prediction dataset was supplied, so prediction-specific methods are not listed. The app does not rank or recommend a model; selection is left to the user.</p>
                 {% endif %}
 
-                <div class="final-report-selector">
-                    <h3>{% if include_prediction_methods %}Choose Model / Prediction Method{% else %}Choose Model{% endif %}</h3>
+                <fieldset class="final-report-selector">
+                    <legend>{% if include_prediction_methods %}Choose Model / Prediction Method{% else %}Choose Model{% endif %}</legend>
                     {% for option in final_model_options %}
                         <label class="final-model-choice">
                             <input type="radio" name="final_model_option" value="{{ option.id }}" {% if option.is_default %}checked{% endif %}>
                             {{ option.label }}
                         </label>
                     {% endfor %}
-                </div>
+                </fieldset>
 
                 <div class="custom-button-container">
                     <!--
                     <button type="button" id="print-final-report" class="dt-button2">
                         <span>Print Selected Report</span>
                     </button>
-                    --!>
+                    -->
                     <button type="button" id="download-word-report" class="dt-button2">
                         <span>Download Selected Word Report</span>
                     </button>
@@ -280,7 +287,7 @@
 
                 {% for option in final_model_options %}
                     {% set model_results = results[option.model_key] %}
-                    <div id="{{ option.id }}-report" class="final-report-content" data-report-label="{{ option.label }}" style="display: {% if option.is_default %}block{% else %}none{% endif %};">
+                    <div id="{{ option.id }}-report" class="final-report-content" data-report-label="{{ option.label }}" role="region" aria-label="{{ option.label }} report summary" aria-hidden="{% if option.is_default %}false{% else %}true{% endif %}" style="display: {% if option.is_default %}block{% else %}none{% endif %};">
                         <h3>Report Summary</h3>
                         <h4>Purpose of this tool</h4>
                         {{ tool_purpose_html | safe }}
@@ -518,8 +525,8 @@
             <div id="{{ approach_id }}">
                 <h2>
                     Fitting: {{ approaches[approach_id].display_name }}
-                    <button type="button" class="help-btn" data-modal="{{ approach_id }}-results-help">
-                        <span class="help-icon">?</span>
+                    <button type="button" class="help-btn" data-modal="{{ approach_id }}-results-help" aria-label="Help for {{ approaches[approach_id].display_name }} fitting results" aria-haspopup="dialog" aria-controls="help-modal">
+                        <span class="help-icon" aria-hidden="true">?</span>
                     </button>
                 </h2>
 {% for model_key, model_results in results.items() %}
@@ -536,7 +543,7 @@
                                         {{ model_results['plot']['plot'] | safe }}
                                     </div>
                                     <div class="custom-button-container">
-                                        <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach1-{{ model_name }}-table" style="text-decoration: none;">
+                                        <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach1-{{ model_name }}-table" style="text-decoration: none;">
                                             <span>Show Data Table</span>
                                         </button>
                                     </div>
@@ -561,7 +568,7 @@
                                         {{ model_results.residual_plot.plot | safe }}
                                     </div>
                                     <div class="custom-button-container">
-                                        <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach1-{{ model_name }}-residual-table" style="text-decoration: none;">
+                                        <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach1-{{ model_name }}-residual-table" style="text-decoration: none;">
                                             <span>Show Data Table</span>
                                         </button>
                                     </div>
@@ -573,7 +580,7 @@
                                         {{ model_results.residual_qq_plot.plot | safe }}
                                     </div>
                                     <div class="custom-button-container">
-                                        <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach1-{{ model_name }}-residual-qq-table" style="text-decoration: none;">
+                                        <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach1-{{ model_name }}-residual-qq-table" style="text-decoration: none;">
                                             <span>Show Data Table</span>
                                         </button>
                                     </div>
@@ -595,7 +602,7 @@
                                         {{ model_results['plot']['plot'] | safe }}
                                     </div>
                                     <div class="custom-button-container">
-                                        <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach2-{{ model_name }}-table" style="text-decoration: none;">
+                                        <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach2-{{ model_name }}-table" style="text-decoration: none;">
                                             <span>Show Data Table</span>
                                         </button>
                                     </div>
@@ -628,7 +635,7 @@
                                             {{ model_results.residual_plot[0].plot | safe }}
                                         </div>
                                         <div class="custom-button-container">
-                                            <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach2-{{ model_name }}-residual-table-in-vitro" style="text-decoration: none;">
+                                            <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach2-{{ model_name }}-residual-table-in-vitro" style="text-decoration: none;">
                                                 <span>Show Data Table</span>
                                             </button>
                                         </div>
@@ -640,7 +647,7 @@
                                             {{ model_results.residual_qq_plot[0].plot | safe }}
                                         </div>
                                         <div class="custom-button-container">
-                                            <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach2-{{ model_name }}-residual-qq-table-in-vitro" style="text-decoration: none;">
+                                            <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach2-{{ model_name }}-residual-qq-table-in-vitro" style="text-decoration: none;">
                                                 <span>Show Data Table</span>
                                             </button>
                                         </div>
@@ -672,7 +679,7 @@
                                         {{ model_results.residual_plot[1].plot | safe }}
                                     </div>
                                     <div class="custom-button-container">
-                                        <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach2-{{ model_name }}-residual-table-in-vivo" style="text-decoration: none;">
+                                        <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach2-{{ model_name }}-residual-table-in-vivo" style="text-decoration: none;">
                                             <span>Show Data Table</span>
                                         </button>
                                     </div>
@@ -684,7 +691,7 @@
                                         {{ model_results.residual_qq_plot[1].plot | safe }}
                                     </div>
                                     <div class="custom-button-container">
-                                        <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach2-{{ model_name }}-residual-qq-table-in-vivo" style="text-decoration: none;">
+                                        <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach2-{{ model_name }}-residual-qq-table-in-vivo" style="text-decoration: none;">
                                             <span>Show Data Table</span>
                                         </button>
                                     </div>
@@ -702,7 +709,7 @@
                                     {{ model_results['plot_v']['plot'] | safe }}
                                 </div>
                                 <div class="custom-button-container">
-                                    <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach3-table-1" style="text-decoration: none;">
+                                    <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach3-table-1" style="text-decoration: none;">
                                         <span>Show Data Table</span>
                                     </button>
                                 </div>
@@ -714,7 +721,7 @@
                                     {{ model_results['plot_t']['plot'] | safe }}
                                 </div>
                                 <div class="custom-button-container">
-                                    <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach3-table-2" style="text-decoration: none;">
+                                    <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach3-table-2" style="text-decoration: none;">
                                         <span>Show Data Table</span>
                                     </button>
                                 </div>
@@ -733,8 +740,8 @@
                     <div id="prediction-{{ approach_id }}">
                         <h2>
                             Prediction: {{ approaches[approach_id].display_name }}
-                            <button type="button" class="help-btn" data-modal="prediction-{{ approach_id }}-help">
-                                <span class="help-icon">?</span>
+                            <button type="button" class="help-btn" data-modal="prediction-{{ approach_id }}-help" aria-label="Help for {{ approaches[approach_id].display_name }} prediction results" aria-haspopup="dialog" aria-controls="help-modal">
+                                <span class="help-icon" aria-hidden="true">?</span>
                             </button>
                         </h2>
                         {% for model_name, pred_result in prediction_results[approach_id].items() %}
@@ -752,7 +759,7 @@
                                                 {{ pred_result.plot.plot | safe }}
                                             </div>
 <div class="custom-button-container">
-                                                <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" 
+                                                <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn"
                                                     data-target="approach1-{{ model_name }}-table-pred" style="text-decoration: none;">
                                                     <span>Show Data Table</span>
                                                 </button>
@@ -763,7 +770,7 @@
                                         {% endif %}
 </div>
                                 {% endif %}
-                                
+
                                 {% if approach_id == "approach2" %}
                                     <div class="model-result">
                                         <h3>Model: {{ models[model_name].display_name }}</h3>
@@ -773,7 +780,7 @@
                                                 {{ pred_result.plot.plot | safe }}
                                             </div>
                                             <div class="custom-button-container">
-                                                <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" 
+                                                <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn"
                                                     data-target="approach2-{{ model_name }}-table-pred" style="text-decoration: none;">
                                                     <span>Show Data Table</span>
                                                 </button>
@@ -788,7 +795,7 @@
                                                 {{ pred_result.plot_tau.plot | safe }}
                                             </div>
                                             <div class="custom-button-container">
-                                                <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" 
+                                                <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn"
                                                     data-target="approach2-{{ model_name }}-table-pred-tau" style="text-decoration: none;">
                                                     <span>Show Data Table</span>
                                                 </button>
@@ -802,7 +809,7 @@
                                         {% endif %}
 </div>
                                 {% endif %}
-                                
+
                                 {% if approach_id == "approach3" %}
                                     <div class="model-result">
                                         <h3>Direct Mapping Predictions</h3>
@@ -811,7 +818,7 @@
                                                 {{ pred_result.plot.plot | safe }}
                                             </div>
                                             <div class="custom-button-container">
-                                                <button class="dt-button2 buttons-copy buttons-html5 show-data-btn" 
+                                                <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn"
                                                     data-target="approach3-{{ model_name }}-pred" style="text-decoration: none;">
                                                     <span>Show Data Table</span>
                                                 </button>
@@ -828,7 +835,7 @@
                 {% endif %}
             {% endfor %}
         {% elif prediction_results and 'error' in prediction_results %}
-            <div id="prediction-error">
+            <div id="prediction-error" role="alert" tabindex="-1">
                 <h2>Prediction Error</h2>
                 <div class="model-result has-error">
                     <p class="error">Error processing prediction file: {{ prediction_results.error }}</p>
@@ -836,22 +843,22 @@
             </div>
         {% endif %}
     </div>
-<div id="help-modal" class="modal">
-        <div class="modal-content">
+    </main>
+<div id="help-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-text" aria-hidden="true" hidden>
+        <div class="modal-content" tabindex="-1">
             <div class="modal-header">
                 <h4 id="modal-title">Help</h4>
-                <span class="close">&times;</span>
+                <button type="button" class="close" aria-label="Close help dialog"><span aria-hidden="true">&times;</span></button>
             </div>
             <div class="modal-body">
-                <div id="modal-text">
-</div>
+                <div id="modal-text"></div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="modal-close-btn">Close</button>
             </div>
         </div>
     </div>
-<div id="modal-content-definitions" style="display: none;">
+<div id="modal-content-definitions" hidden>
 <div id="data-processing-help-content">
             <h4>Data Processing</h4>
             <p>This section shows how your data were preprocessed before model fitting and prediction.</p>

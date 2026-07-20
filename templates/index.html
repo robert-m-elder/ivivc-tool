@@ -1,15 +1,18 @@
 
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <title>IVIVC App for Absorbable Polymers</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="{{ url_for('static', filename='js/accessibility.js') }}" defer></script>
     <script src="{{ url_for('static', filename='js/index.js') }}" defer></script>
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <link rel="shortcut icon" href="{{ url_for('static', filename='images/favicon-32.ico') }}">
 </head>
 <body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
     <header class="site-header">
         <div class="header-inner">
             <div class="header-image">
@@ -20,7 +23,21 @@
         </div>
     </header>
 
-    <main>
+    <main id="main-content" tabindex="-1">
+        <div id="form-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+
+        {% if form_errors %}
+        <section id="form-error-summary" class="error-summary" role="alert" tabindex="-1">
+            <h2>There is a problem with the analysis settings</h2>
+            <ul>
+                {% for error in form_errors %}
+                <li>{% if error.field_id %}<a href="#{{ error.field_id }}">{{ error.message }}</a>{% else %}{{ error.message }}{% endif %}</li>
+                {% endfor %}
+            </ul>
+        </section>
+        {% else %}
+        <section id="form-error-summary" class="error-summary" role="alert" tabindex="-1" hidden></section>
+        {% endif %}
 
         <section class="intro-panel">
             <h2>Purpose of this tool</h2>
@@ -34,182 +51,156 @@
             </div>
             <a class="guide-download-button" href="{{ url_for('user_guide') }}" target="_blank" rel="noopener">Download User Guide</a>
         </section>
-    <form method="post" enctype="multipart/form-data" id="upload-form" class="analysis-form">
+    <form method="post" enctype="multipart/form-data" id="upload-form" class="analysis-form" novalidate>
         <div class="form-section">
             <h3>
                 Select Data:
-                <button type="button" class="help-btn" data-modal="data-help"><span class="help-icon">?</span></button>
+                <button type="button" class="help-btn" data-modal="data-help" aria-label="Help for data upload" aria-haspopup="dialog" aria-controls="help-modal"><span class="help-icon" aria-hidden="true">?</span></button>
             </h3>
             <div class="form-group">
-                <label for="file">
-                    Upload Dataset for Fitting:
-                    <button type="button" class="help-btn-small" data-modal="fitting-data-help">?</button>
-                </label>
-                <input type="file" name="file" id="file" accept=".xlsx,.xls,.csv" required>
-                <button type="button" class="btn btn-sm btn-outline-secondary mt-1 clear-file-btn" data-target="file">
-                    Clear Selection
-                </button>
-</div>
-            <div id="sheet-selection" class="form-group" style="display: none;">
-                <label for="sheet">
-                    Select Worksheet:
-                    <button type="button" class="help-btn-small" data-modal="fitting-sheet-help"><span class="help-icon">?</span></button>
-                </label>
-                <select name="sheet" id="sheet">
+                <div class="label-with-help">
+                    <label for="file">Upload Dataset for Fitting:</label>
+                    <button type="button" class="help-btn-small" data-modal="fitting-data-help" aria-label="Help for the fitting dataset" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button>
+                </div>
+                <div class="file-input-actions">
+                    <input type="file" name="file" id="file" accept=".xlsx,.xls,.csv" required{% if 'file' in error_field_ids %} aria-invalid="true" aria-describedby="file-error"{% endif %}>
+                    <button type="button" class="btn btn-sm btn-outline-secondary clear-file-btn" data-target="file">Clear Selection</button>
+                </div>
+                {% for error in form_errors if error.field_id == 'file' %}<p id="file-error" class="field-error">{{ error.message }}</p>{% endfor %}
+            </div>
+            <div id="sheet-selection" class="form-group" hidden aria-busy="false">
+                <div class="label-with-help">
+                    <label for="sheet">Select Worksheet:</label>
+                    <button type="button" class="help-btn-small" data-modal="fitting-sheet-help" aria-label="Help for fitting-dataset worksheet selection" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button>
+                </div>
+                <select name="sheet" id="sheet"{% if 'sheet' in error_field_ids %} aria-invalid="true" aria-describedby="sheet-error"{% endif %}>
                     <option value="">Select a sheet...</option>
                 </select>
+                {% for error in form_errors if error.field_id == 'sheet' %}<p id="sheet-error" class="field-error">{{ error.message }}</p>{% endfor %}
             </div>
             <div class="form-group">
-                <label for="prediction_file">
-                    Upload Dataset for Prediction (Optional):
-                    <button type="button" class="help-btn-small" data-modal="prediction-data-help">?</button>
-                </label>
-                <input type="file" class="form-control-file" id="prediction_file" name="prediction_file" accept=".csv,.xlsx,.xls">
-                <button type="button" class="btn btn-sm btn-outline-secondary mt-1 clear-file-btn" data-target="prediction_file">
-                    Clear Selection
-                </button>
-</div>
-            <div id="sheet-selection2" class="form-group" style="display: none;">
-                <label for="sheet2">
-                    Select Worksheet:
-                    <button type="button" class="help-btn-small" data-modal="prediction-sheet-help"><span class="help-icon">?</span></button>
-                </label>
-                <select name="prediction_sheet" id="sheet2">
+                <div class="label-with-help">
+                    <label for="prediction_file">Upload Dataset for Prediction (Optional):</label>
+                    <button type="button" class="help-btn-small" data-modal="prediction-data-help" aria-label="Help for the optional prediction dataset" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button>
+                </div>
+                <div class="file-input-actions">
+                    <input type="file" id="prediction_file" name="prediction_file" accept=".csv,.xlsx,.xls"{% if 'prediction_file' in error_field_ids %} aria-invalid="true" aria-describedby="prediction-file-error"{% endif %}>
+                    <button type="button" class="btn btn-sm btn-outline-secondary clear-file-btn" data-target="prediction_file">Clear Selection</button>
+                </div>
+                {% for error in form_errors if error.field_id == 'prediction_file' %}<p id="prediction-file-error" class="field-error">{{ error.message }}</p>{% endfor %}
+            </div>
+            <div id="sheet-selection2" class="form-group" hidden aria-busy="false">
+                <div class="label-with-help">
+                    <label for="sheet2">Select Worksheet:</label>
+                    <button type="button" class="help-btn-small" data-modal="prediction-sheet-help" aria-label="Help for prediction-dataset worksheet selection" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button>
+                </div>
+                <select name="prediction_sheet" id="sheet2"{% if 'sheet2' in error_field_ids %} aria-invalid="true" aria-describedby="sheet2-error"{% endif %}>
                     <option value="">Select a sheet...</option>
                 </select>
+                {% for error in form_errors if error.field_id == 'sheet2' %}<p id="sheet2-error" class="field-error">{{ error.message }}</p>{% endfor %}
             </div>
 </div>
 
         <div class="form-section">
             <h3>
                 Select Approaches and Models:
-                <button type="button" class="help-btn" data-modal="approaches-help">
-                    <span class="help-icon">?</span>
+                <button type="button" class="help-btn" data-modal="approaches-help" aria-label="Help for analysis approaches and models" aria-haspopup="dialog" aria-controls="help-modal">
+                    <span class="help-icon" aria-hidden="true">?</span>
                 </button>
             </h3>
-            <table id="approach-model-table" class="option-table">
-                <tr>
-                    {% for approach_id, approach in approaches.items() %}
-                    <th>
+            <div id="approaches-group" class="option-group-grid" tabindex="-1"{% if 'approaches-group' in error_field_ids %} aria-invalid="true" aria-describedby="approaches-group-error"{% endif %}>
+                {% for approach_id, approach in approaches.items() %}
+                <fieldset class="option-group approach-option-group">
+                    <legend>
                         {{ approach.display_name }}
-                        <button type="button" class="help-btn-small" data-modal="{{ approach_id }}-help">?</button>
-                    </th>
-                    {% endfor %}
-                </tr>
-                <tr>
-                    {% for approach_id, approach in approaches.items() %}
-                    <td>
-                        <label>
-                            <input type="checkbox" name="approaches" value="{{ approach_id }}" checked>
-                            Include {{ approach.display_name }}
-                        </label>
-                    </td>
-                    {% endfor %}
-                </tr>
-                <tr>
-                    {% for approach_id, approach in approaches.items() %}
-                    <th>Models:</th>
-                    {% endfor %}
-                </tr>
-                <tr>
-                    {% for approach_id, approach in approaches.items() %}
-                    <td>
+                        <button type="button" class="help-btn-small" data-modal="{{ approach_id }}-help" aria-label="Help for {{ approach.display_name }}" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button>
+                    </legend>
+                    <label class="approach-option-label">
+                        <input type="checkbox" name="approaches" value="{{ approach_id }}" aria-controls="{{ approach_id }}-models" checked>
+                        Include {{ approach.display_name }}
+                    </label>
+                    <fieldset id="{{ approach_id }}-models" class="model-fieldset">
+                        <legend>Models</legend>
                         {% for model_name in approach.models %}
                         <label class="model-option-label">
                             <input type="checkbox" name="models" value="{{ approach_id }}:{{ model_name }}" checked>
                             {{ models[model_name].display_name }}
-</label><br>
+                        </label>
                         {% endfor %}
                         {% if approach_id == 'approach3' %}
-                            N/A
+                        <p class="not-applicable-text">No parametric model selection is required.</p>
                         {% endif %}
-                    </td>
-                    {% endfor %}
-                </tr>
-            </table>
+                    </fieldset>
+                </fieldset>
+                {% endfor %}
+            </div>
+            {% for error in form_errors if error.field_id == 'approaches-group' %}<p id="approaches-group-error" class="field-error">{{ error.message }}</p>{% endfor %}
         </div>
 
         <div class="form-section">
             <h3>
                 Select Preprocessing Options:
-                <button type="button" class="help-btn" data-modal="preprocessing-help">
-                    <span class="help-icon">?</span>
+                <button type="button" class="help-btn" data-modal="preprocessing-help" aria-label="Help for preprocessing options" aria-haspopup="dialog" aria-controls="help-modal">
+                    <span class="help-icon" aria-hidden="true">?</span>
                 </button>
             </h3>
-            <table id="preprocessing-options" class="option-table">
-                <tr>
-                    <th>
-                        Normalization
-                        <button type="button" class="help-btn-small" data-modal="normalization-help">?</button>
-                    </th>
-                    <th>
-                        Scaling
-                        <button type="button" class="help-btn-small" data-modal="scaling-help">?</button>
-                    </th>
-                    <th>
-                        Interpolation
-                        <button type="button" class="help-btn-small" data-modal="interpolation-help">?</button>
-                    </th>
-                </tr>
-                <tr>
-                    <td>
-                        {% for norm_name, norm_func in preprocessing_options['normalization'].items() %}
-                        {% set norm_meta = preprocessing_descriptions['normalization'].get(norm_name, {}) %}
-                        <label>
-                            <input type="checkbox" name="normalizations" value="{{ norm_name }}">
-                            {{ norm_meta.get('display_name', norm_name) }}
-                        </label><br>
-                        {% endfor %}
-                    </td>
-                    <td>
-                        {% for scale_name, scale_func in preprocessing_options['scaling'].items() %}
-                        {% set scale_meta = preprocessing_descriptions['scaling'].get(scale_name, {}) %}
-                        <label>
-                            <input type="checkbox" name="scalings" value="{{ scale_name }}">
-                            {{ scale_meta.get('display_name', scale_name) }}
-                        </label><br>
-                        {% endfor %}
-                    </td>
-                    <td>
-                        {% for interp_name, interp_func in preprocessing_options['interpolation'].items() %}
-                        {% set interp_meta = preprocessing_descriptions['interpolation'].get(interp_name, {}) %}
-                        <label>
-                            <input type="radio" name="interpolation" value="{{ interp_name }}" {% if interp_name == "default" %}checked{% endif %} required>
-                            {{ interp_meta.get('display_name', interp_name) }}
-                        </label><br>
-                        {% endfor %}
-                    </td>
-                </tr>
-            </table>
-        </div>
-
-        <div class="form-section">
-            <h3>
-                Select Metrics:
-                <button type="button" class="help-btn" data-modal="metrics-help">
-                    <span class="help-icon">?</span>
-                </button>
-            </h3>
-            <div class="checkbox-grid">
-                {% for metric_name, metric_info in metrics.items() %}
-                <label class="checkbox-item">
-                    <input type="checkbox" name="metrics" value="{{ metric_name }}" {% if metric_name in ["r_squared", "rmse", "aicc"] %}checked{% endif %}>
-                    <span>{{ metric_info.display_name }}</span>
-                </label>
-                {% endfor %}
+            <div id="preprocessing-options" class="option-group-grid preprocessing-option-grid">
+                <fieldset class="option-group">
+                    <legend>Normalization <button type="button" class="help-btn-small" data-modal="normalization-help" aria-label="Help for normalization options" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button></legend>
+                    {% for norm_name, norm_func in preprocessing_options['normalization'].items() %}
+                    {% set norm_meta = preprocessing_descriptions['normalization'].get(norm_name, {}) %}
+                    <label class="stacked-option-label"><input type="checkbox" name="normalizations" value="{{ norm_name }}"> {{ norm_meta.get('display_name', norm_name) }}</label>
+                    {% endfor %}
+                </fieldset>
+                <fieldset class="option-group">
+                    <legend>Scaling <button type="button" class="help-btn-small" data-modal="scaling-help" aria-label="Help for scaling options" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button></legend>
+                    {% for scale_name, scale_func in preprocessing_options['scaling'].items() %}
+                    {% set scale_meta = preprocessing_descriptions['scaling'].get(scale_name, {}) %}
+                    <label class="stacked-option-label"><input type="checkbox" name="scalings" value="{{ scale_name }}"> {{ scale_meta.get('display_name', scale_name) }}</label>
+                    {% endfor %}
+                </fieldset>
+                <fieldset class="option-group">
+                    <legend>Interpolation <button type="button" class="help-btn-small" data-modal="interpolation-help" aria-label="Help for interpolation options" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button></legend>
+                    {% for interp_name, interp_func in preprocessing_options['interpolation'].items() %}
+                    {% set interp_meta = preprocessing_descriptions['interpolation'].get(interp_name, {}) %}
+                    <label class="stacked-option-label"><input type="radio" name="interpolation" value="{{ interp_name }}" {% if interp_name == "default" %}checked{% endif %} required> {{ interp_meta.get('display_name', interp_name) }}</label>
+                    {% endfor %}
+                </fieldset>
             </div>
         </div>
 
         <div class="form-section">
             <h3>
+                Select Metrics:
+                <button type="button" class="help-btn" data-modal="metrics-help" aria-label="Help for performance metrics" aria-haspopup="dialog" aria-controls="help-modal">
+                    <span class="help-icon" aria-hidden="true">?</span>
+                </button>
+            </h3>
+            <fieldset id="metrics-group" class="semantic-fieldset" tabindex="-1"{% if 'metrics-group' in error_field_ids %} aria-invalid="true" aria-describedby="metrics-group-error"{% endif %}>
+                <legend class="sr-only">Performance metrics</legend>
+                <div class="checkbox-grid">
+                    {% for metric_name, metric_info in metrics.items() %}
+                    <label class="checkbox-item">
+                        <input type="checkbox" name="metrics" value="{{ metric_name }}" {% if metric_name in ["r_squared", "rmse", "aicc"] %}checked{% endif %}>
+                        <span>{{ metric_info.display_name }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </fieldset>
+            {% for error in form_errors if error.field_id == 'metrics-group' %}<p id="metrics-group-error" class="field-error">{{ error.message }}</p>{% endfor %}
+        </div>
+
+        <div class="form-section" id="advanced-analysis-group" tabindex="-1">
+            <h3>
                 Advanced Analysis Parameters:
-                <button type="button" class="help-btn" data-modal="advanced-analysis-help">
-                    <span class="help-icon">?</span>
+                <button type="button" class="help-btn" data-modal="advanced-analysis-help" aria-label="Help for advanced analysis parameters" aria-haspopup="dialog" aria-controls="help-modal">
+                    <span class="help-icon" aria-hidden="true">?</span>
                 </button>
             </h3>
 
-            <div class="advanced-parameter-row">
-                <div class="advanced-row-label">Cross-validation <button type="button" class="help-btn-small" data-modal="cross-validation-help">?</button></div>
+            <fieldset class="advanced-parameter-row">
+                <legend class="sr-only">Cross-validation settings</legend>
+                <div class="advanced-row-label">Cross-validation <button type="button" class="help-btn-small" data-modal="cross-validation-help" aria-label="Help for cross-validation settings" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button></div>
                 <div class="advanced-field">
                     <label for="cv_scheme">Scheme</label>
                     <select name="cv_scheme" id="cv_scheme">
@@ -231,10 +222,11 @@
                     <label for="cv_random_state">Random seed</label>
                     <input type="number" name="cv_random_state" id="cv_random_state" value="12345">
                 </div>
-            </div>
+            </fieldset>
 
-            <div class="advanced-parameter-row">
-                <div class="advanced-row-label">Grid search <button type="button" class="help-btn-small" data-modal="grid-search-help">?</button></div>
+            <fieldset class="advanced-parameter-row">
+                <legend class="sr-only">Grid-search initialization settings</legend>
+                <div class="advanced-row-label">Grid search <button type="button" class="help-btn-small" data-modal="grid-search-help" aria-label="Help for grid-search initialization settings" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button></div>
                 <div class="advanced-field">
                     <label for="grid_search_num_points">Random starts</label>
                     <input type="number" name="grid_search_num_points" id="grid_search_num_points" value="{{ default_grid_search_num_points }}" min="1">
@@ -251,7 +243,7 @@
                     <label for="grid_search_random_state">Random seed</label>
                     <input type="number" name="grid_search_random_state" id="grid_search_random_state" value="{{ default_grid_search_random_state }}">
                 </div>
-            </div>
+            </fieldset>
         </div>
 
         <div class="form-section">
@@ -259,22 +251,21 @@
         </div>
     </form>
     </main>
-<div id="help-modal" class="modal">
-        <div class="modal-content">
+<div id="help-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-text" aria-hidden="true" hidden>
+        <div class="modal-content" tabindex="-1">
             <div class="modal-header">
                 <h4 id="modal-title">Help</h4>
-                <span class="close">&times;</span>
+                <button type="button" class="close" aria-label="Close help dialog"><span aria-hidden="true">&times;</span></button>
             </div>
             <div class="modal-body">
-                <div id="modal-text">
-</div>
+                <div id="modal-text"></div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="modal-close-btn">Close</button>
             </div>
         </div>
     </div>
-<div id="modal-content-definitions" style="display: none;">
+<div id="modal-content-definitions" hidden>
 <div id="data-help-content">
             <h4>Data Upload</h4>
             <p>This section allows you to upload datasets for IVIVC analysis:</p>
@@ -420,7 +411,7 @@
             </ul>
             <!--
             <p>Additionally, the Kolmogorov-Smirnov test is used for pairwise comparison of model predictions in Approaches 1 and 2. In conjunction with the performance metrics, this can support user-driven model review.</p>
-            --!>
+            -->
         </div>
     </div>
 

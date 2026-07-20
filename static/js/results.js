@@ -1,3 +1,30 @@
+
+function announceResultsStatus(message) {
+    if (window.IVIVCAccessibility) {
+        window.IVIVCAccessibility.setLiveMessage('results-status', message);
+    }
+}
+
+function showResultsAlert(message) {
+    var alertBox = $('#results-alert');
+    if (!message) {
+        alertBox.prop('hidden', true).empty();
+        return;
+    }
+    alertBox.text(message).prop('hidden', false);
+    if (alertBox.length) {
+        alertBox[0].focus();
+    }
+}
+
+function refreshAccessibility(root) {
+    if (!window.IVIVCAccessibility) {
+        return;
+    }
+    window.IVIVCAccessibility.enhanceTableSemantics(root || document);
+    window.IVIVCAccessibility.initializeDataTableControls(root || document);
+    window.IVIVCAccessibility.enhancePlotAccessibility(root || document);
+}
 $(function() {
     $("#vertical-tabs").tabs({
         activate: function(event, ui) {
@@ -56,80 +83,74 @@ $.extend(true, $.fn.dataTable.defaults, {
 });
 
 $(document).ready(function() {
-    // Initialize existing visible DataTables
-    $('.dataframe').DataTable();
+    refreshAccessibility(document);
 
-    // Handle show/hide data table buttons for plot data tables
+    // Initialize tables that are visible when the page loads. Plot data tables
+    // are initialized only when the user expands them.
+    $('.dataframe:visible').DataTable();
+    refreshAccessibility(document);
+
     $('.show-data-btn').on('click', function() {
         var targetTable = $(this).data('target');
         var container = $('#' + targetTable + '-container');
         var button = $(this);
+        var isExpanded = button.attr('aria-expanded') === 'true';
+        var table = container.find('table');
 
-        if (container.is(':visible')) {
-            // Hide table
-            container.hide();
-            button.find('span').text('Show Data Table');
-
-            // Destroy DataTable if it exists
-            var table = container.find('table.display');
+        if (isExpanded) {
             if ($.fn.DataTable.isDataTable(table)) {
                 table.DataTable().destroy();
             }
-        } else {
-            // Show table and initialize DataTable
-            container.show();
-            button.find('span').text('Hide Data Table');
-
-            // Find the table within the container and initialize DataTable
-            var table = container.find('table.display');
-            if (table.length > 0) {
-                // Initialize with the same configuration as existing tables
-                // but with additional export buttons for plot data
-                table.DataTable({
-                    paging: false,
-                    searching: false,
-                    info: false,
-                    ordering: true,
-                    order: [],
-                    responsive: true,
-                    dom: 'frtip<"custom-button-container"B>',
-                    buttons: [
-                        {
-                            extend: 'copy',
-                            text: 'Copy'
-                        },
-                        {
-                            extend: 'csv',
-                            text: 'CSV'
-                        },
-                        {
-                            extend: 'excel',
-                            text: 'Excel'
-                        },
-                        {
-                            extend: 'pdf',
-                            text: 'PDF'
-                        },
-                        {
-                            extend: 'print',
-                            text: 'Print'
-                        }
-                    ],
-                    layout: {
-                        bottomStart: {
-                            buttons: ['copy', 'csv', 'excel', 'pdf', 'print']
-                        }
-                    },
-                    columnDefs: [
-                        {
-                            targets: '_all',
-                            className: 'dt-center'
-                        }
-                    ]
-                });
-            }
+            container.hide().prop('hidden', true);
+            button.attr('aria-expanded', 'false');
+            button.find('span').text('Show Data Table');
+            button.attr('aria-label', 'Show data table for ' + (button.attr('data-plot-title') || 'this plot'));
+            announceResultsStatus('Data table hidden.');
+            return;
         }
+
+        container.prop('hidden', false).show();
+        button.attr('aria-expanded', 'true');
+        button.find('span').text('Hide Data Table');
+        button.attr('aria-label', 'Hide data table for ' + (button.attr('data-plot-title') || 'this plot'));
+
+        if (table.length > 0 && !$.fn.DataTable.isDataTable(table)) {
+            table.DataTable({
+                paging: false,
+                searching: false,
+                info: false,
+                ordering: true,
+                order: [],
+                responsive: true,
+                dom: 'frtip<"custom-button-container"B>',
+                buttons: [
+                    {extend: 'copy', text: 'Copy'},
+                    {extend: 'csv', text: 'CSV'},
+                    {extend: 'excel', text: 'Excel'},
+                    {extend: 'pdf', text: 'PDF'},
+                    {extend: 'print', text: 'Print'}
+                ],
+                layout: {bottomStart: {buttons: ['copy', 'csv', 'excel', 'pdf', 'print']}},
+                columnDefs: [{targets: '_all', className: 'dt-center'}]
+            });
+        }
+        refreshAccessibility(container[0]);
+        announceResultsStatus('Data table shown.');
     });
+
+    if (window.IVIVCAccessibility) {
+        window.IVIVCAccessibility.initializeHelpModal({
+            'data-processing-help': 'data-processing-help-content',
+            'model-comparison-help': 'model-comparison-help-content',
+            'final-model-report-help': 'final-model-report-help-content',
+            'approach1-results-help': 'approach1-results-help-content',
+            'approach2-results-help': 'approach2-results-help-content',
+            'approach3-results-help': 'approach3-results-help-content',
+            'prediction-approach1-help': 'prediction-approach1-help-content',
+            'prediction-approach2-help': 'prediction-approach2-help-content',
+            'prediction-approach3-help': 'prediction-approach3-help-content'
+        });
+    }
 });
 
 
@@ -222,6 +243,7 @@ function debounce(func, wait) {
 document.addEventListener('DOMContentLoaded', function() {
     initializePlotSizes();
     ensureResizePlots(true);
+    refreshAccessibility(document);
 });
 
 // Use debounced version for window resize, and force resize
@@ -240,84 +262,13 @@ $(document).ready(function() {
 });
 
 // MutationObserver to watch for changes in the DOM
-var observer = new MutationObserver(debounce(function() { ensureResizePlots(false); }, 250));
+var observer = new MutationObserver(debounce(function() {
+    ensureResizePlots(false);
+    refreshAccessibility(document);
+}, 250));
 
 // Start observing the document with the configured parameters
 observer.observe(document.body, { childList: true, subtree: true });
-
-// Modal functionality for results page
-$(document).ready(function() {
-    // Modal content mapping
-    const modalContent = {
-        'data-processing-help': 'data-processing-help-content',
-        'model-comparison-help': 'model-comparison-help-content',
-        'final-model-report-help': 'final-model-report-help-content',
-        'approach1-results-help': 'approach1-results-help-content',
-        'approach2-results-help': 'approach2-results-help-content',
-        'approach3-results-help': 'approach3-results-help-content',
-        'prediction-approach1-help': 'prediction-approach1-help-content',
-        'prediction-approach2-help': 'prediction-approach2-help-content',
-        'prediction-approach3-help': 'prediction-approach3-help-content'
-    };
-
-    // Open modal when help button is clicked
-    $('.help-btn').on('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-
-        const modalId = $(this).data('modal');
-        const contentId = modalContent[modalId];
-
-        if (contentId) {
-            const content = $('#' + contentId).html();
-            if (content) {
-                $('#modal-text').html(content);
-                $('#help-modal').fadeIn(300);
-                $('body').addClass('modal-open');
-            } else {
-                // Fallback content
-                $('#modal-text').html('<h4>Help</h4><p>Help information for this section is coming soon.</p>');
-                $('#help-modal').fadeIn(300);
-                $('body').addClass('modal-open');
-            }
-        }
-    });
-
-    // Close modal when X is clicked
-    $('.close').on('click', function() {
-        closeModal();
-    });
-
-    // Close modal when close button is clicked
-    $('.modal-close-btn').on('click', function() {
-        closeModal();
-    });
-
-    // Close modal when clicking outside of it
-    $('#help-modal').on('click', function(e) {
-        if (e.target === this) {
-            closeModal();
-        }
-    });
-
-    // Close modal with Escape key
-    $(document).on('keydown', function(e) {
-        if (e.key === 'Escape' && $('#help-modal').is(':visible')) {
-            closeModal();
-        }
-    });
-
-    function closeModal() {
-        $('#help-modal').fadeOut(300);
-        $('body').removeClass('modal-open');
-    }
-
-    // Prevent modal from closing when clicking inside modal content
-    $('.modal-content').on('click', function(e) {
-        e.stopPropagation();
-    });
-});
-
 
 function sanitizePlotId(value) {
     return String(value || 'plot').replace(/[^A-Za-z0-9_-]/g, '-');
@@ -418,13 +369,13 @@ function populateReportPlots(scope) {
 }
 
 function setActiveFinalReport(selectedId) {
-    $('.final-report-content').hide().removeClass('active-report');
+    $('.final-report-content').hide().removeClass('active-report').attr('aria-hidden', 'true');
     var report = document.getElementById(selectedId + '-report');
     if (!report) {
         return Promise.resolve();
     }
 
-    $(report).show().addClass('active-report');
+    $(report).show().addClass('active-report').attr('aria-hidden', 'false');
 
     return populateReportPlots(report).then(function() {
         if (window.MathJax && window.MathJax.typesetPromise) {
@@ -723,8 +674,10 @@ function downloadSelectedWordReport(selectedId, button) {
     }
 
     var originalText = button.find('span').text();
-    button.prop('disabled', true);
+    showResultsAlert('');
+    button.prop('disabled', true).attr('aria-busy', 'true');
     button.find('span').text('Preparing Word Report...');
+    announceResultsStatus('Preparing the selected Word report.');
 
     setActiveFinalReport(selectedId)
         .then(function() {
@@ -733,7 +686,7 @@ function downloadSelectedWordReport(selectedId, button) {
         .then(function(imageExportSummary) {
             if (imageExportSummary && imageExportSummary.total > 0 && imageExportSummary.exported === 0) {
                 console.warn('No report plot images were exported for the Word report.');
-                alert('No report plot images could be exported. The Word report will still download and will include notes where images were unavailable.');
+                showResultsAlert('No report plot images could be exported. The Word report will still download and will include notes where images were unavailable.');
             } else if (imageExportSummary && imageExportSummary.exported < imageExportSummary.total) {
                 console.warn('Some report plot images were not exported for the Word report.', imageExportSummary);
             }
@@ -761,13 +714,14 @@ function downloadSelectedWordReport(selectedId, button) {
             var filename = filenameFromContentDisposition(response.headers.get('Content-Disposition')) || 'IVIVC_Report.docx';
             return response.blob().then(function(blob) {
                 downloadBlob(blob, filename);
+                announceResultsStatus('The selected Word report was downloaded.');
             });
         })
         .catch(function(error) {
-            alert(error.message || 'Unable to generate Word report.');
+            showResultsAlert(error.message || 'Unable to generate Word report.');
         })
         .finally(function() {
-            button.prop('disabled', false);
+            button.prop('disabled', false).removeAttr('aria-busy');
             button.find('span').text(originalText);
         });
 }
@@ -780,7 +734,11 @@ $(document).ready(function() {
     }
 
     $('input[name="final_model_option"]').on('change', function() {
-        setActiveFinalReport($(this).val());
+        var selectedLabel = $(this).closest('label').text().replace(/\s+/g, ' ').trim();
+        setActiveFinalReport($(this).val()).then(function() {
+            announceResultsStatus('Report summary updated to ' + selectedLabel + '.');
+            refreshAccessibility(document);
+        });
     });
 
     $('#print-final-report').on('click', function() {
