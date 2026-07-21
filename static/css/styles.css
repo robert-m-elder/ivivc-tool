@@ -5,7 +5,7 @@
 }
 
 html, body {
-    height: 100%;
+    min-height: 100%;
     margin: 0;
     padding: 0;
     font-family: Arial, sans-serif;
@@ -21,21 +21,15 @@ body {
 }
 
 
-:root {
-    --header-height: 86px;
-    --header-height-mobile: 128px;
-}
-
 header,
 .site-header {
-    position: fixed;
-    top: 0;
-    left: 0;
+    position: relative;
     width: 100%;
-    min-height: var(--header-height);
+    min-height: 0;
     background-color: #fff;
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     z-index: 1000;
+    flex-shrink: 0;
 }
 
 .header-inner {
@@ -43,7 +37,6 @@ header,
     grid-template-columns: minmax(120px, 220px) minmax(0, 1fr) auto;
     align-items: center;
     gap: 16px;
-    min-height: var(--header-height);
     width: 100%;
     box-sizing: border-box;
     padding: 8px 20px;
@@ -56,6 +49,8 @@ header,
     font-size: clamp(1.05rem, 2.2vw, 1.65rem);
     line-height: 1.18;
     font-weight: 700;
+    max-width: 100%;
+    overflow-wrap: anywhere;
 }
 
 .header-image {
@@ -85,7 +80,7 @@ header,
     font-weight: 600;
     line-height: 1;
     text-decoration: none;
-    white-space: nowrap;
+    white-space: normal;
 }
 
 .user-guide-button:hover,
@@ -135,23 +130,20 @@ header,
 }
 
 @media (max-width: 760px) {
-    header,
-    .site-header {
-        min-height: var(--header-height-mobile);
-    }
-
     .header-inner {
-        min-height: var(--header-height-mobile);
-        grid-template-columns: minmax(96px, 1fr) auto;
+        grid-template-columns: minmax(0, 1fr);
         grid-template-areas:
-            "logo guide"
-            "title title";
-        gap: 6px 12px;
-        padding: 8px 12px;
+            "logo"
+            "title"
+            "guide";
+        justify-items: center;
+        gap: 8px;
+        padding: 10px 12px;
     }
 
     .header-image {
         grid-area: logo;
+        justify-content: center;
     }
 
     .header-image img {
@@ -165,8 +157,10 @@ header,
 
     .header-user-guide-button {
         grid-area: guide;
+        justify-self: center;
         padding: 7px 10px;
         font-size: 0.8rem;
+        max-width: 100%;
     }
 
     .user-guide-callout {
@@ -209,8 +203,8 @@ header,
 
 main {
     width: 100%;
-    margin-top: var(--header-height); /* Should match the header height */
-    padding: 10px; /* Add some padding for content */
+    margin-top: 0;
+    padding: 10px;
 }
 
 /*-------------------------------------*/
@@ -476,11 +470,11 @@ input[type="checkbox"]:disabled {
 
 #vertical-tabs {
     display: flex;
+    align-items: stretch;
     width: 90%;
     max-width: 1800px;
-    height: calc(100vh - 110px); /* Subtract the height of the h1 and some padding */
-    /*margin: 20px auto;*/
-    margin: calc(var(--header-height) + 10px) auto 20px auto;
+    height: auto;
+    margin: 10px auto 20px auto;
     background-color: white;
     border-radius: 5px;
     box-shadow: 0 0 10px rgba(0,0,0,0.1);
@@ -489,17 +483,19 @@ input[type="checkbox"]:disabled {
 
 .ui-tabs-vertical {
     display: flex;
+    align-items: stretch;
     width: 100%;
-    height: 100%;
+    height: auto;
 }
 
 .ui-tabs-vertical .ui-tabs-nav {
+    align-self: stretch;
     padding: .2em .1em .2em .2em;
-    width: 15%;
-    min-width: 225px; /* Set a minimum width for the tab navigation */
+    width: clamp(13rem, 18%, 20rem);
+    min-width: 13rem;
     background: #f6f6f6;
     border-right: 1px solid #767676;
-    overflow-y: auto;
+    overflow: visible;
     box-sizing: border-box; /* Include padding in width calculation */
 }
 
@@ -517,9 +513,11 @@ input[type="checkbox"]:disabled {
     width: 100%;
     padding: 10px;
     box-sizing: border-box;
-    white-space: nowrap; /* Prevent text from wrapping */
-    overflow: hidden;
-    text-overflow: ellipsis; /* Add ellipsis for overflowing text */
+    white-space: normal;
+    overflow: visible;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    line-height: 1.3;
 }
 
 .ui-tabs-vertical .ui-tabs-nav li.ui-tabs-active {
@@ -537,7 +535,8 @@ input[type="checkbox"]:disabled {
     flex: 1; /* Allow the panel to shrink and grow */
     min-width: 0; /* Allow the panel to shrink below its content size */
     box-sizing: border-box;
-    overflow-y: auto;
+    overflow: visible;
+    overflow-wrap: anywhere;
 }
 
 .ui-tabs-panel h2 {
@@ -579,11 +578,11 @@ input[type="checkbox"]:disabled {
 /* Media query for smaller screens */
 @media (max-width: 768px) {
     main {
-        margin-top: var(--header-height-mobile);
+        margin-top: 0;
     }
 
     #vertical-tabs {
-        margin-top: calc(var(--header-height-mobile) + 10px);
+        margin-top: 10px;
         width: 100%;
         height: auto;
         flex-direction: column;
@@ -697,14 +696,14 @@ tr:nth-child(even) {
 
 /* Style for error messages */
 .error {
-    color: #ff0000;  /* Red text color */
+    color: #b42318;
     font-style: italic;
     /*font-weight: bold;*/
 }
 
 /* Style for error cells in the comparison table */
 table td.error {
-    color: #ff0000;  /* Red text color */
+    color: #b42318;
     font-style: italic;
     /*font-weight: bold;*/
     background-color: #ffeeee;  /* Light red background for better visibility */
@@ -712,7 +711,7 @@ table td.error {
 
 /* Add a subtle red border to model result divs with errors */
 .model-result.has-error {
-    border-left: 3px solid #ff0000;
+    border-left: 3px solid #b42318;
     padding-left: 10px;
 }
 
@@ -784,7 +783,6 @@ button.dt-button2:active {
 .submit-button,
 .dt-button,
 .clear-file-btn,
-.show-data-btn,
 input[type="file"]::-webkit-file-upload-button,
 input[type="file"]::file-selector-button,
 a.dt-button2,
@@ -806,7 +804,6 @@ button.dt-button2 {
 .submit-button:hover,
 .dt-button:hover,
 .clear-file-btn:hover,
-.show-data-btn:hover,
 a.dt-button2:hover,
 button.dt-button2:hover {
     background-color: #222c67;
@@ -816,7 +813,6 @@ button.dt-button2:hover {
 .submit-button:active,
 .dt-button:active,
 .clear-file-btn:active,
-.show-data-btn:active,
 a.dt-button2:active,
 button.dt-button2:active {
     background-color: #1a2150; /* Slightly darker shade for pressed state */
@@ -826,7 +822,6 @@ button.dt-button2:active {
 .submit-button:focus,
 .dt-button:focus,
 .clear-file-btn:focus,
-.show-data-btn:focus,
 a.dt-button2:focus,
 button.dt-button2:focus {
     outline: 2px solid #4a90e2;
@@ -859,17 +854,51 @@ button.dt-button2:focus {
     flex-wrap: wrap;
 }
 
+.plot-data-downloads,
+.summary-table-downloads {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 10px 0 20px;
+}
+
+.plot-data-download-label,
+.summary-table-download-label {
+    font-weight: 600;
+}
+
+.plot-data-button-container .dt-buttons,
+.summary-table-button-container .dt-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.plot-data-button-container .dt-button,
+.summary-table-button-container .dt-button {
+    margin: 0;
+}
+
+.plot-data-source {
+    display: none !important;
+}
+
 .data-table-container {
     margin-top: 15px;
     margin-bottom: 20px;
+    max-width: 100%;
+    overflow-x: auto;
 }
 
 .data-table-container table {
-    font-size: 10px;
+    font-size: 0.875rem;
 }
 
-.data-table-container tbody tr {
-    line-height: 0.0;
+.data-table-container th,
+.data-table-container td {
+    line-height: 1.35;
+    vertical-align: top;
 }
 
 .data-table-container .dataTables_wrapper {
@@ -1238,6 +1267,7 @@ body.modal-open {
     body.printing-final-report #final-model-report > p,
     body.printing-final-report .final-report-selector,
     body.printing-final-report .custom-button-container,
+    body.printing-final-report .plot-data-downloads,
     body.printing-final-report .help-btn,
     body.printing-final-report .modal {
         display: none !important;
@@ -1575,7 +1605,7 @@ main:focus {
 }
 
 .compact-error-summary {
-    margin-top: calc(var(--header-height) + 12px);
+    margin-top: 12px;
 }
 
 .field-error {
@@ -1735,6 +1765,35 @@ main:focus {
 .results-main {
     margin-top: 0;
     padding: 0;
+}
+
+.ui-tabs-panel .dataTables_wrapper,
+.ui-tabs-panel .dt-container,
+.ui-tabs-panel .table-scroll-region {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+.ui-tabs-panel table {
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+    .analysis-form,
+    #vertical-tabs {
+        width: 100%;
+    }
+
+    .plot-container {
+        min-height: 320px;
+        padding-bottom: 75%;
+    }
+
+    th, td {
+        padding: 8px;
+    }
 }
 
 @media (max-width: 768px) {

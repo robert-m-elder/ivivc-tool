@@ -33,10 +33,244 @@ function getSummaryTables(root) {
         : scope.find('table.dataframe');
 
     return tables.filter(function() {
-        // Tables underneath plots are intentionally initialized only when the
-        // corresponding Show Data Table button is activated.
+        // Plot-source tables are hidden implementation details used only by
+        // the copy and download controls beneath each plot.
         return $(this).closest('.data-table-container').length === 0;
     });
+}
+
+
+function tableContextLabel(tableElement) {
+    var table = $(tableElement);
+    var explicit = table.attr('data-table-context');
+    if (explicit) {
+        return explicit;
+    }
+
+    var caption = table.find('caption').first().text().replace(/\s+/g, ' ').trim();
+    if (caption) {
+        return caption;
+    }
+
+    var heading = table.prevAll('h2, h3, h4, h5, h6').first().text().replace(/\s+/g, ' ').trim();
+    return heading || 'data table';
+}
+
+function initializeSummaryTableDownloads(tableElement) {
+    if (!$.fn.DataTable.isDataTable(tableElement)) {
+        return;
+    }
+
+    var table = $(tableElement);
+    if (table.attr('data-summary-downloads-initialized') === 'true') {
+        return;
+    }
+
+    var api = table.DataTable();
+    var context = tableContextLabel(tableElement);
+    var container = $(api.table().container());
+    var filename = plotDataFilename(context, table.attr('id') || 'table-data');
+    var exportOptions = {
+        columns: ':not(.no-export)',
+        modifier: {
+            page: 'all',
+            search: 'applied',
+            order: 'applied'
+        }
+    };
+    var buttons = new DataTable.Buttons(api, {
+        buttons: [
+            {
+                extend: 'copyHtml5',
+                text: 'Copy data',
+                title: null,
+                exportOptions: exportOptions,
+                attr: {
+                    'aria-label': 'Copy data from ' + context,
+                    'title': 'Copy data from ' + context
+                }
+            },
+            {
+                extend: 'csvHtml5',
+                text: 'Download CSV',
+                title: null,
+                filename: filename,
+                exportOptions: exportOptions,
+                attr: {
+                    'aria-label': 'Download ' + context + ' as CSV',
+                    'title': 'Download ' + context + ' as CSV'
+                }
+            },
+            {
+                extend: 'excelHtml5',
+                text: 'Download Excel',
+                title: null,
+                filename: filename,
+                exportOptions: exportOptions,
+                attr: {
+                    'aria-label': 'Download ' + context + ' as Excel',
+                    'title': 'Download ' + context + ' as Excel'
+                }
+            }
+        ]
+    });
+
+    var toolbar = $('<div>', {
+        'class': 'summary-table-downloads',
+        'role': 'group',
+        'aria-label': 'Table data downloads for ' + context
+    });
+    $('<span>', {
+        'class': 'summary-table-download-label',
+        'aria-hidden': 'true',
+        'text': 'Table data:'
+    }).appendTo(toolbar);
+    var buttonHost = $('<div>', {
+        'class': 'summary-table-button-container'
+    }).appendTo(toolbar);
+    $(buttons.container()).appendTo(buttonHost);
+    toolbar.appendTo(container);
+
+    toolbar
+        .off('click.ivivcSummaryDataStatus')
+        .on('click.ivivcSummaryDataStatus', 'button', function() {
+            var button = $(this);
+            if (button.hasClass('buttons-copy')) {
+                setTimeout(function() {
+                    announceResultsStatus('Table data copied from ' + context + '.');
+                }, 100);
+            } else if (button.hasClass('buttons-csv')) {
+                announceResultsStatus('CSV download started for ' + context + '.');
+            } else if (button.hasClass('buttons-excel')) {
+                announceResultsStatus('Excel download started for ' + context + '.');
+            }
+        });
+
+    table.attr('data-summary-downloads-initialized', 'true');
+}
+
+function plotDataFilename(context, target) {
+    var base = String(context || target || 'plot-data')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    return base || 'plot-data';
+}
+
+function initializePlotDataDownloads(root) {
+    var scope = root ? $(root) : $(document);
+    var controls = scope.is('.plot-data-downloads')
+        ? scope.add(scope.find('.plot-data-downloads'))
+        : scope.find('.plot-data-downloads');
+
+    controls.each(function() {
+        var group = $(this);
+        if (group.attr('data-downloads-initialized') === 'true') {
+            return;
+        }
+
+        var target = group.attr('data-table-target');
+        var context = group.attr('data-plot-title') || 'plot';
+        var sourceContainer = target ? $('#' + target + '-container') : $();
+        var table = sourceContainer.find('table').first();
+        var buttonHost = group.find('.plot-data-button-container').first();
+
+        if (!target || !sourceContainer.length || !table.length || !buttonHost.length) {
+            buttonHost.text('Plot data are unavailable.');
+            group.attr('data-downloads-initialized', 'true');
+            return;
+        }
+
+        table.attr('data-table-context', context + ' data');
+
+        if (!$.fn.DataTable.isDataTable(table[0])) {
+            table.DataTable({
+                paging: false,
+                searching: false,
+                info: false,
+                ordering: false,
+                order: [],
+                responsive: false,
+                autoWidth: false,
+                dom: null,
+                buttons: [],
+                layout: {
+                    topStart: null,
+                    topEnd: null,
+                    bottomStart: null,
+                    bottomEnd: null
+                }
+            });
+        }
+
+        var api = table.DataTable();
+        var filename = plotDataFilename(context, target);
+        var exportOptions = {
+            columns: ':not(.no-export)',
+            modifier: {
+                page: 'all',
+                search: 'none',
+                order: 'original'
+            }
+        };
+        var buttons = new DataTable.Buttons(api, {
+            buttons: [
+                {
+                    extend: 'copyHtml5',
+                    text: 'Copy data',
+                    title: null,
+                    exportOptions: exportOptions,
+                    attr: {
+                        'aria-label': 'Copy data for ' + context,
+                        'title': 'Copy data for ' + context
+                    }
+                },
+                {
+                    extend: 'csvHtml5',
+                    text: 'Download CSV',
+                    title: null,
+                    filename: filename,
+                    exportOptions: exportOptions,
+                    attr: {
+                        'aria-label': 'Download CSV data for ' + context,
+                        'title': 'Download CSV data for ' + context
+                    }
+                },
+                {
+                    extend: 'excelHtml5',
+                    text: 'Download Excel',
+                    title: null,
+                    filename: filename,
+                    exportOptions: exportOptions,
+                    attr: {
+                        'aria-label': 'Download Excel data for ' + context,
+                        'title': 'Download Excel data for ' + context
+                    }
+                }
+            ]
+        });
+
+        var buttonContainer = $(buttons.container());
+        buttonContainer.appendTo(buttonHost);
+        buttonContainer
+            .off('click.ivivcPlotDataStatus')
+            .on('click.ivivcPlotDataStatus', 'button', function() {
+                var button = $(this);
+                if (button.hasClass('buttons-copy')) {
+                    setTimeout(function() {
+                        announceResultsStatus('Plot data copied for ' + context + '.');
+                    }, 100);
+                } else if (button.hasClass('buttons-csv')) {
+                    announceResultsStatus('CSV download started for ' + context + '.');
+                } else if (button.hasClass('buttons-excel')) {
+                    announceResultsStatus('Excel download started for ' + context + '.');
+                }
+            });
+
+        group.attr('data-downloads-initialized', 'true');
+    });
+
+    refreshAccessibility(root || document);
 }
 
 function announceSummaryTableSort(tableElement) {
@@ -75,6 +309,7 @@ function initializeSummaryDataTables(root) {
                 announceSummaryTableSort(tableElement);
             });
         table.DataTable().columns.adjust();
+        initializeSummaryTableDownloads(tableElement);
     });
 
     refreshAccessibility(root || document);
@@ -92,31 +327,6 @@ $(function() {
     $("#vertical-tabs li").removeClass("ui-corner-top").addClass("ui-corner-left");
 });
 
-// DataTables
-/*$.extend(true, $.fn.dataTable.defaults, {
-    paging: false,
-    searching: false,
-    info: false,
-    ordering: true,
-    responsive: true,
-    dom: 'frtip<"custom-button-container"B>',
-    buttons: [
-        {
-            extend: 'excel',
-            text: 'Download Data'
-        }
-    ],
-    layout: {
-        bottomStart: {
-            buttons: ['excel']
-        }
-    },
-});
-
-$(document).ready(function() {
-    $('.dataframe').DataTable();
-});*/
-
 // DataTables default configuration
 $.extend(true, $.fn.dataTable.defaults, {
     paging: true,
@@ -126,17 +336,13 @@ $.extend(true, $.fn.dataTable.defaults, {
     ordering: true,
     order: [],
     responsive: true,
-    dom: 'frtip<"custom-button-container"B>',
-    buttons: [
-        {
-            extend: 'excel',
-            text: 'Download Data'
-        }
-    ],
+    dom: 'rtp',
+    buttons: [],
     layout: {
-        bottomStart: {
-            buttons: ['excel']
-        }
+        topStart: null,
+        topEnd: null,
+        bottomStart: 'paging',
+        bottomEnd: null
     },
     language: {
         aria: {
@@ -151,56 +357,11 @@ $(document).ready(function() {
     refreshAccessibility(document);
 
     // Initialize summary and comparison tables in the initially visible panel.
-    // Plot-source tables remain deferred until the user expands them.
     initializeSummaryDataTables(document);
 
-    $('.show-data-btn').on('click', function() {
-        var targetTable = $(this).data('target');
-        var container = $('#' + targetTable + '-container');
-        var button = $(this);
-        var isExpanded = button.attr('aria-expanded') === 'true';
-        var table = container.find('table');
-
-        if (isExpanded) {
-            if ($.fn.DataTable.isDataTable(table)) {
-                table.DataTable().destroy();
-            }
-            container.hide().prop('hidden', true);
-            button.attr('aria-expanded', 'false');
-            button.find('span').text('Show Data Table');
-            button.attr('aria-label', 'Show data table for ' + (button.attr('data-plot-title') || 'this plot'));
-            announceResultsStatus('Data table hidden.');
-            return;
-        }
-
-        container.prop('hidden', false).show();
-        button.attr('aria-expanded', 'true');
-        button.find('span').text('Hide Data Table');
-        button.attr('aria-label', 'Hide data table for ' + (button.attr('data-plot-title') || 'this plot'));
-
-        if (table.length > 0 && !$.fn.DataTable.isDataTable(table)) {
-            table.DataTable({
-                paging: false,
-                searching: false,
-                info: false,
-                ordering: true,
-                order: [],
-                responsive: true,
-                dom: 'frtip<"custom-button-container"B>',
-                buttons: [
-                    {extend: 'copy', text: 'Copy'},
-                    {extend: 'csv', text: 'CSV'},
-                    {extend: 'excel', text: 'Excel'},
-                    {extend: 'pdf', text: 'PDF'},
-                    {extend: 'print', text: 'Print'}
-                ],
-                layout: {bottomStart: {buttons: ['copy', 'csv', 'excel', 'pdf', 'print']}},
-                columnDefs: [{targets: '_all', className: 'dt-center'}]
-            });
-        }
-        refreshAccessibility(container[0]);
-        announceResultsStatus('Data table shown.');
-    });
+    // Plot-source tables remain hidden; only their copy and download controls
+    // are exposed beneath the corresponding plots.
+    initializePlotDataDownloads(document);
 
     if (window.IVIVCAccessibility) {
         window.IVIVCAccessibility.initializeHelpModal({

@@ -49,9 +49,49 @@ def _model_initial_points(model_name, x, y):
 colors = {
     'in_vitro': '#2E5F8A',      # Darker blue
     'in_vivo': '#8B3A6B',       # Darker purple-red
-    'in_vitro_2': '#7BB8E8',    # Light blue
-    'in_vivo_2': '#D487B8'      # Light purple-red
+    'in_vitro_2': '#006FA6',    # Accessible prediction blue
+    'in_vivo_2': '#A52A6A'      # Accessible prediction purple-red
 }
+
+
+def _apply_accessible_plot_styles(fig):
+    """Add non-color distinctions and visible outlines to Plotly series."""
+    for trace in fig.data:
+        name = str(getattr(trace, 'name', '') or '')
+        name_lower = name.lower()
+        mode = str(getattr(trace, 'mode', '') or '')
+
+        if 'markers' in mode:
+            if 'in vivo' in name_lower and 'predicted' in name_lower:
+                symbol = 'triangle-up'
+            elif 'in vitro' in name_lower and ('input' in name_lower or 'prediction' in name_lower):
+                symbol = 'square'
+            elif 'in vivo' in name_lower and 'interpolated' in name_lower:
+                symbol = 'diamond-open'
+            elif 'in vitro' in name_lower and 'interpolated' in name_lower:
+                symbol = 'square-open'
+            elif 'in vivo' in name_lower:
+                symbol = 'diamond'
+            elif 'in vitro' in name_lower:
+                symbol = 'circle'
+            else:
+                symbol = getattr(getattr(trace, 'marker', None), 'symbol', None) or 'circle'
+
+            trace.update(
+                marker_symbol=symbol,
+                marker_line_color='#1f1f1f',
+                marker_line_width=1.5,
+            )
+
+        if 'lines' in mode:
+            line = getattr(trace, 'line', None)
+            line_width = getattr(line, 'width', None) if line is not None else None
+            if line_width == 0:
+                continue
+            if 'in vitro' in name_lower and ('fit' in name_lower or 'fitted model' in name_lower):
+                trace.update(line_dash='solid')
+            elif 'in vivo' in name_lower and ('fit' in name_lower or 'fitted model' in name_lower):
+                trace.update(line_dash='dash')
 
 
 CV_COMPARISON_EXCLUDED_METRICS = {'adjusted_r_squared', 'aic', 'aicc', 'bic', 'nrmse', 'mnrmse'}
@@ -1677,59 +1717,141 @@ def write_plotly_data_to_excel(fig, filename, directory):
             df.to_excel(writer, sheet_name=trace.name[:31], index=False)
     return full_path
 
-def extract_plotly_data_for_table(fig):
-    """Extract data from plotly figure and return as HTML table with each trace in separate columns"""
+def _plot_table_axis_label(axis_title):
+    """Return a concise, readable axis label for downloaded plot data."""
+    label = str(axis_title or '').strip() or 'Value'
+    exact_labels = {
+        'Time (In Vitro Data)': 'In vitro time',
+        'Time (In Vivo Data)': 'In vivo time',
+        'Value': 'Response value',
+    }
+    if label in exact_labels:
+        return exact_labels[label]
+    if label.endswith(' (In Vitro Data)'):
+        base = label[:-len(' (In Vitro Data)')].strip().lower()
+        return f'In vitro {base}'
+    if label.endswith(' (In Vivo Data)'):
+        base = label[:-len(' (In Vivo Data)')].strip().lower()
+        return f'In vivo {base}'
+    return label
 
-    # Extract axis titles
+
+def _plot_table_series_label(trace_name):
+    """Return a concise series label without changing the visible plot legend."""
+    label = str(trace_name or '').strip()
+    replacements = {
+        'Data': 'observed data',
+        '95% Prediction Band Upper Bound': '95% band upper',
+        '95% Prediction Band Lower Bound': '95% band lower',
+        '95% Prediction Band Upper Bound (In Vitro)': '95% band upper, in vitro',
+        '95% Prediction Band Lower Bound (In Vitro)': '95% band lower, in vitro',
+        '95% Prediction Band Upper Bound (In Vivo)': '95% band upper, in vivo',
+        '95% Prediction Band Lower Bound (In Vivo)': '95% band lower, in vivo',
+    }
+    if label in replacements:
+        return replacements[label]
+    if not label:
+        return 'series'
+    if label.endswith(' (In Vitro Data)'):
+        base = label[:-len(' (In Vitro Data)')].replace(' Fit', ' fit')
+        return f'{base}, in vitro'
+    if label.endswith(' (In Vivo Data)'):
+        base = label[:-len(' (In Vivo Data)')].replace(' Fit', ' fit')
+        return f'{base}, in vivo'
+    return (
+        label
+        .replace('In Vitro', 'in vitro')
+        .replace('In Vivo', 'in vivo')
+        .replace(' Data', ' data')
+        .replace(' Fit', ' fit')
+    )
+
+
+def _plot_table_column_label(axis_title, trace_name, bound=None):
+    axis_label = _plot_table_axis_label(axis_title)
+    series_label = _plot_table_series_label(trace_name)
+    if bound:
+        series_label = f'{series_label} {bound} bound'
+    return f'{axis_label} ({series_label})'
+
+
+def extract_plotly_data_for_table(fig):
+    """Return an HTML table containing plotted series and uncertainty bounds."""
+    _apply_accessible_plot_styles(fig)
+
     x_title = fig.layout.xaxis.title.text if fig.layout.xaxis.title else 'X'
     y_title = fig.layout.yaxis.title.text if fig.layout.yaxis.title else 'Y'
 
-    # Find the maximum length among all traces to determine table size
     max_length = 0
-    trace_data = {}
+    trace_data = []
+    name_counts = {}
 
     for trace in fig.data:
-        if hasattr(trace, 'x') and hasattr(trace, 'y') and hasattr(trace, 'name') and trace.name is not None:
-            trace_length = len(trace.x)
-            max_length = max(max_length, trace_length)
-            trace_data[trace.name] = {
-                'x': list(trace.x),
-                'y': list(trace.y)
-            }
+        if not (hasattr(trace, 'x') and hasattr(trace, 'y')):
+            continue
+        if trace.x is None or trace.y is None:
+            continue
+
+        base_name = str(getattr(trace, 'name', '') or '').strip()
+        if not base_name:
+            continue
+        name_counts[base_name] = name_counts.get(base_name, 0) + 1
+        trace_name = base_name if name_counts[base_name] == 1 else f'{base_name} ({name_counts[base_name]})'
+
+        x_values = list(trace.x)
+        y_values = list(trace.y)
+        max_length = max(max_length, len(x_values), len(y_values))
+        columns = {
+            _plot_table_column_label(x_title, trace_name): x_values,
+            _plot_table_column_label(y_title, trace_name): y_values,
+        }
+
+        for axis_name, values, axis_title in (
+            ('error_x', x_values, x_title),
+            ('error_y', y_values, y_title),
+        ):
+            error = getattr(trace, axis_name, None)
+            if error is None or getattr(error, 'visible', True) is False:
+                continue
+            error_plus = getattr(error, 'array', None)
+            if error_plus is None:
+                continue
+            error_plus = list(error_plus)
+            error_minus_raw = getattr(error, 'arrayminus', None)
+            error_minus = list(error_minus_raw) if error_minus_raw is not None else list(error_plus)
+            n = min(len(values), len(error_plus), len(error_minus))
+            if n == 0:
+                continue
+            try:
+                center = np.asarray(values[:n], dtype=float)
+                plus = np.asarray(error_plus[:n], dtype=float)
+                minus = np.asarray(error_minus[:n], dtype=float)
+                columns[_plot_table_column_label(axis_title, trace_name, 'lower')] = list(center - minus)
+                columns[_plot_table_column_label(axis_title, trace_name, 'upper')] = list(center + plus)
+            except (TypeError, ValueError):
+                continue
+
+        trace_data.append(columns)
 
     if not trace_data:
-        return "<p>No data available</p>"
+        return '<p>No data available</p>'
 
-    # Create a dictionary to hold all columns
     table_dfs = []
+    for columns in trace_data:
+        padded = {}
+        for column_name, values in columns.items():
+            padded[column_name] = list(values) + [''] * (max_length - len(values))
+        table_dfs.append(pd.DataFrame(padded))
 
-    # Add columns for each trace
-    for trace_name, data in trace_data.items():
-        # Pad shorter traces with NaN to match max_length
-        x_data = data['x'] + [''] * (max_length - len(data['x']))
-        y_data = data['y'] + [''] * (max_length - len(data['y']))
-
-        # Create column names that include the trace name
-        x_col_name = f"{trace_name} - {x_title}"
-        y_col_name = f"{trace_name} - {y_title}"
-
-        table_dfs.append(pd.DataFrame(data=np.array([x_data, y_data]).T, columns=[x_col_name, y_col_name]))
-
-    # Create DataFrame with all traces as separate columns
     combined_df = pd.concat(table_dfs, axis=1)
-
-    # Convert to HTML table with DataTables-compatible structure
-    table_html = combined_df.to_html(
+    return combined_df.to_html(
         classes='table table-striped',
         table_id=f'plot-data-{uuid4().hex}',
         index=False,
         float_format=lambda x: f'{x:.4f}' if pd.notnull(x) else '',
         escape=False,
-        na_rep=''  # Display empty string for NaN values
+        na_rep='',
     )
-
-    return table_html
-
 
 def create_plotly_a1(x, y, model_info, include_bands=True):
     # Create the scatter plot for the data
@@ -1780,6 +1902,7 @@ def create_plotly_a1(x, y, model_info, include_bands=True):
                         x=x_smooth, y=bands['upper'],
                         mode='lines',
                         line=dict(width=0),
+                        name='95% Prediction Band Upper Bound',
                         showlegend=False,
                         hoverinfo='skip',
                         zorder=0
@@ -1791,7 +1914,7 @@ def create_plotly_a1(x, y, model_info, include_bands=True):
                         fill='tonexty',
                         fillcolor='rgba(128,128,128,0.3)',
                         line=dict(width=0),
-                        name='95% Prediction Band',
+                        name='95% Prediction Band Lower Bound',
                         hoverinfo='skip',
                         zorder=0
                     )
@@ -1958,6 +2081,7 @@ def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
                         x=x_smooth, y=bands1['upper'],
                         mode='lines',
                         line=dict(width=0),
+                        name='95% Prediction Band Upper Bound (In Vitro)',
                         showlegend=False,
                         hoverinfo='skip',
                         zorder=0
@@ -1969,7 +2093,7 @@ def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
                         fill='tonexty',
                         fillcolor=hex_to_rgba(colors['in_vitro'], 0.2),
                         line=dict(width=0),
-                        name='95% Prediction Band (In Vitro)',
+                        name='95% Prediction Band Lower Bound (In Vitro)',
                         hoverinfo='skip',
                         zorder=0
                     )
@@ -2007,6 +2131,7 @@ def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
                         x=x_smooth, y=bands2['upper'],
                         mode='lines',
                         line=dict(width=0),
+                        name='95% Prediction Band Upper Bound (In Vivo)',
                         showlegend=False,
                         hoverinfo='skip',
                         zorder=0
@@ -2018,7 +2143,7 @@ def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
                         fill='tonexty',
                         fillcolor=hex_to_rgba(colors['in_vivo'], 0.2),
                         line=dict(width=0),
-                        name='95% Prediction Band (In Vivo)',
+                        name='95% Prediction Band Lower Bound (In Vivo)',
                         hoverinfo='skip',
                         zorder=0
                     )

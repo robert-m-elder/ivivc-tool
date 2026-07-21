@@ -90,7 +90,7 @@
             setBackgroundInert(true);
 
             window.requestAnimationFrame(function() {
-                const focusTarget = closeButtons[0] || dialog;
+                const focusTarget = modalTitle || closeButtons[0] || dialog;
                 focusTarget.focus();
             });
         }
@@ -153,7 +153,7 @@
 
             const first = focusable[0];
             const last = focusable[focusable.length - 1];
-            if (event.shiftKey && document.activeElement === first) {
+            if (event.shiftKey && (document.activeElement === first || document.activeElement === modalTitle || !dialog.contains(document.activeElement))) {
                 event.preventDefault();
                 last.focus();
             } else if (!event.shiftKey && document.activeElement === last) {
@@ -189,11 +189,100 @@
         return stripHtml(layoutTitle) || nearestHeadingText(container) || 'Interactive data plot';
     }
 
+    function axisTitle(plotDiv, axisName, fallback) {
+        const axis = plotDiv && plotDiv.layout ? plotDiv.layout[axisName] : null;
+        const title = axis && axis.title ? axis.title.text || axis.title : '';
+        return stripHtml(title) || fallback;
+    }
+
+    function uniqueTraceNames(plotDiv) {
+        const names = [];
+        (plotDiv.data || []).forEach(function(trace) {
+            const name = stripHtml(trace.name || '');
+            if (!name || /upper bound/i.test(name) || names.indexOf(name) !== -1) {
+                return;
+            }
+            names.push(name);
+        });
+        return names;
+    }
+
+    function hasErrorBars(plotDiv) {
+        return (plotDiv.data || []).some(function(trace) {
+            return Boolean(
+                (trace.error_x && trace.error_x.visible !== false && trace.error_x.array) ||
+                (trace.error_y && trace.error_y.visible !== false && trace.error_y.array)
+            );
+        });
+    }
+
+    function hasPredictionBand(plotDiv) {
+        return (plotDiv.data || []).some(function(trace) {
+            return /prediction band/i.test(trace.name || '') || trace.fill === 'tonexty';
+        });
+    }
+
+    function associatedUncertaintyText(container) {
+        let sibling = container.previousElementSibling;
+        while (sibling) {
+            if (sibling.classList && sibling.classList.contains('uncertainty-plot-alert')) {
+                return sibling.textContent.replace(/\s+/g, ' ').trim();
+            }
+            if (/^H[1-6]$/.test(sibling.tagName) || (sibling.classList && sibling.classList.contains('plot-container'))) {
+                break;
+            }
+            sibling = sibling.previousElementSibling;
+        }
+        return '';
+    }
+
+    function plotTypeDescription(container, plotDiv, title) {
+        const id = (container.id || '').toLowerCase();
+        const titleLower = title.toLowerCase();
+        const traces = uniqueTraceNames(plotDiv);
+        const traceText = traces.length
+            ? ' Series shown: ' + traces.join('; ') + '.'
+            : '';
+        const xTitle = axisTitle(plotDiv, 'xaxis', 'x-axis value');
+        const yTitle = axisTitle(plotDiv, 'yaxis', 'y-axis value');
+        let explanation = '';
+
+        if (id.indexOf('residual-qq') !== -1 || titleLower.indexOf('q-q') !== -1) {
+            explanation = ' The diagonal reference line shows the pattern expected for normally distributed standardized residuals. Points farther from the line indicate larger departures from that pattern.';
+        } else if (id.indexOf('residual') !== -1 || titleLower.indexOf('residual') !== -1) {
+            explanation = ' The dashed horizontal line marks zero residual. When present, the shaded inner band and dotted outer lines provide common visual reference ranges for comparing residual magnitude; they are not acceptance limits or confidence intervals.';
+        } else if (id.indexOf('processing-raw-data') !== -1) {
+            explanation = ' Markers show the uploaded in vitro and in vivo observations before preprocessing.';
+        } else if (id.indexOf('interpolation') !== -1) {
+            explanation = ' Marker symbols distinguish measured observations from values estimated by interpolation.';
+        } else if (id.indexOf('plot-fit-approach3') !== -1) {
+            explanation = ' The plot shows the direct interpolation-based value or time ratio used for mapping; no parametric fitted curve or model-based uncertainty band is shown.';
+        } else if (id.indexOf('plot-fit-') !== -1 || titleLower.indexOf(' fit') !== -1) {
+            explanation = ' Markers show observations and lines show the fitted model relationship.';
+            if (hasPredictionBand(plotDiv)) {
+                explanation += ' Shaded areas show approximate 95% prediction bands.';
+            }
+        } else if (id.indexOf('prediction') !== -1 || titleLower.indexOf('prediction') !== -1) {
+            explanation = ' Marker symbols distinguish fitting observations, prediction inputs, and predicted in vivo values or times. Dotted connecting lines, when present, show the corresponding mapping between input and prediction points.';
+        }
+
+        if (hasErrorBars(plotDiv)) {
+            explanation += ' Error bars show the calculated uncertainty around predicted values or times.';
+        }
+
+        const warning = associatedUncertaintyText(container);
+        if (warning) {
+            explanation += ' Plot warning: ' + warning + '.';
+        }
+
+        return title + '. Horizontal axis: ' + xTitle + '. Vertical axis: ' + yTitle + '.' + traceText + explanation + ' Use the Plotly toolbar to inspect or rescale the chart. The controls beneath the plot can copy or download the plotted series and any available error-bar bounds.';
+    }
+
     function enhancePlotAccessibility(root) {
         const scope = root || document;
         scope.querySelectorAll('.plot-container, .report-plot-placeholder').forEach(function(container) {
             const plotDiv = container.querySelector('.plotly-graph-div, .report-plotly-div');
-            if (!plotDiv || plotDiv.dataset.accessibilityEnhanced === 'true') {
+            if (!plotDiv) {
                 return;
             }
 
@@ -202,14 +291,15 @@
             const summaryId = containerId + '-accessibility-summary';
             let summary = document.getElementById(summaryId);
             const title = plotTitle(plotDiv, container);
+            const description = plotTypeDescription(container, plotDiv, title);
 
             if (!summary) {
                 summary = document.createElement('p');
                 summary.id = summaryId;
                 summary.className = 'sr-only plot-accessibility-summary';
-                summary.textContent = title + '. Interactive chart. Use the Plotly toolbar to explore the chart. A data table containing the plotted values is available after the chart.';
                 container.insertAdjacentElement('beforebegin', summary);
             }
+            summary.textContent = description;
 
             plotDiv.setAttribute('role', 'group');
             plotDiv.setAttribute('aria-roledescription', 'interactive chart');
@@ -217,16 +307,16 @@
             plotDiv.setAttribute('aria-describedby', summaryId);
 
             const controlsContainer = container.nextElementSibling;
-            const dataButton = controlsContainer && controlsContainer.classList.contains('custom-button-container')
-                ? controlsContainer.querySelector('.show-data-btn')
+            const downloadGroup = controlsContainer && controlsContainer.classList.contains('plot-data-downloads')
+                ? controlsContainer
                 : null;
-            if (dataButton) {
-                const detailsId = dataButton.getAttribute('aria-controls');
-                if (detailsId) {
-                    plotDiv.setAttribute('aria-details', detailsId);
+            if (downloadGroup) {
+                if (!downloadGroup.id) {
+                    downloadGroup.id = containerId + '-data-downloads';
                 }
-                dataButton.dataset.plotTitle = title;
-                dataButton.setAttribute('aria-label', 'Show data table for ' + title);
+                downloadGroup.dataset.plotTitle = title;
+                downloadGroup.setAttribute('aria-label', 'Plot data downloads for ' + title);
+                plotDiv.setAttribute('aria-details', downloadGroup.id);
             }
             plotDiv.dataset.accessibilityEnhanced = 'true';
         });
@@ -253,27 +343,37 @@
                 caption.textContent = nearestHeadingText(table) || ('Data table ' + (index + 1));
                 table.insertBefore(caption, table.firstChild);
             }
+
+            if (!table.closest('.data-table-container, .table-scroll-region, .dt-container, .dataTables_wrapper')) {
+                const caption = table.querySelector('caption');
+                const region = document.createElement('div');
+                const label = caption ? caption.textContent.replace(/\s+/g, ' ').trim() : ('Data table ' + (index + 1));
+                region.className = 'table-scroll-region';
+                region.setAttribute('role', 'region');
+                region.setAttribute('aria-label', 'Scrollable table: ' + label);
+                region.setAttribute('tabindex', '0');
+                table.parentNode.insertBefore(region, table);
+                region.appendChild(table);
+            }
         });
     }
 
     function initializeDataTableControls(root) {
         const scope = root || document;
-        scope.querySelectorAll('.show-data-btn').forEach(function(button, index) {
-            const target = button.dataset.target;
-            const container = target ? document.getElementById(target + '-container') : null;
-            if (!container) {
-                return;
+        scope.querySelectorAll('.plot-data-downloads').forEach(function(group, index) {
+            const target = group.dataset.tableTarget;
+            const sourceContainer = target ? document.getElementById(target + '-container') : null;
+            const title = group.dataset.plotTitle || 'plot';
+
+            if (!group.id) {
+                group.id = 'plot-data-downloads-' + (index + 1);
             }
-            if (!button.id) {
-                button.id = 'show-data-table-' + (index + 1);
-            }
-            button.type = 'button';
-            button.setAttribute('aria-controls', container.id);
-            button.setAttribute('aria-expanded', container.hidden || getComputedStyle(container).display === 'none' ? 'false' : 'true');
-            container.setAttribute('role', 'region');
-            container.setAttribute('aria-labelledby', button.id);
-            if (getComputedStyle(container).display === 'none') {
-                container.hidden = true;
+            group.setAttribute('role', 'group');
+            group.setAttribute('aria-label', 'Plot data downloads for ' + title);
+
+            if (sourceContainer) {
+                sourceContainer.hidden = true;
+                sourceContainer.setAttribute('aria-hidden', 'true');
             }
         });
     }

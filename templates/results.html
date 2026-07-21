@@ -11,6 +11,20 @@
     {% endfor %}
 {%- endmacro %}
 
+{% macro render_plot_data_downloads(target, plot_title, table_html) -%}
+    <div class="plot-data-downloads"
+         data-table-target="{{ target }}"
+         data-plot-title="{{ plot_title }}"
+         role="group"
+         aria-label="Plot data downloads for {{ plot_title }}">
+        <span class="plot-data-download-label" aria-hidden="true">Plot data:</span>
+        <div class="plot-data-button-container"></div>
+    </div>
+    <div id="{{ target }}-container" class="data-table-container plot-data-source" hidden aria-hidden="true">
+        {{ table_html | safe }}
+    </div>
+{%- endmacro %}
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -27,10 +41,7 @@
     <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/buttons/3.2.3/js/dataTables.buttons.js"></script>
     <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/buttons/3.2.3/js/buttons.dataTables.js"></script>
     <script type="text/javascript" charset="utf8" src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <script type="text/javascript" charset="utf8" src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
-    <script type="text/javascript" charset="utf8" src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
     <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/buttons/3.2.3/js/buttons.html5.min.js"></script>
-    <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/buttons/3.2.3/js/buttons.print.min.js"></script>
 
     <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/colreorder/2.1.1/css/colReorder.dataTables.min.css">
     <script type="text/javascript" src="https://cdn.datatables.net/colreorder/2.1.1/js/dataTables.colReorder.js"></script>
@@ -130,39 +141,18 @@
             <div id="plot-processing-raw-data" class="plot-container report-source-plot">
                 {{ raw_data_info['plot'] | safe }}
             </div>
-            <div class="custom-button-container">
-                <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="raw-data-table" style="text-decoration: none;">
-                    <span>Show Data Table</span>
-                </button>
-            </div>
-            <div id="raw-data-table-container" class="data-table-container" style="display: none;">
-                {{ raw_data_info['table_html'] | safe }}
-            </div>
+            {{ render_plot_data_downloads('raw-data-table', 'Fitting data plot', raw_data_info['table_html']) }}
             <div id="plot-processing-interpolation" class="plot-container report-source-plot">
                 {{ interpolation_info['plot'] | safe }}
             </div>
-            <div class="custom-button-container">
-                <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="interpolation-table" style="text-decoration: none;">
-                    <span>Show Data Table</span>
-                </button>
-            </div>
-            <div id="interpolation-table-container" class="data-table-container" style="display: none;">
-                {{ interpolation_info['table_html'] | safe }}
-            </div>
+            {{ render_plot_data_downloads('interpolation-table', 'Processed fitting data plot', interpolation_info['table_html']) }}
 
 {% if 'plot' in prediction_interpolation_info %}
                 <h4>Prediction Data:</h4>
                 <div id="plot-processing-prediction-interpolation" class="plot-container report-source-plot">
                     {{ prediction_interpolation_info['plot'] | safe }}
                 </div>
-                <div class="custom-button-container">
-                    <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="prediction-interpolation-table" style="text-decoration: none;">
-                        <span>Show Data Table</span>
-                    </button>
-                </div>
-                <div id="prediction-interpolation-table-container" class="data-table-container" style="display: none;">
-                    {{ prediction_interpolation_info['table_html'] | safe }}
-                </div>
+                {{ render_plot_data_downloads('prediction-interpolation-table', 'Processed prediction data plot', prediction_interpolation_info['table_html']) }}
             {% endif %}
         </div>
 <div id="comparison">
@@ -542,14 +532,7 @@
 <div id="plot-fit-{{ model_key|replace(':', '-') }}" class="plot-container report-source-plot">
                                         {{ model_results['plot']['plot'] | safe }}
                                     </div>
-                                    <div class="custom-button-container">
-                                        <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach1-{{ model_name }}-table" style="text-decoration: none;">
-                                            <span>Show Data Table</span>
-                                        </button>
-                                    </div>
-                                    <div id="approach1-{{ model_name }}-table-container" class="data-table-container" style="display: none;">
-                                        {{ model_results['plot']['table_html'] | safe }}
-                                    </div>
+                                    {{ render_plot_data_downloads('approach1-' ~ model_name ~ '-table', models[model_name].display_name ~ ' Approach 1 fitting plot', model_results['plot']['table_html']) }}
 
 <h4>Function</h4>
                                     <p>\[{{ model_results.function }}\]</p>
@@ -567,26 +550,12 @@
                                             <div id="plot-residual-{{ model_key|replace(':', '-') }}" class="plot-container report-source-plot">
                                         {{ model_results.residual_plot.plot | safe }}
                                     </div>
-                                    <div class="custom-button-container">
-                                        <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach1-{{ model_name }}-residual-table" style="text-decoration: none;">
-                                            <span>Show Data Table</span>
-                                        </button>
-                                    </div>
-                                    <div id="approach1-{{ model_name }}-residual-table-container" class="data-table-container" style="display: none;">
-                                        {{ model_results.residual_plot.table_html | safe }}
-                                    </div>
+                                    {{ render_plot_data_downloads('approach1-' ~ model_name ~ '-residual-table', models[model_name].display_name ~ ' Approach 1 residual plot', model_results.residual_plot.table_html) }}
                                     <h5>Normal Q-Q plot of residuals</h5>
                                     <div id="plot-residual-qq-{{ model_key|replace(':', '-') }}" class="plot-container report-source-plot">
                                         {{ model_results.residual_qq_plot.plot | safe }}
                                     </div>
-                                    <div class="custom-button-container">
-                                        <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach1-{{ model_name }}-residual-qq-table" style="text-decoration: none;">
-                                            <span>Show Data Table</span>
-                                        </button>
-                                    </div>
-                                    <div id="approach1-{{ model_name }}-residual-qq-table-container" class="data-table-container" style="display: none;">
-                                        {{ model_results.residual_qq_plot.table_html | safe }}
-                                    </div>
+                                    {{ render_plot_data_downloads('approach1-' ~ model_name ~ '-residual-qq-table', models[model_name].display_name ~ ' Approach 1 residual Q-Q plot', model_results.residual_qq_plot.table_html) }}
                                 {% endif %}
                             </div>
                         {% endif %}
@@ -601,14 +570,7 @@
 <div id="plot-fit-{{ model_key|replace(':', '-') }}" class="plot-container report-source-plot">
                                         {{ model_results['plot']['plot'] | safe }}
                                     </div>
-                                    <div class="custom-button-container">
-                                        <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach2-{{ model_name }}-table" style="text-decoration: none;">
-                                            <span>Show Data Table</span>
-                                        </button>
-                                    </div>
-                                    <div id="approach2-{{ model_name }}-table-container" class="data-table-container" style="display: none;">
-                                        {{ model_results['plot']['table_html'] | safe }}
-                                    </div>
+                                    {{ render_plot_data_downloads('approach2-' ~ model_name ~ '-table', models[model_name].display_name ~ ' Approach 2 fitting plot', model_results['plot']['table_html']) }}
 <h4>Function</h4>
                                     <p>\[{{ model_results.function }}\]</p>
                                     <section class="approach2-dataset-section approach2-dataset-in-vitro">
@@ -634,26 +596,12 @@
                                         <div id="plot-residual-{{ model_key|replace(':', '-') }}-in-vitro" class="plot-container report-source-plot">
                                             {{ model_results.residual_plot[0].plot | safe }}
                                         </div>
-                                        <div class="custom-button-container">
-                                            <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach2-{{ model_name }}-residual-table-in-vitro" style="text-decoration: none;">
-                                                <span>Show Data Table</span>
-                                            </button>
-                                        </div>
-                                        <div id="approach2-{{ model_name }}-residual-table-in-vitro-container" class="data-table-container" style="display: none;">
-                                            {{ model_results.residual_plot[0].table_html | safe }}
-                                        </div>
+                                        {{ render_plot_data_downloads('approach2-' ~ model_name ~ '-residual-table-in-vitro', models[model_name].display_name ~ ' Approach 2 in vitro residual plot', model_results.residual_plot[0].table_html) }}
                                         <h5>Normal Q-Q plot of residuals</h5>
                                         <div id="plot-residual-qq-{{ model_key|replace(':', '-') }}-in-vitro" class="plot-container report-source-plot">
                                             {{ model_results.residual_qq_plot[0].plot | safe }}
                                         </div>
-                                        <div class="custom-button-container">
-                                            <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach2-{{ model_name }}-residual-qq-table-in-vitro" style="text-decoration: none;">
-                                                <span>Show Data Table</span>
-                                            </button>
-                                        </div>
-                                        <div id="approach2-{{ model_name }}-residual-qq-table-in-vitro-container" class="data-table-container" style="display: none;">
-                                            {{ model_results.residual_qq_plot[0].table_html | safe }}
-                                        </div>
+                                        {{ render_plot_data_downloads('approach2-' ~ model_name ~ '-residual-qq-table-in-vitro', models[model_name].display_name ~ ' Approach 2 in vitro residual Q-Q plot', model_results.residual_qq_plot[0].table_html) }}
                                     </section>
                                     <section class="approach2-dataset-section approach2-dataset-in-vivo">
                                         <h4 class="approach2-dataset-heading">In Vivo Data</h4>
@@ -678,26 +626,12 @@
                                             <div id="plot-residual-{{ model_key|replace(':', '-') }}-in-vivo" class="plot-container report-source-plot">
                                         {{ model_results.residual_plot[1].plot | safe }}
                                     </div>
-                                    <div class="custom-button-container">
-                                        <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach2-{{ model_name }}-residual-table-in-vivo" style="text-decoration: none;">
-                                            <span>Show Data Table</span>
-                                        </button>
-                                    </div>
-                                    <div id="approach2-{{ model_name }}-residual-table-in-vivo-container" class="data-table-container" style="display: none;">
-                                        {{ model_results.residual_plot[1].table_html | safe }}
-                                    </div>
+                                    {{ render_plot_data_downloads('approach2-' ~ model_name ~ '-residual-table-in-vivo', models[model_name].display_name ~ ' Approach 2 in vivo residual plot', model_results.residual_plot[1].table_html) }}
                                     <h5>Normal Q-Q plot of residuals</h5>
                                     <div id="plot-residual-qq-{{ model_key|replace(':', '-') }}-in-vivo" class="plot-container report-source-plot">
                                         {{ model_results.residual_qq_plot[1].plot | safe }}
                                     </div>
-                                    <div class="custom-button-container">
-                                        <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach2-{{ model_name }}-residual-qq-table-in-vivo" style="text-decoration: none;">
-                                            <span>Show Data Table</span>
-                                        </button>
-                                    </div>
-                                    <div id="approach2-{{ model_name }}-residual-qq-table-in-vivo-container" class="data-table-container" style="display: none;">
-                                        {{ model_results.residual_qq_plot[1].table_html | safe }}
-                                    </div>
+                                    {{ render_plot_data_downloads('approach2-' ~ model_name ~ '-residual-qq-table-in-vivo', models[model_name].display_name ~ ' Approach 2 in vivo residual Q-Q plot', model_results.residual_qq_plot[1].table_html) }}
                                     </section>
                                 {% endif %}
                             </div>
@@ -708,26 +642,12 @@
 <div id="plot-fit-approach3-value" class="plot-container report-source-plot">
                                     {{ model_results['plot_v']['plot'] | safe }}
                                 </div>
-                                <div class="custom-button-container">
-                                    <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach3-table-1" style="text-decoration: none;">
-                                        <span>Show Data Table</span>
-                                    </button>
-                                </div>
-                                <div id="approach3-table-1-container" class="data-table-container" style="display: none;">
-                                    {{ model_results['plot_v']['table_html'] | safe }}
-                                </div>
+                                {{ render_plot_data_downloads('approach3-table-1', 'Approach 3 response-value mapping plot', model_results['plot_v']['table_html']) }}
 <p></p>
                                 <div id="plot-fit-approach3-time" class="plot-container report-source-plot">
                                     {{ model_results['plot_t']['plot'] | safe }}
                                 </div>
-                                <div class="custom-button-container">
-                                    <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn" data-target="approach3-table-2" style="text-decoration: none;">
-                                        <span>Show Data Table</span>
-                                    </button>
-                                </div>
-                                <div id="approach3-table-2-container" class="data-table-container" style="display: none;">
-                                    {{ model_results['plot_t']['table_html'] | safe }}
-                                </div>
+                                {{ render_plot_data_downloads('approach3-table-2', 'Approach 3 time mapping plot', model_results['plot_t']['table_html']) }}
 </div>
                         {% endif %}
                     {% endif %}
@@ -758,15 +678,7 @@
                                             <div id="plot-prediction-{{ approach_id }}-{{ model_name }}" class="plot-container report-source-plot">
                                                 {{ pred_result.plot.plot | safe }}
                                             </div>
-<div class="custom-button-container">
-                                                <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn"
-                                                    data-target="approach1-{{ model_name }}-table-pred" style="text-decoration: none;">
-                                                    <span>Show Data Table</span>
-                                                </button>
-                                            </div>
-                                            <div id="approach1-{{ model_name }}-table-pred-container" class="data-table-container" style="display: none;">
-                                                {{ pred_result['plot']['table_html'] | safe }}
-                                            </div>
+{{ render_plot_data_downloads('approach1-' ~ model_name ~ '-table-pred', models[model_name].display_name ~ ' Approach 1 prediction plot', pred_result['plot']['table_html']) }}
                                         {% endif %}
 </div>
                                 {% endif %}
@@ -779,30 +691,14 @@
 <div id="plot-prediction-{{ approach_id }}-{{ model_name }}-value" class="plot-container report-source-plot">
                                                 {{ pred_result.plot.plot | safe }}
                                             </div>
-                                            <div class="custom-button-container">
-                                                <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn"
-                                                    data-target="approach2-{{ model_name }}-table-pred" style="text-decoration: none;">
-                                                    <span>Show Data Table</span>
-                                                </button>
-                                            </div>
-                                            <div id="approach2-{{ model_name }}-table-pred-container" class="data-table-container" style="display: none;">
-                                                {{ pred_result['plot']['table_html'] | safe }}
-                                            </div>
+                                            {{ render_plot_data_downloads('approach2-' ~ model_name ~ '-table-pred', models[model_name].display_name ~ ' Approach 2 response-value ratio prediction plot', pred_result['plot']['table_html']) }}
 {% endif %}
                                         {% if 'plot_tau' in pred_result and pred_result['plot_tau'] is not none %}
                                             <h4>Time constant ratio rescaling</h4>
                                             <div id="plot-prediction-{{ approach_id }}-{{ model_name }}-tau" class="plot-container report-source-plot">
                                                 {{ pred_result.plot_tau.plot | safe }}
                                             </div>
-                                            <div class="custom-button-container">
-                                                <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn"
-                                                    data-target="approach2-{{ model_name }}-table-pred-tau" style="text-decoration: none;">
-                                                    <span>Show Data Table</span>
-                                                </button>
-                                            </div>
-                                            <div id="approach2-{{ model_name }}-table-pred-tau-container" class="data-table-container" style="display: none;">
-                                                {{ pred_result['plot_tau']['table_html'] | safe }}
-                                            </div>
+                                            {{ render_plot_data_downloads('approach2-' ~ model_name ~ '-table-pred-tau', models[model_name].display_name ~ ' Approach 2 time-constant ratio prediction plot', pred_result['plot_tau']['table_html']) }}
                                         {% elif pred_result.plot_tau_skip_reason %}
                                             <h4>Time constant ratio rescaling</h4>
                                             <p class="prediction-skip-reason">{{ pred_result.plot_tau_skip_reason }}</p>
@@ -817,15 +713,7 @@
                                             <div id="plot-prediction-approach3-{{ model_name|replace('_', '-') }}" class="plot-container report-source-plot">
                                                 {{ pred_result.plot.plot | safe }}
                                             </div>
-                                            <div class="custom-button-container">
-                                                <button type="button" class="dt-button2 buttons-copy buttons-html5 show-data-btn"
-                                                    data-target="approach3-{{ model_name }}-pred" style="text-decoration: none;">
-                                                    <span>Show Data Table</span>
-                                                </button>
-                                            </div>
-                                            <div id="approach3-{{ model_name }}-pred-container" class="data-table-container" style="display: none;">
-                                                {{ pred_result.plot.table_html | safe }}
-                                            </div>
+                                            {{ render_plot_data_downloads('approach3-' ~ model_name ~ '-pred', 'Approach 3 direct mapping prediction plot', pred_result.plot.table_html) }}
 {% endif %}
                                     </div>
                                 {% endif %}
@@ -844,10 +732,10 @@
         {% endif %}
     </div>
     </main>
-<div id="help-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-text" aria-hidden="true" hidden>
+<div id="help-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-hidden="true" hidden>
         <div class="modal-content" tabindex="-1">
             <div class="modal-header">
-                <h4 id="modal-title">Help</h4>
+                <h4 id="modal-title" tabindex="-1">Help</h4>
                 <button type="button" class="close" aria-label="Close help dialog"><span aria-hidden="true">&times;</span></button>
             </div>
             <div class="modal-body">

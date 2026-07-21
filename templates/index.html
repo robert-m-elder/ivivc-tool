@@ -64,13 +64,13 @@
                 </div>
                 <div class="file-input-actions">
                     <input type="file" name="file" id="file" accept=".xlsx,.xls,.csv" required{% if 'file' in error_field_ids %} aria-invalid="true" aria-describedby="file-error"{% endif %}>
-                    <button type="button" class="btn btn-sm btn-outline-secondary clear-file-btn" data-target="file">Clear Selection</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary clear-file-btn" data-target="file" aria-label="Clear fitting dataset selection">Clear Selection</button>
                 </div>
                 {% for error in form_errors if error.field_id == 'file' %}<p id="file-error" class="field-error">{{ error.message }}</p>{% endfor %}
             </div>
             <div id="sheet-selection" class="form-group" hidden aria-busy="false">
                 <div class="label-with-help">
-                    <label for="sheet">Select Worksheet:</label>
+                    <label for="sheet">Select Worksheet<span class="sr-only"> for the fitting dataset</span>:</label>
                     <button type="button" class="help-btn-small" data-modal="fitting-sheet-help" aria-label="Help for fitting-dataset worksheet selection" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button>
                 </div>
                 <select name="sheet" id="sheet"{% if 'sheet' in error_field_ids %} aria-invalid="true" aria-describedby="sheet-error"{% endif %}>
@@ -85,13 +85,13 @@
                 </div>
                 <div class="file-input-actions">
                     <input type="file" id="prediction_file" name="prediction_file" accept=".csv,.xlsx,.xls"{% if 'prediction_file' in error_field_ids %} aria-invalid="true" aria-describedby="prediction-file-error"{% endif %}>
-                    <button type="button" class="btn btn-sm btn-outline-secondary clear-file-btn" data-target="prediction_file">Clear Selection</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary clear-file-btn" data-target="prediction_file" aria-label="Clear prediction dataset selection">Clear Selection</button>
                 </div>
                 {% for error in form_errors if error.field_id == 'prediction_file' %}<p id="prediction-file-error" class="field-error">{{ error.message }}</p>{% endfor %}
             </div>
             <div id="sheet-selection2" class="form-group" hidden aria-busy="false">
                 <div class="label-with-help">
-                    <label for="sheet2">Select Worksheet:</label>
+                    <label for="sheet2">Select Worksheet<span class="sr-only"> for the prediction dataset</span>:</label>
                     <button type="button" class="help-btn-small" data-modal="prediction-sheet-help" aria-label="Help for prediction-dataset worksheet selection" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button>
                 </div>
                 <select name="prediction_sheet" id="sheet2"{% if 'sheet2' in error_field_ids %} aria-invalid="true" aria-describedby="sheet2-error"{% endif %}>
@@ -251,10 +251,10 @@
         </div>
     </form>
     </main>
-<div id="help-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-text" aria-hidden="true" hidden>
+<div id="help-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-hidden="true" hidden>
         <div class="modal-content" tabindex="-1">
             <div class="modal-header">
-                <h4 id="modal-title">Help</h4>
+                <h4 id="modal-title" tabindex="-1">Help</h4>
                 <button type="button" class="close" aria-label="Close help dialog"><span aria-hidden="true">&times;</span></button>
             </div>
             <div class="modal-body">
