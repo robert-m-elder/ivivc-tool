@@ -288,6 +288,7 @@
                         {% endif %}
 
                         <h4>Preprocessing</h4>
+                        {{ preprocessing_overview_summary_html | safe }}
                         <table class="settings-table description-table">
                             <thead>
                                 <tr>
@@ -328,6 +329,9 @@
                                     {% endfor %}
                                 </tbody>
                             </table>
+
+                            <h4>Cross-validation</h4>
+                            {{ cross_validation_overview_summary_html | safe }}
 
                             <h4>Grid-search initialization</h4>
                             {{ grid_search_description_html | safe }}
@@ -402,6 +406,11 @@
                             {% endfor %}
                             <h4>Fitted parameter diagnostics</h4>
                             {{ model_results.parameter_diagnostics_html | safe }}
+                            <h4>Uncertainty and error-bar interpretation</h4>
+                            {{ option.fit_uncertainty_html | safe }}
+                            {% if option.prediction_error_html %}
+                                {{ option.prediction_error_html | safe }}
+                            {% endif %}
                             <h4>Goodness of fit and validation</h4>
                             {{ goodness_validation_table_html | safe }}
                             {{ model_results.stats_table | safe }}
@@ -452,6 +461,11 @@
                             {% if model_results.prediction_skip_reasons and model_results.prediction_skip_reasons.tau_ratio %}
                                 <p class="prediction-skip-reason"><strong>Prediction method not performed:</strong> {{ model_results.prediction_skip_reasons.tau_ratio }}</p>
                             {% endif %}
+                            <h4>Uncertainty and error-bar interpretation</h4>
+                            {{ option.fit_uncertainty_html | safe }}
+                            {% if option.prediction_error_html %}
+                                {{ option.prediction_error_html | safe }}
+                            {% endif %}
                             <h4>Goodness of fit and validation</h4>
                             {{ goodness_validation_table_html | safe }}
                             <h5>In vitro data</h5>
@@ -496,12 +510,11 @@
                         {% elif option.approach_id == 'approach3' %}
                             <h4>Model form</h4>
                             <p>Direct interpolation-based mapping; no parametric model is fitted for this approach.</p>
-                        {% endif %}
-
-                        <h4>Uncertainty and error-bar interpretation</h4>
-                        {{ option.fit_uncertainty_html | safe }}
-                        {% if option.prediction_error_html %}
-                            {{ option.prediction_error_html | safe }}
+                            <h4>Uncertainty and error-bar interpretation</h4>
+                            {{ option.fit_uncertainty_html | safe }}
+                            {% if option.prediction_error_html %}
+                                {{ option.prediction_error_html | safe }}
+                            {% endif %}
                         {% endif %}
 
                         <p class="report-disclaimer"><strong>Report note:</strong> This report summarizes the app configuration and fitted model output. It should be reviewed alongside the plots, source data, residual behavior, and any domain-specific acceptance criteria before use in a validation package.</p>

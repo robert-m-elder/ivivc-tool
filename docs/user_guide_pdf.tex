@@ -1,6 +1,13 @@
+% Enable tagged PDF 2.0 output. Add a formal PDF/UA standard declaration only after validation.
+\DocumentMetadata{
+  lang = en-US,
+  pdfversion = 2.0,
+  testphase = {phase-III,title,table,math,firstaid}
+}
 \documentclass[10pt,letterpaper]{article}
 \usepackage[margin=0.75in]{geometry}
 \usepackage{amsmath}
+\usepackage{unicode-math}
 \usepackage{array}
 \usepackage{booktabs}
 \usepackage{enumitem}
@@ -16,7 +23,21 @@
 \usepackage{parskip}
 \setlist[itemize]{leftmargin=*}
 \setlist[enumerate]{leftmargin=*}
-\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue, citecolor=blue, breaklinks=true}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue,
+  citecolor=blue,
+  breaklinks=true,
+  pdftitle={IVIVC App User Guide},
+  pdfauthor={IVIVC App},
+  pdfsubject={User guide for the IVIVC App for Absorbable Polymers},
+  pdfkeywords={IVIVC, absorbable polymers, model fitting, cross-validation},
+  pdfdisplaydoctitle=true
+}
+
+% All guide tables use their first row as the column-header row.
+\tagpdfsetup{table/header-rows={1}}
 
 \pagestyle{fancy}
 \fancyhf{}

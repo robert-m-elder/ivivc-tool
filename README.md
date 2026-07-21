@@ -43,34 +43,4 @@ Establishing an in vitro-in vivo correlation (IVIVC) can support the evaluation 
 
 ## User guide
 
-See [`docs/user_guide.pdf`](docs/user_guide.pdf) for detailed descriptions of inputs, options, methods, and outputs. The main LaTeX content source is [`docs/user_guide.tex`](docs/user_guide.tex), with generated inserts in [`docs/includes/generated/`](docs/includes/generated/), appendices in [`docs/appendices/`](docs/appendices/), and references in [`docs/references.bib`](docs/references.bib). These files are content-only so they can be copied into an Overleaf project and included from a top-level LaTeX document.
-
-## Documentation source-of-truth
-
-- Edit `docs/user_guide.tex` for user-guide narrative, structure, and guide-only interpretation text.
-- Edit `docs/appendices/*.tex` for appendix text.
-- Edit `utilities/descriptions.yaml` for reusable app-facing wording used by templates, reports, modals, or generated reference inserts.
-- Edit model, metric, and preprocessing registry files for registry-derived guide tables.
-- Edit `docs/references.bib` for references.
-
-Regenerate generated guide inserts and this README with:
-
-```bash
-python docs/generate_user_guide.py
-```
-
-Compile the PDF with:
-
-```bash
-bash docs/generate_user_guide_pdf.sh
-```
-
-## Review packet
-
-To generate Word review artifacts for non-technical review, run:
-
-```bash
-bash docs/generate_review_packet.sh
-```
-
-This writes review-only `.docx` files to `docs/review/`. Reviewers can use Word comments or tracked changes, but accepted edits should be applied back to the source files.
+See [`docs/user_guide.pdf`](docs/user_guide.pdf) for detailed descriptions of inputs, options, methods, and outputs. 

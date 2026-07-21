@@ -5,6 +5,7 @@ loads that YAML source and exposes Python constants and formatting helpers used
 by Flask templates, reports, and generated documentation.
 """
 
+import re
 from pathlib import Path
 
 import yaml
@@ -54,6 +55,20 @@ GRID_SEARCH_DESCRIPTION_HTML = _required(_DESCRIPTION_CONTENT, 'grid_search_desc
 CV_SCHEMES = _required(_DESCRIPTION_CONTENT, 'cv_schemes')
 ANALYSIS_PARAMETERS = _required(_DESCRIPTION_CONTENT, 'analysis_parameters')
 MODAL_HELP = _required(_DESCRIPTION_CONTENT, 'modal_help')
+
+
+def _first_paragraph_html(value):
+    """Return the first HTML paragraph from reusable explanatory text."""
+    match = re.search(r'<p\b[^>]*>.*?</p>', str(value or ''), flags=re.IGNORECASE | re.DOTALL)
+    return match.group(0) if match else str(value or '')
+
+
+PREPROCESSING_OVERVIEW_SUMMARY_HTML = _first_paragraph_html(
+    MODAL_HELP['index']['preprocessing_overview_html']
+)
+CROSS_VALIDATION_OVERVIEW_SUMMARY_HTML = _first_paragraph_html(
+    MODAL_HELP['index']['cross_validation_html']
+)
 
 CV_SCHEME_LABELS = {
     key: value.get('display_name', key)
@@ -156,8 +171,6 @@ def format_analysis_config_rows(config):
             value = config.get(key, '')
         if key == 'cv_scheme':
             value = CV_SCHEME_LABELS.get(value, value)
-        elif key == 'grid_search_num_cores' and value in (None, ''):
-            value = 'Auto'
         rows.append({
             'kind': 'setting',
             'label': ANALYSIS_CONFIG_LABELS[key],
@@ -176,7 +189,6 @@ def format_analysis_config_rows(config):
     add_section('Grid-search settings')
     for key in [
         'grid_search_num_points',
-        'grid_search_num_cores',
         'grid_search_param_min',
         'grid_search_param_max',
         'grid_search_random_state',

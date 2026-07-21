@@ -647,7 +647,7 @@ function cleanReportText(value) {
     return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
-function extractTableRows(table) {
+function extractTableData(table) {
     var rows = [];
     Array.from(table.querySelectorAll('tr')).forEach(function(row) {
         var cells = Array.from(row.querySelectorAll('th, td')).map(function(cell) {
@@ -657,7 +657,69 @@ function extractTableRows(table) {
             rows.push(cells);
         }
     });
-    return rows;
+
+    var headerRows = table.tHead ? table.tHead.rows.length : 0;
+    if (headerRows === 0 && rows.length > 0) {
+        var bodyRows = Array.from(table.querySelectorAll('tbody tr'));
+        var rowHeaderLayout = bodyRows.length > 0 && bodyRows.every(function(row) {
+            var cells = Array.from(row.children).filter(function(cell) {
+                return cell.matches('th, td');
+            });
+            var isSectionRow = cells.length === 1 && cells[0].tagName.toLowerCase() === 'th';
+            var isSettingRow = cells.length === 2 && cells[0].tagName.toLowerCase() === 'th';
+            return isSectionRow || isSettingRow;
+        });
+        if (rowHeaderLayout) {
+            rows.unshift(['Setting', 'Selected value']);
+            headerRows = 1;
+        }
+    }
+
+    var caption = table.querySelector('caption');
+    var title = caption ? cleanReportText(caption.textContent) : '';
+    if (!title) {
+        title = getPreviousHeadingText(table) || 'Report data table';
+    }
+
+    return {
+        rows: rows,
+        header_rows: headerRows,
+        title: title,
+        description: title + '. Column headings are identified in the first row.'
+    };
+}
+
+function referencedDescription(element) {
+    if (!element) {
+        return '';
+    }
+    var descriptionIds = (element.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean);
+    return descriptionIds.map(function(descriptionId) {
+        var description = document.getElementById(descriptionId);
+        return description ? cleanReportText(description.textContent) : '';
+    }).filter(Boolean).join(' ');
+}
+
+function reportPlotMetadata(placeholder) {
+    var plot = getPlotForWordExport(placeholder);
+    var title = getPreviousHeadingText(placeholder);
+    if (!title && plot) {
+        title = cleanReportText(plot.getAttribute('aria-label'));
+    }
+    title = title || 'Report plot';
+
+    var description = referencedDescription(plot);
+    if (!description) {
+        var sourceId = placeholder.getAttribute('data-plot-source');
+        var source = sourceId ? document.getElementById(sourceId) : null;
+        var sourcePlot = source ? source.querySelector('.plotly-graph-div') : null;
+        description = referencedDescription(sourcePlot);
+    }
+
+    return {
+        title: title,
+        description: description || title
+    };
 }
 
 function appendReportElementToPayload(element, sections) {
@@ -665,20 +727,28 @@ function appendReportElementToPayload(element, sections) {
         return;
     }
 
+    if (element.hidden || element.getAttribute('aria-hidden') === 'true' ||
+            element.classList.contains('sr-only') ||
+            element.classList.contains('plot-data-downloads') ||
+            element.classList.contains('summary-table-downloads')) {
+        return;
+    }
+
     if (element.classList.contains('report-plot-placeholder')) {
         var imageId = element.getAttribute('data-report-image-id');
+        var plotMetadata = reportPlotMetadata(element);
         if (imageId) {
             sections.push({
                 type: 'image',
-                title: '',
+                title: plotMetadata.title,
+                description: plotMetadata.description,
                 data_url: reportImageDataById[imageId] || ''
             });
         } else if (element.getAttribute('data-report-export-attempted') === 'true') {
-            var plotTitle = getPreviousHeadingText(element) || 'Report plot';
             var exportError = element.getAttribute('data-report-export-error') || 'Image export was unavailable.';
             sections.push({
                 type: 'paragraph',
-                text: plotTitle + ': plot image could not be exported to Word. ' + exportError
+                text: plotMetadata.title + ': plot image could not be exported to Word. ' + exportError
             });
         }
         return;
@@ -732,9 +802,15 @@ function appendReportElementToPayload(element, sections) {
     }
 
     if (tagName === 'table') {
-        var rows = extractTableRows(element);
-        if (rows.length > 0) {
-            sections.push({type: 'table', rows: rows});
+        var tableData = extractTableData(element);
+        if (tableData.rows.length > 0) {
+            sections.push({
+                type: 'table',
+                rows: tableData.rows,
+                header_rows: tableData.header_rows,
+                title: tableData.title,
+                description: tableData.description
+            });
         }
         return;
     }

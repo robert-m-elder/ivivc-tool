@@ -69,7 +69,7 @@ def _apply_accessible_plot_styles(fig):
             elif 'in vivo' in name_lower and 'interpolated' in name_lower:
                 symbol = 'diamond-open'
             elif 'in vitro' in name_lower and 'interpolated' in name_lower:
-                symbol = 'square-open'
+                symbol = 'circle-open'
             elif 'in vivo' in name_lower:
                 symbol = 'diamond'
             elif 'in vitro' in name_lower:
@@ -80,7 +80,7 @@ def _apply_accessible_plot_styles(fig):
             trace.update(
                 marker_symbol=symbol,
                 marker_line_color='#1f1f1f',
-                marker_line_width=1.5,
+                marker_line_width=2.5 if 'interpolated' in name_lower else 1.5,
             )
 
         if 'lines' in mode:
@@ -1501,33 +1501,33 @@ def create_initial_plotly(t1, m1, t2, m2):
 
 def create_interpolation_plotly(t1, m1, t2, m2, tt, mi1, mi2):
     fig = go.Figure()
-    # In Vitro Data (actual)
+    # Draw the measured/scaled points first so the larger open interpolation
+    # markers remain visible when both series share a coordinate.
     fig.add_trace(go.Scatter(
         x=t1, y=m1,
         mode='markers',
         name='In Vitro Data (scaled/normed)',
-        marker=dict(color=colors['in_vitro'], size=24, line=dict(color='white', width=2))
+        marker=dict(color=colors['in_vitro'], size=18, symbol='circle', line=dict(color='white', width=2))
     ))
-    # In Vitro Data (interpolated)
-    fig.add_trace(go.Scatter(
-        x=tt, y=mi1,
-        mode='markers',
-        name='In Vitro Data (interpolated)',
-        marker=dict(color=colors['in_vitro'], size=12, symbol='square', line=dict(color='white', width=2))
-    ))
-    # In Vivo Data (actual)
     fig.add_trace(go.Scatter(
         x=t2, y=m2,
         mode='markers',
         name='In Vivo Data (scaled/normed)',
-        marker=dict(color=colors['in_vivo'], size=24, line=dict(color='white', width=2))
+        marker=dict(color=colors['in_vivo'], size=18, symbol='diamond', line=dict(color='white', width=2))
     ))
-    # In Vivo Data (interpolated)
+    # Filled/open variants retain a consistent shape for each dataset while
+    # making interpolated points visible outside overlapping measured points.
+    fig.add_trace(go.Scatter(
+        x=tt, y=mi1,
+        mode='markers',
+        name='In Vitro Data (interpolated)',
+        marker=dict(color=colors['in_vitro'], size=30, symbol='circle-open', line=dict(color='#1f1f1f', width=2.5))
+    ))
     fig.add_trace(go.Scatter(
         x=tt, y=mi2,
         mode='markers',
         name='In Vivo Data (interpolated)',
-        marker=dict(color=colors['in_vivo'], size=12, symbol='square', line=dict(color='white', width=2))
+        marker=dict(color=colors['in_vivo'], size=30, symbol='diamond-open', line=dict(color='#1f1f1f', width=2.5))
     ))
     fig.update_layout(
         template='plotly_white',
@@ -1554,98 +1554,62 @@ def create_interpolation_plotly(t1, m1, t2, m2, tt, mi1, mi2):
             mirror=True
         )
     )
-    # Update axes with relative font sizes
     fig.update_xaxes(
-        title_font=dict(size=20),  # Slightly larger than base font
+        title_font=dict(size=20),
         tickfont=dict(size=18)
     )
     fig.update_yaxes(
-        title_font=dict(size=20),  # Slightly larger than base font
+        title_font=dict(size=20),
         tickfont=dict(size=18)
     )
-    # Extract data as HTML table
     table_html = extract_plotly_data_for_table(fig)
-    # Configure the plot for download options
-    config = {'responsive': True,'displaylogo': False}
-    # Convert the figure to HTML
+    config = {'responsive': True, 'displaylogo': False}
     plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
-    return {'plot':plot_html, 'table_html': table_html}
+    return {'plot': plot_html, 'table_html': table_html}
 
 def create_interpolation_plotly_new(t1, m1, t2, m2, mm, ti1, ti2):
     fig = go.Figure()
-    # In Vitro Data (actual)
     fig.add_trace(go.Scatter(
         x=t1, y=m1,
         mode='markers',
         name='In Vitro Data (actual)',
-        marker=dict(color=colors['in_vitro'], size=15, line=dict(color='black', width=1))
+        marker=dict(color=colors['in_vitro'], size=18, symbol='circle', line=dict(color='black', width=1))
     ))
-    # In Vitro Data (interpolated)
-    fig.add_trace(go.Scatter(
-        x=ti1, y=mm,
-        mode='markers',
-        name='In Vitro Data (interpolated)',
-        marker=dict(color=colors['in_vitro'], size=8, line=dict(color='black', width=1))
-    ))
-    # In Vivo Data (actual)
     fig.add_trace(go.Scatter(
         x=t2, y=m2,
         mode='markers',
         name='In Vivo Data (actual)',
-        marker=dict(color=colors['in_vivo'], size=15, line=dict(color='black', width=1))
+        marker=dict(color=colors['in_vivo'], size=18, symbol='diamond', line=dict(color='black', width=1))
     ))
-    # In Vivo Data (interpolated)
+    fig.add_trace(go.Scatter(
+        x=ti1, y=mm,
+        mode='markers',
+        name='In Vitro Data (interpolated)',
+        marker=dict(color=colors['in_vitro'], size=30, symbol='circle-open', line=dict(color='black', width=2.5))
+    ))
     fig.add_trace(go.Scatter(
         x=ti2, y=mm,
         mode='markers',
         name='In Vivo Data (interpolated)',
-        marker=dict(color=colors['in_vivo'], size=8, line=dict(color='black', width=1))
+        marker=dict(color=colors['in_vivo'], size=30, symbol='diamond-open', line=dict(color='black', width=2.5))
     ))
     fig.update_layout(
         template='plotly_white',
         autosize=True, 
         xaxis_title='Time',
         yaxis_title='Value',
-        legend=dict(font=dict(size=18)),  # Slightly smaller than base font
+        legend=dict(font=dict(size=18)),
         margin=dict(l=30, r=30, t=30, b=30),
-        font=dict(
-            family="Arial, sans-serif",
-            size=14,  # Base font size
-            color="black"
-        ),
-        xaxis=dict(
-            showline=True,
-            linewidth=2,
-            linecolor='#767676',
-            mirror=True
-        ),
-        yaxis=dict(
-            showline=True,
-            linewidth=2,
-            linecolor='#767676',
-            mirror=True
-        )
+        font=dict(family="Arial, sans-serif", size=14, color="black"),
+        xaxis=dict(showline=True, linewidth=2, linecolor='#767676', mirror=True),
+        yaxis=dict(showline=True, linewidth=2, linecolor='#767676', mirror=True)
     )
-    # Update axes with relative font sizes
-    fig.update_xaxes(
-        title_font=dict(size=20),  # Slightly larger than base font
-        tickfont=dict(size=18)
-    )
-    fig.update_yaxes(
-        title_font=dict(size=20),  # Slightly larger than base font
-        tickfont=dict(size=18)
-    )
-    # Extract data as HTML table
+    fig.update_xaxes(title_font=dict(size=20), tickfont=dict(size=18))
+    fig.update_yaxes(title_font=dict(size=20), tickfont=dict(size=18))
     table_html = extract_plotly_data_for_table(fig)
-
-    # Configure the plot for download options
-    config = {
-        'responsive': True,
-        'displaylogo': False,
-    }
-    # Convert the figure to HTML
+    config = {'responsive': True, 'displaylogo': False}
     plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
-    return {'plot':plot_html, 'table_html': table_html}
+    return {'plot': plot_html, 'table_html': table_html}
 
 def create_prediction_interpolation_plotly(t1, m1):
     fig = go.Figure()

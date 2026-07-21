@@ -10,8 +10,8 @@
 \textbf{Parameter} & \textbf{Internal key} & \textbf{Description} \\
 \midrule
 \endhead
-Cross-validation scheme & cv\_scheme & Selects the splitting method used to estimate cross-validation performance for fitted parametric models. Leave-one-timepoint-out is the default. \\
-CV splits/folds/block size & cv\_n\_splits & For Shuffle split, the number of repeated random train/test splits. For K-fold, the number of folds. For Leave-contiguous-block-out, the number of adjacent time points set aside per split. The setup page does not enforce a maximum block size because the uploaded data are not read until Analyze is selected; larger blocks may leave too few observations for stable fitting. This setting is not used for Leave-one-timepoint-out or None. \\
+Cross-validation scheme & cv\_scheme & Selects the splitting method used to estimate cross-validation performance for fitted parametric models. Shuffle split is the default general robustness check. \\
+CV splits/block size & cv\_n\_splits & For Shuffle split, the number of repeated random train/test splits. For Leave-contiguous-block-out, the number of adjacent time points set aside per split. The setup page does not enforce a maximum block size because the uploaded data are not read until Analyze is selected; larger blocks may leave too few observations for stable fitting. This setting is not used for Leave-one-timepoint-out or None. \\
 Shuffle split test size & cv\_test\_size & The fraction of observations used as test data in each Shuffle split repeat. Smaller values leave more observations for fitting; larger values make the test more demanding but leave fewer observations for training. \\
 CV random seed & cv\_random\_state & Seed used to make randomized cross-validation splits reproducible. This applies to Shuffle split. \\
 \bottomrule
