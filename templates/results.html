@@ -25,6 +25,26 @@
     </div>
 {%- endmacro %}
 
+{% macro render_analysis_settings_table(rows) -%}
+    <table class="settings-table">
+        {% for row in rows %}
+            {% if row.kind == 'section' %}
+                {% if not loop.first %}</tbody>{% endif %}
+                <tbody>
+                    <tr class="settings-section-row">
+                        <th scope="rowgroup" colspan="2">{{ row.label }}</th>
+                    </tr>
+            {% else %}
+                    <tr>
+                        <th scope="row">{{ row.label }}</th>
+                        <td>{{ row.value }}</td>
+                    </tr>
+            {% endif %}
+            {% if loop.last %}</tbody>{% endif %}
+        {% endfor %}
+    </table>
+{%- endmacro %}
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -40,7 +60,6 @@
 <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/2.3.2/js/dataTables.js"></script>
     <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/buttons/3.2.3/js/dataTables.buttons.js"></script>
     <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/buttons/3.2.3/js/buttons.dataTables.js"></script>
-    <script type="text/javascript" charset="utf8" src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/buttons/3.2.3/js/buttons.html5.min.js"></script>
 
     <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/colreorder/2.1.1/css/colReorder.dataTables.min.css">
@@ -52,7 +71,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
     <link rel="shortcut icon" href="{{ url_for('static', filename='images/favicon-32.ico') }}">
 </head>
-<body>
+<body data-excel-download-url="{{ url_for('download_table_excel') }}">
     <a class="skip-link" href="#main-content">Skip to main content</a>
     <header class="site-header">
         <div class="header-inner">
@@ -117,27 +136,12 @@
                 </tbody>
             </table>
             <h3>Analysis Settings:</h3>
-            <table class="settings-table">
-                <tbody>
-                    {% for row in analysis_config_rows %}
-                    {% if row.kind == 'section' %}
-                    <tr class="settings-section-row">
-                        <th colspan="2">{{ row.label }}</th>
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <th>{{ row.label }}</th>
-                        <td>{{ row.value }}</td>
-                    </tr>
-                    {% endif %}
-                    {% endfor %}
-                </tbody>
-            </table>
+            {{ render_analysis_settings_table(analysis_config_rows) }}
             <!--
             <h4>Grid-search initialization</h4>
             {{ grid_search_description_html | safe }}
             -->
-            <h4>Fitting Data:</h4>
+            <h3>Fitting Data:</h3>
             <div id="plot-processing-raw-data" class="plot-container report-source-plot">
                 {{ raw_data_info['plot'] | safe }}
             </div>
@@ -148,7 +152,7 @@
             {{ render_plot_data_downloads('interpolation-table', 'Processed fitting data plot', interpolation_info['table_html']) }}
 
 {% if 'plot' in prediction_interpolation_info %}
-                <h4>Prediction Data:</h4>
+                <h3>Prediction Data:</h3>
                 <div id="plot-processing-prediction-interpolation" class="plot-container report-source-plot">
                     {{ prediction_interpolation_info['plot'] | safe }}
                 </div>
@@ -313,22 +317,7 @@
                             <p class="evidence-note">Cross-validation and grid-search initialization are not applicable to Approach 3 because no parametric model is used. Selected performance metrics are not included in this report section for the same reason.</p>
                         {% else %}
                             <h4>Analysis settings</h4>
-                            <table class="settings-table">
-                                <tbody>
-                                    {% for row in analysis_config_rows %}
-                                    {% if row.kind == 'section' %}
-                                    <tr class="settings-section-row">
-                                        <th colspan="2">{{ row.label }}</th>
-                                    </tr>
-                                    {% else %}
-                                    <tr>
-                                        <th>{{ row.label }}</th>
-                                        <td>{{ row.value }}</td>
-                                    </tr>
-                                    {% endif %}
-                                    {% endfor %}
-                                </tbody>
-                            </table>
+                            {{ render_analysis_settings_table(analysis_config_rows) }}
 
                             <h4>Cross-validation</h4>
                             {{ cross_validation_overview_summary_html | safe }}

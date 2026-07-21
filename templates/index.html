@@ -52,6 +52,7 @@
             <a class="guide-download-button" href="{{ url_for('user_guide') }}" target="_blank" rel="noopener">Download User Guide</a>
         </section>
     <form method="post" enctype="multipart/form-data" id="upload-form" class="analysis-form" novalidate>
+        <h2 class="analysis-setup-heading">Analysis setup</h2>
         <div class="form-section">
             <h3>
                 Select Data:
@@ -59,7 +60,7 @@
             </h3>
             <div class="form-group">
                 <div class="label-with-help">
-                    <label for="file">Upload Dataset for Fitting:</label>
+                    <label for="file">Upload Dataset for Fitting (required):</label>
                     <button type="button" class="help-btn-small" data-modal="fitting-data-help" aria-label="Help for the fitting dataset" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button>
                 </div>
                 <div class="file-input-actions">

@@ -31,6 +31,7 @@ from utilities.descriptions import (
 from utilities.reporting import build_final_model_options
 from utilities.model_evidence import build_relative_evidence_tables
 from utilities.word_report import build_word_report, safe_report_filename, WORD_MIME_TYPE
+from utilities.excel_export import build_accessible_excel, EXCEL_MIME_TYPE
 from utilities.model_display import get_human_readable_function
 from metrics import metrics
 from engine import (
@@ -302,6 +303,27 @@ def get_sheets():
             return jsonify({'sheets': sheets})
         except Exception as e:
             return jsonify({'error': str(e)}), 400
+
+
+@app.route('/download_table_excel', methods=['POST'])
+def download_table_excel():
+    """Generate an accessible Excel workbook for a browser data table."""
+    payload = request.get_json(silent=True) or {}
+    try:
+        workbook_io, filename = build_accessible_excel(payload)
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    except Exception as exc:
+        print(f"Error generating Excel table download: {exc}")
+        traceback.print_exc()
+        return jsonify({'error': 'The Excel workbook could not be generated.'}), 500
+
+    return send_file(
+        workbook_io,
+        as_attachment=True,
+        download_name=filename,
+        mimetype=EXCEL_MIME_TYPE,
+    )
 
 
 @app.route('/download_word_report', methods=['POST'])

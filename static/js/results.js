@@ -21,9 +21,11 @@ function refreshAccessibility(root) {
     if (!window.IVIVCAccessibility) {
         return;
     }
-    window.IVIVCAccessibility.enhanceTableSemantics(root || document);
-    window.IVIVCAccessibility.initializeDataTableControls(root || document);
-    window.IVIVCAccessibility.enhancePlotAccessibility(root || document);
+    var accessibilityRoot = root && root.jquery ? root[0] : (root || document);
+    window.IVIVCAccessibility.enhanceTableSemantics(accessibilityRoot);
+    window.IVIVCAccessibility.initializeDataTableControls(accessibilityRoot);
+    window.IVIVCAccessibility.enhancePlotAccessibility(accessibilityRoot);
+    window.IVIVCAccessibility.updateTableScrollRegions(accessibilityRoot);
 }
 
 function getSummaryTables(root) {
@@ -102,14 +104,14 @@ function initializeSummaryTableDownloads(tableElement) {
                 }
             },
             {
-                extend: 'excelHtml5',
                 text: 'Download Excel',
-                title: null,
-                filename: filename,
-                exportOptions: exportOptions,
+                className: 'buttons-excel',
+                action: function(event, dataTableApi, node) {
+                    downloadAccessibleExcel(dataTableApi, context, filename, exportOptions, node);
+                },
                 attr: {
-                    'aria-label': 'Download ' + context + ' as Excel',
-                    'title': 'Download ' + context + ' as Excel'
+                    'aria-label': 'Download ' + context + ' as accessible Excel',
+                    'title': 'Download ' + context + ' as accessible Excel'
                 }
             }
         ]
@@ -141,8 +143,6 @@ function initializeSummaryTableDownloads(tableElement) {
                 }, 100);
             } else if (button.hasClass('buttons-csv')) {
                 announceResultsStatus('CSV download started for ' + context + '.');
-            } else if (button.hasClass('buttons-excel')) {
-                announceResultsStatus('Excel download started for ' + context + '.');
             }
         });
 
@@ -155,6 +155,86 @@ function plotDataFilename(context, target) {
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '');
     return base || 'plot-data';
+}
+
+
+function responseDownloadFilename(response, fallback) {
+    var disposition = response.headers.get('Content-Disposition') || '';
+    var utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+    if (utf8Match) {
+        try {
+            return decodeURIComponent(utf8Match[1]);
+        } catch (error) {
+            return fallback;
+        }
+    }
+    var simpleMatch = disposition.match(/filename="?([^";]+)"?/i);
+    return simpleMatch ? simpleMatch[1] : fallback;
+}
+
+function saveDownloadedBlob(blob, filename) {
+    var url = window.URL.createObjectURL(blob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(function() {
+        window.URL.revokeObjectURL(url);
+    }, 1000);
+}
+
+function downloadAccessibleExcel(api, context, filename, exportOptions, buttonNode) {
+    var endpoint = document.body.getAttribute('data-excel-download-url') || '/download_table_excel';
+    var button = $(buttonNode);
+    var exported = api.buttons.exportData(exportOptions);
+    var fallbackFilename = filename + '.xlsx';
+    var payload = {
+        title: context,
+        sheet_name: context,
+        filename: fallbackFilename,
+        headers: exported.header || [],
+        rows: exported.body || []
+    };
+
+    button.prop('disabled', true).attr('aria-disabled', 'true');
+    showResultsAlert('');
+    announceResultsStatus('Preparing accessible Excel download for ' + context + '.');
+
+    fetch(endpoint, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+    })
+        .then(function(response) {
+            if (!response.ok) {
+                return response.json().catch(function() {
+                    return {};
+                }).then(function(errorPayload) {
+                    throw new Error(errorPayload.error || 'The Excel workbook could not be generated.');
+                });
+            }
+            var downloadFilename = responseDownloadFilename(response, fallbackFilename);
+            return response.blob().then(function(blob) {
+                return { blob: blob, filename: downloadFilename };
+            });
+        })
+        .then(function(download) {
+            showResultsAlert('');
+            saveDownloadedBlob(download.blob, download.filename);
+            announceResultsStatus('Accessible Excel download started for ' + context + '.');
+        })
+        .catch(function(error) {
+            showResultsAlert(error.message || 'The Excel workbook could not be generated.');
+            announceResultsStatus('Excel download failed for ' + context + '.');
+        })
+        .finally(function() {
+            button.prop('disabled', false).removeAttr('aria-disabled');
+        });
 }
 
 function initializePlotDataDownloads(root) {
@@ -237,14 +317,14 @@ function initializePlotDataDownloads(root) {
                     }
                 },
                 {
-                    extend: 'excelHtml5',
                     text: 'Download Excel',
-                    title: null,
-                    filename: filename,
-                    exportOptions: exportOptions,
+                    className: 'buttons-excel',
+                    action: function(event, dataTableApi, node) {
+                        downloadAccessibleExcel(dataTableApi, context, filename, exportOptions, node);
+                    },
                     attr: {
-                        'aria-label': 'Download Excel data for ' + context,
-                        'title': 'Download Excel data for ' + context
+                        'aria-label': 'Download accessible Excel data for ' + context,
+                        'title': 'Download accessible Excel data for ' + context
                     }
                 }
             ]
@@ -262,8 +342,6 @@ function initializePlotDataDownloads(root) {
                     }, 100);
                 } else if (button.hasClass('buttons-csv')) {
                     announceResultsStatus('CSV download started for ' + context + '.');
-                } else if (button.hasClass('buttons-excel')) {
-                    announceResultsStatus('Excel download started for ' + context + '.');
                 }
             });
 

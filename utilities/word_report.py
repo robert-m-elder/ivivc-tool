@@ -79,6 +79,19 @@ def _clean_text(value):
     return value
 
 
+def _clean_plot_alt_text(value):
+    """Remove browser-only instructions from plot text used in Word alt text."""
+    value = _clean_text(value)
+    browser_only_sentences = (
+        r'Use the Plotly toolbar to inspect or rescale the chart\.?',
+        r'The controls beneath the plot can copy or download the plotted series '
+        r'and any available error-bar bounds\.?',
+    )
+    for sentence in browser_only_sentences:
+        value = re.sub(sentence, '', value, flags=re.IGNORECASE)
+    return re.sub(r'\s+', ' ', value).strip()
+
+
 def _add_document_styles(document):
     """Apply conservative styles and a document language to the report."""
     styles = document.styles
@@ -141,18 +154,14 @@ def _decode_image_data_url(data_url):
 
 
 def _add_image(document, data_url, title=None, description=None):
-    """Add an exported plot with visible description and image alt text."""
+    """Add an exported plot and place its substantive description in alt text."""
     image_stream = _decode_image_data_url(data_url)
     plot_title = _clean_text(title) or 'Report plot'
-    plot_description = _clean_text(description) or plot_title
+    plot_description = _clean_plot_alt_text(description) or plot_title
 
     if image_stream is None:
         document.add_paragraph(f'{plot_title}: image was unavailable for export.')
         return
-
-    description_paragraph = document.add_paragraph()
-    description_paragraph.add_run('Plot description: ').bold = True
-    description_paragraph.add_run(plot_description)
 
     paragraph = document.add_paragraph()
     paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER

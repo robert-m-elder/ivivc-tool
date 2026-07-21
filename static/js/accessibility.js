@@ -333,7 +333,10 @@
             table.querySelectorAll('tbody tr').forEach(function(row) {
                 const firstHeader = row.querySelector(':scope > th');
                 if (firstHeader && !firstHeader.hasAttribute('scope')) {
-                    firstHeader.setAttribute('scope', firstHeader.hasAttribute('colspan') ? 'colgroup' : 'row');
+                    firstHeader.setAttribute(
+                        'scope',
+                        row.classList.contains('settings-section-row') ? 'rowgroup' : 'row'
+                    );
                 }
             });
 
@@ -349,13 +352,45 @@
                 const region = document.createElement('div');
                 const label = caption ? caption.textContent.replace(/\s+/g, ' ').trim() : ('Data table ' + (index + 1));
                 region.className = 'table-scroll-region';
-                region.setAttribute('role', 'region');
-                region.setAttribute('aria-label', 'Scrollable table: ' + label);
-                region.setAttribute('tabindex', '0');
+                region.dataset.tableRegionLabel = label;
                 table.parentNode.insertBefore(region, table);
                 region.appendChild(table);
             }
         });
+
+        window.requestAnimationFrame(function() {
+            updateTableScrollRegions(scope);
+        });
+    }
+
+    function updateTableScrollRegion(region) {
+        const label = region.dataset.tableRegionLabel || nearestHeadingText(region) || 'data table';
+        const isVisible = region.offsetParent !== null;
+        const hasHorizontalOverflow = isVisible && region.scrollWidth > region.clientWidth + 1;
+
+        if (hasHorizontalOverflow) {
+            region.setAttribute('role', 'region');
+            region.setAttribute('aria-label', 'Scrollable table: ' + label);
+            region.setAttribute('tabindex', '0');
+            region.dataset.horizontallyScrollable = 'true';
+        } else {
+            region.removeAttribute('role');
+            region.removeAttribute('aria-label');
+            region.removeAttribute('tabindex');
+            delete region.dataset.horizontallyScrollable;
+        }
+    }
+
+    function updateTableScrollRegions(root) {
+        const scope = root || document;
+        const regions = [];
+        if (scope instanceof Element && scope.classList.contains('table-scroll-region')) {
+            regions.push(scope);
+        }
+        scope.querySelectorAll('.table-scroll-region').forEach(function(region) {
+            regions.push(region);
+        });
+        regions.forEach(updateTableScrollRegion);
     }
 
     function initializeDataTableControls(root) {
@@ -383,6 +418,15 @@
         enhanceTableSemantics: enhanceTableSemantics,
         initializeDataTableControls: initializeDataTableControls,
         initializeHelpModal: initializeHelpModal,
-        setLiveMessage: setLiveMessage
+        setLiveMessage: setLiveMessage,
+        updateTableScrollRegions: updateTableScrollRegions
     };
+
+    let resizeTimer = null;
+    window.addEventListener('resize', function() {
+        window.clearTimeout(resizeTimer);
+        resizeTimer = window.setTimeout(function() {
+            updateTableScrollRegions(document);
+        }, 100);
+    });
 })(window);
