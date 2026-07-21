@@ -69,6 +69,7 @@ header,
 }
 
 .user-guide-button,
+.contact-button,
 .guide-download-button {
     display: inline-block;
     padding: 8px 14px;
@@ -85,6 +86,8 @@ header,
 
 .user-guide-button:hover,
 .user-guide-button:focus,
+.contact-button:hover,
+.contact-button:focus,
 .guide-download-button:hover,
 .guide-download-button:focus {
     background-color: #007cba;
@@ -92,8 +95,34 @@ header,
     text-decoration: none;
 }
 
-.header-user-guide-button {
+.header-actions {
     justify-self: end;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 5px;
+    min-width: 0;
+}
+
+.header-action-links {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.header-user-guide-button,
+.contact-button {
+    text-align: center;
+}
+
+.app-version {
+    color: #444;
+    font-size: 0.76rem;
+    line-height: 1.2;
+    text-align: right;
+    overflow-wrap: anywhere;
 }
 
 .user-guide-callout {
@@ -135,7 +164,7 @@ header,
         grid-template-areas:
             "logo"
             "title"
-            "guide";
+            "actions";
         justify-items: center;
         gap: 8px;
         padding: 10px 12px;
@@ -155,12 +184,26 @@ header,
         font-size: clamp(0.95rem, 4.5vw, 1.2rem);
     }
 
-    .header-user-guide-button {
-        grid-area: guide;
+    .header-actions {
+        grid-area: actions;
         justify-self: center;
+        align-items: center;
+        width: 100%;
+    }
+
+    .header-action-links {
+        justify-content: center;
+    }
+
+    .header-user-guide-button,
+    .contact-button {
         padding: 7px 10px;
         font-size: 0.8rem;
         max-width: 100%;
+    }
+
+    .app-version {
+        text-align: center;
     }
 
     .user-guide-callout {

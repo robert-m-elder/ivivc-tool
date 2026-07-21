@@ -32,6 +32,7 @@ from utilities.reporting import build_final_model_options
 from utilities.model_evidence import build_relative_evidence_tables
 from utilities.word_report import build_word_report, safe_report_filename, WORD_MIME_TYPE
 from utilities.excel_export import build_accessible_excel, EXCEL_MIME_TYPE
+from utilities.app_info import get_app_info
 from utilities.model_display import get_human_readable_function
 from metrics import metrics
 from engine import (
@@ -47,6 +48,12 @@ from engine import (
 )
 
 app = Flask(__name__)
+
+
+@app.context_processor
+def inject_app_info():
+    """Expose version and contact information to all browser templates."""
+    return {'app_info': get_app_info()}
 
 
 @app.route('/user-guide')
@@ -216,7 +223,10 @@ def index():
             selected_metrics=selected_metrics,
         )
 
-        analysis_config_rows = format_analysis_config_rows(analysis_config)
+        analysis_config_rows = format_analysis_config_rows(
+            analysis_config,
+            app_info=get_app_info(),
+        )
         preprocessing_rows = format_preprocessing_rows(
             selected_normalizations,
             selected_scalings,

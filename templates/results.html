@@ -79,7 +79,13 @@
                 <img src="{{ url_for('static', filename='images/Logo_FDA_Primary_Blue.png') }}" alt="FDA Logo">
             </div>
             <h1 class="app-title">IVIVC Results for Absorbable Polymers</h1>
-            <a class="user-guide-button header-user-guide-button" href="{{ url_for('user_guide') }}" target="_blank" rel="noopener">User Guide</a>
+            <div class="header-actions">
+                <div class="header-action-links">
+                    <a class="user-guide-button header-user-guide-button" href="{{ url_for('user_guide') }}" target="_blank" rel="noopener">User Guide</a>
+                    <a class="contact-button" href="{{ app_info.contact_mailto }}" aria-label="Email the IVIVC App maintainer about a bug or feature request">Contact / Report an issue</a>
+                </div>
+                <span class="app-version" title="Source revision: {{ app_info.revision }}">Version {{ app_info.display }}</span>
+            </div>
         </div>
     </header>
 

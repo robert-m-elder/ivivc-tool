@@ -153,12 +153,13 @@ def format_metric_description_rows(metrics, selected_metrics=None):
     return rows
 
 
-def format_analysis_config_rows(config):
+def format_analysis_config_rows(config, app_info=None):
     """Return display-ready analysis settings rows with section headers.
 
     Cross-validation rows are limited to settings relevant to the selected
     scheme. Grid-search settings are always shown because they control
-    parametric model initialization.
+    parametric model initialization. Application version information is
+    appended when supplied so it is retained in browser and report settings.
     """
     scheme = config.get('cv_scheme', 'shuffle_split')
     rows = []
@@ -194,5 +195,18 @@ def format_analysis_config_rows(config):
         'grid_search_random_state',
     ]:
         add_setting(key)
+
+    if app_info:
+        add_section('Application information')
+        rows.append({
+            'kind': 'setting',
+            'label': 'App version',
+            'value': app_info.get('version', 'unknown'),
+        })
+        rows.append({
+            'kind': 'setting',
+            'label': 'Source revision',
+            'value': app_info.get('revision', 'Not available'),
+        })
 
     return rows
