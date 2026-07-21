@@ -1759,8 +1759,13 @@ def extract_plotly_data_for_table(fig):
         base_name = str(getattr(trace, 'name', '') or '').strip()
         if not base_name:
             continue
-        name_counts[base_name] = name_counts.get(base_name, 0) + 1
-        trace_name = base_name if name_counts[base_name] == 1 else f'{base_name} ({name_counts[base_name]})'
+        table_name = getattr(trace, 'meta', None)
+        if not isinstance(table_name, str) or not table_name.strip():
+            table_name = base_name
+        else:
+            table_name = table_name.strip()
+        name_counts[table_name] = name_counts.get(table_name, 0) + 1
+        trace_name = table_name if name_counts[table_name] == 1 else f'{table_name} ({name_counts[table_name]})'
 
         x_values = list(trace.x)
         y_values = list(trace.y)
@@ -1878,7 +1883,8 @@ def create_plotly_a1(x, y, model_info, include_bands=True):
                         fill='tonexty',
                         fillcolor='rgba(128,128,128,0.3)',
                         line=dict(width=0),
-                        name='95% Prediction Band Lower Bound',
+                        name='95% Prediction Band',
+                        meta='95% Prediction Band Lower Bound',
                         hoverinfo='skip',
                         zorder=0
                     )
@@ -2057,7 +2063,8 @@ def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
                         fill='tonexty',
                         fillcolor=hex_to_rgba(colors['in_vitro'], 0.2),
                         line=dict(width=0),
-                        name='95% Prediction Band Lower Bound (In Vitro)',
+                        name='95% Prediction Band (In Vitro)',
+                        meta='95% Prediction Band Lower Bound (In Vitro)',
                         hoverinfo='skip',
                         zorder=0
                     )
@@ -2107,7 +2114,8 @@ def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
                         fill='tonexty',
                         fillcolor=hex_to_rgba(colors['in_vivo'], 0.2),
                         line=dict(width=0),
-                        name='95% Prediction Band Lower Bound (In Vivo)',
+                        name='95% Prediction Band (In Vivo)',
+                        meta='95% Prediction Band Lower Bound (In Vivo)',
                         hoverinfo='skip',
                         zorder=0
                     )
