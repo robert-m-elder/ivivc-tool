@@ -25,10 +25,68 @@ function refreshAccessibility(root) {
     window.IVIVCAccessibility.initializeDataTableControls(root || document);
     window.IVIVCAccessibility.enhancePlotAccessibility(root || document);
 }
+
+function getSummaryTables(root) {
+    var scope = root ? $(root) : $(document);
+    var tables = scope.is('table.dataframe')
+        ? scope.add(scope.find('table.dataframe'))
+        : scope.find('table.dataframe');
+
+    return tables.filter(function() {
+        // Tables underneath plots are intentionally initialized only when the
+        // corresponding Show Data Table button is activated.
+        return $(this).closest('.data-table-container').length === 0;
+    });
+}
+
+function announceSummaryTableSort(tableElement) {
+    var table = $(tableElement);
+    var api = table.DataTable();
+    var order = api.order();
+
+    if (!order || order.length === 0) {
+        announceResultsStatus('Table returned to its original order.');
+        return;
+    }
+
+    var columnIndex = order[0][0];
+    var direction = order[0][1] === 'asc' ? 'ascending' : 'descending';
+    var heading = $(api.column(columnIndex).header()).text().replace(/\s+/g, ' ').trim();
+    announceResultsStatus('Table sorted by ' + (heading || 'selected column') + ', ' + direction + '.');
+}
+
+function initializeSummaryDataTables(root) {
+    getSummaryTables(root).each(function() {
+        var tableElement = this;
+        var table = $(tableElement);
+
+        // DataTables calculates column widths from the rendered table. Defer
+        // initialization until the table's tab or report panel is visible.
+        if (!table.is(':visible')) {
+            return;
+        }
+
+        if (!$.fn.DataTable.isDataTable(tableElement)) {
+            table.DataTable();
+        }
+
+        table.off('order.dt.ivivcSummarySort')
+            .on('order.dt.ivivcSummarySort', function() {
+                announceSummaryTableSort(tableElement);
+            });
+        table.DataTable().columns.adjust();
+    });
+
+    refreshAccessibility(root || document);
+}
+
 $(function() {
     $("#vertical-tabs").tabs({
         activate: function(event, ui) {
-            handleVisiblePlotResize();
+            setTimeout(function() {
+                initializeSummaryDataTables(ui.newPanel);
+                handleVisiblePlotResize();
+            }, 0);
         }
     }).addClass("ui-tabs-vertical ui-helper-clearfix");
     $("#vertical-tabs li").removeClass("ui-corner-top").addClass("ui-corner-left");
@@ -80,15 +138,21 @@ $.extend(true, $.fn.dataTable.defaults, {
             buttons: ['excel']
         }
     },
+    language: {
+        aria: {
+            orderable: ': Activate to sort this column',
+            orderableReverse: ': Activate to reverse the sort',
+            orderableRemove: ': Activate to remove sorting'
+        }
+    }
 });
 
 $(document).ready(function() {
     refreshAccessibility(document);
 
-    // Initialize tables that are visible when the page loads. Plot data tables
-    // are initialized only when the user expands them.
-    $('.dataframe:visible').DataTable();
-    refreshAccessibility(document);
+    // Initialize summary and comparison tables in the initially visible panel.
+    // Plot-source tables remain deferred until the user expands them.
+    initializeSummaryDataTables(document);
 
     $('.show-data-btn').on('click', function() {
         var targetTable = $(this).data('target');
@@ -376,12 +440,14 @@ function setActiveFinalReport(selectedId) {
     }
 
     $(report).show().addClass('active-report').attr('aria-hidden', 'false');
+    initializeSummaryDataTables(report);
 
     return populateReportPlots(report).then(function() {
         if (window.MathJax && window.MathJax.typesetPromise) {
             return window.MathJax.typesetPromise([report]);
         }
     }).then(function() {
+        initializeSummaryDataTables(report);
         resizeReportPlots(report);
     });
 }
