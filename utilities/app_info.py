@@ -6,7 +6,7 @@ import os
 import subprocess
 from functools import lru_cache
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 CONTACT_EMAIL = "robert.elder@fda.hhs.gov"
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -84,7 +84,11 @@ def get_app_info() -> dict[str, str]:
             "Please do not include sensitive or confidential data in this email.",
         ]
     )
-    mailto = f"mailto:{CONTACT_EMAIL}?{urlencode({'subject': subject, 'body': body})}"
+    mailto_query = urlencode(
+        {'subject': subject, 'body': body},
+        quote_via=quote,
+    )
+    mailto = f"mailto:{CONTACT_EMAIL}?{mailto_query}"
 
     return {
         "version": version,
