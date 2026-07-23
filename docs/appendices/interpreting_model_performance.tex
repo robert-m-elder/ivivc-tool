@@ -129,15 +129,15 @@ Use the eligible cross-validation metrics to assess prediction behavior during C
 
 \subsection{Interpreting residual diagnostics}
 
-Residuals are the differences between observed and predicted values (observed minus predicted). Residual diagnostics help assess whether model errors show systematic patterns, changes in error size over time (heteroscedasticity), or other departures from model assumptions \cite{kutner2005}. The app provides two qualitative diagnostic plots: residual-vs-time plots and quantile-quantile (Q-Q) plots.
+Residuals are the differences between observed and predicted values (observed minus predicted). Residual diagnostics help assess whether model errors show systematic patterns, changes in error size over time (heteroscedasticity), or other departures from model assumptions \cite{kutner2005}. The app provides two qualitative diagnostic plots: residual-vs-time plots and quantile-quantile (Q-Q) plots. If your dataset contains few time points, which is typical of IVIVC datasets, these plots should be treated as exploratory diagnostics rather than pass/fail tests. With only a few points, random variation can sometimes appear to form a meaningful pattern.
 
 \subsubsection*{Residual-vs-time plots}
 
-Residuals are plotted in the same units as the fitted response. Each model uses an independent symmetric y-axis centered at zero. The axis covers the largest absolute residual but is not allowed to shrink below 1\% of the observed response range. This minimum prevents extremely small numerical residuals from being expanded to fill the plot and appearing more important than they are. The maximum absolute residual is reported above each plot. Use RMSE or MAE when an exact cross-model comparison of residual magnitude is needed.
+Residuals are plotted in the same units as the fitted response. The axis covers the largest absolute residual for each model but is not allowed to shrink below a small fraction of the observed response range. This minimum prevents extremely small numerical residuals from being expanded to fill the plot and appearing more important than they are. Use RMSE or MAE when an cross-model comparison of residual magnitude is needed.
 
 \subsubsection*{Q-Q plots}
 
-Q-Q plots compare the ordered standardized residuals against the pattern expected under a normal distribution (i.e., a Gaussian distribution or bell curve). Points near the diagonal reference line are broadly consistent with normal residual variation. Systematic curvature, large departures in the tails, or isolated extreme points may suggest non-normality, outliers, or a model form that does not fit the data well. When residual variation is too small relative to the response scale, the app reports that the Q-Q plot is not informative rather than magnifying numerical differences. Because IVIVC datasets typically contain few time points, Q-Q plots should be treated as exploratory diagnostics rather than pass/fail tests.
+Quantile-quantile (Q-Q) plots compare the ordered standardized residuals against the pattern expected under a normal distribution (i.e., a Gaussian distribution or bell curve). Points near the diagonal reference line are broadly consistent with normal residual variation. Systematic curvature, large departures in the tails, or isolated extreme points may suggest non-normality, outliers, or a model form that does not fit the data well. When residual variation is too small relative to the response scale, the app reports that the Q-Q plot is not informative rather than magnifying numerical differences. 
 
 \subsubsection*{What to look for}
 

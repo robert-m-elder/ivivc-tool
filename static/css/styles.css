@@ -356,7 +356,7 @@ main {
 
 .advanced-parameter-row {
     display: grid;
-    grid-template-columns: minmax(130px, 0.6fr) repeat(4, minmax(150px, 1fr));
+    grid-template-columns: minmax(190px, 0.8fr) repeat(4, minmax(150px, 1fr));
     gap: 12px;
     align-items: end;
     margin-bottom: 12px;
@@ -367,7 +367,7 @@ main {
 }
 
 .advanced-parameter-row:nth-of-type(2) {
-    grid-template-columns: minmax(130px, 0.6fr) repeat(4, minmax(150px, 1fr));
+    grid-template-columns: minmax(190px, 0.8fr) repeat(4, minmax(150px, 1fr));
 }
 
 .advanced-row-label {
