@@ -133,18 +133,11 @@ Residuals are the differences between observed and predicted values (observed mi
 
 \subsubsection*{Residual-vs-time plots}
 
-Residuals are plotted in the same units as the fitted response. To make visual comparison across models easier, all comparable models within an approach share a common y-axis scale, derived from the pooled 95th percentile of absolute residuals across those models. Two reference bands are drawn on each plot:
-
-\begin{itemize}
-    \item A \textbf{shaded band} at $\pm 25\%$ of the common residual scale.
-    \item \textbf{Dashed lines} at $\pm 50\%$ of the common residual scale.
-\end{itemize}
-
-These bands provide visual context for comparing residual magnitude across models. They are not confidence intervals, prediction intervals, acceptance limits, or regulatory criteria. Because the common scale is derived from the selected models, it will shift if the model set changes.
+Residuals are plotted in the same units as the fitted response. Each model uses an independent symmetric y-axis centered at zero. The axis covers the largest absolute residual but is not allowed to shrink below 1\% of the observed response range. This minimum prevents extremely small numerical residuals from being expanded to fill the plot and appearing more important than they are. The maximum absolute residual is reported above each plot. Use RMSE or MAE when an exact cross-model comparison of residual magnitude is needed.
 
 \subsubsection*{Q-Q plots}
 
-Q-Q plots compare the ordered standardized residuals against the pattern expected under a normal distribution (i.e., a Gaussian distribution or bell curve). Points near the diagonal reference line are broadly consistent with normal residual variation. Systematic curvature, large departures in the tails, or isolated extreme points may suggest non-normality, outliers, or a model form that does not fit the data well. Because IVIVC datasets typically contain few time points, Q-Q plots should be treated as exploratory diagnostics rather than pass/fail tests.
+Q-Q plots compare the ordered standardized residuals against the pattern expected under a normal distribution (i.e., a Gaussian distribution or bell curve). Points near the diagonal reference line are broadly consistent with normal residual variation. Systematic curvature, large departures in the tails, or isolated extreme points may suggest non-normality, outliers, or a model form that does not fit the data well. When residual variation is too small relative to the response scale, the app reports that the Q-Q plot is not informative rather than magnifying numerical differences. Because IVIVC datasets typically contain few time points, Q-Q plots should be treated as exploratory diagnostics rather than pass/fail tests.
 
 \subsubsection*{What to look for}
 
@@ -153,7 +146,6 @@ Residual diagnostics should be reviewed qualitatively---by eye---rather than by 
 \begin{itemize}
     \item Sustained curvature or systematic trends in the residuals over time.
     \item Clustering, where residuals at adjacent time points are consistently on the same side of zero.
-    \item Repeated excursions outside the reference bands.
 \end{itemize}
 
 When any of these patterns appear, consider whether a different model form, additional parameters, or a transformed response might better describe the underlying relationship. 

@@ -99,9 +99,9 @@ cross_validation_summary_html: |-
 goodness_validation_table_html: |-
   <p>This table reports final scores for the fitted model for all selected metrics and mean cross-validation (CV) scores for eligible prediction metrics. Ratio rows show the full-fit score divided by the CV score for the same metric where that comparison is meaningful. Adjusted R² and information criteria (AIC, AICc, BIC) are shown for the final model but are not given CV values or ratios because the final model and cross-validation models are fitted using different data subsets. Detailed interpretation guidance is provided in the user guide.</p>
 residual_diagnostics_html: |-
-  <p>Residuals are calculated as observed minus predicted values and are shown in the original response units. Residual-vs-time plots use a common y-axis scale across comparable models so residual magnitude and patterns can be compared visually. The plot scale and reference bands are based on the pooled 95th percentile of absolute residuals across comparable models; the shaded band shows ±25% of that residual scale and the dashed reference lines show ±50%. These bands provide visual context for comparing residual patterns; they are not confidence intervals or acceptance limits.</p>
-  <p>Normal quantile-quantile (Q-Q) plots compare ordered standardized residuals with the pattern expected under a normal distribution. Points near the diagonal line are broadly consistent with normal residual variation, while curvature, tail departures, or isolated extreme points may suggest non-normality, outliers, or model mismatch. With small IVIVC datasets, Q-Q plots should be interpreted qualitatively rather than as pass/fail tests.</p>
-  <p>Residual diagnostics should be reviewed qualitatively. Points scattered around zero in the residual-vs-time plot are more consistent with an appropriate model form, although they do not prove that the model is valid. Sustained patterns, curvature, clustering, repeated excursions outside the reference bands, or adjacent time points with residuals mostly on the same side of zero may indicate bias or that the selected model form may not fully capture the data.</p>
+  <p>Residuals are calculated as observed minus predicted values. Raw residual plots show them in the original response units versus time. Each plot uses its own symmetric y-axis centered at zero. The axis covers the largest absolute residual but is not allowed to shrink below 1% of the observed response range, which prevents extremely small numerical residuals from being expanded to fill the plot. The maximum absolute residual is reported above the plot.</p>
+  <p>Normal quantile-quantile (Q-Q) plots compare ordered standardized residuals with the pattern expected under a normal distribution. Points near the diagonal line are broadly consistent with normal residual variation, while curvature, tail departures, or isolated extreme points may suggest non-normality, outliers, or model mismatch. A Q-Q plot is not shown when residual variation is too small relative to the response scale to assess the distribution reliably. With small IVIVC datasets, Q-Q plots should be interpreted qualitatively rather than as pass/fail tests.</p>
+  <p>Residual diagnostics should be reviewed qualitatively. Points scattered around zero in the residual-vs-time plot are more consistent with an appropriate model form, although they do not prove that the model is valid. Sustained patterns, curvature, clustering, or adjacent time points with residuals mostly on the same side of zero may indicate bias or that the selected model form may not fully capture the data.</p>
 parameter_diagnostics_comparison_html: |-
   <p>The Fitted Parameter Diagnostics table summarizes the diagnostic badges shown with each individual model fit. These badges help identify models that may warrant closer review for large parameter uncertainty, parameter coupling, or parameter-identifiability cautions. Detailed explanations can be found in the individual fitting results and in the user guide.</p>
 grid_search_description_html: |-
@@ -148,6 +148,12 @@ analysis_parameters:
   grid_search_random_state:
     display_name: Grid-search random seed
     description: Seed used to make randomized starting-point sampling reproducible. Changing the seed changes the sampled candidates while keeping the same bounds and number of starts.
+  include_raw_residual_plots:
+    display_name: Raw residuals
+    description: Shows residuals (i.e., errors) in the original response units versus time. Selected by default and may be hidden for a more compact results view.
+  include_residual_qq_plots:
+    display_name: Quantile-quantile (Q-Q) plots
+    description: Shows qualitative normal quantile-quantile (Q-Q) diagnostics when residual variation is large enough to make the plot informative. Selected by default and may be hidden for a more compact results view.
 modal_help:
   index:
     preprocessing_overview_html: |-
@@ -159,12 +165,20 @@ modal_help:
       </ul>
       <p>More information about each preprocessing option is available from the help buttons next to Normalization, Scaling, and Interpolation.</p>
     advanced_analysis_overview_html: |-
-      <p>Advanced analysis parameters control two separate parts of the analysis workflow:</p>
+      <p>Advanced analysis parameters control three parts of the analysis workflow:</p>
       <ul>
         <li><strong>Cross-validation:</strong> how the app checks prediction performance by repeatedly setting aside part of the data and fitting to the rest.</li>
         <li><strong>Grid search:</strong> how the app searches for suitable starting parameter values before nonlinear least-squares fitting.</li>
+        <li><strong>Residual diagnostics:</strong> whether raw residual (error) and normal quantile-quantile (Q-Q) plots are included in the results. Both are selected by default and can be hidden for a more compact results view.</li>
       </ul>
-      <p>The default settings are intended as reasonable starting points. You may want to adjust these settings when datasets are small, fits or cross-validation appear unstable, or runtime is excessive.</p>
+      <p>The default settings are intended as reasonable starting points. You may want to adjust these settings when datasets are small, fits or cross-validation appear unstable, runtime is excessive, or a more compact results view is preferred.</p>
+    residual_diagnostics_html: |-
+      <p>Residual diagnostics help assess whether model errors show patterns that may not be apparent from fit metrics alone.</p>
+      <ul>
+        <li><strong>Raw residuals:</strong> show observed minus predicted response values (i.e., the prediction errors) over time in the original response units. Each plot uses an independent symmetric axis and a minimum display range so very small residuals are not exaggerated visually.</li>
+        <li><strong>Normal Q-Q plots:</strong> a quantile-quantile (Q-Q) plot provides a qualitative check of whether residuals are broadly consistent with a normal error pattern. When residual variation is too small relative to the response scale, the app shows a notice instead of a potentially misleading plot.</li>
+      </ul>
+      <p>Both options are selected by default. Deselect either option for a more compact results view.</p>
     cross_validation_html: |-
       <p>Cross-validation checks how selected fitted models predict data that were not used to fit that model. It may be used for Approaches 1 and 2, where parametric models are fitted.</p>
       <p>For time-course data, the main question is what kind of data should be set aside for the prediction check. This app usually evaluates whether a fitted curve captures the overall response pattern, not whether early time points can forecast later time points. Shuffle split is the default because it provides a general robustness check of the fitted curve form. Even so, time order matters because nearby observations may be strongly related. Omitting one point is a gentle check, omitting a contiguous block is a stricter check of a time region, and shuffled splits do not preserve time order.</p>

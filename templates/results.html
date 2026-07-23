@@ -409,16 +409,22 @@
                             <h4>Goodness of fit and validation</h4>
                             {{ goodness_validation_table_html | safe }}
                             {{ model_results.stats_table | safe }}
+                            {% if analysis_config.include_raw_residual_plots or analysis_config.include_residual_qq_plots %}
                             <h4>Residual diagnostics</h4>
                             {{ residual_diagnostics_html | safe }}
-                            <h5>Residual plot</h5>
+                            {% if analysis_config.include_raw_residual_plots %}
+                            <h5>Raw residual plot</h5>
                             <div class="report-plot-placeholder" data-plot-source="plot-residual-{{ option.model_dom_id }}">
-                                <p class="plot-unavailable">Original-unit residual plot is not available.</p>
+                                <p class="plot-unavailable">Raw residual plot is not available.</p>
                             </div>
+                            {% endif %}
+                            {% if analysis_config.include_residual_qq_plots %}
                             <h5>Normal Q-Q plot of residuals</h5>
                             <div class="report-plot-placeholder" data-plot-source="plot-residual-qq-{{ option.model_dom_id }}">
                                 <p class="plot-unavailable">Normal Q-Q residual plot is not available.</p>
                             </div>
+                            {% endif %}
+                            {% endif %}
                             {% set approach_evidence = evidence_tables.get(option.approach_id, {}) %}
                             {% if approach_evidence.get('fit') %}
                                 <h4>Relative evidence context</h4>
@@ -467,24 +473,34 @@
                             {{ model_results.stats_table[0] | safe }}
                             <h5>In vivo data</h5>
                             {{ model_results.stats_table[1] | safe }}
+                            {% if analysis_config.include_raw_residual_plots or analysis_config.include_residual_qq_plots %}
                             <h4>Residual diagnostics</h4>
                             {{ residual_diagnostics_html | safe }}
-                            <h5>In vitro residuals: original-unit, common scale</h5>
+                            {% if analysis_config.include_raw_residual_plots %}
+                            <h5>In vitro raw residual plot</h5>
                             <div class="report-plot-placeholder" data-plot-source="plot-residual-{{ option.model_dom_id }}-in-vitro">
-                                <p class="plot-unavailable">In vitro original-unit residual plot is not available.</p>
+                                <p class="plot-unavailable">In vitro raw residual plot is not available.</p>
                             </div>
-                            <h5>In vitro residuals: normal Q-Q plot</h5>
+                            {% endif %}
+                            {% if analysis_config.include_residual_qq_plots %}
+                            <h5>In vitro normal Q-Q plot</h5>
                             <div class="report-plot-placeholder" data-plot-source="plot-residual-qq-{{ option.model_dom_id }}-in-vitro">
                                 <p class="plot-unavailable">In vitro normal Q-Q residual plot is not available.</p>
                             </div>
-                            <h5>In vivo residuals: original-unit, common scale</h5>
+                            {% endif %}
+                            {% if analysis_config.include_raw_residual_plots %}
+                            <h5>In vivo raw residual plot</h5>
                             <div class="report-plot-placeholder" data-plot-source="plot-residual-{{ option.model_dom_id }}-in-vivo">
-                                <p class="plot-unavailable">In vivo original-unit residual plot is not available.</p>
+                                <p class="plot-unavailable">In vivo raw residual plot is not available.</p>
                             </div>
-                            <h5>In vivo residuals: normal Q-Q plot</h5>
+                            {% endif %}
+                            {% if analysis_config.include_residual_qq_plots %}
+                            <h5>In vivo normal Q-Q plot</h5>
                             <div class="report-plot-placeholder" data-plot-source="plot-residual-qq-{{ option.model_dom_id }}-in-vivo">
                                 <p class="plot-unavailable">In vivo normal Q-Q residual plot is not available.</p>
                             </div>
+                            {% endif %}
+                            {% endif %}
                             {% set approach_evidence = evidence_tables.get(option.approach_id, {}) %}
                             {% if approach_evidence %}
                                 <h4>Relative evidence context</h4>
@@ -552,18 +568,28 @@
                                     {{ model_results.parameter_diagnostics_html | safe }}
                                     <h4>Goodness of fit</h4>
                                     {{ model_results.stats_table | safe }}
+                                    {% if analysis_config.include_raw_residual_plots or analysis_config.include_residual_qq_plots %}
                                     <h4>Residual diagnostics</h4>
                                     {{ residual_diagnostics_html | safe }}
-                                    <h5>Residual plot</h5>
-                                            <div id="plot-residual-{{ model_key|replace(':', '-') }}" class="plot-container report-source-plot">
+                                    {% if model_results.residual_plot is defined %}
+                                    <h5>Raw residual plot</h5>
+                                    <div id="plot-residual-{{ model_key|replace(':', '-') }}" class="plot-container report-source-plot">
                                         {{ model_results.residual_plot.plot | safe }}
                                     </div>
                                     {{ render_plot_data_downloads('approach1-' ~ model_name ~ '-residual-table', models[model_name].display_name ~ ' Approach 1 residual plot', model_results.residual_plot.table_html) }}
+                                    {% endif %}
+                                    {% if model_results.residual_qq_plot is defined %}
                                     <h5>Normal Q-Q plot of residuals</h5>
+                                    {% if model_results.residual_qq_plot.available %}
                                     <div id="plot-residual-qq-{{ model_key|replace(':', '-') }}" class="plot-container report-source-plot">
                                         {{ model_results.residual_qq_plot.plot | safe }}
                                     </div>
                                     {{ render_plot_data_downloads('approach1-' ~ model_name ~ '-residual-qq-table', models[model_name].display_name ~ ' Approach 1 residual Q-Q plot', model_results.residual_qq_plot.table_html) }}
+                                    {% else %}
+                                    <p class="residual-diagnostic-note">{{ model_results.residual_qq_plot.message }}</p>
+                                    {% endif %}
+                                    {% endif %}
+                                    {% endif %}
                                 {% endif %}
                             </div>
                         {% endif %}
@@ -598,18 +624,28 @@
                                         {% endif %}
                                         <h4>Goodness of Fit</h4>
                                         {{ model_results.stats_table[0] | safe }}
+                                        {% if analysis_config.include_raw_residual_plots or analysis_config.include_residual_qq_plots %}
                                         <h4>Residual diagnostics</h4>
                                         {{ residual_diagnostics_html | safe }}
-                                        <h5>Residual plot</h5>
+                                        {% if model_results.residual_plot is defined and model_results.residual_plot[0] %}
+                                        <h5>Raw residual plot</h5>
                                         <div id="plot-residual-{{ model_key|replace(':', '-') }}-in-vitro" class="plot-container report-source-plot">
                                             {{ model_results.residual_plot[0].plot | safe }}
                                         </div>
                                         {{ render_plot_data_downloads('approach2-' ~ model_name ~ '-residual-table-in-vitro', models[model_name].display_name ~ ' Approach 2 in vitro residual plot', model_results.residual_plot[0].table_html) }}
+                                        {% endif %}
+                                        {% if model_results.residual_qq_plot is defined and model_results.residual_qq_plot[0] %}
                                         <h5>Normal Q-Q plot of residuals</h5>
+                                        {% if model_results.residual_qq_plot[0].available %}
                                         <div id="plot-residual-qq-{{ model_key|replace(':', '-') }}-in-vitro" class="plot-container report-source-plot">
                                             {{ model_results.residual_qq_plot[0].plot | safe }}
                                         </div>
                                         {{ render_plot_data_downloads('approach2-' ~ model_name ~ '-residual-qq-table-in-vitro', models[model_name].display_name ~ ' Approach 2 in vitro residual Q-Q plot', model_results.residual_qq_plot[0].table_html) }}
+                                        {% else %}
+                                        <p class="residual-diagnostic-note">{{ model_results.residual_qq_plot[0].message }}</p>
+                                        {% endif %}
+                                        {% endif %}
+                                        {% endif %}
                                     </section>
                                     <section class="approach2-dataset-section approach2-dataset-in-vivo">
                                         <h4 class="approach2-dataset-heading">In Vivo Data</h4>
@@ -628,18 +664,28 @@
                                     {% endif %}
                                     <h4>Goodness of Fit</h4>
                                     {{ model_results.stats_table[1] | safe }}
+                                    {% if analysis_config.include_raw_residual_plots or analysis_config.include_residual_qq_plots %}
                                     <h4>Residual diagnostics</h4>
                                     {{ residual_diagnostics_html | safe }}
-                                    <h5>Residual plot</h5>
-                                            <div id="plot-residual-{{ model_key|replace(':', '-') }}-in-vivo" class="plot-container report-source-plot">
+                                    {% if model_results.residual_plot is defined and model_results.residual_plot[1] %}
+                                    <h5>Raw residual plot</h5>
+                                    <div id="plot-residual-{{ model_key|replace(':', '-') }}-in-vivo" class="plot-container report-source-plot">
                                         {{ model_results.residual_plot[1].plot | safe }}
                                     </div>
                                     {{ render_plot_data_downloads('approach2-' ~ model_name ~ '-residual-table-in-vivo', models[model_name].display_name ~ ' Approach 2 in vivo residual plot', model_results.residual_plot[1].table_html) }}
+                                    {% endif %}
+                                    {% if model_results.residual_qq_plot is defined and model_results.residual_qq_plot[1] %}
                                     <h5>Normal Q-Q plot of residuals</h5>
+                                    {% if model_results.residual_qq_plot[1].available %}
                                     <div id="plot-residual-qq-{{ model_key|replace(':', '-') }}-in-vivo" class="plot-container report-source-plot">
                                         {{ model_results.residual_qq_plot[1].plot | safe }}
                                     </div>
                                     {{ render_plot_data_downloads('approach2-' ~ model_name ~ '-residual-qq-table-in-vivo', models[model_name].display_name ~ ' Approach 2 in vivo residual Q-Q plot', model_results.residual_qq_plot[1].table_html) }}
+                                    {% else %}
+                                    <p class="residual-diagnostic-note">{{ model_results.residual_qq_plot[1].message }}</p>
+                                    {% endif %}
+                                    {% endif %}
+                                    {% endif %}
                                     </section>
                                 {% endif %}
                             </div>
@@ -780,7 +826,7 @@
                 <li><strong>Model parameters:</strong> coefficients reported as estimate ± 95% confidence interval.</li>
                 <li><strong>Fitted parameter diagnostics:</strong> brief badges that flag parameter uncertainty, coupling, or identifiability cautions.</li>
                 <li><strong>Goodness of fit:</strong> selected fitted-data metrics, eligible cross-validation metrics, fit/CV ratios, and CV comparison badges.</li>
-                <li><strong>Residual diagnostics:</strong> residual-vs-x plots with common residual-scale reference bands to help visually identify possible bias or residual patterns, plus normal Q-Q plots for a qualitative residual-normality check.</li>
+                <li><strong>Residual diagnostics:</strong> raw residual-vs-time plots in response units with independent symmetric axes, plus normal Q-Q plots when residual variation is large enough to make the diagnostic informative.</li>
             </ul>
             <h4>Uncertainty and fitting plot bands</h4>
             {{ approach_descriptions['approach1']['fit_uncertainty_html'] | safe }}
@@ -796,7 +842,7 @@
                 <li><strong>Fitted parameter diagnostics:</strong> brief badges shown separately for the in vitro and in vivo fits.</li>
                 <li><strong>Time constant:</strong> fitted characteristic time scale where available.</li>
                 <li><strong>Goodness of fit:</strong> selected fitted-data metrics, eligible cross-validation metrics, fit/CV ratios, and CV comparison badges for each dataset.</li>
-                <li><strong>Residual diagnostics:</strong> residual-vs-time plots with common residual-scale reference bands shown separately for the in vitro and in vivo fits, plus normal Q-Q plots for qualitative residual-normality checks.</li>
+                <li><strong>Residual diagnostics:</strong> raw residual-vs-time plots in response units shown separately for the in vitro and in vivo fits, plus normal Q-Q plots when residual variation is large enough to make the diagnostic informative.</li>
             </ul>
             <h4>Uncertainty and fitting plot bands</h4>
             {{ approach_descriptions['approach2']['fit_uncertainty_html'] | safe }}

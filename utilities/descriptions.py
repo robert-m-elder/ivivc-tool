@@ -178,6 +178,10 @@ def format_analysis_config_rows(config, app_info=None):
             'value': value,
         })
 
+    #add_section('Residual diagnostic display')
+    #add_setting('include_raw_residual_plots', 'Shown' if config.get('include_raw_residual_plots', True) else 'Hidden')
+    #add_setting('include_residual_qq_plots', 'Shown' if config.get('include_residual_qq_plots', True) else 'Hidden')
+
     add_section('Cross-validation settings')
     add_setting('cv_scheme', scheme)
     if scheme == 'shuffle_split':

@@ -121,6 +121,8 @@ def parse_analysis_config():
         'grid_search_param_min': _form_float('grid_search_param_min', -1e6),
         'grid_search_param_max': _form_float('grid_search_param_max', 1e6),
         'grid_search_random_state': _form_int('grid_search_random_state', 12345),
+        'include_raw_residual_plots': request.form.get('include_raw_residual_plots') == 'on',
+        'include_residual_qq_plots': request.form.get('include_residual_qq_plots') == 'on',
     }
 
 @app.route('/', methods=['GET', 'POST'])

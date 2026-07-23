@@ -407,6 +407,7 @@ $(document).ready(function() {
             'interpolation-help': 'interpolation-help-content',
             'metrics-help': 'metrics-help-content',
             'advanced-analysis-help': 'advanced-analysis-help-content',
+            'residual-diagnostics-help': 'residual-diagnostics-help-content',
             'cross-validation-help': 'cross-validation-help-content',
             'grid-search-help': 'grid-search-help-content',
             'r2-help': 'r2-help-content'

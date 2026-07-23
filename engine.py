@@ -585,7 +585,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
             results[model_key] = {'error': str(e)}
             traceback.print_exc()
     
-    _attach_residual_plots(results)
+    _attach_residual_plots(results, analysis_config=analysis_config)
     return results
 
 def process_predictions(data, prediction_data, results, selected_approaches, interpolated_data=None):
@@ -785,137 +785,73 @@ def _concat_finite(arrays):
         return np.array([], dtype=float)
     return np.concatenate(pieces)
 
-def _robust_residual_reference_scale(residual_values, percentile=95.0):
-    """Return a robust common residual scale across comparable models."""
-    vals = np.abs(_finite_vector(residual_values))
-    if vals.size == 0:
-        return np.nan
-    scale = float(np.percentile(vals, percentile))
-    if not np.isfinite(scale) or scale <= 0:
-        scale = float(np.max(vals)) if vals.size else np.nan
-    return scale if np.isfinite(scale) and scale > 0 else np.nan
+def _residual_display_scale(residuals, response_values, minimum_fraction=0.025, padding=1.10):
+    """Return an independent symmetric residual-axis limit in response units.
+
+    The limit covers the largest absolute residual but is never smaller than a
+    small fraction of the observed response range. This prevents near-zero
+    numerical residuals from being expanded to fill the entire plot.
+    """
+    residuals = _finite_vector(residuals)
+    response_values = _finite_vector(response_values)
+    max_abs_residual = float(np.max(np.abs(residuals))) if residuals.size else 0.0
+    response_range = float(np.ptp(response_values)) if response_values.size else 0.0
+    response_scale = float(np.max(np.abs(response_values))) if response_values.size else 0.0
+    minimum_half_range = max(
+        minimum_fraction * response_range,
+        1e-12 * max(1.0, response_scale),
+    )
+    half_range = max(max_abs_residual, minimum_half_range)
+    if not np.isfinite(half_range) or half_range <= 0:
+        half_range = 1.0
+    return {
+        'axis_limit': padding * half_range,
+        'max_abs_residual': max_abs_residual,
+        'minimum_controls_scale': minimum_half_range > max_abs_residual,
+        'response_range': response_range,
+    }
 
 
-def _common_axis_limit(values, reference_scale=None, padding=1.20):
-    """Return a symmetric y-axis limit that covers residuals and reference bands."""
-    vals = _finite_vector(values)
-    candidates = []
-    if vals.size:
-        candidates.append(float(np.max(np.abs(vals))))
-    if reference_scale is not None and np.isfinite(reference_scale) and reference_scale > 0:
-        candidates.append(float(reference_scale))
-    max_value = max(candidates) if candidates else 1.0
-    if not np.isfinite(max_value) or max_value <= 0:
-        max_value = 1.0
-    return padding * max_value
-
-
-
-
+def _qq_residual_tolerance(response_values, relative_tolerance=1e-2):
+    """Return a practical lower bound for residual variation in a Q-Q plot."""
+    response_values = _finite_vector(response_values)
+    response_range = float(np.ptp(response_values)) if response_values.size else 0.0
+    response_scale = float(np.max(np.abs(response_values))) if response_values.size else 0.0
+    return max(
+        relative_tolerance * response_range,
+        1e-12 * max(1.0, response_scale),
+    )
 
 
 def create_residual_plotly(
     x,
     residuals,
+    response_values,
     title,
     x_axis_title='Fitting x-axis',
     marker_color='black',
-    reference_scale=None,
-    reference_label='observed response SD',
-    y_axis_limit=None,
 ):
-    """Create an original-unit residual-vs-x Plotly figure and source-data table.
-
-    Reference bands are based on a robust residual scale computed across
-    comparable models, not model-specific RMSE, so residual plots are easier
-    to compare while staying focused on residual behavior.
-    """
+    """Create an independently scaled raw residual-vs-time Plotly figure."""
     x = np.asarray(x, dtype=float)
     residuals = np.asarray(residuals, dtype=float)
+    response_values = np.asarray(response_values, dtype=float)
     mask = np.isfinite(x) & np.isfinite(residuals)
     x = x[mask]
     residuals = residuals[mask]
 
-    y_axis_title = 'Residual (observed - predicted)'
-    residual_values = residuals
-
-    band_scale = None
-    inner_band = None
-    outer_band = None
-    if reference_scale is not None and np.isfinite(reference_scale) and reference_scale > 0:
-        band_scale = float(reference_scale)
-        inner_band = 0.25 * band_scale
-        outer_band = 0.50 * band_scale
+    scale_info = _residual_display_scale(residuals, response_values)
+    axis_limit = scale_info['axis_limit']
+    max_abs_residual = scale_info['max_abs_residual']
 
     fig = go.Figure()
     if x.size > 0:
         order = np.argsort(x)
         x_plot = x[order]
-        residual_plot = residual_values[order]
+        residual_plot = residuals[order]
         x_min, x_max = float(np.min(x_plot)), float(np.max(x_plot))
         if x_min == x_max:
             x_min -= 0.5
             x_max += 0.5
-
-        if inner_band is not None and outer_band is not None and np.isfinite(inner_band) and np.isfinite(outer_band) and outer_band > 0:
-            fig.add_shape(
-                type='rect',
-                xref='x',
-                yref='y',
-                x0=x_min,
-                x1=x_max,
-                y0=-inner_band,
-                y1=inner_band,
-                fillcolor='rgba(128, 128, 128, 0.18)',
-                line=dict(width=0),
-                layer='below',
-            )
-            fig.add_shape(
-                type='line',
-                xref='x',
-                yref='y',
-                x0=x_min,
-                x1=x_max,
-                y0=outer_band,
-                y1=outer_band,
-                line=dict(color='rgba(80, 80, 80, 0.8)', dash='dot', width=2),
-                layer='below',
-            )
-            fig.add_shape(
-                type='line',
-                xref='x',
-                yref='y',
-                x0=x_min,
-                x1=x_max,
-                y0=-outer_band,
-                y1=-outer_band,
-                line=dict(color='rgba(80, 80, 80, 0.8)', dash='dot', width=2),
-                layer='below',
-            )
-            fig.add_annotation(
-                x=x_max,
-                y=inner_band,
-                xref='x',
-                yref='y',
-                text=f'+/- 0.25 {reference_label}',
-                showarrow=False,
-                xanchor='right',
-                yanchor='bottom',
-                font=dict(size=12, color='rgba(80, 80, 80, 0.9)'),
-                bgcolor='rgba(255, 255, 255, 0.65)',
-            )
-            fig.add_annotation(
-                x=x_max,
-                y=outer_band,
-                xref='x',
-                yref='y',
-                text=f'+/- 0.5 {reference_label}',
-                showarrow=False,
-                xanchor='right',
-                yanchor='bottom',
-                font=dict(size=12, color='rgba(80, 80, 80, 0.9)'),
-                bgcolor='rgba(255, 255, 255, 0.65)',
-            )
 
         fig.add_shape(
             type='line',
@@ -936,21 +872,41 @@ def create_residual_plotly(
             marker=dict(color=marker_color, size=15, line=dict(color='white', width=2)),
         ))
 
-    yaxis_kwargs = dict(showline=True, linewidth=2, linecolor='#767676', mirror=True, zeroline=False)
-    if y_axis_limit is not None and np.isfinite(y_axis_limit) and y_axis_limit > 0:
-        yaxis_kwargs['range'] = [-float(y_axis_limit), float(y_axis_limit)]
+    #note = f"Maximum absolute residual: {max_abs_residual:.4g}"
+    note = ''
+    if scale_info['minimum_controls_scale']:
+        note += 'Residuals are very small relative to the observed response range; the y-axis has not been expanded to fill the plot.'
+    fig.add_annotation(
+        text=note,
+        xref='paper',
+        yref='paper',
+        x=0,
+        y=1.02,
+        showarrow=False,
+        xanchor='left',
+        yanchor='bottom',
+        align='left',
+        font=dict(size=12, color='rgba(80, 80, 80, 0.95)'),
+    )
 
     fig.update_layout(
         template='plotly_white',
         autosize=True,
         title=title,
         xaxis_title=x_axis_title,
-        yaxis_title=y_axis_title,
+        yaxis_title='Residual (observed - predicted)',
         showlegend=False,
-        margin=dict(l=30, r=30, t=30, b=30),
+        margin=dict(l=30, r=30, t=60, b=30),
         font=dict(family='Arial, sans-serif', size=14, color='black'),
         xaxis=dict(showline=True, linewidth=2, linecolor='#767676', mirror=True),
-        yaxis=yaxis_kwargs,
+        yaxis=dict(
+            showline=True,
+            linewidth=2,
+            linecolor='#767676',
+            mirror=True,
+            zeroline=False,
+            range=[-float(axis_limit), float(axis_limit)],
+        ),
     )
     fig.update_xaxes(title_font=dict(size=20), tickfont=dict(size=18))
     fig.update_yaxes(title_font=dict(size=20), tickfont=dict(size=18))
@@ -958,81 +914,78 @@ def create_residual_plotly(
     table_html = extract_plotly_data_for_table(fig)
     config = {'responsive': True, 'displaylogo': False}
     plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
-    return {'plot': plot_html, 'table_html': table_html}
-
+    return {'plot': plot_html, 'table_html': table_html, 'scale_info': scale_info}
 
 
 def create_residual_qq_plotly(
     residuals,
+    response_values,
     title,
     marker_color='black',
 ):
-    """Create a normal Q-Q Plotly figure for standardized residuals."""
+    """Create a normal Q-Q plot unless residual variation is negligible."""
     residuals = _finite_vector(residuals)
     n = residuals.size
 
-    fig = go.Figure()
-    annotation_text = None
-
     if n < 2:
-        annotation_text = 'Q-Q plot unavailable: fewer than two finite residuals are available.'
-    else:
-        residual_sd = float(np.std(residuals, ddof=1))
-        if not np.isfinite(residual_sd) or residual_sd <= 0:
-            annotation_text = 'Q-Q plot unavailable: residual variance is zero.'
-        else:
-            standardized = (residuals - float(np.mean(residuals))) / residual_sd
-            ordered_residuals = np.sort(standardized)
-            probabilities = (np.arange(1, n + 1, dtype=float) - 0.5) / n
-            theoretical_quantiles = sp.stats.norm.ppf(probabilities)
+        return {
+            'available': False,
+            'message': 'Q-Q plot not informative: fewer than two finite residuals are available.',
+            'plot': None,
+            'table_html': '',
+        }
 
-            finite_mask = np.isfinite(theoretical_quantiles) & np.isfinite(ordered_residuals)
-            theoretical_quantiles = theoretical_quantiles[finite_mask]
-            ordered_residuals = ordered_residuals[finite_mask]
+    residual_sd = float(np.std(residuals, ddof=1))
+    tolerance = _qq_residual_tolerance(response_values)
+    if not np.isfinite(residual_sd) or residual_sd <= tolerance:
+        return {
+            'available': False,
+            'message': 'Q-Q plot not informative: residual variation is too small relative to the response scale to assess the distribution reliably.',
+            'plot': None,
+            'table_html': '',
+        }
 
-            if theoretical_quantiles.size < 2:
-                annotation_text = 'Q-Q plot unavailable: too few finite quantiles are available.'
-            else:
-                combined = np.concatenate([theoretical_quantiles, ordered_residuals])
-                axis_min = float(np.min(combined))
-                axis_max = float(np.max(combined))
-                if axis_min == axis_max:
-                    axis_min -= 0.5
-                    axis_max += 0.5
-                padding = 0.08 * (axis_max - axis_min)
-                axis_min -= padding
-                axis_max += padding
+    standardized = (residuals - float(np.mean(residuals))) / residual_sd
+    ordered_residuals = np.sort(standardized)
+    probabilities = (np.arange(1, n + 1, dtype=float) - 0.5) / n
+    theoretical_quantiles = sp.stats.norm.ppf(probabilities)
+    finite_mask = np.isfinite(theoretical_quantiles) & np.isfinite(ordered_residuals)
+    theoretical_quantiles = theoretical_quantiles[finite_mask]
+    ordered_residuals = ordered_residuals[finite_mask]
 
-                fig.add_trace(go.Scatter(
-                    x=[axis_min, axis_max],
-                    y=[axis_min, axis_max],
-                    mode='lines',
-                    name='Normal reference line',
-                    line=dict(color='rgba(80, 80, 80, 0.85)', dash='dash', width=2),
-                ))
-                fig.add_trace(go.Scatter(
-                    x=theoretical_quantiles,
-                    y=ordered_residuals,
-                    mode='markers',
-                    name='Standardized residuals',
-                    marker=dict(color=marker_color, size=15, line=dict(color='white', width=2)),
-                ))
-                fig.update_xaxes(range=[axis_min, axis_max])
-                fig.update_yaxes(range=[axis_min, axis_max])
+    if theoretical_quantiles.size < 2:
+        return {
+            'available': False,
+            'message': 'Q-Q plot not informative: too few finite quantiles are available.',
+            'plot': None,
+            'table_html': '',
+        }
 
-    if annotation_text:
-        fig.add_annotation(
-            text=annotation_text,
-            xref='paper',
-            yref='paper',
-            x=0.5,
-            y=0.5,
-            showarrow=False,
-            align='center',
-            font=dict(size=14, color='rgba(80, 80, 80, 0.95)'),
-            bgcolor='rgba(255, 255, 255, 0.8)',
-        )
+    combined = np.concatenate([theoretical_quantiles, ordered_residuals])
+    axis_min = float(np.min(combined))
+    axis_max = float(np.max(combined))
+    if axis_min == axis_max:
+        axis_min -= 0.5
+        axis_max += 0.5
+    padding = 0.08 * (axis_max - axis_min)
+    axis_min -= padding
+    axis_max += padding
 
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=[axis_min, axis_max],
+        y=[axis_min, axis_max],
+        mode='lines',
+        name='Normal reference line',
+        line=dict(color='rgba(80, 80, 80, 0.85)', dash='dash', width=2),
+    ))
+    fig.add_trace(go.Scatter(
+        x=theoretical_quantiles,
+        y=ordered_residuals,
+        mode='markers',
+        name='Standardized residuals',
+        marker=dict(color=marker_color, size=15, line=dict(color='white', width=2)),
+    ))
     fig.update_layout(
         template='plotly_white',
         autosize=True,
@@ -1042,8 +995,8 @@ def create_residual_qq_plotly(
         showlegend=True,
         margin=dict(l=30, r=30, t=30, b=30),
         font=dict(family='Arial, sans-serif', size=14, color='black'),
-        xaxis=dict(showline=True, linewidth=2, linecolor='#767676', mirror=True, zeroline=False),
-        yaxis=dict(showline=True, linewidth=2, linecolor='#767676', mirror=True, zeroline=False, scaleanchor='x', scaleratio=1),
+        xaxis=dict(showline=True, linewidth=2, linecolor='#767676', mirror=True, zeroline=False, range=[axis_min, axis_max]),
+        yaxis=dict(showline=True, linewidth=2, linecolor='#767676', mirror=True, zeroline=False, scaleanchor='x', scaleratio=1, range=[axis_min, axis_max]),
     )
     fig.update_xaxes(title_font=dict(size=20), tickfont=dict(size=18))
     fig.update_yaxes(title_font=dict(size=20), tickfont=dict(size=18))
@@ -1051,20 +1004,18 @@ def create_residual_qq_plotly(
     table_html = extract_plotly_data_for_table(fig)
     config = {'responsive': True, 'displaylogo': False}
     plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
-    return {'plot': plot_html, 'table_html': table_html}
+    return {'available': True, 'message': '', 'plot': plot_html, 'table_html': table_html}
 
 
 def _collect_residual_contexts(results):
-    """Group residual data so plots can share scaling across comparable models."""
+    """Group residual data by approach and dataset."""
     contexts = {
         ('approach1', 'fit'): [],
         ('approach2', 'in_vitro'): [],
         ('approach2', 'in_vivo'): [],
     }
     for model_key, model_results in results.items():
-        if not isinstance(model_results, dict) or 'error' in model_results:
-            continue
-        if ':' not in model_key:
+        if not isinstance(model_results, dict) or 'error' in model_results or ':' not in model_key:
             continue
         approach_id, model_name = model_key.split(':', 1)
         if approach_id == 'approach1' and 'residuals' in model_results:
@@ -1104,49 +1055,48 @@ def _collect_residual_contexts(results):
     return contexts
 
 
-def _attach_residual_plots(results):
-    """Attach original-unit residual plots with common robust scaling."""
+def _attach_residual_plots(results, analysis_config=None):
+    """Attach the selected residual diagnostics to completed model results."""
+    analysis_config = analysis_config or {}
+    include_raw = bool(analysis_config.get('include_raw_residual_plots', True))
+    include_qq = bool(analysis_config.get('include_residual_qq_plots', True))
+    if not include_raw and not include_qq:
+        return
+
     for (approach_id, dataset_id), items in _collect_residual_contexts(results).items():
-        if not items:
-            continue
-
-        all_residuals = _concat_finite(item['residuals'] for item in items)
-        residual_reference_scale = _robust_residual_reference_scale(all_residuals)
-        if all_residuals.size == 0:
-            continue
-
-        original_axis_limit = _common_axis_limit(all_residuals, reference_scale=residual_reference_scale)
-
         for item in items:
-            model_key = item['model_key']
-            model_results = results[model_key]
+            model_results = results[item['model_key']]
             display_name = models[item['model_name']]['display_name']
-            original_plot = create_residual_plotly(
-                item['x'],
-                item['residuals'],
-                f"{item['title_prefix']} for {display_name} Fit",
-                x_axis_title=item['x_axis_title'],
-                marker_color=item['marker_color'],
-                reference_scale=residual_reference_scale,
-                reference_label='residual scale',
-                y_axis_limit=original_axis_limit,
-            )
-            qq_plot = create_residual_qq_plotly(
-                item['residuals'],
-                f"{item['title_prefix']} Normal Q-Q Plot for {display_name} Fit",
-                marker_color=item['marker_color'],
-            )
+            raw_plot = None
+            qq_plot = None
+            if include_raw:
+                raw_plot = create_residual_plotly(
+                    item['x'],
+                    item['residuals'],
+                    item['y'],
+                    f"{item['title_prefix']} for {display_name} Fit",
+                    x_axis_title=item['x_axis_title'],
+                    marker_color=item['marker_color'],
+                )
+            if include_qq:
+                qq_plot = create_residual_qq_plotly(
+                    item['residuals'],
+                    item['y'],
+                    f"{item['title_prefix']} Normal Q-Q Plot for {display_name} Fit",
+                    marker_color=item['marker_color'],
+                )
+
             if approach_id == 'approach1':
-                model_results['residual_plot'] = original_plot
-                model_results['residual_qq_plot'] = qq_plot
-            elif approach_id == 'approach2':
-                if 'residual_plot' not in model_results:
-                    model_results['residual_plot'] = [None, None]
-                if 'residual_qq_plot' not in model_results:
-                    model_results['residual_qq_plot'] = [None, None]
+                if raw_plot is not None:
+                    model_results['residual_plot'] = raw_plot
+                if qq_plot is not None:
+                    model_results['residual_qq_plot'] = qq_plot
+            else:
                 idx = 0 if dataset_id == 'in_vitro' else 1
-                model_results['residual_plot'][idx] = original_plot
-                model_results['residual_qq_plot'][idx] = qq_plot
+                if raw_plot is not None:
+                    model_results.setdefault('residual_plot', [None, None])[idx] = raw_plot
+                if qq_plot is not None:
+                    model_results.setdefault('residual_qq_plot', [None, None])[idx] = qq_plot
 
 
 _CV_BADGE_CLASS_BY_LEVEL = {

@@ -136,6 +136,10 @@ The default grid-search settings can usually be left unchanged. If fitting fails
 
 \input{includes/generated/grid_search_parameter_table.tex}
 
+\subsection{Residual diagnostic display}
+
+Raw residual (i.e., prediction error) plots and normal quantile-quantile (Q-Q) plots are selected by default in the Advanced Analysis section. Either plot type can be hidden before analysis when a more compact results view is preferred. Raw residual plots show observed-minus-predicted values in the original response units. Each plot uses its own symmetric y-axis centered at zero, with a minimum display range relative to the observed response range so very small residuals are not visually exaggerated. Q-Q plots are omitted when residual variation is too small relative to the response scale to make the diagnostic informative.
+
 \section{Outputs}
 
 The IVIVC app generates interactive results and downloadable reports that summarize fitted model behavior, model-comparison metrics, diagnostic information, and user-selected analysis settings. Output availability depends on the selected approaches, whether fitting succeeds, and whether a prediction dataset was supplied.

@@ -250,7 +250,7 @@
         if (id.indexOf('residual-qq') !== -1 || titleLower.indexOf('q-q') !== -1) {
             explanation = ' The diagonal reference line shows the pattern expected for normally distributed standardized residuals. Points farther from the line indicate larger departures from that pattern.';
         } else if (id.indexOf('residual') !== -1 || titleLower.indexOf('residual') !== -1) {
-            explanation = ' The dashed horizontal line marks zero residual. When present, the shaded inner band and dotted outer lines provide common visual reference ranges for comparing residual magnitude; they are not acceptance limits or confidence intervals.';
+            explanation = ' The dashed horizontal line marks zero residual. The y-axis is symmetric around zero and is shown in the original response units. The annotation reports the maximum absolute residual and indicates when a minimum display range is used to avoid magnifying negligible residuals.';
         } else if (id.indexOf('processing-raw-data') !== -1) {
             explanation = ' Markers show the uploaded in vitro and in vivo observations before preprocessing.';
         } else if (id.indexOf('interpolation') !== -1) {

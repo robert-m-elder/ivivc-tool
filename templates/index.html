@@ -251,6 +251,20 @@
                     <input type="number" name="grid_search_random_state" id="grid_search_random_state" value="{{ default_grid_search_random_state }}">
                 </div>
             </fieldset>
+
+            <fieldset class="advanced-parameter-row residual-display-options">
+                <legend class="sr-only">Residual diagnostics display settings</legend>
+                <div class="advanced-row-label">Residual diagnostics <button type="button" class="help-btn-small" data-modal="residual-diagnostics-help" aria-label="Help for residual diagnostic display settings" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button></div>
+                <label class="checkbox-item advanced-checkbox-option">
+                    <input type="checkbox" name="include_raw_residual_plots" checked>
+                    <span>Raw residuals</span>
+                </label>
+                <label class="checkbox-item advanced-checkbox-option">
+                    <input type="checkbox" name="include_residual_qq_plots" checked>
+                    <span>Quantile-quantile (Q-Q)</span>
+                </label>
+            </fieldset>
+
         </div>
 
         <div class="form-section">
@@ -398,6 +412,10 @@
 <div id="advanced-analysis-help-content">
             <h4>Advanced Analysis Parameters</h4>
             {{ modal_help['index']['advanced_analysis_overview_html'] | safe }}
+        </div>
+        <div id="residual-diagnostics-help-content">
+            <h4>Residual diagnostics</h4>
+            {{ modal_help['index']['residual_diagnostics_html'] | safe }}
         </div>
         <div id="cross-validation-help-content">
             <h4>Cross-validation</h4>

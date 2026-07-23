@@ -1871,3 +1871,18 @@ main:focus {
         width: 100%;
     }
 }
+
+/* Residual diagnostic display controls */
+.residual-display-options {
+    align-items: center;
+}
+.advanced-checkbox-option {
+    min-height: 2.75rem;
+    align-items: center;
+}
+.residual-diagnostic-note {
+    padding: 0.75rem 1rem;
+    border-left: 4px solid #767676;
+    background: #f2f2f2;
+    max-width: 60rem;
+}
