@@ -200,10 +200,18 @@ The following descriptions summarize how fitted-parameter uncertainty, fitting-p
 
 \input{includes/generated/uncertainty_by_approach.tex}
 
+
 \section{Command-line interface}
 
 The repository includes \texttt{cli.py} for batch-oriented fitting from the command line. Use \texttt{python cli.py --help} to see available arguments for input files, approaches, models, metrics, preprocessing options, cross-validation settings, and grid-search settings. The internal keys specified in this user guide are used to specify settings with \texttt{cli.py}.
 
+
 \section{Extending the app}
 
 The IVIVC app is designed so that common extensions can be added with minimal changes to the main application code. In many cases, new models, performance metrics, and preprocessing methods can be added by following the structure of the existing files in the relevant subdirectories.
+
+
+\section{Data handling}
+
+The app does not save uploaded datasets or fitting results to persistent server storage. Uploaded data are processed for the current analysis, and generated results and downloads are returned directly to the user.
+

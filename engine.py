@@ -1905,9 +1905,6 @@ def create_plotly_a1(x, y, model_info, include_bands=True):
         fillcolor='rgba(0, 0, 0, 0)',
         layer='above'
     )
-    # Write data to Excel file
-    #output_filename = f'data_approach1_{model_info["model_name"]}.xlsx'
-    #output_path = write_plotly_data_to_excel(fig, output_filename, output_directory)
     # Extract data as HTML table
     table_html = extract_plotly_data_for_table(fig)
     # Configure the plot for download options
@@ -2241,9 +2238,6 @@ def create_plotly_a3(x, y1, y2, ptype='v'):
         title_font=dict(size=20),  # Slightly larger than base font
         tickfont=dict(size=18)
     )
-    # Write data to Excel file
-    #output_filename = f'data_approach3_{ptype}.xlsx'
-    #output_path = write_plotly_data_to_excel(fig, output_filename, output_directory)
     # Extract data as HTML table
     table_html = extract_plotly_data_for_table(fig)
     # Configure the plot for download options
@@ -2349,10 +2343,6 @@ def create_prediction_plot_a1(data, t_pred, m_pred, t_pred_vivo, model_info, inc
     fig.update_xaxes(title_font=dict(size=20), tickfont=dict(size=18))
     fig.update_yaxes(title_font=dict(size=20), tickfont=dict(size=18))
 
-    # Write data to Excel file
-    #output_filename = f'prediction_approach1_{model_info["model_name"]}.xlsx'
-    #output_path = write_plotly_data_to_excel(fig, output_filename, output_directory)
-    #output_path = ''
     # Extract data as HTML table
     table_html = extract_plotly_data_for_table(fig)
 

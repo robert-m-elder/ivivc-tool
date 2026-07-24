@@ -70,7 +70,7 @@ IS_PRODUCTION = 'PYTHONANYWHERE_DOMAIN' in os.environ
 # Basic configuration
 app.config['DEBUG'] = not IS_PRODUCTION
 app.config['ENV'] = 'production' if IS_PRODUCTION else 'development'
-app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MiB
+app.config['MAX_CONTENT_LENGTH'] = 25 * 1024 * 1024  # 25 MiB
 
 def _form_int(name, default):
     value = request.form.get(name, '')
@@ -357,12 +357,6 @@ def download_word_report():
         download_name=filename,
         mimetype=WORD_MIME_TYPE,
     )
-
-@app.route('/download/<path:filename>')
-def download_excel(filename):
-    base_dir = os.path.abspath(os.sep)  # Root directory
-    full_path = os.path.normpath(os.path.join(base_dir, filename))
-    return send_file(full_path, as_attachment=True)
 
 if not IS_PRODUCTION and __name__ == '__main__':
     app.run(debug=True)

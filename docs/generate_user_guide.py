@@ -290,6 +290,10 @@ def build_readme() -> str:
         ## User guide
 
         See [`docs/user_guide.pdf`](docs/user_guide.pdf) for detailed descriptions of inputs, options, methods, and outputs. 
+
+        ## Data handling
+        The app does not save uploaded datasets or fitting results to persistent server storage. 
+        Uploaded data are processed for the current analysis, and generated results and downloads are returned directly to the user.
         """
     ).lstrip()
 

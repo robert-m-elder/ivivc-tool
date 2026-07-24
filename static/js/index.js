@@ -18,11 +18,22 @@ function populateSheetSelection(sheets, sheetSelectId, sheetSelectionId, storage
     selection.prop('hidden', false).attr('aria-busy', 'false');
 
     var selectedSheet = sessionStorage.getItem(storageKey);
-    if (selectedSheet) {
-        sheetSelect.val(selectedSheet);
+    if (!selectedSheet || sheets.indexOf(selectedSheet) === -1) {
+        selectedSheet = sheets.length ? sheets[0] : '';
     }
+    sheetSelect.val(selectedSheet);
+    if (selectedSheet) {
+        sessionStorage.setItem(storageKey, selectedSheet);
+    } else {
+        sessionStorage.removeItem(storageKey);
+    }
+
     if (announce !== false) {
-        announceFormStatus(sheets.length + ' worksheet' + (sheets.length === 1 ? '' : 's') + ' available. Select the worksheet to analyze.');
+        var message = sheets.length + ' worksheet' + (sheets.length === 1 ? '' : 's') + ' available.';
+        if (selectedSheet) {
+            message += ' ' + selectedSheet + ' selected.';
+        }
+        announceFormStatus(message);
     }
 }
 
