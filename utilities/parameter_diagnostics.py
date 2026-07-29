@@ -169,7 +169,7 @@ def build_parameter_diagnostics_html(params, pcov):
     """Return a compact HTML summary of fitted-parameter diagnostics.
 
     The diagnostics are intended as screening aids. They do not label a model as
-    valid or invalid and should be interpreted together with plots, residuals,
+    valid or invalid and are intended for interpretation together with plots, residuals,
     cross-validation behavior, and scientific plausibility.
     """
     covariance, param_names, error_message = _validate_covariance(params, pcov)
@@ -248,8 +248,8 @@ def build_parameter_diagnostics_html(params, pcov):
             )
         else:
             summary = (
-                'Review these fitted-parameter diagnostics. They may indicate an unsuitable model due to '
-                'large parameter uncertainty or weakly identified fitted parameters.'
+                'Review these fitted-parameter diagnostics. Large parameter uncertainty or '
+                'weakly identified fitted parameters may limit interpretation of the model.'
             )
     else:
         summary = (

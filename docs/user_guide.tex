@@ -7,6 +7,8 @@
 
 \input{includes/generated/app_purpose.tex}
 
+This guide describes the app and offers considerations for reviewing its outputs. It does not establish requirements, acceptance criteria, or a prescribed model-selection process. Users determine how to analyze and interpret their data for the intended use.
+
 For general background on credibility assessment and reporting of computational modeling studies in medical device submissions, see FDA guidance on computational modeling credibility and reporting \cite{fda_modeling_guidance,fda_reporting_guidance}. 
 
 For additional discussion of model performance, cross-validation results, uncertainty, residual diagnostics, and model selection considerations, see Appendix~\ref{app:model-performance}
@@ -52,7 +54,7 @@ Prediction dataset & Optional two-column in vitro dataset used after fitting to 
 \bottomrule
 \end{longtable}
 
-Acceptable formats are CSV and Excel (.xls, .xlsx). For Excel workbooks, select the sheet containing the relevant data. For csv files, the first columns are read directly in the order described above.
+Supported formats are CSV and Excel (.xls, .xlsx). For Excel workbooks, select the sheet containing the relevant data. For CSV files, the first columns are read directly in the order described above.
 
 \subsection{Analysis approaches and models}
 
@@ -76,7 +78,7 @@ The surface erosion mass loss form is based on geometry-controlled surface erosi
 
 \subsection{Preprocessing options}
 
-Preprocessing prepares the uploaded data for comparison, fitting, and prediction. Normalization expresses response values relative to a reference value so datasets can be compared on a common relative scale. Scaling changes the numerical scale of time or response values without changing the underlying pattern. Interpolation estimates response values at time points that were not directly observed, which may be useful when an approach requires matching in vitro and in vivo time points (i.e., Approach 1, Approach 3).
+Preprocessing prepares the uploaded data for comparison, fitting, and prediction. Normalization expresses response values relative to a reference value so datasets can be compared on a common relative scale. Scaling changes the numerical scale of time or response values without changing the underlying pattern. Interpolation estimates response values at time points that were not directly observed and may be useful when an approach requires matching in vitro and in vivo time points (i.e., Approach 1, Approach 3).
 
 \input{includes/generated/preprocessing_options.tex}
 
@@ -88,19 +90,21 @@ Performance metrics are summary measures that help describe how closely a fitted
 
 For additional background on common error metrics, scale-dependent accuracy measures, and adjusted \(R^2\), see references \cite{hodson2022,hyndman2006,miles2014}.
 
-For AIC\textsubscript{c}, a rule of thumb is to prefer AIC\textsubscript{c} over AIC when the ratio of fitted observations to estimated parameters is small, such as \(n/k < 40\), where \(n\) is the number of fitted observations and \(k\) is the number of model parameters \cite{burnham2002}, which we have found to be the case for typical IVIVC datasets.
+AIC\textsubscript{c} adds a small-sample correction to AIC that is relevant when the ratio of fitted observations to estimated parameters is small. A commonly cited rule of thumb is \(n/k < 40\), where \(n\) is the number of fitted observations and \(k\) is the number of model parameters \cite{burnham2002}; this condition is common in typical IVIVC datasets.
 
-By default, the app selects \(R^2\), RMSE, and AIC\textsubscript{c}. This default set has been useful in internal testing with real datasets, but it is not necessarily the best set for every dataset or intended use. Users may select additional metrics when they provide useful context for a specific analysis. The default set gives three complementary views of model performance. \(R^2\) is widely known and describes how well the fitted curve follows the observed response pattern. RMSE reports typical error in the original response units, making it easier to judge whether the error is practically large or small. AIC\textsubscript{c} supports comparison among fitted candidate models by balancing fit quality with a penalty for unnecessary model complexity, with a correction that is useful for smaller datasets.
+By default, the app selects \(R^2\), RMSE, and AIC\textsubscript{c}. This default set has been useful in internal testing with real datasets, but it is not intended as a universal metric set. Additional metrics are available when they provide useful context for a specific analysis. The default set gives three complementary views of model performance. \(R^2\) is widely known and describes how well the fitted curve follows the observed response pattern. RMSE reports typical error in the original response units, making it easier to judge whether the error is practically large or small. AIC\textsubscript{c} supports comparison among fitted candidate models by balancing fit quality with a penalty for unnecessary model complexity, with a correction that is useful for smaller datasets.
 
 \subsection{Cross-validation options}
 
-Cross-validation (CV) checks whether model performance changes substantially when different observations are omitted from fitting. The app does this by repeatedly setting aside part of the dataset, fitting the model to the remaining observations, and comparing model predictions with the observations that were set aside.
+Cross-validation provides an estimate of the model's ability to predict observations not used for fitting. The app does this by repeatedly setting aside part of the dataset, fitting the model to the remaining observations, and comparing model predictions with the observations that were set aside. When the cross-validation error is similar to the error from fitting the full dataset, this suggests the fitted relationship is reasonably stable.
 
-In this app, CV should be interpreted as a \textbf{prediction-error diagnostic} and sensitivity check, not as a confidence interval or parameter uncertainty estimate. If the error from the model fitted to the full dataset is similar to the CV error, that provides reassurance that the fitted relationship is not overly dependent on a particular subset of observations. If the CV error is much worse, the model may be sensitive to the available data, the selected splitting scheme, or the number and placement of time points.
+In this app, CV is intended as a \textbf{prediction-error diagnostic} and sensitivity check, not as a confidence interval or parameter uncertainty estimate. If the error from the model fitted to the full dataset is similar to the CV error, that provides reassurance that the fitted relationship is not overly dependent on a particular subset of observations. If the CV error is much worse, the fitted relationship might be sensitive to the available data, the selected splitting scheme, or the number and placement of time points.
 
-For time-course data, the splitting scheme matters because nearby observations may contain related information, and early, middle, and late time points may represent different parts of the degradation process. Setting aside a random subset is a general check of whether the fitted curve captures the overall response pattern, but it is less time-aware. Setting aside one time point mainly asks whether the model can recover an individual omitted observation. Setting aside a contiguous block asks whether the model can bridge a missing region of the profile.
+For time-course data, the splitting scheme matters because nearby observations can contain related information, and early, middle, and late time points can represent different parts of the degradation process. Setting aside a random subset is a general check of whether the fitted curve captures the overall response pattern, but it is less time-aware. Setting aside one time point mainly asks whether the model can recover an individual omitted observation. Setting aside a contiguous block asks whether the model can bridge a missing region of the profile.
 
-Shuffle split is the default CV scheme because it provides a general robustness check of whether the selected curve form captures the overall degradation or correlation pattern. It should not be interpreted as a time-aware forecasting test. Use leave-contiguous-block-out when sensitivity to a missing time region is the main concern, and use leave-one-timepoint-out when the dataset is too small to set aside larger groups of observations. When results change substantially across CV schemes, review the fitted plots, residual diagnostics, parameter uncertainty, model complexity, and scientific plausibility rather than treating CV as a pass/fail result.
+Shuffle split is the default CV scheme because it provides a general robustness check of whether the selected curve form captures the overall degradation or correlation pattern. It is not a time-aware forecasting test. Use leave-contiguous-block-out when sensitivity to a missing time region is the main concern, and use leave-one-timepoint-out when the dataset is too small to set aside larger groups of observations. When results change substantially across CV schemes, review the fitted plots, residual diagnostics, parameter uncertainty, model complexity, and scientific plausibility rather than treating CV as a pass/fail result.
+
+The default CV settings have been useful in internal testing with real datasets but are not intended to be universally applicable. Possible reasons to adjust them include small datasets or unstable cross-validation results.
 
 For background on cross-validation procedures and their use in model assessment and selection, including issues that arise with time series, see references \cite{arlot2010, bergmeir2012, roberts2017, bergmeir2018}.
 
@@ -117,10 +121,10 @@ The table below summarizes the schemes available in the app. The ``CV error desc
 \textbf{Scheme} & \textbf{CV error describes} & \textbf{Useful when} & \textbf{Main caution} \\
 \midrule
 \endhead
-Shuffle split & Prediction error for repeated random subsets of observations set aside from fitting. & Default general robustness check for whether the fitted curve captures the overall response pattern. & Not time-aware; may be overly reassuring when nearby time points carry similar information. \\
-Leave-one-timepoint-out & Prediction error when one time point is omitted at a time; sensitivity to setting aside one observation. & Useful for very small datasets because each repeated fit still uses nearly all of the available data. & Can be a gentle test when neighboring time points bracket the omitted point. \\
-Leave-contiguous-block-out & Prediction error when a block of adjacent time points is omitted; sensitivity to a gap in the observed profile. & Primary time-aware sensitivity check, especially when a missing time region is a practical concern. & Larger blocks make the test harder but may leave too few points for the model to fit stably. Start with small blocks and increase cautiously. \\
-None & No cross-validation is performed; only the model fitted to the full dataset is summarized. & Appropriate when there are too few observations to split meaningfully, repeated fits are numerically unstable, or the goal is simply to examine the fitted model itself. & Removes one diagnostic tool. When CV is skipped, rely more carefully on fitted plots, residuals, final-fit metrics, parameter diagnostics, and scientific plausibility. \\
+Shuffle split & Prediction error for repeated random subsets of observations set aside from fitting. & Default general robustness check for whether the fitted curve captures the overall response pattern. & Not time-aware; can appear overly reassuring when nearby time points carry similar information. \\
+Leave-one-timepoint-out & Prediction error when one time point is omitted at a time; sensitivity to setting aside one observation. & Useful for very small datasets because each repeated fit still uses nearly all of the available data. & Can be a gentle test when neighboring time points have similar response values to the omitted point. \\
+Leave-contiguous-block-out & Prediction error when a block of adjacent time points is omitted; sensitivity to a gap in the observed profile. & Primary time-aware sensitivity check, especially when a missing time region is a practical concern. & Larger blocks make the test harder but can leave too few points for the model to fit stably. Start with small blocks and increase cautiously. \\
+None & No cross-validation is performed; only the model fitted to the full dataset is summarized. & Useful when there are too few observations to split meaningfully, repeated fits are numerically unstable, or the goal is simply to examine the fitted model itself. & Removes one diagnostic tool. When CV is skipped, place greater emphasis on fitted plots, residuals, final-fit metrics, parameter diagnostics, and scientific plausibility. \\
 \bottomrule
 \end{longtable}
 
@@ -132,7 +136,7 @@ None & No cross-validation is performed; only the model fitted to the full datas
 
 \input{includes/generated/grid_search_description.tex}
 
-The default grid-search settings can usually be left unchanged. If fitting fails or appears unstable, consider increasing the number of random starts, adjusting the parameter bounds, changing the random seed, or reviewing whether the selected model is appropriate for the data.
+The default grid-search settings can usually be left unchanged. If fitting fails or appears unstable, consider increasing the number of random starts, adjusting the candidate starting-value range, changing the random seed, or reviewing whether the selected model form is suitable for the data.
 
 \input{includes/generated/grid_search_parameter_table.tex}
 
@@ -166,7 +170,7 @@ Selected model \& summary of outputs & User-selected report summaries and option
 
 Relative model evidence tables compare candidate parametric models using information criteria (i.e., AIC, AIC\textsubscript{c}, and/or BIC), showing which models have more support from the observed data after balancing fit quality against model complexity. These comparisons are only meaningful among models fitted to the same data, with the same preprocessing settings, and within the same IVIVC approach.
 
-These tables are shown only when one or more information criteria are selected as metrics. If more than one criterion is selected, review each separately---AIC, AIC\textsubscript{c}, and BIC can occasionally rank the same models differently. See the appendix for interpretation guidance, rules of thumb, and limitations.
+These tables are shown only when one or more information criteria are selected as metrics. Interpret each selected criterion separately---AIC, AIC\textsubscript{c}, and BIC can occasionally rank the same models differently. See the appendix for interpretation guidance, rules of thumb, and limitations.
 
 The relative model evidence tables contain the following quantities. 
 
@@ -192,9 +196,9 @@ Support badge & Rule-of-thumb label based on the delta value. Intended to aid us
 
 \subsection{Uncertainty and error bars}
 
-These displays show how much fitted curves or predictions may vary based on the fitted model, residual error, and preprocessing choices. They are intended to support review of uncertainty, not to define acceptance limits.
+These displays show how much fitted curves or predictions vary based on the fitted model and residual error. They are intended to support review of uncertainty, not to define acceptance limits.
 
-Very large uncertainty bands may extend beyond the initial plot range and may not be visible until the plot is rescaled. When this occurs, the app displays an informational badge near the affected fitting plot. A separate warning is shown if one or more uncertainty bounds are nonfinite or the uncertainty band cannot be calculated. The badge describes the display condition but does not identify its cause; review the fitted parameter diagnostics, model form, and available data when it appears.
+Very large uncertainty bands can extend beyond the initial plot range and remain out of view until the plot is rescaled. When this occurs, the app displays an informational badge near the affected fitting plot. A separate warning is shown if one or more uncertainty bounds are nonfinite or the uncertainty band cannot be calculated. The badge describes the display condition but does not identify its cause; review the fitted parameter diagnostics, model form, and available data when it appears.
 
 The following descriptions summarize how fitted-parameter uncertainty, fitting-plot bands, and prediction error bars are calculated or interpreted for each approach.
 

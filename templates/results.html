@@ -406,7 +406,7 @@
                             {% if option.prediction_error_html %}
                                 {{ option.prediction_error_html | safe }}
                             {% endif %}
-                            <h4>Goodness of fit and validation</h4>
+                            <h4>Goodness of fit and cross-validation</h4>
                             {{ goodness_validation_table_html | safe }}
                             {{ model_results.stats_table | safe }}
                             {% if analysis_config.include_raw_residual_plots or analysis_config.include_residual_qq_plots %}
@@ -467,7 +467,7 @@
                             {% if option.prediction_error_html %}
                                 {{ option.prediction_error_html | safe }}
                             {% endif %}
-                            <h4>Goodness of fit and validation</h4>
+                            <h4>Goodness of fit and cross-validation</h4>
                             {{ goodness_validation_table_html | safe }}
                             <h5>In vitro data</h5>
                             {{ model_results.stats_table[0] | safe }}
@@ -528,7 +528,7 @@
                             {% endif %}
                         {% endif %}
 
-                        <p class="report-disclaimer"><strong>Report note:</strong> This report summarizes the app configuration and fitted model output. It should be reviewed alongside the plots, source data, residual behavior, and any domain-specific acceptance criteria before use in a validation package.</p>
+                        <p class="report-disclaimer"><strong>Report note:</strong> This report summarizes the app configuration and fitted model output. It does not replace review of the plots, source data, residual behavior, or any domain-specific criteria relevant to the intended use, and it does not establish model validity or regulatory acceptability.</p>
                     </div>
                 {% endfor %}
             {% else %}
@@ -811,7 +811,7 @@
             </ul>
             <h4>Grid-search initialization</h4>
             {{ grid_search_description_html | safe }}
-            <p><strong>For model review:</strong> Review the plots to ensure data quality. For example, poor interpolation may indicate the need for different preprocessing options.</p>
+            <p><strong>For model review:</strong> Review the plots to check data quality. For example, poor interpolation might indicate the need for different preprocessing options.</p>
         </div>
 <div id="model-comparison-help-content">
             <h4>Model Comparison</h4>
