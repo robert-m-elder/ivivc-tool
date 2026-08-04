@@ -1,10 +1,9 @@
 settingname,settingvalue
-Generating model,Stretched Exponential
+Generating model,Exponential
 True parameter a,100.000
-True parameter b,-0.310
-True parameter c,0.550
-Noise standard deviation,1.250
-Dataset random seed,1847
+True parameter b,-0.075
+Noise standard deviation,1.500
+Dataset random seed,31
 CV scheme,Shuffle split
 CV splits,100
 CV test fraction,0.25

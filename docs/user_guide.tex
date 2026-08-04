@@ -11,7 +11,7 @@ This guide describes the app and offers considerations for reviewing its outputs
 
 For general background on credibility assessment and reporting of computational modeling studies in medical device submissions, see FDA guidance on computational modeling credibility and reporting \cite{fda_modeling_guidance,fda_reporting_guidance}. 
 
-For additional discussion of model performance, cross-validation results, uncertainty, residual diagnostics, and model selection considerations, see Appendix~\ref{app:model-performance}
+For additional discussion of model performance, cross-validation results, uncertainty, residual diagnostics, and model selection considerations, see Appendix~\ref{app:model-performance} For an example of interpreting model performance, see Appendix~\ref{app:model-comparison-tutorial}
 
 \section{What the app does}
 
@@ -205,17 +205,17 @@ The following descriptions summarize how fitted-parameter uncertainty, fitting-p
 \input{includes/generated/uncertainty_by_approach.tex}
 
 
-\section{Command-line interface}
+\section{Miscellaneous}
+
+\subsection{Command-line interface}
 
 The repository includes \texttt{cli.py} for batch-oriented fitting from the command line. Use \texttt{python cli.py --help} to see available arguments for input files, approaches, models, metrics, preprocessing options, cross-validation settings, and grid-search settings. The internal keys specified in this user guide are used to specify settings with \texttt{cli.py}.
 
-
-\section{Extending the app}
+\subsection{Extending the app}
 
 The IVIVC app is designed so that common extensions can be added with minimal changes to the main application code. In many cases, new models, performance metrics, and preprocessing methods can be added by following the structure of the existing files in the relevant subdirectories.
 
+\subsection{Data handling}
 
-\section{Data handling}
-
-The app does not save uploaded datasets or fitting results to persistent server storage. Uploaded data are processed for the current analysis, and generated results and downloads are returned directly to the user.
+The app does not save uploaded datasets or fitting results to persistent storage. Uploaded data are processed for the current analysis, and generated results and downloads are returned directly to the user.
 
