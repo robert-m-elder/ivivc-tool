@@ -17,6 +17,8 @@
 \usepackage{xcolor}
 \usepackage{xurl}
 \usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage[l3]{csvsimple}
 
 \setlength{\parindent}{0pt}
 %\setlength{\parskip}{0.55em}
@@ -62,15 +64,18 @@
 
 \newpage
 \phantomsection
-\section*{Appendix}
-\addcontentsline{toc}{section}{Appendix}
+\section*{Appendices}
+\addcontentsline{toc}{section}{Appendices}
 \appendix
 \renewcommand{\thesection}{\Alph{section}.}
 \renewcommand{\thesubsection}{\Alph{section}.\arabic{subsection}}
 
 \input{appendices/interpreting_model_performance.tex}
-
 \newpage
+
+\input{appendices/model_comparison_tutorial.tex}
+\newpage
+
 \addcontentsline{toc}{section}{References}
 \bibliographystyle{unsrt}
 %\nocite{*}

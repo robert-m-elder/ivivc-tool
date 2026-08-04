@@ -1,0 +1,4 @@
+model,role,nparams,residualdf,rtwo,adjrtwo,rmse,mae,aicc,deltaaicc,aiccweight,bic,cvrmse,cvmae,cvrmseratio,maxcorr,maxcorrpair
+Exponential,Plausible but imperfect,2,10,0.934,0.928,7.188,6.057,52.670,31.867,0.0000,52.306,8.842,7.600,1.230,0.558,a-b
+Stretched Exponential,Strong candidate,3,9,0.997,0.996,1.635,1.315,20.803,0.000,0.9984,19.257,2.397,2.040,1.466,0.933,b-c
+Double Exponential,More flexible candidate,4,8,0.993,0.991,2.297,1.904,33.672,12.869,0.0016,29.897,4.828,3.957,2.102,0.881,c-d

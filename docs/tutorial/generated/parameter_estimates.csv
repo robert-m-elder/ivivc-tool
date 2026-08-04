@@ -1,0 +1,10 @@
+model,parameter,estimate,standarderror,cihalfwidth,relativestandarderror
+Exponential,a,84.529,4.975,11.085,5.885
+Exponential,b,-0.082,0.011,0.024,13.343
+Stretched Exponential,a,100.623,1.848,4.181,1.837
+Stretched Exponential,b,-0.302,0.021,0.047,6.896
+Stretched Exponential,c,0.557,0.023,0.051,4.065
+Double Exponential,a,43.101,5.506,12.696,12.774
+Double Exponential,b,-0.635,0.151,0.348,23.755
+Double Exponential,c,56.715,5.096,11.752,8.986
+Double Exponential,d,-0.049,0.006,0.013,11.485
