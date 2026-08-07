@@ -1,5 +1,5 @@
 model,role,nparams,residualdf,rtwo,adjrtwo,rmse,mae,aicc,deltaaicc,aiccweight,bic,cvrmse,cvmae,cvrmseratio,maxcorr,maxcorrpair
-Linear,Clearly inadequate,2,11,0.779,0.759,16.186,14.827,77.588,67.957,0,77.518,21.285,18.542,1.315,0.74,a-b
-Exponential,Strong candidate,2,11,0.999,0.999,1.186,0.989,9.631,0,0.8006,9.561,1.337,1.182,1.128,0.561,a-b
-Stretched Exponential,More flexible candidate,3,10,0.999,0.999,1.166,1.007,12.663,3.032,0.1758,11.691,1.601,1.405,1.373,0.979,b-c
-Double Exponential,Most flexible candidate,4,9,0.999,0.999,1.152,0.979,16.682,7.051,0.0236,13.942,2.22E+19,1.11E+19,1.93E+19,1,a-c
+Linear,Clearly inadequate,2,7,0.805,0.777,16.338,14.935,56.283,37.381,0.0000,54.678,24.279,21.776,1.486,0.723,a-b
+Exponential,Strong candidate,2,7,0.997,0.996,2.048,1.469,18.902,0.000,0.8906,17.297,2.783,2.292,1.359,0.604,a-b
+Stretched Exponential,More flexible candidate,3,6,0.997,0.996,1.987,1.616,23.156,4.254,0.1062,18.948,3.557,3.070,1.791,0.963,b-c
+Double Exponential,Most flexible candidate,4,5,0.997,0.996,1.960,1.601,30.112,11.209,0.0033,20.901,1261.292,735.979,643.566,1.000,a-c

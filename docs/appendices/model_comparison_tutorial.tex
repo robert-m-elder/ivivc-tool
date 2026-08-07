@@ -8,7 +8,7 @@
 
 \subsection{Purpose of the example}
 
-This worked example illustrates how fitted curves, performance metrics, cross-validation, residual plots, Q--Q plots, and parameter uncertainty results can be considered together when comparing candidate models. The dataset is simulated so the underlying relationship is known, but the comparison is presented in the same way as an analysis of an unknown experimental relationship. The example is intended as a practical demonstration, not as an acceptance procedure or a set of model-selection criteria.
+This worked example illustrates how fitted curves, performance metrics, cross-validation, residual plots, Q--Q plots, and parameter uncertainty results can be considered together when comparing candidate models. It provides practical examples of residual patterns that can help readers interpret their own results; further illustrated examples are available in \cite{motulsky1987, kutner2005, nistResidualAnalysis, psuResidualExamples, originlabResidualPlotAnalysis}. The dataset is simulated so the underlying relationship is known, but the comparison is presented in the same way as an analysis of an unknown experimental relationship. The example is intended as a practical demonstration, not as an acceptance procedure or a set of model-selection criteria.
 
 An accompanying Python script generates a noisy single-exponential decay dataset and fits four candidate models. The four candidate models fitted to the primary dataset are:
 
@@ -126,7 +126,7 @@ These Q--Q plots do not distinguish the candidate models as clearly as the resid
 \subsection{Effect of the number of observations}
 \label{sec:tutorial-number-of-points}
 
-Figures~\ref{fig:tutorial-fitted-curves}--\ref{fig:tutorial-qq} use the primary dataset with 12 observations. To illustrate the effect of denser sampling, a second independent dataset was generated from the same single-exponential relationship and noise distribution at 61 evenly spaced times. Figure~\ref{fig:tutorial-dense-diagnostics} shows the fitted curves and residual diagnostics for the linear and exponential models. This section provides a qualitative example of how the number of observations can affect the ability to distinguish a suitable model from one with systematic lack of fit.
+Figures~\ref{fig:tutorial-fitted-curves}--\ref{fig:tutorial-qq} use the primary dataset with 9 observations. To illustrate the effect of denser sampling, a second independent dataset was generated from the same single-exponential relationship and noise distribution at 61 evenly spaced times from 0 to 60. Figure~\ref{fig:tutorial-dense-diagnostics} shows the fitted curves and residual diagnostics for the linear and exponential models. This section provides a qualitative example of how the number of observations can affect the ability to distinguish a suitable model from one with systematic lack of fit.
 
 \begin{figure}[h!]
     \centering

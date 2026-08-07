@@ -2,8 +2,8 @@ settingname,settingvalue
 Generating model,Exponential
 True parameter a,100.000
 True parameter b,-0.075
-Noise standard deviation,1.500
-Dataset random seed,31
+Noise standard deviation,3.000
+Dataset random seed,27
 CV scheme,Shuffle split
 CV splits,100
 CV test fraction,0.25

@@ -51,16 +51,17 @@ from utilities.model_evidence import add_relative_evidence  # noqa: E402
 # Reproducible tutorial configuration
 # -----------------------------------------------------------------------------
 
-DEFAULT_RANDOM_SEED = 31
+DEFAULT_RANDOM_SEED = 27
 #DEFAULT_RANDOM_SEED = 215
 DEFAULT_CV_SEED = 12345
 DEFAULT_CV_SPLITS = 100
 DEFAULT_CV_TEST_SIZE = 0.25
 DEFAULT_GRID_SEARCH_POINTS = 100
-DEFAULT_NOISE_SD = 1.5
+DEFAULT_NOISE_SD = 3.0
 DENSE_RANDOM_SEED_OFFSET = 100003
 
-TIME_POINTS = np.array([0, 1, 2, 4, 8, 12, 16, 20, 24, 30, 36, 48, 60], dtype=float)
+TIME_POINTS = np.array([0, 2, 4, 8, 12, 24, 36, 48, 60], dtype=float)
+#TIME_POINTS = np.array([0, 1, 2, 4, 8, 12, 16, 20, 24, 30, 36, 48, 60], dtype=float)
 DENSE_TIME_POINTS = np.linspace(0.0, 60.0, 61)
 
 TRUE_MODEL_ID = "exponential"
