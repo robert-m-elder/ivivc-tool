@@ -1465,13 +1465,13 @@ def _create_interpolation_plotly(t1, m1, t2, m2, interp_x1, interp_y1, interp_x2
     fig.add_trace(go.Scatter(
         x=t1, y=m1,
         mode='markers',
-        name='In Vitro Data (observed/preprocessed)',
+        name='In Vitro Data (preprocessed)',
         marker=dict(color=colors['in_vitro'], size=14, symbol='circle', line=dict(color='white', width=2))
     ))
     fig.add_trace(go.Scatter(
         x=t2, y=m2,
         mode='markers',
-        name='In Vivo Data (observed/preprocessed)',
+        name='In Vivo Data (preprocessed)',
         marker=dict(color=colors['in_vivo'], size=14, symbol='diamond', line=dict(color='white', width=2))
     ))
     # Filled/open variants retain a consistent shape for each dataset while
