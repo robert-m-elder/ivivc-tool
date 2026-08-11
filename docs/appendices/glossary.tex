@@ -1,0 +1,153 @@
+\section{Glossary}
+\label{app:glossary}
+
+This glossary defines terms as they are used in the IVIVC app and this user guide. The definitions are intended as quick references rather than general statistical or regulatory definitions. See Appendix~\ref{app:model-performance} for more detailed interpretation guidance.
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.25\textwidth}>{\raggedright\arraybackslash}p{0.67\textwidth}@{}}
+\toprule
+\textbf{Term} & \textbf{Meaning in this app and guide} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Term} & \textbf{Meaning in this app and guide} \\
+\midrule
+\endhead
+
+%Adjusted \(R^2\) & \(R^2\) adjusted for the number of fitted parameters and observations. It can decrease when added parameters do not improve the fit enough to offset the added complexity. \\
+
+%AIC (Akaike information criterion) & Information criterion that balances fit quality against model complexity. Lower values indicate stronger relative support only among comparable models fitted to the same data under the same analysis conditions. \\
+
+%AIC\textsubscript{c} (corrected AIC) & AIC with an additional correction for small samples. It is especially useful when the number of observations is not large relative to the number of fitted parameters. \\
+
+Analysis approach & The overarching method used to establish or evaluate the in vitro/in vivo relationship. An approach can use fitted mathematical models or, for Approach 3, direct interpolation-based mappings. \\
+
+Approach 1: Direct Correlation & Relates matched in vitro and in vivo time points and fits a model that maps in vitro time to predicted in vivo time. \\
+
+Approach 2: Independent Model Fitting & Fits the same model family separately to the in vitro and in vivo datasets, then compares or applies the fitted relationships. \\
+
+Approach 3: Direct Mapping & Uses interpolation-based response-value or time mappings between the in vitro and in vivo datasets rather than fitting a parametric model. \\
+
+%BIC (Bayesian information criterion) & Information criterion that balances fit quality against model complexity and generally penalizes additional parameters more strongly than AIC as the number of observations increases. Lower values indicate stronger relative support among comparable models. \\
+
+Candidate model & A mathematical form considered for fitting within an applicable analysis approach. Candidate models can differ in shape, number of parameters, and flexibility. \\
+
+Confidence interval (parameter) & Approximate range used to summarize uncertainty in a fitted parameter. The app reports each parameter as the estimate \(\pm\) the half-width of a 95\% confidence interval when the required covariance information is available. \\
+
+%Confidence interval half-width & Distance from a parameter estimate to either endpoint of the reported symmetric confidence interval. This is the value shown after the \(\pm\) sign in the app. \\
+
+Covariance matrix & Matrix calculated from the fitted model that summarizes approximate parameter variances and how parameter estimates vary together. It is used for parameter standard errors, confidence intervals, and parameter-correlation diagnostics. \\
+
+Cross-validation (CV) & Prediction-error and sensitivity diagnostic in which part of the fitting data is set aside, the model is fit to the remaining observations, and predictions are compared with the omitted observations. CV does not estimate parameter uncertainty. \\
+
+%CV comparison badge & Informational label that summarizes whether CV performance is similar to or worse than full-fit performance for eligible metrics. It is a screening aid, not an acceptance criterion. \\
+
+%Delta (information criterion) & Difference between a model's AIC, AIC\textsubscript{c}, or BIC value and the lowest value for the comparable candidate set. A delta near zero indicates support similar to the leading model under that criterion. \\
+
+Densified interpolation & Interpolation option that adds evenly spaced points between observed measurements. The added response values are estimates, not additional experimental observations. \\
+
+Empirical support & Relative support provided by the observed data for one candidate model compared with others under a selected information criterion. It does not establish that a model is correct or suitable for a particular use. \\
+
+%Evidence ratio & Ratio comparing the largest information-criterion weight in a candidate set with a model's weight. Larger values indicate less relative support than the leading model. \\
+
+Extrapolation & Use of a fitted model to estimate behavior outside the range of the observed data. Extrapolated behavior generally has greater uncertainty and depends more strongly on the assumed model form. \\
+
+Fit/CV ratio & Ratio of a full-fit metric value to the corresponding mean cross-validation metric reported by the app. Values near 1 indicate similar full-fit and cross-validation performance; interpretation also depends on the metric and CV scheme. \\
+
+Fitted model & A candidate model after its parameters have been estimated from the data. \\
+
+Fitted parameter diagnostics & App summaries that flag large relative standard errors, strong parameter coupling, or combined identifiability concerns for closer review. They do not determine whether a model is valid or acceptable. \\
+
+Fitting dataset & Required dataset containing paired in vitro and in vivo time-course data used to establish the IVIVC relationship. \\
+
+Full fit & Model fit obtained using the complete fitting dataset rather than a training subset created for cross-validation. \\
+
+Goodness of fit & Degree to which a fitted model describes the observations used to estimate its parameters. The app summarizes goodness of fit with selected metrics and fitted-curve displays. \\
+
+Grid search initialization & Procedure that evaluates many candidate parameter starting values before the final nonlinear least-squares fit and selects a promising starting point. It can improve fitting robustness but does not guarantee a global optimum. \\
+
+Identifiability & Degree to which the available data distinguish among possible values of fitted model parameters. Poor identifiability occurs when substantially different parameter combinations can produce very similar fitted curves. \\
+
+Information criterion & Model-comparison measure, such as AIC, AIC\textsubscript{c}, or BIC, that combines fit quality with a penalty for model complexity. Information-criterion values are interpreted comparatively, not as absolute fit scores. \\
+
+Interpolation & Estimation of response values between measured points. Interpolated values are derived from the observed data and are not new measurements. \\
+
+In vitro & Measurements or behavior observed in a laboratory or other setting outside the living organism. In this app, in vitro data provide one side of the IVIVC relationship. \\
+
+In vivo & Measurements or behavior observed in a living organism. In this app, in vivo data provide the other side of the IVIVC relationship. \\
+
+IVIVC (in vitro--in vivo correlation) & Quantitative relationship between in vitro and in vivo degradation behavior. The app provides several approaches for establishing, evaluating, and applying such relationships. \\
+
+%Leave-contiguous-block-out & Time-aware CV scheme that sets aside a block of adjacent observations in time order and fits the model to the remaining data. It evaluates sensitivity to a missing region of the observed profile. \\
+
+%Leave-one-timepoint-out & CV scheme that sets aside one time point at a time and fits the model using all remaining observations. It preserves as much fitting data as possible for small datasets. \\
+
+%MAE (mean absolute error) & Average absolute difference between observed and fitted or predicted values. Lower values indicate smaller errors, and the units match the response units. \\
+
+Model complexity & Flexibility introduced by a model's form and number of fitted parameters. Additional complexity can improve in-sample fit but can also increase parameter uncertainty or overfitting. \\
+
+Model parameter & Numerical quantity in a model equation that is estimated from the data during fitting, such as an amplitude, rate constant, exponent, or lag parameter. \\
+
+%MSE (mean squared error) & Average squared difference between observed and fitted or predicted values. Lower values indicate smaller errors; the units are squared response units. \\
+
+Normalization & Preprocessing that expresses response values relative to a reference, such as the first response value or the observed minimum and maximum, so datasets can be compared on a common relative scale. \\
+
+%NRMSE (normalized root mean squared error) & RMSE divided by a selected normalization factor, such as the response mean or standard deviation. Interpretation depends on the normalization method used. \\
+
+Overfitting & Situation in which a model's flexibility allows it to follow random variation in the fitted data rather than only the underlying relationship. Overfitting can appear as excellent full-fit metrics accompanied by poorer CV performance or unstable parameters. \\
+
+Parameter coupling / correlation & Tendency for two fitted parameter estimates to change together. Strong coupling can mean that one parameter can compensate for another while producing a similar fitted curve. \\
+
+Parameter estimate & Fitted numerical value of a model parameter obtained from the optimization procedure. \\
+
+%Parameter identifiability caution & App badge used when strong parameter coupling occurs together with elevated parameter uncertainty or a related numerical sensitivity indication. It signals a need for closer review rather than a pass/fail conclusion. \\
+
+Parameter uncertainty & Uncertainty in the numerical values of fitted model parameters. The app summarizes it with approximate confidence intervals, relative standard errors, and parameter-coupling diagnostics where available. \\
+
+Parametric model & Mathematical model described by an equation with a finite set of fitted parameters. Approaches 1 and 2 can use parametric models; Approach 3 uses direct mappings rather than a fitted parametric model. \\
+
+Prediction band & Model-based interval around a fitted or predicted relationship that incorporates sources of uncertainty defined for the applicable approach. In fitted parametric models, the displayed 95\% prediction band generally includes fitted-parameter uncertainty and residual/model error. \\
+
+Prediction dataset & Optional in vitro dataset used after model fitting to generate corresponding in vivo predictions. \\
+
+Prediction error & Difference between an observed response and the corresponding model prediction. For fitted observations, this difference is also called a residual. \\
+
+Preprocessing & Operations applied to uploaded data before fitting, comparison, or prediction. In this app, preprocessing can include normalization, scaling, and interpolation. \\
+
+Q--Q plot (quantile--quantile plot) & Graph that compares ordered standardized residuals with the quantiles expected from a normal distribution. It is used as a qualitative diagnostic for residual-distribution shape. \\
+
+%\(R^2\) (coefficient of determination) & Measure of how much of the observed response variation is represented by the fitted model relative to a mean-response baseline. Higher values indicate closer agreement with the observed pattern, but a high \(R^2\) does not establish model suitability. \\
+
+Random seed & Starting value used by a pseudorandom procedure so randomized operations, like shuffle split CV and grid search, can be reproduced. \\
+
+Relative model evidence & Comparison of candidate models using AIC, AIC\textsubscript{c}, or BIC, including delta values, weights, and evidence ratios. These quantities describe relative support only within a comparable candidate set. \\
+
+Relative standard error (RSE) & Parameter standard error expressed as a percentage of the absolute parameter estimate. Large RSE values indicate that uncertainty is large relative to the fitted value. \\
+
+Residual & Observed response minus the fitted or predicted response (i.e., the error in a given prediction). Residual patterns over time can reveal systematic lack of fit that is not obvious from the fitted curve alone. \\
+
+Residual plot & Plot of residuals against time or another fitted quantity. In this app, raw residual plots show observed-minus-predicted response values versus time in the original response units. \\
+
+Residual degrees of freedom & Number of fitted observations minus the number of estimated model parameters, \(n-p\). It is used in estimating residual variance and in the app's approximate parameter confidence intervals. \\
+
+Response value & Measured y-axis quantity that changes with time, such as mass remaining, molecular weight, strength, or another degradation-related endpoint. \\
+
+%RMSE (root mean squared error) & Square root of MSE. It summarizes typical error magnitude in the same units as the response and gives greater influence to larger errors than MAE. \\
+
+Scaling & Preprocessing that changes the numerical scale of time or response values, such as applying a base-10 logarithm, without changing which observations are present. \\
+
+Scientific plausibility & Consistency of the fitted relationship, parameter values, and predicted behavior with relevant knowledge of the polymer, degradation mechanism, test conditions, and intended use. \\
+
+%Shuffle split & Default CV scheme that repeatedly divides observations at random into training and test subsets. It provides a general robustness check but does not preserve time order. \\
+
+Standard error (SE) & Approximate standard deviation of a fitted parameter estimate implied by the fitted model and covariance calculation. Smaller values indicate more precise parameter estimates on that parameter's scale. \\
+
+%Support badge & Informational label based on an information-criterion delta value. It summarizes relative model support as a screening aid and is not an acceptance criterion or model recommendation. \\
+
+Test data & Observations set aside during a CV split and used to evaluate predictions from a model fitted without those observations. \\
+
+Training data & Observations retained during a CV split and used to fit the model for that split. \\
+
+%Weight (information criterion) & Normalized relative-support value calculated from information-criterion deltas across the displayed candidate set. Weights sum to 1 within that set and are not absolute probabilities that a model is correct. \\
+
+\bottomrule
+\end{longtable}
