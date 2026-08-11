@@ -44,8 +44,8 @@ Log10 response scaling & log\_y & Uses a base-10 log scale for response values b
 \textbf{Option} & \textbf{Internal key} & \textbf{Description} \\
 \midrule
 \endhead
-No interpolation & none & Uses only the original measured points. Response values between measurements are not estimated, so unmatched positions are marked as missing. \\
-Shared-time interpolation & default & Uses linear interpolation to estimate response values for both datasets at a shared set of experimental time points. Estimates outside the measured time range are marked as unavailable. \\
-Densified interpolation & alternative & Adds extra evenly spaced points between adjacent observations before interpolation. This can smooth displays and make fitting more stable, but the added response values are estimated rather than directly measured and can affect metric values. \\
+No interpolation & none & Uses only exact matches from the observed data. No response-at-time or time-at-response estimates are added, so unmatched positions remain unavailable for Approaches 1 and 3. Approach 2 uses observed points regardless of this setting. \\
+Shared-grid interpolation & default & Uses linear interpolation in both directions: response values are estimated at the shared set of observed time points, and times are estimated at the shared set of observed response values. Estimates outside the measured overlap are unavailable. Approach 2 does not use these interpolated points for fitting. \\
+Densified interpolation & alternative & Adds intermediate grid points in both time and response-value directions before linear interpolation, producing denser paired mappings for Approaches 1 and 3. The added points are estimates rather than additional experimental observations. Approach 2 does not use them for fitting. \\
 \bottomrule
 \end{longtable}

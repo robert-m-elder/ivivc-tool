@@ -99,7 +99,9 @@ The Data Processing results tab shows these two representations separately so th
 
 \textbf{Approach 3: Direct Mapping.} Approach 3 does not fit a parametric model and instead uses both interpolation directions. Response values at shared times are used to calculate response-value ratios or mappings over time. Times at shared response values are used to calculate time ratios or mappings across the response range. Both representations are therefore relevant when Approach 3 is selected.
 
-With \textbf{No interpolation}, Approaches 1 and 3 can use only exact overlaps available in the observed data, which may leave few or no comparable points for one of the mappings. Time-at-response interpolation also assumes that a response value can be associated with a meaningful single time over the analyzed range. Strongly nonmonotonic response profiles can make this inverse mapping ambiguous; review the by-response-value interpolation plot before relying on that mapping.
+With \textbf{No interpolation}, Approaches 1 and 3 can use only the matching points that are actually present in both datasets. If the datasets have few or no matching times or response values, there may be too few points for the comparison. Interpolation can provide additional matched points. 
+
+Interpolation by response value assumes that each response value corresponds to a single time. If the response rises and falls over the analyzed range, the same response value may occur at more than one time, making this mapping unclear. Check the by-response-value interpolation plot to ensure the results appear reasonable before relying on this mapping.
 
 \subsection{Performance metrics}
 

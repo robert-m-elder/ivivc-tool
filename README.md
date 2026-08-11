@@ -26,7 +26,7 @@ Establishing an in vitro-in vivo correlation (IVIVC) can support the evaluation 
 
 ## What the app does
 
-- Applies selected normalization, scaling, and interpolation options to prepare fitting and prediction data.
+- Applies selected normalization and scaling, and uses interpolation where required for paired-data approaches and mappings.
 - Fits user-selected IVIVC approaches and model families to paired in vitro and in vivo data.
 - Calculates selected goodness-of-fit, model-comparison, and cross-validation metrics.
 - Generates fitting, comparison, and prediction plots with uncertainty displays where supported.
