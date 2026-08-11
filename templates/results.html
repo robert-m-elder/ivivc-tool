@@ -147,15 +147,28 @@
             <h4>Grid-search initialization</h4>
             {{ grid_search_description_html | safe }}
             -->
-            <h3>Fitting Data:</h3>
+            <h3>Fitting Data and Interpolation:</h3>
             <div id="plot-processing-raw-data" class="plot-container report-source-plot">
                 {{ raw_data_info['plot'] | safe }}
             </div>
             {{ render_plot_data_downloads('raw-data-table', 'Fitting data plot', raw_data_info['table_html']) }}
-            <div id="plot-processing-interpolation" class="plot-container report-source-plot">
-                {{ interpolation_info['plot'] | safe }}
+            <p class="processing-interpolation-note">The interpolation option creates two aligned representations when needed: response values at shared times and times at shared response values. Approach 2 fits the preprocessed observed points directly and does not use either interpolated representation.</p>
+            <div class="processing-interpolation-grid">
+                <div class="processing-interpolation-panel">
+                    <h4>By time: response at shared times</h4>
+                    <div id="plot-processing-interpolation-time" class="plot-container report-source-plot">
+                        {{ time_interpolation_info['plot'] | safe }}
+                    </div>
+                    {{ render_plot_data_downloads('interpolation-time-table', 'Response values at shared times plot', time_interpolation_info['table_html']) }}
+                </div>
+                <div class="processing-interpolation-panel">
+                    <h4>By response value: time at shared values</h4>
+                    <div id="plot-processing-interpolation-value" class="plot-container report-source-plot">
+                        {{ value_interpolation_info['plot'] | safe }}
+                    </div>
+                    {{ render_plot_data_downloads('interpolation-value-table', 'Times at shared response values plot', value_interpolation_info['table_html']) }}
+                </div>
             </div>
-            {{ render_plot_data_downloads('interpolation-table', 'Processed fitting data plot', interpolation_info['table_html']) }}
 
 {% if 'plot' in prediction_interpolation_info %}
                 <h3>Prediction Data:</h3>
@@ -360,9 +373,13 @@
                         <div class="report-plot-placeholder" data-plot-source="plot-processing-raw-data">
                             <p class="plot-unavailable">Raw input data plot is not available.</p>
                         </div>
-                        <h5>Preprocessed and interpolated fitting data</h5>
-                        <div class="report-plot-placeholder" data-plot-source="plot-processing-interpolation">
-                            <p class="plot-unavailable">Preprocessed fitting data plot is not available.</p>
+                        <h5>Interpolation by time: response at shared times</h5>
+                        <div class="report-plot-placeholder" data-plot-source="plot-processing-interpolation-time">
+                            <p class="plot-unavailable">Shared-time interpolation plot is not available.</p>
+                        </div>
+                        <h5>Interpolation by response value: time at shared values</h5>
+                        <div class="report-plot-placeholder" data-plot-source="plot-processing-interpolation-value">
+                            <p class="plot-unavailable">Shared-response interpolation plot is not available.</p>
                         </div>
                         {% if prediction_results and prediction_results != {} and 'error' not in prediction_results %}
                             <h5>Preprocessed prediction data</h5>
@@ -809,9 +826,10 @@
                 <li><strong>{{ row.category }} - {{ row.name }}:</strong> {{ row.description }}</li>
                 {% endfor %}
             </ul>
+            <p><strong>Interpolation displays:</strong> the by-time plot shows response values estimated at shared times; the by-response-value plot shows times estimated at shared response values. Approach 1 uses the by-response-value representation, Approach 3 uses both representations, and Approach 2 fits each preprocessed observed dataset independently without interpolation.</p>
             <h4>Grid-search initialization</h4>
             {{ grid_search_description_html | safe }}
-            <p><strong>For model review:</strong> Review the plots to check data quality. For example, poor interpolation might indicate the need for different preprocessing options.</p>
+            <p><strong>For model review:</strong> Review both interpolation plots when using Approach 1 or 3. Sparse overlap or implausible interpolation may indicate that the selected interpolation option is not suitable for the available data.</p>
         </div>
 <div id="model-comparison-help-content">
             <h4>Model Comparison</h4>
@@ -821,7 +839,7 @@
             <h4>Approach 1: Direct Correlation Results</h4>
             <p>This tab shows each fitted direct-correlation model separately. It includes:</p>
             <ul>
-                <li><strong>Plot:</strong> matched in vitro and in vivo time points with the fitted model overlay.</li>
+                <li><strong>Plot:</strong> paired in vitro and in vivo times at common response values with the fitted model overlay.</li>
                 <li><strong>Function:</strong> mathematical equation of the fitted model.</li>
                 <li><strong>Model parameters:</strong> coefficients reported as estimate ± 95% confidence interval.</li>
                 <li><strong>Fitted parameter diagnostics:</strong> brief badges that flag parameter uncertainty, coupling, or identifiability cautions.</li>
@@ -834,7 +852,7 @@
         </div>
 <div id="approach2-results-help-content">
             <h4>Approach 2: Independent Model Fitting Results</h4>
-            <p>This tab shows each model family fitted independently to the in vitro and in vivo datasets. It includes:</p>
+            <p>This tab shows each model family fitted independently to the preprocessed observed in vitro and in vivo datasets. Interpolated points are not used for Approach 2 fitting. It includes:</p>
             <ul>
                 <li><strong>Plot:</strong> both datasets with separate fitted model curves.</li>
                 <li><strong>Function:</strong> mathematical equation of the fitted model family.</li>
@@ -850,10 +868,10 @@
         </div>
 <div id="approach3-results-help-content">
             <h4>Approach 3: Direct Mapping Results</h4>
-            <p>Shows direct comparison between interpolated datasets:</p>
+            <p>Shows the two direct mappings calculated from the interpolated datasets:</p>
             <ul>
-                <li><strong>Response Value vs. Time Plot:</strong> Difference between in vitro and in vivo response values over time</li>
-                <li><strong>Time vs. Response Value Plot:</strong> Ratio of dataset times across response-value ranges</li>
+                <li><strong>Response Value vs. Time Plot:</strong> uses response values at shared times to compare the in vitro and in vivo profiles over time.</li>
+                <li><strong>Time vs. Response Value Plot:</strong> uses times at shared response values to compare the time scales across the response range.</li>
             </ul>
             <h4>Uncertainty and fitting plot bands</h4>
             {{ approach_descriptions['approach3']['fit_uncertainty_html'] | safe }}

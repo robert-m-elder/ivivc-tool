@@ -21,11 +21,11 @@ This glossary defines terms as they are used in the IVIVC app and this user guid
 
 Analysis approach & The overarching method used to establish or evaluate the in vitro/in vivo relationship. An approach can use fitted mathematical models or, for Approach 3, direct interpolation-based mappings. \\
 
-Approach 1: Direct Correlation & Relates matched in vitro and in vivo time points and fits a model that maps in vitro time to predicted in vivo time. \\
+Approach 1: Direct Correlation & Relates in vitro and in vivo times at common response values and fits a model that maps in vitro time to predicted in vivo time. Interpolation by response value can be used when exact response-value matches are unavailable. \\
 
-Approach 2: Independent Model Fitting & Fits the same model family separately to the in vitro and in vivo datasets, then compares or applies the fitted relationships. \\
+Approach 2: Independent Model Fitting & Fits the same model family separately to the preprocessed observed in vitro and in vivo datasets, then compares or applies the fitted relationships. Interpolated points are not used for fitting. \\
 
-Approach 3: Direct Mapping & Uses interpolation-based response-value or time mappings between the in vitro and in vivo datasets rather than fitting a parametric model. \\
+Approach 3: Direct Mapping & Uses response-at-shared-time and time-at-shared-response-value mappings between the in vitro and in vivo datasets rather than fitting a parametric model. \\
 
 %BIC (Bayesian information criterion) & Information criterion that balances fit quality against model complexity and generally penalizes additional parameters more strongly than AIC as the number of observations increases. Lower values indicate stronger relative support among comparable models. \\
 
@@ -43,7 +43,7 @@ Cross-validation (CV) & Prediction-error and sensitivity diagnostic in which par
 
 %Delta (information criterion) & Difference between a model's AIC, AIC\textsubscript{c}, or BIC value and the lowest value for the comparable candidate set. A delta near zero indicates support similar to the leading model under that criterion. \\
 
-Densified interpolation & Interpolation option that adds evenly spaced points between observed measurements. The added response values are estimates, not additional experimental observations. \\
+Densified interpolation & Interpolation option that adds intermediate grid points in both the time and response-value directions before interpolation. The added values are estimates, not additional experimental observations. \\
 
 Empirical support & Relative support provided by the observed data for one candidate model compared with others under a selected information criterion. It does not establish that a model is correct or suitable for a particular use. \\
 
@@ -112,6 +112,8 @@ Prediction dataset & Optional in vitro dataset used after model fitting to gener
 Prediction error & Difference between an observed response and the corresponding model prediction. For fitted observations, this difference is also called a residual. \\
 
 Preprocessing & Operations applied to uploaded data before fitting, comparison, or prediction. In this app, preprocessing can include normalization, scaling, and interpolation. \\
+
+Shared-grid interpolation & Interpolation option that estimates response values at the union of observed time points and estimates times at the union of observed response values. Estimates outside the overlapping range are unavailable. \\
 
 Q--Q plot (quantile--quantile plot) & Graph that compares ordered standardized residuals with the quantiles expected from a normal distribution. It is used as a qualitative diagnostic for residual-distribution shape. \\
 

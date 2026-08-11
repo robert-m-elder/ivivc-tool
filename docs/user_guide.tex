@@ -78,9 +78,28 @@ The surface erosion mass loss form is based on geometry-controlled surface erosi
 
 \subsection{Preprocessing options}
 
-Preprocessing prepares the uploaded data for comparison, fitting, and prediction. Normalization expresses response values relative to a reference value so datasets can be compared on a common relative scale. Scaling changes the numerical scale of time or response values without changing the underlying pattern. Interpolation estimates response values at time points that were not directly observed and may be useful when an approach requires matching in vitro and in vivo time points (i.e., Approach 1, Approach 3).
+Preprocessing prepares the uploaded data for comparison, fitting, and prediction. Normalization expresses response values relative to a reference value so datasets can be compared on a common relative scale. Scaling changes the numerical scale of time or response values without changing the underlying pattern. Interpolation is used when an approach requires paired in vitro and in vivo quantities that were not measured at exactly matching positions. The app constructs both response-at-time and time-at-response representations; these are used differently by Approaches 1 and 3 and are not used for Approach 2 fitting.
 
 \input{includes/generated/preprocessing_options.tex}
+
+\subsubsection{How interpolation is used by each approach}
+
+When interpolation is selected, the app constructs two complementary representations of the preprocessed fitting data:
+
+\begin{itemize}
+    \item \textbf{Interpolation by time (response at shared times):} for a shared set of time points, the app estimates the corresponding in vitro and in vivo response values. This representation is used by Approach 3 for response-value mappings over time.
+    \item \textbf{Interpolation by response value (time at shared values):} for a shared set of response values, the app estimates the corresponding in vitro and in vivo times. This representation is used by Approach 1 and by the time-mapping part of Approach 3.
+\end{itemize}
+
+The Data Processing results tab shows these two representations separately so that the points used for each mapping can be reviewed directly. With the shared-grid interpolation option, the shared grids are based on the union of observed time points and the union of observed response values, respectively. Densified interpolation adds intermediate grid points in both directions before interpolation. Estimates outside the overlapping data range are not used.
+
+\textbf{Approach 1: Direct Correlation.} Approach 1 relates the in vitro and in vivo \emph{times associated with the same response value}. If the two datasets contain exactly matching response values, those observed pairs can be used directly. Otherwise, interpolation by response value estimates the time at common response values so that the in vitro and in vivo times can be paired for fitting. Matching the original experimental time schedules is not required because the fitted relationship is in vivo time as a function of in vitro time at equivalent response states.
+
+\textbf{Approach 2: Independent Model Fitting.} Approach 2 fits the selected model family independently to each preprocessed observed dataset. The in vitro and in vivo time points do not need to match, and the response values do not need to match, so no alignment by interpolation is required. The app therefore excludes interpolated points from Approach 2 fitting. Interpolated values are deterministic estimates from the measured observations rather than additional independent observations; treating them as fitting data could change the apparent sample size, fit metrics, cross-validation inputs, residual degrees of freedom, and covariance-based parameter uncertainty without adding new experimental information. Normalization and scaling, when selected, are still applied before the independent fits.
+
+\textbf{Approach 3: Direct Mapping.} Approach 3 does not fit a parametric model and instead uses both interpolation directions. Response values at shared times are used to calculate response-value ratios or mappings over time. Times at shared response values are used to calculate time ratios or mappings across the response range. Both representations are therefore relevant when Approach 3 is selected.
+
+With \textbf{No interpolation}, Approaches 1 and 3 can use only exact overlaps available in the observed data, which may leave few or no comparable points for one of the mappings. Time-at-response interpolation also assumes that a response value can be associated with a meaningful single time over the analyzed range. Strongly nonmonotonic response profiles can make this inverse mapping ambiguous; review the by-response-value interpolation plot before relying on that mapping.
 
 \subsection{Performance metrics}
 

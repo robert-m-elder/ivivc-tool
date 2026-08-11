@@ -97,9 +97,9 @@ def _apply_accessible_plot_styles(fig):
 CV_COMPARISON_EXCLUDED_METRICS = {'adjusted_r_squared', 'aic', 'aicc', 'bic', 'nrmse', 'mnrmse'}
 
 
-UNCERTAINTY_RANGE_MATERIAL_MARGIN_SPANS = 0.10
-UNCERTAINTY_RANGE_FAR_MARGIN_SPANS = 2.0
-UNCERTAINTY_RANGE_FRACTION_THRESHOLD = 0.10
+UNCERTAINTY_RANGE_MATERIAL_MARGIN_SPANS = 1.0
+UNCERTAINTY_RANGE_FAR_MARGIN_SPANS = 5.0
+UNCERTAINTY_RANGE_FRACTION_THRESHOLD = 0.20
 
 
 def _uncertainty_unavailable_warning(series_label=None, reason='calculation_failed'):
@@ -466,11 +466,16 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                 }
             elif approach_id == 'approach2':
                 cv = make_cross_validator(analysis_config, approach_id)
-                # process data for this approach
-                m = ~np.isnan(mi1)
-                x1,y1 = tt[m], mi1[m]
-                m = ~np.isnan(mi2)
-                x2,y2 = tt[m], mi2[m]
+                # Approach 2 fits the two preprocessed datasets independently.
+                # No interpolation/alignment is needed because the datasets do
+                # not need matched times or matched response values for separate
+                # curve fitting. Using only observed/preprocessed points also
+                # avoids treating deterministic interpolation estimates as
+                # additional fitting observations.
+                m = ~np.isnan(t1) & ~np.isnan(m1)
+                x1,y1 = t1[m], m1[m]
+                m = ~np.isnan(t2) & ~np.isnan(m2)
+                x2,y2 = t2[m], m2[m]
                 # Dataset 1
                 # get rough initial estimate of parameters
                 with warnings.catch_warnings():
@@ -517,8 +522,6 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                 gof2 = {metric: calculate_metric(metric, y2, y_pred2, len(p0)) for metric in selected_metrics}
                 stats2 = pd.concat([pd.DataFrame(gof2, index=[0]), pd.DataFrame({'CV '+metric:v for metric,v in cvs2_mean.items()}, index=[0])], axis=1)
                 stats_table2 = _goodness_cv_comparison_table(gof2, cvs2_mean)
-                #upopt2 = unc.correlated_values(popt2, pcov2)
-                #tau2 = get_tau(modelname, upopt2)
                 popt2, pcov2 = list(model_result2['params'].values()), model_result2['pcov']
                 upopt2 = unc.correlated_values(popt2, pcov2)
                 upopt2 = dict(zip(model_result2['params'].keys(),upopt2))
@@ -557,6 +560,10 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                     'residuals': [residuals1,residuals2],
                     'residual_x': [x1, x2],
                     'residual_y': [y1, y2],
+                    'residual_dof': [
+                        int(len(y1) - len(model_result1['params'])),
+                        int(len(y2) - len(model_result2['params']))
+                    ],
                     'evidence_data': {
                         'in_vitro': {
                             'n': int(len(y1)),
@@ -668,7 +675,9 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                                     t_pred_vivo_tau = np.array([t.n for t in t_pred_vivo_tau_unc])
                                     t_pred_vivo_err_tau = np.array([t.s for t in t_pred_vivo_tau_unc])
                                     ### Convert to error bar
-                                    dof = len(tt) - len(model_results['params'])
+                                    residual_dof = model_results.get('residual_dof', [])
+                                    valid_dof = [int(value) for value in residual_dof if value is not None and int(value) > 0]
+                                    dof = min(valid_dof) if valid_dof else 0
                                     t_value = sp.stats.t.ppf(1-0.05/2, dof) if dof > 0 else 1.96
                                     t_pred_vivo_err_tau = t_value * t_pred_vivo_err_tau
                                     # Create prediction plot
@@ -1449,46 +1458,46 @@ def create_initial_plotly(t1, m1, t2, m2):
     plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
     return {'plot':plot_html, 'table_html': table_html}
 
-def create_interpolation_plotly(t1, m1, t2, m2, tt, mi1, mi2):
+def _create_interpolation_plotly(t1, m1, t2, m2, interp_x1, interp_y1, interp_x2, interp_y2):
     fig = go.Figure()
     # Draw the measured/scaled points first so the larger open interpolation
     # markers remain visible when both series share a coordinate.
     fig.add_trace(go.Scatter(
         x=t1, y=m1,
         mode='markers',
-        name='In Vitro Data (scaled/normed)',
-        marker=dict(color=colors['in_vitro'], size=18, symbol='circle', line=dict(color='white', width=2))
+        name='In Vitro Data (observed/preprocessed)',
+        marker=dict(color=colors['in_vitro'], size=14, symbol='circle', line=dict(color='white', width=2))
     ))
     fig.add_trace(go.Scatter(
         x=t2, y=m2,
         mode='markers',
-        name='In Vivo Data (scaled/normed)',
-        marker=dict(color=colors['in_vivo'], size=18, symbol='diamond', line=dict(color='white', width=2))
+        name='In Vivo Data (observed/preprocessed)',
+        marker=dict(color=colors['in_vivo'], size=14, symbol='diamond', line=dict(color='white', width=2))
     ))
     # Filled/open variants retain a consistent shape for each dataset while
     # making interpolated points visible outside overlapping measured points.
     fig.add_trace(go.Scatter(
-        x=tt, y=mi1,
+        x=interp_x1, y=interp_y1,
         mode='markers',
         name='In Vitro Data (interpolated)',
-        marker=dict(color=colors['in_vitro'], size=30, symbol='circle-open', line=dict(color='#1f1f1f', width=2.5))
+        marker=dict(color=colors['in_vitro'], size=22, symbol='circle-open', line=dict(color='#1f1f1f', width=2.5))
     ))
     fig.add_trace(go.Scatter(
-        x=tt, y=mi2,
+        x=interp_x2, y=interp_y2,
         mode='markers',
         name='In Vivo Data (interpolated)',
-        marker=dict(color=colors['in_vivo'], size=30, symbol='diamond-open', line=dict(color='#1f1f1f', width=2.5))
+        marker=dict(color=colors['in_vivo'], size=22, symbol='diamond-open', line=dict(color='#1f1f1f', width=2.5))
     ))
     fig.update_layout(
         template='plotly_white',
         autosize=True, 
         xaxis_title='Time',
         yaxis_title='Value',
-        legend=dict(font=dict(size=18)),  # Slightly smaller than base font
+        legend=dict(font=dict(size=13)),
         margin=dict(l=30, r=30, t=30, b=30),
         font=dict(
             family="Arial, sans-serif",
-            size=14,  # Base font size
+            size=12,
             color="black"
         ),
         xaxis=dict(
@@ -1505,61 +1514,26 @@ def create_interpolation_plotly(t1, m1, t2, m2, tt, mi1, mi2):
         )
     )
     fig.update_xaxes(
-        title_font=dict(size=20),
-        tickfont=dict(size=18)
+        title_font=dict(size=16),
+        tickfont=dict(size=13)
     )
     fig.update_yaxes(
-        title_font=dict(size=20),
-        tickfont=dict(size=18)
+        title_font=dict(size=16),
+        tickfont=dict(size=13)
     )
     table_html = extract_plotly_data_for_table(fig)
     config = {'responsive': True, 'displaylogo': False}
     plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
     return {'plot': plot_html, 'table_html': table_html}
 
-def create_interpolation_plotly_new(t1, m1, t2, m2, mm, ti1, ti2):
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=t1, y=m1,
-        mode='markers',
-        name='In Vitro Data (actual)',
-        marker=dict(color=colors['in_vitro'], size=18, symbol='circle', line=dict(color='black', width=1))
-    ))
-    fig.add_trace(go.Scatter(
-        x=t2, y=m2,
-        mode='markers',
-        name='In Vivo Data (actual)',
-        marker=dict(color=colors['in_vivo'], size=18, symbol='diamond', line=dict(color='black', width=1))
-    ))
-    fig.add_trace(go.Scatter(
-        x=ti1, y=mm,
-        mode='markers',
-        name='In Vitro Data (interpolated)',
-        marker=dict(color=colors['in_vitro'], size=30, symbol='circle-open', line=dict(color='black', width=2.5))
-    ))
-    fig.add_trace(go.Scatter(
-        x=ti2, y=mm,
-        mode='markers',
-        name='In Vivo Data (interpolated)',
-        marker=dict(color=colors['in_vivo'], size=30, symbol='diamond-open', line=dict(color='black', width=2.5))
-    ))
-    fig.update_layout(
-        template='plotly_white',
-        autosize=True, 
-        xaxis_title='Time',
-        yaxis_title='Value',
-        legend=dict(font=dict(size=18)),
-        margin=dict(l=30, r=30, t=30, b=30),
-        font=dict(family="Arial, sans-serif", size=14, color="black"),
-        xaxis=dict(showline=True, linewidth=2, linecolor='#767676', mirror=True),
-        yaxis=dict(showline=True, linewidth=2, linecolor='#767676', mirror=True)
-    )
-    fig.update_xaxes(title_font=dict(size=20), tickfont=dict(size=18))
-    fig.update_yaxes(title_font=dict(size=20), tickfont=dict(size=18))
-    table_html = extract_plotly_data_for_table(fig)
-    config = {'responsive': True, 'displaylogo': False}
-    plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
-    return {'plot': plot_html, 'table_html': table_html}
+def create_interpolation_plotly(t1, m1, t2, m2, tt, mi1, mi2):
+    """Plot response values estimated at a shared time grid."""
+    return _create_interpolation_plotly(t1, m1, t2, m2, tt, mi1, tt, mi2)
+
+
+def create_value_interpolation_plotly(t1, m1, t2, m2, mm, ti1, ti2):
+    """Plot times estimated at a shared response-value grid."""
+    return _create_interpolation_plotly(t1, m1, t2, m2, ti1, mm, ti2, mm)
 
 def create_prediction_interpolation_plotly(t1, m1):
     fig = go.Figure()

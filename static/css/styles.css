@@ -785,6 +785,39 @@ table td.error {
     height: 100% !important;
 }
 
+.processing-interpolation-note {
+    margin: 12px 0 8px;
+}
+
+.processing-interpolation-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+    align-items: start;
+}
+
+.processing-interpolation-panel {
+    min-width: 0;
+}
+
+.processing-interpolation-panel h4 {
+    margin-bottom: 4px;
+}
+
+.processing-interpolation-panel .plot-container {
+    padding-bottom: 68%;
+}
+
+@media (max-width: 900px) {
+    .processing-interpolation-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .processing-interpolation-panel .plot-container {
+        padding-bottom: 48%;
+    }
+}
+
 /*a.dt-button2,
 button.dt-button2 {
     display: inline-block;

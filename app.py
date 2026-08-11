@@ -41,6 +41,7 @@ from engine import (
     create_parameter_diagnostics_summary,
     create_initial_plotly,
     create_interpolation_plotly,
+    create_value_interpolation_plotly,
     create_prediction_interpolation_plotly,
     preprocess_data,
     process_data,
@@ -197,7 +198,8 @@ def index():
         t1_scale,m1_scale,t2_scale,m2_scale,mm,tt,ti1,ti2,mi1,mi2 = data
 
         raw_data_info = create_initial_plotly(t1, m1, t2, m2)
-        interpolation_info = create_interpolation_plotly(t1_scale, m1_scale, t2_scale, m2_scale, tt, mi1, mi2)
+        time_interpolation_info = create_interpolation_plotly(t1_scale, m1_scale, t2_scale, m2_scale, tt, mi1, mi2)
+        value_interpolation_info = create_value_interpolation_plotly(t1_scale, m1_scale, t2_scale, m2_scale, mm, ti1, ti2)
 
         # Apply models
         with warnings.catch_warnings():
@@ -277,7 +279,7 @@ def index():
             include_prediction_methods=include_prediction_methods
         )
 
-        return render_template('results.html', results=results, models=models, raw_data_info=raw_data_info, interpolation_info=interpolation_info, prediction_interpolation_info=prediction_interpolation_info, 
+        return render_template('results.html', results=results, models=models, raw_data_info=raw_data_info, time_interpolation_info=time_interpolation_info, value_interpolation_info=value_interpolation_info, prediction_interpolation_info=prediction_interpolation_info,
                                comparisons=comparisons, ks_tables=ks_tables, cv_summary_tables=cv_summary_tables,
                                approaches=approaches, selected_approaches=selected_approaches, 
                                selected_scalings=selected_scalings, selected_normalizations=selected_normalizations, selected_interpolation=selected_interpolation,

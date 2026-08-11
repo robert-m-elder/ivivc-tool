@@ -333,7 +333,7 @@
             <h4>Analysis Approaches</h4>
             <p>Choose the overall way the app relates the in vitro and in vivo datasets:</p>
             <ul>
-                <li><strong>Approach 1:</strong> directly relate matched in vitro and in vivo time points.</li>
+                <li><strong>Approach 1:</strong> directly relate in vitro and in vivo times at common response values.</li>
                 <li><strong>Approach 2:</strong> fit the same type of curve separately to each dataset.</li>
                 <li><strong>Approach 3:</strong> create a direct data-based mapping without fitting a parametric model.</li>
             </ul>
@@ -341,14 +341,14 @@
 
         <div id="approach1-help-content">
             <h4>Approach 1: Direct Correlation</h4>
-            <p>Directly relates matched in vitro and in vivo time points, then uses the fitted relationship to map in vitro time to predicted in vivo time.</p>
+            <p>Directly relates the in vitro and in vivo times associated with the same response values, then uses the fitted relationship to map in vitro time to predicted in vivo time.</p>
             <p><strong>Method:</strong></p>
             <ul>
-                <li>Fits a model to paired in vitro and in vivo time points.</li>
-                <li>Requires matched time points or interpolation to create matched pairs.</li>
+                <li>Fits a model to paired in vitro and in vivo times at common response values.</li>
+                <li>Uses time interpolated at shared response values when exact response-value matches are unavailable.</li>
                 <li>Uses the fitted relationship as a time-scaling function.</li>
             </ul>
-            <p><strong>Useful when:</strong> the two datasets have matching time points, or interpolation can create matched pairs, and the main question is how in vitro time corresponds to in vivo time.</p>
+            <p><strong>Useful when:</strong> the main question is how the time required to reach a given response in vitro corresponds to the time required to reach that response in vivo.</p>
         </div>
 
         <div id="approach2-help-content">
@@ -358,7 +358,7 @@
             <ul>
                 <li>Fits the selected model form independently to each dataset.</li>
                 <li>Can calculate predictions using fitted response ratios or fitted time constants, when available.</li>
-                <li>Does not require the original time points to match exactly.</li>
+                <li>Does not require matching time points or response values; interpolation is not used for Approach 2 fitting.</li>
             </ul>
             <p><strong>Useful when:</strong> datasets have different time scales or sampling schedules, or when a specific degradation-curve shape is scientifically meaningful for both datasets.</p>
         </div>
@@ -368,10 +368,10 @@
             <p>Creates direct mappings between the datasets without fitting a parametric model.</p>
             <p><strong>Method:</strong></p>
             <ul>
-                <li>Uses interpolation-based ratios or mappings calculated from the supplied data.</li>
+                <li>Uses response values interpolated at shared times for response-value mappings.</li>
+                <li>Uses times interpolated at shared response values for time mappings.</li>
                 <li>Provides two scaling options for predictions.</li>
                 <li>Does not assume a specific equation for the degradation pattern.</li>
-                <li>Requires matched response values or interpolation to create comparable points.</li>
             </ul>
             <p><strong>Useful when:</strong> the analysis is exploratory, a simple equation does not describe the observed pattern well, or a direct data-based mapping is preferred.</p>
         </div>
@@ -402,7 +402,7 @@
 
         <div id="interpolation-help-content">
             <h4>Interpolation Options</h4>
-            <p>Use interpolation between the provided data to estimate response values at shared time points for fitting, comparison, and direct mapping. A common set of observed time points for the two datasets is needed if paired response values are to be compared or modeled (i.e., Approach 1, Approach 3).</p>
+            <p>The app can interpolate in two directions: response values at shared times and times at shared response values. Approach 1 uses the second representation, Approach 3 uses both, and Approach 2 fits each observed preprocessed dataset independently without interpolation.</p>
             <ul>
                 {% for option_key, option_info in preprocessing_descriptions['interpolation'].items() %}
                 <li><strong>{{ option_info.display_name }}:</strong> {{ option_info.description }}</li>
