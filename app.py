@@ -16,6 +16,7 @@ from utilities.descriptions import (
     CROSS_VALIDATION_SUMMARY_HTML,
     GOODNESS_VALIDATION_TABLE_HTML,
     CV_FIT_VARIABILITY_HTML,
+    SAMPLING_INFORMATION_HTML,
     RESIDUAL_DIAGNOSTICS_HTML,
     RELATIVE_MODEL_EVIDENCE_HTML,
     PARAMETER_DIAGNOSTICS_COMPARISON_HTML,
@@ -96,6 +97,7 @@ def _index_template_context(form_errors=None):
         'grid_search_description_html': GRID_SEARCH_DESCRIPTION_HTML,
         'tool_purpose_html': TOOL_PURPOSE_HTML,
         'modal_help': MODAL_HELP,
+        'sampling_information_html': SAMPLING_INFORMATION_HTML,
         'default_grid_search_num_points': (10 if IS_PRODUCTION else 200),
         'default_grid_search_param_min': '-1000000',
         'default_grid_search_param_max': '1000000',
@@ -126,6 +128,7 @@ def parse_analysis_config():
         'include_raw_residual_plots': request.form.get('include_raw_residual_plots') == 'on',
         'include_residual_qq_plots': request.form.get('include_residual_qq_plots') == 'on',
         'include_cv_fit_variability_plot': request.form.get('include_cv_fit_variability_plot') == 'on',
+        'include_sampling_information_plot': request.form.get('include_sampling_information_plot') == 'on',
     }
 
 @app.route('/', methods=['GET', 'POST'])
@@ -296,6 +299,7 @@ def index():
                                cross_validation_summary_html=CROSS_VALIDATION_SUMMARY_HTML,
                                goodness_validation_table_html=GOODNESS_VALIDATION_TABLE_HTML,
                                cv_fit_variability_html=CV_FIT_VARIABILITY_HTML,
+                               sampling_information_html=SAMPLING_INFORMATION_HTML,
                                residual_diagnostics_html=RESIDUAL_DIAGNOSTICS_HTML,
                                parameter_diagnostics_comparison_html=PARAMETER_DIAGNOSTICS_COMPARISON_HTML,
                                parameter_diagnostic_tables=parameter_diagnostic_tables,

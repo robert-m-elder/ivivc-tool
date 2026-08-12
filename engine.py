@@ -620,6 +620,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
             traceback.print_exc()
     
     _attach_cv_fit_variability_plots(results, analysis_config=analysis_config)
+    _attach_sampling_information_plots(results, analysis_config=analysis_config)
     _attach_residual_plots(results, analysis_config=analysis_config)
     return results
 
@@ -859,6 +860,288 @@ def _qq_residual_tolerance(response_values, relative_tolerance=1e-2):
         1e-12 * max(1.0, response_scale),
     )
 
+
+
+def _model_sensitivity_matrix(model_function, x_values, params):
+    """Numerically evaluate local response sensitivities to fitted parameters."""
+    x_values = np.asarray(x_values, dtype=float)
+    param_values = np.asarray(list((params or {}).values()), dtype=float)
+    if x_values.ndim != 1 or param_values.ndim != 1 or param_values.size == 0:
+        return None
+    if not np.all(np.isfinite(x_values)) or not np.all(np.isfinite(param_values)):
+        return None
+
+    def evaluate(values):
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', category=RuntimeWarning)
+                result = np.asarray(model_function(x_values, *values), dtype=float)
+        except Exception:
+            return None
+        if result.shape != x_values.shape or not np.all(np.isfinite(result)):
+            return None
+        return result
+
+    base = evaluate(param_values)
+    if base is None:
+        return None
+
+    jacobian = np.empty((x_values.size, param_values.size), dtype=float)
+    step_scale = np.cbrt(np.finfo(float).eps)
+    for index, value in enumerate(param_values):
+        step = step_scale * max(1.0, abs(float(value)))
+        plus = param_values.copy()
+        minus = param_values.copy()
+        plus[index] += step
+        minus[index] -= step
+        plus_curve = evaluate(plus)
+        minus_curve = evaluate(minus)
+
+        if plus_curve is not None and minus_curve is not None:
+            derivative = (plus_curve - minus_curve) / (2.0 * step)
+        elif plus_curve is not None:
+            derivative = (plus_curve - base) / step
+        elif minus_curve is not None:
+            derivative = (base - minus_curve) / step
+        else:
+            return None
+
+        if not np.all(np.isfinite(derivative)):
+            return None
+        jacobian[:, index] = derivative
+
+    return jacobian
+
+
+def _positive_semidefinite_covariance(pcov, n_params):
+    """Return a symmetric PSD covariance, allowing only small numerical negatives."""
+    covariance = np.asarray(pcov, dtype=float)
+    if covariance.shape != (n_params, n_params) or not np.all(np.isfinite(covariance)):
+        return None
+    covariance = 0.5 * (covariance + covariance.T)
+    try:
+        eigenvalues, eigenvectors = np.linalg.eigh(covariance)
+    except np.linalg.LinAlgError:
+        return None
+    scale = max(float(np.max(np.abs(eigenvalues))), np.finfo(float).eps) if eigenvalues.size else np.finfo(float).eps
+    if np.min(eigenvalues) < -1e-8 * scale:
+        return None
+    eigenvalues = np.clip(eigenvalues, 0.0, None)
+    return (eigenvectors * eigenvalues) @ eigenvectors.T
+
+
+def create_sampling_information_plotly(
+    x,
+    y,
+    residuals,
+    model_function,
+    final_params,
+    pcov,
+    title,
+    marker_color='black',
+):
+    """Estimate prediction-oriented benefit of one additional observation.
+
+    The calculation uses the local parameter covariance from the final nonlinear
+    least-squares fit. At each candidate time, it applies a rank-one covariance
+    update for one independent observation with variance equal to the fitted
+    residual variance, then measures the resulting reduction in mean
+    parameter-driven fitted-response variance across the observed time range.
+    """
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    residuals = np.asarray(residuals, dtype=float)
+    finite = np.isfinite(x) & np.isfinite(y) & np.isfinite(residuals)
+    x = x[finite]
+    y = y[finite]
+    residuals = residuals[finite]
+    params = final_params or {}
+    n_params = len(params)
+
+    unavailable = lambda message: {
+        'available': False,
+        'message': message,
+        'plot': None,
+        'table_html': '',
+    }
+
+    if x.size < max(2, n_params + 1):
+        return unavailable('Sampling-information plot not available: too few finite observations are available for the fitted model.')
+    x_min = float(np.min(x))
+    x_max = float(np.max(x))
+    if not np.isfinite(x_min) or not np.isfinite(x_max) or x_min == x_max:
+        return unavailable('Sampling-information plot not available: the observed times do not span a range.')
+
+    residual_dof = int(x.size - n_params)
+    if residual_dof <= 0:
+        return unavailable('Sampling-information plot not available: residual degrees of freedom are not positive.')
+    residual_variance = float(np.sum(residuals ** 2) / residual_dof)
+    if not np.isfinite(residual_variance) or residual_variance <= 0:
+        return unavailable('Sampling-information plot not available: residual variance could not be estimated from the fitted data.')
+
+    covariance = _positive_semidefinite_covariance(pcov, n_params)
+    if covariance is None:
+        return unavailable('Sampling-information plot not available: the fitted parameter covariance matrix is unavailable or unsuitable for the local calculation.')
+
+    x_grid = np.linspace(x_min, x_max, 240)
+    sensitivities = _model_sensitivity_matrix(model_function, x_grid, params)
+    if sensitivities is None:
+        return unavailable('Sampling-information plot not available: local model sensitivities could not be evaluated over the observed time range.')
+
+    current_variance = np.einsum('ij,jk,ik->i', sensitivities, covariance, sensitivities)
+    current_variance = np.clip(current_variance, 0.0, None)
+    mean_current_variance = float(np.mean(current_variance))
+    variance_scale = max(1.0, float(np.nanmax(np.abs(y))) ** 2)
+    if not np.isfinite(mean_current_variance) or mean_current_variance <= np.finfo(float).eps * variance_scale:
+        return unavailable('Sampling-information plot not informative: fitted-response uncertainty from the parameter covariance is negligible over the observed time range.')
+
+    percent_reduction = np.full(x_grid.shape, np.nan, dtype=float)
+    for index, sensitivity in enumerate(sensitivities):
+        cov_times_sensitivity = covariance @ sensitivity
+        denominator = residual_variance + float(sensitivity @ cov_times_sensitivity)
+        if not np.isfinite(denominator) or denominator <= 0:
+            continue
+        response_covariance = sensitivities @ cov_times_sensitivity
+        mean_reduction = float(np.mean(response_covariance ** 2) / denominator)
+        if np.isfinite(mean_reduction):
+            percent_reduction[index] = 100.0 * mean_reduction / mean_current_variance
+
+    valid = np.isfinite(percent_reduction)
+    if np.count_nonzero(valid) < 2:
+        return unavailable('Sampling-information plot not available: the expected variance reduction could not be evaluated across the observed time range.')
+    percent_reduction = np.clip(percent_reduction, 0.0, 100.0)
+
+    best_index = int(np.nanargmax(percent_reduction))
+    best_time = float(x_grid[best_index])
+    best_reduction = float(percent_reduction[best_index])
+    y_max = max(float(np.nanmax(percent_reduction)), 1e-9)
+    rug_y = -0.055 * y_max
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=x_grid,
+        y=percent_reduction,
+        mode='lines',
+        name='Expected reduction in variance',
+        line=dict(color=marker_color, width=3),
+    ))
+    fig.add_trace(go.Scatter(
+        x=[best_time],
+        y=[best_reduction],
+        mode='markers',
+        name='Highest estimated benefit',
+        marker=dict(color=marker_color, size=11, line=dict(color='white', width=2)),
+        hovertemplate='Candidate time: %{x:.4g}<br>Expected reduction: %{y:.2f}%<extra></extra>',
+    ))
+    fig.add_trace(go.Scatter(
+        x=np.sort(x),
+        y=np.full(x.shape, rug_y),
+        mode='markers',
+        name='Observed times',
+        marker=dict(color='black', symbol='line-ns', size=12, line=dict(color='black', width=2)),
+        hovertemplate='Observed time: %{x:.4g}<extra></extra>',
+    ))
+
+    fig.add_annotation(
+        text=(
+            f'Highest local estimate: {best_reduction:.1f}% reduction at time {best_time:.4g}. '
+            'Rug marks show observed times; use the curve to identify informative regions rather than a single exact sampling time.'
+        ),
+        xref='paper',
+        yref='paper',
+        x=0,
+        y=1.02,
+        showarrow=False,
+        xanchor='left',
+        yanchor='bottom',
+        align='left',
+        font=dict(size=12, color='rgba(80, 80, 80, 0.95)'),
+    )
+    fig.update_layout(
+        template='plotly_white',
+        autosize=True,
+        title=title,
+        xaxis_title='Candidate time for one additional observation',
+        yaxis_title='Expected reduction in variance (%)',
+        legend=dict(font=dict(size=15)),
+        margin=dict(l=30, r=30, t=85, b=30),
+        font=dict(family='Arial, sans-serif', size=14, color='black'),
+        xaxis=dict(showline=True, linewidth=2, linecolor='#767676', mirror=True),
+        yaxis=dict(
+            showline=True,
+            linewidth=2,
+            linecolor='#767676',
+            mirror=True,
+            range=[rug_y * 1.8, y_max * 1.08],
+            zeroline=True,
+            zerolinecolor='#b0b0b0',
+        ),
+    )
+    fig.update_xaxes(title_font=dict(size=20), tickfont=dict(size=18))
+    fig.update_yaxes(title_font=dict(size=20), tickfont=dict(size=18))
+
+    table_length = max(len(x_grid), len(x))
+    table = pd.DataFrame({
+        'Candidate time': list(x_grid) + [''] * (table_length - len(x_grid)),
+        'Expected reduction in mean fitted-response variance (%)': list(percent_reduction) + [''] * (table_length - len(percent_reduction)),
+        'Observed time': list(np.sort(x)) + [''] * (table_length - len(x)),
+    })
+    table_html = table.to_html(
+        classes='table table-striped',
+        table_id=f'plot-data-{uuid4().hex}',
+        index=False,
+        float_format=lambda value: f'{value:.4f}' if pd.notnull(value) else '',
+        escape=False,
+        na_rep='',
+    )
+    _apply_accessible_plot_styles(fig)
+    config = {'responsive': True, 'displaylogo': False}
+    plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
+    return {
+        'available': True,
+        'message': '',
+        'plot': plot_html,
+        'table_html': table_html,
+        'best_time': best_time,
+        'best_reduction_percent': best_reduction,
+    }
+
+
+def _attach_sampling_information_plots(results, analysis_config=None):
+    """Attach optional prediction-oriented sampling diagnostics to Approach 2 fits."""
+    analysis_config = analysis_config or {}
+    if not bool(analysis_config.get('include_sampling_information_plot', False)):
+        return
+
+    for model_key, model_results in results.items():
+        if not isinstance(model_results, dict) or 'error' in model_results or ':' not in model_key:
+            continue
+        approach_id, model_name = model_key.split(':', 1)
+        if approach_id != 'approach2':
+            continue
+
+        x_values = model_results.get('residual_x', [None, None])
+        y_values = model_results.get('residual_y', [None, None])
+        residual_values = model_results.get('residuals', [None, None])
+        final_params = model_results.get('params', [{}, {}])
+        covariance = model_results.get('pcov', [None, None])
+        model_function = models[model_name]['model_function']
+        model_display = models[model_name]['display_name']
+
+        model_results['sampling_information_plot'] = [
+            create_sampling_information_plotly(
+                x_values[0], y_values[0], residual_values[0], model_function,
+                final_params[0], covariance[0],
+                f'In Vitro Potential Information From One Additional Observation: {model_display}',
+                marker_color=colors['in_vitro'],
+            ),
+            create_sampling_information_plotly(
+                x_values[1], y_values[1], residual_values[1], model_function,
+                final_params[1], covariance[1],
+                f'In Vivo Potential Information From One Additional Observation: {model_display}',
+                marker_color=colors['in_vivo'],
+            ),
+        ]
 
 def create_cv_fit_variability_plotly(
     x,

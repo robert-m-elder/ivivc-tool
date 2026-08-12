@@ -50,6 +50,7 @@ RELATIVE_MODEL_EVIDENCE_NOTE_HTML = RELATIVE_MODEL_EVIDENCE_HTML
 CROSS_VALIDATION_SUMMARY_HTML = _required(_DESCRIPTION_CONTENT, 'cross_validation_summary_html')
 GOODNESS_VALIDATION_TABLE_HTML = _required(_DESCRIPTION_CONTENT, 'goodness_validation_table_html')
 CV_FIT_VARIABILITY_HTML = _required(_DESCRIPTION_CONTENT, 'cv_fit_variability_html')
+SAMPLING_INFORMATION_HTML = _required(_DESCRIPTION_CONTENT, 'sampling_information_html')
 RESIDUAL_DIAGNOSTICS_HTML = _required(_DESCRIPTION_CONTENT, 'residual_diagnostics_html')
 PARAMETER_DIAGNOSTICS_COMPARISON_HTML = _required(_DESCRIPTION_CONTENT, 'parameter_diagnostics_comparison_html')
 GRID_SEARCH_DESCRIPTION_HTML = _required(_DESCRIPTION_CONTENT, 'grid_search_description_html')

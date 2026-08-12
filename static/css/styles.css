@@ -1907,7 +1907,7 @@ main:focus {
 
 /* Optional diagnostic display controls */
 .advanced-parameter-row.diagnostic-plot-options {
-    grid-template-columns: minmax(190px, 0.8fr) repeat(2, minmax(260px, 1fr));
+    grid-template-columns: minmax(190px, 0.8fr) repeat(3, minmax(220px, 1fr));
     align-items: start;
 }
 .diagnostic-option-group {
