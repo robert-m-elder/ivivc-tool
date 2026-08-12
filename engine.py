@@ -50,7 +50,9 @@ colors = {
     'in_vitro': '#2E5F8A',      # Darker blue
     'in_vivo': '#8B3A6B',       # Darker purple-red
     'in_vitro_2': '#006FA6',    # Accessible prediction blue
-    'in_vivo_2': '#A52A6A'      # Accessible prediction purple-red
+    'in_vivo_2': '#A52A6A',     # Accessible prediction purple-red
+    'a2_prediction_input': '#4F91B9',   # Lighter blue for Approach 2 prediction input
+    'a2_prediction_output': '#C8799F'   # Lighter mauve for Approach 2 predicted output
 }
 
 
@@ -3021,7 +3023,7 @@ def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, m
         x=t_pred, y=m_pred,
         mode='markers',
         name='In Vitro (Input)',
-        marker=dict(color=colors['in_vitro_2'], size=15, line=dict(color='white', width=2))
+        marker=dict(color=colors['a2_prediction_input'], size=15, line=dict(color='white', width=2))
     ))
 
     # Calculate prediction bands/error bars for the predicted in vivo values or times if available
@@ -3053,14 +3055,14 @@ def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, m
                 x=t_pred, y=mt_pred_vivo,
                 mode='markers',
                 name='In Vivo (Predicted)',
-                marker=dict(color=colors['in_vivo_2'], size=15, line=dict(color='white', width=2)),
+                marker=dict(color=colors['a2_prediction_output'], size=15, line=dict(color='white', width=2)),
                 error_y=dict(
                     type='data',
                     symmetric=False,
                     array=error_y_upper,      # Upper error
                     arrayminus=error_y_lower, # Lower error
                     visible=True,
-                    color=colors['in_vivo_2'],
+                    color=colors['a2_prediction_output'],
                     thickness=2,
                     width=8
                 )
@@ -3071,7 +3073,7 @@ def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, m
                 x=t_pred, y=mt_pred_vivo,
                 mode='markers',
                 name='In Vivo (Predicted)',
-                marker=dict(color=colors['in_vivo_2'], size=15, line=dict(color='white', width=2))
+                marker=dict(color=colors['a2_prediction_output'], size=15, line=dict(color='white', width=2))
             ))
 
     else:
@@ -3092,14 +3094,14 @@ def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, m
                 x=mt_pred_vivo, y=m_pred,
                 mode='markers',
                 name='In Vivo (Predicted)',
-                marker=dict(color=colors['in_vivo_2'], size=15, line=dict(color='white', width=2)),
+                marker=dict(color=colors['a2_prediction_output'], size=15, line=dict(color='white', width=2)),
                 error_x=dict(
                     type='data',
                     symmetric=False,
                     array=error_x_upper,      # Upper error
                     arrayminus=error_x_lower, # Lower error
                     visible=True,
-                    color=colors['in_vivo_2'],
+                    color=colors['a2_prediction_output'],
                     thickness=2,
                     width=8
                 )
@@ -3110,7 +3112,7 @@ def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, m
                 x=mt_pred_vivo, y=m_pred,
                 mode='markers',
                 name='In Vivo (Predicted)',
-                marker=dict(color=colors['in_vivo_2'], size=15, line=dict(color='white', width=2))
+                marker=dict(color=colors['a2_prediction_output'], size=15, line=dict(color='white', width=2))
             ))
     if 0:
         ## MASS, no error bars
@@ -3119,7 +3121,7 @@ def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, m
             x=mt_pred_vivo, y=m_pred,
             mode='markers',
             name='In Vivo (Predicted)',
-            marker=dict(color=colors['in_vivo_2'], size=15, line=dict(color='white', width=2))
+            marker=dict(color=colors['a2_prediction_output'], size=15, line=dict(color='white', width=2))
         ))
 
         # Connection lines to show time scaling
