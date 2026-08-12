@@ -216,27 +216,49 @@ def auto_grid_search(func, x, y, param_min=-1e6, param_max=1e6, num_points=100, 
     
     return best_result.x
 
-def cross_validation_curve_fit(x_data, y_data, model_function, cv, selected_metrics, p0=None, kwargs={}):
+def cross_validation_curve_fit(
+    x_data,
+    y_data,
+    model_function,
+    cv,
+    selected_metrics,
+    p0=None,
+    kwargs={},
+    return_fit_params=False,
+):
+    """Run cross-validation and optionally retain each split's fitted parameters.
+
+    The optional parameter vectors are used only for descriptive CV-fit
+    variability plots. A ``None`` entry is retained for a split whose fit or
+    test prediction failed so the plot can report how many CV fits contributed.
+    """
     num_params = len(inspect.signature(model_function).parameters) - 1  # subtract 1 for 'x'
     scores = {metric: [] for metric in selected_metrics}
+    fit_params = []
     if cv is None:
-        return {metric: np.array([np.nan]) for metric in selected_metrics}
+        scores = {metric: np.array([np.nan]) for metric in selected_metrics}
+        return (scores, fit_params) if return_fit_params else scores
     for train_index, test_index in cv.split(x_data):
         x_train, x_test = x_data[train_index], x_data[test_index]
         y_train, y_test = y_data[train_index], y_data[test_index]
+        popt = None
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore', category=RuntimeWarning)
                 popt, pcov = sp.optimize.curve_fit(model_function, x_train, y_train, p0, **kwargs)
             y_pred = model_function(x_test, *popt)
+            if not np.all(np.isfinite(y_pred)):
+                raise ValueError('Cross-validation prediction contains nonfinite values.')
             tmp_scores = {metric: calculate_metric(metric, y_test, y_pred, num_params) for metric in selected_metrics}
         except Exception:
+            popt = None
             tmp_scores = {metric: np.nan for metric in selected_metrics}
-        #tmp_scores = evaluate_goodness_of_fit(y_test, y_pred)
         for k,v in tmp_scores.items():
             scores[k].append(v)
+        if return_fit_params:
+            fit_params.append(None if popt is None else np.asarray(popt, dtype=float))
     scores = {k:np.array(scores[k]) for k in scores}
-    return scores
+    return (scores, fit_params) if return_fit_params else scores
 
 ## time constant, generic function
 def calculate_tau(model_function, params):

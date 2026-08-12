@@ -15,6 +15,7 @@ from utilities.descriptions import (
     CROSS_VALIDATION_OVERVIEW_SUMMARY_HTML,
     CROSS_VALIDATION_SUMMARY_HTML,
     GOODNESS_VALIDATION_TABLE_HTML,
+    CV_FIT_VARIABILITY_HTML,
     RESIDUAL_DIAGNOSTICS_HTML,
     RELATIVE_MODEL_EVIDENCE_HTML,
     PARAMETER_DIAGNOSTICS_COMPARISON_HTML,
@@ -124,6 +125,7 @@ def parse_analysis_config():
         'grid_search_random_state': _form_int('grid_search_random_state', 12345),
         'include_raw_residual_plots': request.form.get('include_raw_residual_plots') == 'on',
         'include_residual_qq_plots': request.form.get('include_residual_qq_plots') == 'on',
+        'include_cv_fit_variability_plot': request.form.get('include_cv_fit_variability_plot') == 'on',
     }
 
 @app.route('/', methods=['GET', 'POST'])
@@ -293,6 +295,7 @@ def index():
                                relative_model_evidence_html=RELATIVE_MODEL_EVIDENCE_HTML,
                                cross_validation_summary_html=CROSS_VALIDATION_SUMMARY_HTML,
                                goodness_validation_table_html=GOODNESS_VALIDATION_TABLE_HTML,
+                               cv_fit_variability_html=CV_FIT_VARIABILITY_HTML,
                                residual_diagnostics_html=RESIDUAL_DIAGNOSTICS_HTML,
                                parameter_diagnostics_comparison_html=PARAMETER_DIAGNOSTICS_COMPARISON_HTML,
                                parameter_diagnostic_tables=parameter_diagnostic_tables,

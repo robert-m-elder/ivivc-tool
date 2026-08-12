@@ -426,6 +426,17 @@
                             <h4>Goodness of fit and cross-validation</h4>
                             {{ goodness_validation_table_html | safe }}
                             {{ model_results.stats_table | safe }}
+                            {% if analysis_config.include_cv_fit_variability_plot and model_results.cv_fit_variability_plot is defined %}
+                            <h4>CV fit variability (mean ± SD)</h4>
+                            {{ cv_fit_variability_html | safe }}
+                            {% if model_results.cv_fit_variability_plot.available %}
+                            <div class="report-plot-placeholder" data-plot-source="plot-cv-fit-{{ option.model_dom_id }}">
+                                <p class="plot-unavailable">CV fit variability plot is not available.</p>
+                            </div>
+                            {% else %}
+                            <p class="residual-diagnostic-note">{{ model_results.cv_fit_variability_plot.message }}</p>
+                            {% endif %}
+                            {% endif %}
                             {% if analysis_config.include_raw_residual_plots or analysis_config.include_residual_qq_plots %}
                             <h4>Residual diagnostics</h4>
                             {{ residual_diagnostics_html | safe }}
@@ -488,8 +499,29 @@
                             {{ goodness_validation_table_html | safe }}
                             <h5>In vitro data</h5>
                             {{ model_results.stats_table[0] | safe }}
+                            {% if analysis_config.include_cv_fit_variability_plot and model_results.cv_fit_variability_plot is defined %}
+                            <h5>In vitro CV fit variability (mean ± SD)</h5>
+                            {{ cv_fit_variability_html | safe }}
+                            {% if model_results.cv_fit_variability_plot[0].available %}
+                            <div class="report-plot-placeholder" data-plot-source="plot-cv-fit-{{ option.model_dom_id }}-in-vitro">
+                                <p class="plot-unavailable">In vitro CV fit variability plot is not available.</p>
+                            </div>
+                            {% else %}
+                            <p class="residual-diagnostic-note">{{ model_results.cv_fit_variability_plot[0].message }}</p>
+                            {% endif %}
+                            {% endif %}
                             <h5>In vivo data</h5>
                             {{ model_results.stats_table[1] | safe }}
+                            {% if analysis_config.include_cv_fit_variability_plot and model_results.cv_fit_variability_plot is defined %}
+                            <h5>In vivo CV fit variability (mean ± SD)</h5>
+                            {% if model_results.cv_fit_variability_plot[1].available %}
+                            <div class="report-plot-placeholder" data-plot-source="plot-cv-fit-{{ option.model_dom_id }}-in-vivo">
+                                <p class="plot-unavailable">In vivo CV fit variability plot is not available.</p>
+                            </div>
+                            {% else %}
+                            <p class="residual-diagnostic-note">{{ model_results.cv_fit_variability_plot[1].message }}</p>
+                            {% endif %}
+                            {% endif %}
                             {% if analysis_config.include_raw_residual_plots or analysis_config.include_residual_qq_plots %}
                             <h4>Residual diagnostics</h4>
                             {{ residual_diagnostics_html | safe }}
@@ -585,6 +617,18 @@
                                     {{ model_results.parameter_diagnostics_html | safe }}
                                     <h4>Goodness of fit</h4>
                                     {{ model_results.stats_table | safe }}
+                                    {% if analysis_config.include_cv_fit_variability_plot and model_results.cv_fit_variability_plot is defined %}
+                                    <h4>CV fit variability (mean ± SD)</h4>
+                                    {{ cv_fit_variability_html | safe }}
+                                    {% if model_results.cv_fit_variability_plot.available %}
+                                    <div id="plot-cv-fit-{{ model_key|replace(':', '-') }}" class="plot-container report-source-plot">
+                                        {{ model_results.cv_fit_variability_plot.plot | safe }}
+                                    </div>
+                                    {{ render_plot_data_downloads('approach1-' ~ model_name ~ '-cv-fit-variability-table', models[model_name].display_name ~ ' Approach 1 CV fit variability plot', model_results.cv_fit_variability_plot.table_html) }}
+                                    {% else %}
+                                    <p class="residual-diagnostic-note">{{ model_results.cv_fit_variability_plot.message }}</p>
+                                    {% endif %}
+                                    {% endif %}
                                     {% if analysis_config.include_raw_residual_plots or analysis_config.include_residual_qq_plots %}
                                     <h4>Residual diagnostics</h4>
                                     {{ residual_diagnostics_html | safe }}
@@ -641,6 +685,18 @@
                                         {% endif %}
                                         <h4>Goodness of Fit</h4>
                                         {{ model_results.stats_table[0] | safe }}
+                                        {% if analysis_config.include_cv_fit_variability_plot and model_results.cv_fit_variability_plot is defined %}
+                                        <h4>CV fit variability (mean ± SD)</h4>
+                                        {{ cv_fit_variability_html | safe }}
+                                        {% if model_results.cv_fit_variability_plot[0].available %}
+                                        <div id="plot-cv-fit-{{ model_key|replace(':', '-') }}-in-vitro" class="plot-container report-source-plot">
+                                            {{ model_results.cv_fit_variability_plot[0].plot | safe }}
+                                        </div>
+                                        {{ render_plot_data_downloads('approach2-' ~ model_name ~ '-cv-fit-variability-table-in-vitro', models[model_name].display_name ~ ' Approach 2 in vitro CV fit variability plot', model_results.cv_fit_variability_plot[0].table_html) }}
+                                        {% else %}
+                                        <p class="residual-diagnostic-note">{{ model_results.cv_fit_variability_plot[0].message }}</p>
+                                        {% endif %}
+                                        {% endif %}
                                         {% if analysis_config.include_raw_residual_plots or analysis_config.include_residual_qq_plots %}
                                         <h4>Residual diagnostics</h4>
                                         {{ residual_diagnostics_html | safe }}
@@ -681,6 +737,18 @@
                                     {% endif %}
                                     <h4>Goodness of Fit</h4>
                                     {{ model_results.stats_table[1] | safe }}
+                                    {% if analysis_config.include_cv_fit_variability_plot and model_results.cv_fit_variability_plot is defined %}
+                                    <h4>CV fit variability (mean ± SD)</h4>
+                                    {{ cv_fit_variability_html | safe }}
+                                    {% if model_results.cv_fit_variability_plot[1].available %}
+                                    <div id="plot-cv-fit-{{ model_key|replace(':', '-') }}-in-vivo" class="plot-container report-source-plot">
+                                        {{ model_results.cv_fit_variability_plot[1].plot | safe }}
+                                    </div>
+                                    {{ render_plot_data_downloads('approach2-' ~ model_name ~ '-cv-fit-variability-table-in-vivo', models[model_name].display_name ~ ' Approach 2 in vivo CV fit variability plot', model_results.cv_fit_variability_plot[1].table_html) }}
+                                    {% else %}
+                                    <p class="residual-diagnostic-note">{{ model_results.cv_fit_variability_plot[1].message }}</p>
+                                    {% endif %}
+                                    {% endif %}
                                     {% if analysis_config.include_raw_residual_plots or analysis_config.include_residual_qq_plots %}
                                     <h4>Residual diagnostics</h4>
                                     {{ residual_diagnostics_html | safe }}

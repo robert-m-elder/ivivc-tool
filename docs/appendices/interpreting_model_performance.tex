@@ -99,6 +99,14 @@ For the small datasets typical in IVIVC development, cross-validation results ar
 
 For example, strong leave-one-timepoint-out performance alongside weaker leave-contiguous-block-out performance may indicate that the model can interpolate individual missing points well, but becomes less reliable when an entire local region of the profile is absent from fitting. The importance of that distinction depends on the intended use of the model.
 
+\subsubsection*{CV fit variability plots}
+
+Average CV performance metrics summarize prediction performance across the held-out observations and CV splits, but they do not show how much the fitted curve itself changes from one training subset to another. Two models can therefore have similar average CV errors even when one produces nearly the same fitted relationship across splits and the other changes appreciably depending on which observations are withheld.
+
+The optional CV fit variability plot provides this complementary information by showing the final fit to all observations together with the mean fitted curve and mean $\pm$ one standard deviation across the successful CV training-set fits. A narrow band indicates that the fitted relationship changes relatively little across the CV splits. A wider band, or widening confined to a particular part of the curve, identifies regions where the fitted relationship is more sensitive to the training data, suggesting that additional data in that region may be particularly informative. A noticeable difference between the mean CV fit and the final fit can likewise indicate that repeatedly leaving out observations changes the fitted relationship in a systematic way.
+
+The band is a descriptive sensitivity diagnostic, not a confidence interval, prediction interval, or parameter-uncertainty interval. Its appearance depends on the selected CV scheme and the number of successful CV fits, so interpret it together with the average CV metrics and the prediction task represented by the chosen splitting scheme.
+
 \subsubsection*{Fit/CV ratios}
 
 The app reports fit/CV ratios to summarize the relationship between full-fit and cross-validation performance for the same metric. A ratio near 1 indicates that the two are similar. A ratio far from 1 may suggest reduced generalizability, overfitting, model instability, or sensitivity to the splitting scheme. Because the direction of concern depends on the metric (for example, a ratio above 1 is concerning for RMSE but not for $R^2$), interpretation of the ratio depends on the raw fit and CV values, the chosen splitting scheme, and the fitted plots.

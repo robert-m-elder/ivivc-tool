@@ -396,6 +396,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
     grid_search_param_min = float(analysis_config.get('grid_search_param_min', -1e6))
     grid_search_param_max = float(analysis_config.get('grid_search_param_max', 1e6))
     grid_search_random_state = analysis_config.get('grid_search_random_state', 12345)
+    include_cv_fit_variability = bool(analysis_config.get('include_cv_fit_variability_plot', False))
     t1,m1,t2,m2,mm,tt,ti1,ti2,mi1,mi2 = data
     
     results = {}
@@ -419,7 +420,15 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                                           num_points=grid_search_num_points, num_cores=grid_search_num_cores, random_state=grid_search_random_state,
                                           initial_points=_model_initial_points(model_name, x, y))
                 # cross-validation
-                cvs = cross_validation_curve_fit(x, y, models[model_name]['model_function'], cv, selected_metrics, p0=p0, kwargs=models[model_name]['fit_kwargs'])
+                cv_output = cross_validation_curve_fit(
+                    x, y, models[model_name]['model_function'], cv, selected_metrics,
+                    p0=p0, kwargs=models[model_name]['fit_kwargs'],
+                    return_fit_params=include_cv_fit_variability,
+                )
+                if include_cv_fit_variability:
+                    cvs, cv_fit_params = cv_output
+                else:
+                    cvs, cv_fit_params = cv_output, []
                 cvs_mean = {f'{metric}':np.nanmean(values[np.isfinite(values)]) for metric,values in cvs.items()}
                 # fit final model
                 model_result = models[model_name]['fit_model'](x, y, p0=p0)
@@ -451,6 +460,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                     'residuals': residuals,
                     'residual_x': x,
                     'residual_y': y,
+                    'cv_fit_params': cv_fit_params,
                     'stats': stats,
                     'predictions': y_pred,
                     'evidence_data': {
@@ -484,7 +494,15 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                                           num_points=grid_search_num_points, num_cores=grid_search_num_cores, random_state=grid_search_random_state,
                                           initial_points=_model_initial_points(model_name, x1, y1))
                 # cross-validation
-                cvs1 = cross_validation_curve_fit(x1, y1, models[model_name]['model_function'], cv, selected_metrics, p0=p0, kwargs=models[model_name]['fit_kwargs'])
+                cv_output1 = cross_validation_curve_fit(
+                    x1, y1, models[model_name]['model_function'], cv, selected_metrics,
+                    p0=p0, kwargs=models[model_name]['fit_kwargs'],
+                    return_fit_params=include_cv_fit_variability,
+                )
+                if include_cv_fit_variability:
+                    cvs1, cv_fit_params1 = cv_output1
+                else:
+                    cvs1, cv_fit_params1 = cv_output1, []
                 cvs1_mean = {f'{metric}':np.nanmean(v[np.isfinite(v)]) for metric,v in cvs1.items()}
                 # fit final model
                 model_result1 = models[model_name]['fit_model'](x1, y1, p0=p0)
@@ -513,7 +531,15 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                                           num_points=grid_search_num_points, num_cores=grid_search_num_cores, random_state=grid_search_random_state,
                                           initial_points=_model_initial_points(model_name, x2, y2))
                 # cross-validation
-                cvs2 = cross_validation_curve_fit(x2, y2, models[model_name]['model_function'], cv, selected_metrics, p0=p0, kwargs=models[model_name]['fit_kwargs'])
+                cv_output2 = cross_validation_curve_fit(
+                    x2, y2, models[model_name]['model_function'], cv, selected_metrics,
+                    p0=p0, kwargs=models[model_name]['fit_kwargs'],
+                    return_fit_params=include_cv_fit_variability,
+                )
+                if include_cv_fit_variability:
+                    cvs2, cv_fit_params2 = cv_output2
+                else:
+                    cvs2, cv_fit_params2 = cv_output2, []
                 cvs2_mean = {f'{metric}':np.nanmean(v[np.isfinite(v)]) for metric,v in cvs2.items()}
                 # fit final model
                 model_result2 = models[model_name]['fit_model'](x2, y2, p0=p0)
@@ -560,6 +586,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                     'residuals': [residuals1,residuals2],
                     'residual_x': [x1, x2],
                     'residual_y': [y1, y2],
+                    'cv_fit_params': [cv_fit_params1, cv_fit_params2],
                     'residual_dof': [
                         int(len(y1) - len(model_result1['params'])),
                         int(len(y2) - len(model_result2['params']))
@@ -592,6 +619,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
             results[model_key] = {'error': str(e)}
             traceback.print_exc()
     
+    _attach_cv_fit_variability_plots(results, analysis_config=analysis_config)
     _attach_residual_plots(results, analysis_config=analysis_config)
     return results
 
@@ -830,6 +858,237 @@ def _qq_residual_tolerance(response_values, relative_tolerance=1e-2):
         relative_tolerance * response_range,
         1e-12 * max(1.0, response_scale),
     )
+
+
+def create_cv_fit_variability_plotly(
+    x,
+    y,
+    model_function,
+    final_params,
+    cv_fit_params,
+    title,
+    x_axis_title='Time',
+    y_axis_title='Response value',
+    marker_color='black',
+):
+    """Create a descriptive mean +/- SD plot across CV training-set fits."""
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    finite_data = np.isfinite(x) & np.isfinite(y)
+    x = x[finite_data]
+    y = y[finite_data]
+    total_splits = len(cv_fit_params or [])
+
+    if x.size < 2:
+        return {
+            'available': False,
+            'message': 'CV fit variability plot not available: fewer than two finite observations are available.',
+            'plot': None,
+            'table_html': '',
+            'successful_fits': 0,
+            'total_splits': total_splits,
+        }
+
+    x_min = float(np.min(x))
+    x_max = float(np.max(x))
+    if x_min == x_max:
+        return {
+            'available': False,
+            'message': 'CV fit variability plot not available: the fitting x-values do not span a range.',
+            'plot': None,
+            'table_html': '',
+            'successful_fits': 0,
+            'total_splits': total_splits,
+        }
+
+    x_grid = np.linspace(x_min, x_max, 200)
+    cv_curves = []
+    for params in cv_fit_params or []:
+        if params is None:
+            continue
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', category=RuntimeWarning)
+                curve = np.asarray(model_function(x_grid, *params), dtype=float)
+            if curve.shape == x_grid.shape and np.all(np.isfinite(curve)):
+                cv_curves.append(curve)
+        except Exception:
+            continue
+
+    successful_fits = len(cv_curves)
+    if successful_fits < 2:
+        if total_splits == 0:
+            message = 'CV fit variability plot not available because cross-validation was not run.'
+        else:
+            message = (
+                'CV fit variability plot not available: fewer than two cross-validation fits '
+                'produced finite curves over the displayed range.'
+            )
+        return {
+            'available': False,
+            'message': message,
+            'plot': None,
+            'table_html': '',
+            'successful_fits': successful_fits,
+            'total_splits': total_splits,
+        }
+
+    cv_curves = np.vstack(cv_curves)
+    cv_mean = np.mean(cv_curves, axis=0)
+    cv_sd = np.std(cv_curves, axis=0, ddof=1)
+    cv_lower = cv_mean - cv_sd
+    cv_upper = cv_mean + cv_sd
+
+    try:
+        final_curve = np.asarray(model_function(x_grid, **final_params), dtype=float)
+    except TypeError:
+        final_curve = np.asarray(model_function(x_grid, *list(final_params.values())), dtype=float)
+
+    if final_curve.shape != x_grid.shape or not np.all(np.isfinite(final_curve)):
+        return {
+            'available': False,
+            'message': 'CV fit variability plot not available because the final fitted curve could not be evaluated over the displayed range.',
+            'plot': None,
+            'table_html': '',
+            'successful_fits': successful_fits,
+            'total_splits': total_splits,
+        }
+
+    band_fill = hex_to_rgba(marker_color, 0.18) if str(marker_color).startswith('#') else 'rgba(128,128,128,0.18)'
+    mean_color = marker_color if str(marker_color).startswith('#') else '#555555'
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=x_grid,
+        y=cv_upper,
+        mode='lines',
+        line=dict(width=0),
+        name='CV mean + 1 SD',
+        showlegend=False,
+        hoverinfo='skip',
+    ))
+    fig.add_trace(go.Scatter(
+        x=x_grid,
+        y=cv_lower,
+        mode='lines',
+        line=dict(width=0),
+        fill='tonexty',
+        fillcolor=band_fill,
+        name='CV mean +/- 1 SD',
+        meta='CV mean - 1 SD',
+        hoverinfo='skip',
+    ))
+    fig.add_trace(go.Scatter(
+        x=x_grid,
+        y=cv_mean,
+        mode='lines',
+        name='Mean CV fit',
+        line=dict(color=mean_color, width=3, dash='dash'),
+    ))
+    fig.add_trace(go.Scatter(
+        x=x_grid,
+        y=final_curve,
+        mode='lines',
+        name='Final full-data fit',
+        line=dict(color='black', width=3),
+    ))
+    fig.add_trace(go.Scatter(
+        x=x,
+        y=y,
+        mode='markers',
+        name='Observed data',
+        marker=dict(color=marker_color, size=13, line=dict(color='white', width=2)),
+    ))
+
+    split_note = f'Band based on {successful_fits} successful CV fits'
+    if total_splits and successful_fits != total_splits:
+        split_note += f' of {total_splits} attempted splits'
+    split_note += '. Mean +/- SD describes variation among CV training-set fits; it is not an uncertainty interval.'
+    fig.add_annotation(
+        text=split_note,
+        xref='paper',
+        yref='paper',
+        x=0,
+        y=1.02,
+        showarrow=False,
+        xanchor='left',
+        yanchor='bottom',
+        align='left',
+        font=dict(size=12, color='rgba(80, 80, 80, 0.95)'),
+    )
+
+    fig.update_layout(
+        template='plotly_white',
+        autosize=True,
+        title=title,
+        xaxis_title=x_axis_title,
+        yaxis_title=y_axis_title,
+        legend=dict(font=dict(size=16)),
+        margin=dict(l=30, r=30, t=80, b=30),
+        font=dict(family='Arial, sans-serif', size=14, color='black'),
+        xaxis=dict(showline=True, linewidth=2, linecolor='#767676', mirror=True),
+        yaxis=dict(showline=True, linewidth=2, linecolor='#767676', mirror=True),
+    )
+    fig.update_xaxes(title_font=dict(size=20), tickfont=dict(size=18))
+    fig.update_yaxes(title_font=dict(size=20), tickfont=dict(size=18))
+
+    table_html = extract_plotly_data_for_table(fig)
+    config = {'responsive': True, 'displaylogo': False}
+    plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
+    return {
+        'available': True,
+        'message': '',
+        'plot': plot_html,
+        'table_html': table_html,
+        'successful_fits': successful_fits,
+        'total_splits': total_splits,
+    }
+
+
+def _attach_cv_fit_variability_plots(results, analysis_config=None):
+    """Attach optional CV training-fit variability plots to completed fits."""
+    analysis_config = analysis_config or {}
+    if not bool(analysis_config.get('include_cv_fit_variability_plot', False)):
+        return
+
+    for model_key, model_results in results.items():
+        if not isinstance(model_results, dict) or 'error' in model_results or ':' not in model_key:
+            continue
+        approach_id, model_name = model_key.split(':', 1)
+        if approach_id not in ('approach1', 'approach2'):
+            continue
+        model_function = models[model_name]['model_function']
+        model_display = models[model_name]['display_name']
+
+        if approach_id == 'approach1':
+            model_results['cv_fit_variability_plot'] = create_cv_fit_variability_plotly(
+                model_results.get('residual_x'),
+                model_results.get('residual_y'),
+                model_function,
+                model_results.get('params', {}),
+                model_results.get('cv_fit_params', []),
+                f'Cross-Validation Fit Variability: {model_display}',
+                x_axis_title='Time (In Vitro Data)',
+                y_axis_title='Time (In Vivo Data)',
+                marker_color='black',
+            )
+        else:
+            residual_x = model_results.get('residual_x', [None, None])
+            residual_y = model_results.get('residual_y', [None, None])
+            final_params = model_results.get('params', [{}, {}])
+            cv_fit_params = model_results.get('cv_fit_params', [[], []])
+            model_results['cv_fit_variability_plot'] = [
+                create_cv_fit_variability_plotly(
+                    residual_x[0], residual_y[0], model_function, final_params[0], cv_fit_params[0],
+                    f'In Vitro Cross-Validation Fit Variability: {model_display}',
+                    x_axis_title='Time', y_axis_title='Response value', marker_color=colors['in_vitro'],
+                ),
+                create_cv_fit_variability_plotly(
+                    residual_x[1], residual_y[1], model_function, final_params[1], cv_fit_params[1],
+                    f'In Vivo Cross-Validation Fit Variability: {model_display}',
+                    x_axis_title='Time', y_axis_title='Response value', marker_color=colors['in_vivo'],
+                ),
+            ]
 
 
 def create_residual_plotly(

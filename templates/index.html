@@ -252,17 +252,27 @@
                 </div>
             </fieldset>
 
-            <fieldset class="advanced-parameter-row residual-display-options">
-                <legend class="sr-only">Residual diagnostics display settings</legend>
-                <div class="advanced-row-label">Residual diagnostics <button type="button" class="help-btn-small" data-modal="residual-diagnostics-help" aria-label="Help for residual diagnostic display settings" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button></div>
-                <label class="checkbox-item advanced-checkbox-option">
-                    <input type="checkbox" name="include_raw_residual_plots" checked>
-                    <span>Raw residuals</span>
-                </label>
-                <label class="checkbox-item advanced-checkbox-option">
-                    <input type="checkbox" name="include_residual_qq_plots" checked>
-                    <span>Quantile-quantile (Q-Q)</span>
-                </label>
+            <fieldset class="advanced-parameter-row diagnostic-plot-options">
+                <legend class="sr-only">Advanced analysis plot settings</legend>
+                <div class="advanced-row-label">Diagnostic plots</div>
+                <div class="diagnostic-option-group">
+                    <div class="diagnostic-option-heading">Cross-validation <button type="button" class="help-btn-small" data-modal="cross-validation-help" aria-label="Help for cross-validation diagnostic display settings" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button></div>
+                    <label class="checkbox-item advanced-checkbox-option">
+                        <input type="checkbox" name="include_cv_fit_variability_plot" id="include_cv_fit_variability_plot" checked>
+                        <span>Fit variability (mean ± SD)</span>
+                    </label>
+                </div>
+                <div class="diagnostic-option-group">
+                    <div class="diagnostic-option-heading">Residuals <button type="button" class="help-btn-small" data-modal="residual-diagnostics-help" aria-label="Help for residual diagnostic display settings" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button></div>
+                    <label class="checkbox-item advanced-checkbox-option">
+                        <input type="checkbox" name="include_raw_residual_plots" checked>
+                        <span>Raw residuals</span>
+                    </label>
+                    <label class="checkbox-item advanced-checkbox-option">
+                        <input type="checkbox" name="include_residual_qq_plots" checked>
+                        <span>Quantile-quantile (Q-Q)</span>
+                    </label>
+                </div>
             </fieldset>
 
         </div>

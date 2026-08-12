@@ -99,6 +99,8 @@ cross_validation_summary_html: |-
   <p>The Cross-Validation Summary table reports mean CV scores for selected eligible metrics where cross-validation was run successfully. Ratio columns show the full-fit score divided by the cross-validation score for the same metric, and the CV comparison badge summarizes whether prediction performance on test data warrants closer review. Adjusted R² and information criteria (AIC, AICc, BIC) are excluded because the final model and cross-validation models are fitted using different data subsets. Detailed interpretation guidance is provided in the user guide.</p>
 goodness_validation_table_html: |-
   <p>This table reports final scores for the fitted model for all selected metrics and mean cross-validation (CV) scores for eligible prediction metrics. Ratio rows show the full-fit score divided by the CV score for the same metric where that comparison is meaningful. Adjusted R² and information criteria (AIC, AICc, BIC) are shown for the final model but are not given CV values or ratios because the final model and cross-validation models are fitted using different data subsets. Detailed interpretation guidance is provided in the user guide.</p>
+cv_fit_variability_html: |-
+  <p>The CV fit variability plot compares the model fitted to all observations with the mean curve from the CV training-set fits. The shaded band is the pointwise mean ± one standard deviation across those CV fits. A wider band indicates that the fitted curve changes more depending on which observations are used for training. This band is a descriptive sensitivity diagnostic; it is not a confidence interval, prediction interval, or parameter-uncertainty interval.</p>
 residual_diagnostics_html: |-
   <p>Residuals are calculated as observed minus predicted values. Raw residual plots show them in the original response units versus time. Each plot uses its own symmetric y-axis centered at zero. The axis covers the largest absolute residual but is not allowed to shrink below a small fraction of the observed response range, which prevents extremely small numerical residuals from being expanded to fill the plot.</p>
   <p>Normal quantile-quantile (Q-Q) plots compare ordered standardized residuals with the pattern expected under a normal distribution (i.e., a Gaussian distribution or bell curve). Points near the diagonal line are broadly consistent with normal residual variation, while curvature, tail departures, or isolated extreme points may suggest non-normality, outliers, or model mismatch. A Q-Q plot is not shown when residual variation is too small relative to the response scale to assess the distribution reliably. With small IVIVC datasets, Q-Q plots are intended for qualitative interpretation rather than pass/fail use.</p>
@@ -155,6 +157,9 @@ analysis_parameters:
   include_residual_qq_plots:
     display_name: Quantile-quantile (Q-Q) plots
     description: Shows qualitative normal quantile-quantile (Q-Q) diagnostics when residual variation is large enough to make the plot informative. Selected by default; users can hide it for a more compact results view.
+  include_cv_fit_variability_plot:
+    display_name: CV fit variability (mean ± SD)
+    description: Shows the final full-data fit together with the mean and pointwise standard deviation of curves fitted to the cross-validation training subsets. The band describes sensitivity to the selected CV splits and is not a confidence or prediction interval.
 modal_help:
   index:
     preprocessing_overview_html: |-
@@ -168,7 +173,7 @@ modal_help:
     advanced_analysis_overview_html: |-
       <p>Advanced analysis parameters control three parts of the analysis workflow:</p>
       <ul>
-        <li><strong>Cross-validation:</strong> how the app checks prediction performance by repeatedly setting aside part of the data and fitting to the rest.</li>
+        <li><strong>Cross-validation:</strong> how the app checks prediction performance by repeatedly setting aside part of the data and fitting to the rest, and whether the CV fit variability plot is shown.</li>
         <li><strong>Grid search:</strong> how the app searches for suitable starting parameter values before nonlinear least-squares fitting.</li>
         <li><strong>Residual diagnostics:</strong> whether raw residual (error) and normal quantile-quantile (Q-Q) plots are included in the results. Both are selected by default and can be hidden for a more compact results view.</li>
       </ul>
@@ -182,6 +187,7 @@ modal_help:
       <p>Both options are selected by default. Deselect either option for a more compact results view.</p>
     cross_validation_html: |-
       <p>Cross-validation checks how selected fitted models predict data that were not used to fit that model. It is available for Approaches 1 and 2, where parametric models are fitted.</p>
+      <p>The optional <strong>CV fit variability (mean ± SD)</strong> plot evaluates each CV training-set fit over the full displayed x-range, then shows the mean curve and a pointwise ±1 SD band together with the final full-data fit. The band shows how much the fitted relationship changes across CV splits. It is not a confidence or prediction interval.</p>
       <p>For time-course data, the main question is what kind of data are set aside for the prediction check. This app usually evaluates whether a fitted curve captures the overall response pattern, not whether early time points can forecast later time points. Shuffle split is the default because it provides a general robustness check of the fitted curve form. Even so, time order matters because nearby observations can be strongly related. Omitting one point is a gentle check, omitting a contiguous block is a stricter check of a time region, and shuffled splits do not preserve time order.</p>
       <ul>
         <li><strong>Shuffle split:</strong> default scheme. Repeatedly makes random training and test subsets. Use mainly as a general robustness check of whether the fitted curve captures the overall response pattern. It is not time-aware and can look overly reassuring when neighboring time points are strongly related.</li>

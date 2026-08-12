@@ -1905,13 +1905,35 @@ main:focus {
     }
 }
 
-/* Residual diagnostic display controls */
-.residual-display-options {
-    align-items: center;
+/* Optional diagnostic display controls */
+.advanced-parameter-row.diagnostic-plot-options {
+    grid-template-columns: minmax(190px, 0.8fr) repeat(2, minmax(260px, 1fr));
+    align-items: start;
+}
+.diagnostic-option-group {
+    min-width: 0;
+}
+.diagnostic-option-heading {
+    font-weight: bold;
+    margin-bottom: 4px;
+}
+@media (max-width: 1100px) {
+    .advanced-parameter-row.diagnostic-plot-options {
+        grid-template-columns: repeat(2, minmax(180px, 1fr));
+    }
+}
+@media (max-width: 600px) {
+    .advanced-parameter-row.diagnostic-plot-options {
+        grid-template-columns: 1fr;
+    }
 }
 .advanced-checkbox-option {
     min-height: 2.75rem;
     align-items: center;
+}
+.advanced-checkbox-option.checkbox-disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
 }
 .residual-diagnostic-note {
     padding: 0.75rem 1rem;

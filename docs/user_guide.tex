@@ -123,6 +123,8 @@ Cross-validation provides an estimate of the model's ability to predict observat
 
 In this app, CV is intended as a \textbf{prediction-error diagnostic} and sensitivity check, not as a confidence interval or parameter uncertainty estimate. If the error from the model fitted to the full dataset is similar to the CV error, that provides reassurance that the fitted relationship is not overly dependent on a particular subset of observations. If the CV error is much worse, the fitted relationship might be sensitive to the available data, the selected splitting scheme, or the number and placement of time points.
 
+An optional \textbf{CV fit variability (mean $\pm$ SD)} plot provides a complementary view of that sensitivity. For every CV split that fits successfully, the app evaluates the model fitted to the training subset over the full displayed x-range. At each x-value, it calculates the mean fitted response and standard deviation across the CV fits. The plot shows the final model fitted to all observations, the mean CV-training fit, and a shaded mean $\pm$ one-standard-deviation band. A wider band indicates that the fitted curve changes more depending on which observations are included in the training data. This band summarizes variation among CV fits; it is not a confidence interval, prediction interval, or parameter-uncertainty interval. Its appearance depends on the selected CV splitting scheme and the number of successful CV fits.
+
 For time-course data, the splitting scheme matters because nearby observations can contain related information, and early, middle, and late time points can represent different parts of the degradation process. Setting aside a random subset is a general check of whether the fitted curve captures the overall response pattern, but it is less time-aware. Setting aside one time point mainly asks whether the model can recover an individual omitted observation. Setting aside a contiguous block asks whether the model can bridge a missing region of the profile.
 
 Shuffle split is the default CV scheme because it provides a general robustness check of whether the selected curve form captures the overall degradation or correlation pattern. It is not a time-aware forecasting test. Use leave-contiguous-block-out when sensitivity to a missing time region is the main concern, and use leave-one-timepoint-out when the dataset is too small to set aside larger groups of observations. When results change substantially across CV schemes, review the fitted plots, residual diagnostics, parameter uncertainty, model complexity, and scientific plausibility rather than treating CV as a pass/fail result.
@@ -163,9 +165,11 @@ The default grid-search settings can usually be left unchanged. If fitting fails
 
 \input{includes/generated/grid_search_parameter_table.tex}
 
-\subsection{Residual diagnostic display}
+\subsection{Diagnostic plot display}
 
-Raw residual (i.e., prediction error) plots and normal quantile-quantile (Q-Q) plots are selected by default in the Advanced Analysis section. Either plot type can be hidden before analysis when a more compact results view is preferred. Raw residual plots show observed-minus-predicted values in the original response units. Each plot uses its own symmetric y-axis centered at zero, with a minimum display range relative to the observed response range so very small residuals are not visually exaggerated. Q-Q plots are omitted when residual variation is too small relative to the response scale to make the diagnostic informative.
+The CV fit variability plot, raw residual plots, and normal quantile-quantile (Q-Q) plots are selected by default in the Advanced Analysis section and can be hidden before analysis for a more compact results view. The CV fit variability plot is available only when cross-validation is performed. It is placed below the goodness-of-fit table for the corresponding fitted dataset.
+
+Raw residual plots show observed-minus-predicted values in the original response units. Each plot uses its own symmetric y-axis centered at zero, with a minimum display range relative to the observed response range so very small residuals are not visually exaggerated. Q-Q plots are omitted when residual variation is too small relative to the response scale to make the diagnostic informative.
 
 \section{Outputs}
 
@@ -181,7 +185,7 @@ The IVIVC app generates interactive results and downloadable reports that summar
 \midrule
 \endhead
 Preprocessing outputs & Processed data tables and plots showing the data used for fitting and prediction. \\
-Model fitting outputs & Parameter estimates reported as estimate $\pm$ 95\% confidence interval where available, fitted plots with error bars, residual plots, and selected performance metrics. \\
+Model fitting outputs & Parameter estimates reported as estimate $\pm$ 95\% confidence interval where available, fitted plots with error bars, optional CV fit-variability and residual diagnostic plots, and selected performance metrics. \\
 Model comparison outputs & Tables comparing selected approaches, models, metrics, relative model evidence, and cross-validation summaries. \\
 Prediction outputs & Prediction plots and downloadable tables when a prediction dataset is supplied and the selected method can be applied. \\
 Selected model \& summary of outputs & User-selected report summaries and optional report export for incorporation into external documentation. \\

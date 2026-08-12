@@ -256,7 +256,8 @@ function updateCrossValidationSettingState(resetValues) {
         nSplits: $('#cv_n_splits'),
         nSplitsLabel: $('#cv_n_splits_label'),
         testSize: $('#cv_test_size'),
-        randomState: $('#cv_random_state')
+        randomState: $('#cv_random_state'),
+        fitVariability: $('#include_cv_fit_variability_plot')
     };
 
     function setFieldState(field, enabled) {
@@ -286,6 +287,8 @@ function updateCrossValidationSettingState(resetValues) {
     setFieldState(controls.nSplits, usesSplitsField);
     setFieldState(controls.testSize, usesTestSize);
     setFieldState(controls.randomState, usesRandomState);
+    controls.fitVariability.prop('disabled', scheme === 'none');
+    controls.fitVariability.closest('label').toggleClass('checkbox-disabled', scheme === 'none');
 }
 
 function collectFormErrors(form) {
