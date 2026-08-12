@@ -17,6 +17,65 @@ function showResultsAlert(message) {
     }
 }
 
+function initializeModelJumpNavigators(root) {
+    var scope = root ? $(root) : $(document);
+    var navigators = scope.is('.model-jump-nav')
+        ? scope.add(scope.find('.model-jump-nav'))
+        : scope.find('.model-jump-nav');
+
+    navigators.each(function() {
+        var navigator = $(this);
+        if (navigator.attr('data-model-jump-initialized') === 'true') {
+            return;
+        }
+
+        var select = navigator.find('.model-jump-select').first();
+        var button = navigator.find('.model-jump-button').first();
+        var topButton = navigator.find('.model-jump-top-button').first();
+
+        function updateButtonState() {
+            button.prop('disabled', !select.val());
+        }
+
+        function moveToTarget(target, announcement) {
+            if (!target) {
+                return;
+            }
+
+            var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            target.scrollIntoView({
+                behavior: reduceMotion ? 'auto' : 'smooth',
+                block: 'start'
+            });
+
+            try {
+                target.focus({ preventScroll: true });
+            } catch (error) {
+                target.focus();
+            }
+
+            announceResultsStatus(announcement);
+        }
+
+        select.on('change.ivivcModelJump', updateButtonState);
+        button.on('click.ivivcModelJump', function() {
+            var targetId = select.val();
+            var target = targetId ? document.getElementById(targetId) : null;
+            var targetLabel = target ? target.textContent.replace(/\s+/g, ' ').trim() : '';
+            moveToTarget(target, 'Moved to ' + targetLabel + '.');
+        });
+
+        topButton.on('click.ivivcModelJump', function() {
+            var targetId = topButton.attr('data-target');
+            var target = targetId ? document.getElementById(targetId) : null;
+            moveToTarget(target, 'Moved to the top of this results section.');
+        });
+
+        updateButtonState();
+        navigator.attr('data-model-jump-initialized', 'true');
+    });
+}
+
 function refreshAccessibility(root) {
     if (!window.IVIVCAccessibility) {
         return;
@@ -433,6 +492,7 @@ $.extend(true, $.fn.dataTable.defaults, {
 
 $(document).ready(function() {
     refreshAccessibility(document);
+    initializeModelJumpNavigators(document);
 
     // Initialize summary and comparison tables in the initially visible panel.
     initializeSummaryDataTables(document);

@@ -684,6 +684,113 @@ tr:nth-child(even) {
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
 }
 
+.model-jump-nav {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 12px 0 18px;
+    padding: 10px 12px;
+    background-color: #ffffff;
+    border: 1px solid #8a8a8a;
+    border-radius: 4px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+}
+
+.model-jump-nav label {
+    color: #2c3e50;
+    font-weight: 700;
+}
+
+.model-jump-select {
+    flex: 1 1 18rem;
+    min-width: 12rem;
+    max-width: 32rem;
+    padding: 8px 10px;
+    border: 1px solid #767676;
+    border-radius: 4px;
+    background-color: #ffffff;
+    color: #222222;
+    font: inherit;
+}
+
+.model-jump-button,
+.model-jump-top-button {
+    background-color: #007cba;
+    color: #ffffff;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 600;
+}
+
+.model-jump-button:hover:not(:disabled),
+.model-jump-top-button:hover {
+    background-color: #222c67;
+}
+
+.model-jump-button:active:not(:disabled),
+.model-jump-top-button:active {
+    background-color: #1a2150;
+}
+
+.model-jump-top-button {
+    background-color: #ffffff;
+    color: #005ea8;
+    border: 2px solid #005ea8;
+    padding: 6px 14px;
+}
+
+.model-jump-top-button:hover,
+.model-jump-top-button:active {
+    color: #ffffff;
+}
+
+.model-jump-button:disabled {
+    background-color: #767676;
+    cursor: not-allowed;
+    opacity: 0.75;
+}
+
+.model-jump-select:focus-visible,
+.model-jump-button:focus-visible,
+.model-jump-top-button:focus-visible,
+.model-jump-target:focus,
+.model-jump-top-target:focus {
+    outline: 3px solid #1a56db;
+    outline-offset: 3px;
+}
+
+.model-jump-target,
+.model-jump-top-target {
+    scroll-margin-top: 5rem;
+}
+
+@media (max-width: 600px) {
+    .model-jump-nav {
+        align-items: stretch;
+    }
+
+    .model-jump-nav label {
+        flex-basis: 100%;
+    }
+
+    .model-jump-select {
+        min-width: 0;
+        max-width: none;
+    }
+
+    .model-jump-target,
+    .model-jump-top-target {
+        scroll-margin-top: 7rem;
+    }
+}
+
 .model-result h4 {
     margin-top: 15px;
     margin-bottom: 5px;
@@ -1344,6 +1451,7 @@ body.modal-open {
     body.printing-final-report .final-report-selector,
     body.printing-final-report .custom-button-container,
     body.printing-final-report .plot-data-downloads,
+    body.printing-final-report .model-jump-nav,
     body.printing-final-report .help-btn,
     body.printing-final-report .modal {
         display: none !important;

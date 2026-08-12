@@ -822,6 +822,25 @@ def _concat_finite(arrays):
         return np.array([], dtype=float)
     return np.concatenate(pieces)
 
+
+def _padded_axis_range(*arrays, padding_fraction=0.10):
+    """Return a finite min/max range with fit-plot-style proportional padding."""
+    values = _concat_finite(arrays)
+    if not values.size:
+        return None
+
+    lower = float(np.min(values))
+    upper = float(np.max(values))
+    span = upper - lower
+    if not np.isfinite(span) or span < 0:
+        return None
+    if span == 0:
+        span = max(abs(lower), abs(upper), 1.0)
+
+    padding = padding_fraction * span
+    return [lower - padding, upper + padding]
+
+
 def _residual_display_scale(residuals, response_values, minimum_fraction=0.025, padding=1.10):
     """Return an independent symmetric residual-axis limit in response units.
 
@@ -955,6 +974,13 @@ def create_cv_fit_variability_plotly(
             'total_splits': total_splits,
         }
 
+    # Match the primary fitting plots' display logic: scale from the observed
+    # data and final full-data fit, then add 10% padding. The CV band does not
+    # drive the limits, so an extreme training-split fit cannot expand the
+    # entire diagnostic and make it difficult to compare with the fit plot.
+    x_range = _padded_axis_range(x, x_grid)
+    y_range = _padded_axis_range(y, final_curve)
+
     band_fill = hex_to_rgba(marker_color, 0.18) if str(marker_color).startswith('#') else 'rgba(128,128,128,0.18)'
     mean_color = marker_color if str(marker_color).startswith('#') else '#555555'
 
@@ -1027,8 +1053,8 @@ def create_cv_fit_variability_plotly(
         legend=dict(font=dict(size=16)),
         margin=dict(l=30, r=30, t=80, b=30),
         font=dict(family='Arial, sans-serif', size=14, color='black'),
-        xaxis=dict(showline=True, linewidth=2, linecolor='#767676', mirror=True),
-        yaxis=dict(showline=True, linewidth=2, linecolor='#767676', mirror=True),
+        xaxis=dict(showline=True, linewidth=2, linecolor='#767676', mirror=True, range=x_range),
+        yaxis=dict(showline=True, linewidth=2, linecolor='#767676', mirror=True, range=y_range),
     )
     fig.update_xaxes(title_font=dict(size=20), tickfont=dict(size=18))
     fig.update_yaxes(title_font=dict(size=20), tickfont=dict(size=18))
@@ -2018,14 +2044,9 @@ def create_plotly_a1(x, y, model_info, include_bands=True):
     traces = [trace_data, trace_fit]
     uncertainty_warnings = []
 
-    # manual axis range
-    x_range_data = [min(np.concatenate([x, x_smooth])), max(np.concatenate([x, x_smooth]))]
-    y_range_data = [min(np.concatenate([y, y_smooth])), max(np.concatenate([y, y_smooth]))]
-    # Add some padding (5% on each side)
-    x_padding = (x_range_data[1] - x_range_data[0]) * 0.1
-    y_padding = (y_range_data[1] - y_range_data[0]) * 0.1
-    x_range = [x_range_data[0] - x_padding, x_range_data[1] + x_padding]
-    y_range = [y_range_data[0] - y_padding, y_range_data[1] + y_padding]
+    # Manual axis ranges: observed data + final fit, with 10% padding.
+    x_range = _padded_axis_range(x, x_smooth)
+    y_range = _padded_axis_range(y, y_smooth)
     
     # Add prediction bands if requested and covariance matrix is available
     if include_bands:
@@ -2193,14 +2214,9 @@ def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
     y_smooth1 = model_info['model_function'](x_smooth, **model_info['params1'])
     y_smooth2 = model_info['model_function'](x_smooth, **model_info['params2'])
 
-    # manual axis range
-    x_range_data = [min(np.concatenate([x1, x2, x_smooth])), max(np.concatenate([x1, x2, x_smooth]))]
-    y_range_data = [min(np.concatenate([y1, y2, y_smooth1, y_smooth2])), max(np.concatenate([y1, y2, y_smooth1, y_smooth2]))]
-    # Add some padding (5% on each side)
-    x_padding = (x_range_data[1] - x_range_data[0]) * 0.1
-    y_padding = (y_range_data[1] - y_range_data[0]) * 0.1
-    x_range = [x_range_data[0] - x_padding, x_range_data[1] + x_padding]
-    y_range = [y_range_data[0] - y_padding, y_range_data[1] + y_padding]
+    # Manual axis ranges: observed data + final fits, with 10% padding.
+    x_range = _padded_axis_range(x1, x2, x_smooth)
+    y_range = _padded_axis_range(y1, y2, y_smooth1, y_smooth2)
 
     traces = [trace1, trace2]
     uncertainty_warnings = []

@@ -586,18 +586,34 @@
         </div>
 {% for approach_id in selected_approaches %}
             <div id="{{ approach_id }}">
-                <h2>
+                <h2 id="fit-{{ approach_id }}-top" class="model-jump-top-target" tabindex="-1">
                     Fitting: {{ approaches[approach_id].display_name }}
                     <button type="button" class="help-btn" data-modal="{{ approach_id }}-results-help" aria-label="Help for {{ approaches[approach_id].display_name }} fitting results" aria-haspopup="dialog" aria-controls="help-modal">
                         <span class="help-icon" aria-hidden="true">?</span>
                     </button>
                 </h2>
+                {% if approach_id in ["approach1", "approach2"] %}
+                <nav class="model-jump-nav" aria-label="Model navigation for {{ approaches[approach_id].display_name }} fitting results">
+                    <label for="model-jump-fit-{{ approach_id }}">Jump to model:</label>
+                    <select id="model-jump-fit-{{ approach_id }}" class="model-jump-select">
+                        <option value="">Select a model</option>
+                        {% for jump_model_key, jump_model_results in results.items() %}
+                            {% if jump_model_key.startswith(approach_id ~ ':') %}
+                                {% set jump_model_name = jump_model_key.split(':')[1] %}
+                                <option value="fit-{{ approach_id }}-{{ jump_model_name|replace('_', '-') }}">{{ models[jump_model_name].display_name }}</option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                    <button type="button" class="model-jump-button" disabled>Go</button>
+                    <button type="button" class="model-jump-top-button" data-target="fit-{{ approach_id }}-top" aria-label="Jump to top of {{ approaches[approach_id].display_name }} fitting results">Top</button>
+                </nav>
+                {% endif %}
 {% for model_key, model_results in results.items() %}
                     {% if model_key.startswith(approach_id) %}
                         {% if approach_id == "approach1" %}
                         {% set model_name = model_key.split(':')[1] %}
                             <div class="model-result {% if model_results.error %}has-error{% endif %}">
-                                <h3>{{ models[model_name].display_name }}</h3>
+                                <h3 id="fit-{{ approach_id }}-{{ model_name|replace('_', '-') }}" class="model-jump-target" tabindex="-1">{{ models[model_name].display_name }}</h3>
                                 {% if model_results.error %}
                                     <p class="error">Error: {{ model_results.error }}</p>
                                 {% else %}
@@ -657,7 +673,7 @@
                         {% if approach_id == "approach2" %}
                         {% set model_name = model_key.split(':')[1] %}
                             <div class="model-result {% if model_results.error %}has-error{% endif %}">
-                                <h3>Model: {{ models[model_name].display_name }}</h3>
+                                <h3 id="fit-{{ approach_id }}-{{ model_name|replace('_', '-') }}" class="model-jump-target" tabindex="-1">Model: {{ models[model_name].display_name }}</h3>
                                 {% if model_results.error %}
                                     <p class="error">Error: {{ model_results.error }}</p>
                                 {% else %}
@@ -797,22 +813,44 @@
             {% for approach_id in selected_approaches %}
                 {% if approach_id in prediction_results and prediction_results[approach_id] %}
                     <div id="prediction-{{ approach_id }}">
-                        <h2>
+                        <h2 id="prediction-{{ approach_id }}-top" class="model-jump-top-target" tabindex="-1">
                             Prediction: {{ approaches[approach_id].display_name }}
                             <button type="button" class="help-btn" data-modal="prediction-{{ approach_id }}-help" aria-label="Help for {{ approaches[approach_id].display_name }} prediction results" aria-haspopup="dialog" aria-controls="help-modal">
                                 <span class="help-icon" aria-hidden="true">?</span>
                             </button>
                         </h2>
+                        <nav class="model-jump-nav" aria-label="Model navigation for {{ approaches[approach_id].display_name }} prediction results">
+                            <label for="model-jump-prediction-{{ approach_id }}">{% if approach_id == "approach3" %}Jump to prediction:{% else %}Jump to model:{% endif %}</label>
+                            <select id="model-jump-prediction-{{ approach_id }}" class="model-jump-select">
+                                <option value="">{% if approach_id == "approach3" %}Select a prediction{% else %}Select a model{% endif %}</option>
+                                {% for jump_model_name, jump_pred_result in prediction_results[approach_id].items() %}
+                                    {% if approach_id == "approach3" %}
+                                        {% if jump_model_name == "method1_value_scaling" %}
+                                            {% set jump_label = "Response-value scaling" %}
+                                        {% elif jump_model_name == "method2_time_scaling" %}
+                                            {% set jump_label = "Time scaling" %}
+                                        {% else %}
+                                            {% set jump_label = jump_model_name %}
+                                        {% endif %}
+                                    {% else %}
+                                        {% set jump_label = models[jump_model_name].display_name if jump_model_name in models else jump_model_name %}
+                                    {% endif %}
+                                    <option value="prediction-{{ approach_id }}-result-{{ jump_model_name|replace('_', '-') }}">{{ jump_label }}</option>
+                                {% endfor %}
+                            </select>
+                            <button type="button" class="model-jump-button" disabled>Go</button>
+                            <button type="button" class="model-jump-top-button" data-target="prediction-{{ approach_id }}-top" aria-label="Jump to top of {{ approaches[approach_id].display_name }} prediction results">Top</button>
+                        </nav>
                         {% for model_name, pred_result in prediction_results[approach_id].items() %}
                             {% if 'error' in pred_result %}
                                 <div class="model-result has-error">
-                                    <h3>{{ models[model_name].display_name if model_name in models else model_name }}</h3>
+                                    <h3 id="prediction-{{ approach_id }}-result-{{ model_name|replace('_', '-') }}" class="model-jump-target" tabindex="-1">{{ models[model_name].display_name if model_name in models else model_name }}</h3>
                                     <p class="error">Error: {{ pred_result.error }}</p>
                                 </div>
                             {% else %}
                                 {% if approach_id == "approach1" %}
                                     <div class="model-result">
-                                        <h3>{{ models[model_name].display_name }}</h3>
+                                        <h3 id="prediction-{{ approach_id }}-result-{{ model_name|replace('_', '-') }}" class="model-jump-target" tabindex="-1">{{ models[model_name].display_name }}</h3>
                                         {% if 'plot' in pred_result %}
                                             <div id="plot-prediction-{{ approach_id }}-{{ model_name }}" class="plot-container report-source-plot">
                                                 {{ pred_result.plot.plot | safe }}
@@ -824,7 +862,7 @@
 
                                 {% if approach_id == "approach2" %}
                                     <div class="model-result">
-                                        <h3>Model: {{ models[model_name].display_name }}</h3>
+                                        <h3 id="prediction-{{ approach_id }}-result-{{ model_name|replace('_', '-') }}" class="model-jump-target" tabindex="-1">Model: {{ models[model_name].display_name }}</h3>
                                         {% if 'plot' in pred_result %}
                                             <h4>Response-value ratio rescaling</h4>
 <div id="plot-prediction-{{ approach_id }}-{{ model_name }}-value" class="plot-container report-source-plot">
@@ -847,7 +885,9 @@
 
                                 {% if approach_id == "approach3" %}
                                     <div class="model-result">
-                                        <h3>Direct Mapping Predictions</h3>
+                                        <h3 id="prediction-{{ approach_id }}-result-{{ model_name|replace('_', '-') }}" class="model-jump-target" tabindex="-1">
+                                            {% if model_name == "method1_value_scaling" %}Direct Mapping Prediction: Response-value scaling{% elif model_name == "method2_time_scaling" %}Direct Mapping Prediction: Time scaling{% else %}Direct Mapping Predictions{% endif %}
+                                        </h3>
                                         {% if 'plot' in pred_result %}
                                             <div id="plot-prediction-approach3-{{ model_name|replace('_', '-') }}" class="plot-container report-source-plot">
                                                 {{ pred_result.plot.plot | safe }}
