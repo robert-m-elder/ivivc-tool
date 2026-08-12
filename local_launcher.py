@@ -15,7 +15,7 @@ HOST = "127.0.0.1"
 
 
 def _available_port() -> int:
-    """Ask macOS for an unused localhost TCP port."""
+    """Ask the operating system for an unused localhost TCP port."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind((HOST, 0))
         return int(sock.getsockname()[1])
@@ -26,11 +26,11 @@ def main() -> None:
     url = f"http://{HOST}:{port}/"
     server = make_server(HOST, port, app, threaded=True)
 
-    print("IVIVC App is running locally on this Mac.")
+    print("IVIVC App is running locally on this computer.")
     print(f"Opening {url}")
     print("No app data are sent to an external IVIVC server.")
     print("Keep this window open while using the app.")
-    print("Press Control-C or close this Terminal window to stop the app.\n")
+    print("Press Control-C or close this window to stop the app.\n")
 
     threading.Timer(0.8, webbrowser.open, args=(url,)).start()
     try:
