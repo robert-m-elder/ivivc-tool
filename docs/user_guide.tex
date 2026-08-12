@@ -66,6 +66,12 @@ Approaches differ in how the in vitro and in vivo time courses are related to on
 
 \input{includes/generated/approach_model_table.tex}
 
+For Approach 2 models where a finite value can be calculated, the app summarizes each fitted decay curve with an \textbf{integral time constant}. For a fitted model $f(t)$, the time constant is defined as
+\[
+\tau = \frac{1}{f(0)}\int_0^\infty f(t)\,dt,
+\]
+which is the area under the fitted curve after normalizing its fitted value at time zero to 1. It provides a single characteristic time scale for comparing fitted in vitro and in vivo profiles; for positive decay profiles, a larger value generally corresponds to slower overall decay. The ratio of the in vivo and in vitro time constants can also be used to rescale prediction times. This integral definition provides a characteristic time scale based on the area under a normalized relaxation or decay curve \cite{coffey2017}. Because the integral extends beyond the observed time range, the result depends on the fitted model's extrapolated behavior.
+
 \subsubsection{Models}
 
 Candidate models are the mathematical equations available for fitting within the applicable approaches. Different model forms represent different assumptions about the shape of the degradation relationship, such as linear behavior, power-law behavior, or sigmoidal transition behavior.
