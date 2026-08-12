@@ -623,6 +623,299 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
     _attach_residual_plots(results, analysis_config=analysis_config)
     return results
 
+def _inverse_response_times(model_function, params, target_responses, time_range, grid_points=1001):
+    """Map response values to unique fitted times over a bounded calibration range.
+
+    The inverse is only used when the fitted curve is monotonic over the supplied
+    time range. Targets outside the fitted response range are returned as NaN so
+    the prediction method does not silently extrapolate beyond observed in vivo
+    calibration times.
+    """
+    target_responses = np.asarray(target_responses, dtype=float)
+    result = np.full(target_responses.shape, np.nan, dtype=float)
+    status = np.full(target_responses.shape, 'unavailable', dtype=object)
+
+    t_min, t_max = [float(value) for value in time_range]
+    if not np.isfinite(t_min) or not np.isfinite(t_max) or t_max <= t_min:
+        return result, status, 'Observed-response inverse prediction requires at least two distinct in vivo calibration times.'
+
+    t_grid = np.linspace(t_min, t_max, max(int(grid_points), 101))
+    try:
+        y_grid = np.asarray(model_function(t_grid, **params), dtype=float)
+    except Exception as exc:
+        return result, status, f'Observed-response inverse prediction was not performed because the fitted in vivo curve could not be evaluated: {exc}'
+
+    finite = np.isfinite(t_grid) & np.isfinite(y_grid)
+    if np.count_nonzero(finite) < 2:
+        return result, status, 'Observed-response inverse prediction was not performed because the fitted in vivo curve is not finite over the calibration range.'
+    t_grid = t_grid[finite]
+    y_grid = y_grid[finite]
+
+    y_span = float(np.max(y_grid) - np.min(y_grid))
+    monotonic_tol = max(1e-10, y_span * 1e-8)
+    dy = np.diff(y_grid)
+    nondecreasing = bool(np.all(dy >= -monotonic_tol))
+    nonincreasing = bool(np.all(dy <= monotonic_tol))
+    if not (nondecreasing or nonincreasing) or y_span <= monotonic_tol:
+        return result, status, 'Observed-response inverse prediction was not performed because the fitted in vivo curve is not one-to-one over the observed in vivo time range.'
+
+    y_min = float(np.min(y_grid))
+    y_max = float(np.max(y_grid))
+    response_tol = max(1e-10, y_span * 1e-8)
+
+    def root_function(time_value, target):
+        value = np.asarray(model_function(np.asarray([time_value], dtype=float), **params), dtype=float).reshape(-1)[0]
+        return float(value - target)
+
+    for index, target in np.ndenumerate(target_responses):
+        if not np.isfinite(target):
+            status[index] = 'nonfinite input response'
+            continue
+        if target < y_min - response_tol or target > y_max + response_tol:
+            status[index] = 'outside fitted in vivo response range'
+            continue
+        if np.isclose(target, y_grid[0], atol=response_tol, rtol=0):
+            result[index] = t_grid[0]
+            status[index] = 'mapped'
+            continue
+        if np.isclose(target, y_grid[-1], atol=response_tol, rtol=0):
+            result[index] = t_grid[-1]
+            status[index] = 'mapped'
+            continue
+        try:
+            result[index] = sp.optimize.brentq(
+                root_function,
+                t_grid[0],
+                t_grid[-1],
+                args=(float(target),),
+                xtol=1e-10,
+                rtol=1e-10,
+                maxiter=200,
+            )
+            status[index] = 'mapped'
+        except Exception:
+            status[index] = 'no unique root in calibration range'
+
+    return result, status, None
+
+
+def _inverse_response_prediction_intervals(
+    model_function,
+    params,
+    pcov,
+    residuals,
+    target_responses,
+    time_range,
+    confidence_level=0.95,
+    n_samples=1000,
+    grid_points=501,
+):
+    """Approximate inverse-prediction intervals by Monte Carlo propagation.
+
+    Each draw samples the fitted in vivo parameter covariance and an independent
+    response perturbation whose standard deviation is the residual standard error
+    of the in vivo calibration fit. The perturbed response is then inverse-mapped
+    through the sampled fitted curve over the observed calibration time range.
+
+    This deliberately treats the in vivo residual standard error as a surrogate for
+    uncertainty in the new in vitro response; the app does not have a separately
+    measured error model for the prediction dataset.
+    """
+    targets = np.asarray(target_responses, dtype=float)
+    lower = np.full(targets.shape, np.nan, dtype=float)
+    upper = np.full(targets.shape, np.nan, dtype=float)
+    valid_counts = np.zeros(targets.shape, dtype=int)
+
+    if pcov is None:
+        return {
+            'lower': lower,
+            'upper': upper,
+            'valid_counts': valid_counts,
+            'n_samples': int(n_samples),
+            'residual_std': np.nan,
+        }, 'Approximate inverse-prediction intervals were unavailable because the fitted in vivo parameter covariance matrix was unavailable.'
+
+    param_names = list(params.keys())
+    param_values = np.asarray([params[name] for name in param_names], dtype=float)
+    covariance = np.asarray(pcov, dtype=float)
+    if covariance.shape != (len(param_values), len(param_values)) or not np.all(np.isfinite(covariance)):
+        return {
+            'lower': lower,
+            'upper': upper,
+            'valid_counts': valid_counts,
+            'n_samples': int(n_samples),
+            'residual_std': np.nan,
+        }, 'Approximate inverse-prediction intervals were unavailable because the fitted in vivo parameter covariance matrix was invalid.'
+
+    residuals = np.asarray(residuals, dtype=float)
+    residuals = residuals[np.isfinite(residuals)]
+    dof = int(len(residuals) - len(param_values))
+    if dof <= 0:
+        return {
+            'lower': lower,
+            'upper': upper,
+            'valid_counts': valid_counts,
+            'n_samples': int(n_samples),
+            'residual_std': np.nan,
+        }, 'Approximate inverse-prediction intervals were unavailable because the fitted in vivo model had no positive residual degrees of freedom.'
+
+    residual_std = float(np.sqrt(np.sum(residuals ** 2) / dof))
+    if not np.isfinite(residual_std):
+        return {
+            'lower': lower,
+            'upper': upper,
+            'valid_counts': valid_counts,
+            'n_samples': int(n_samples),
+            'residual_std': residual_std,
+        }, 'Approximate inverse-prediction intervals were unavailable because the in vivo residual standard error could not be calculated.'
+
+    t_min, t_max = [float(value) for value in time_range]
+    if not np.isfinite(t_min) or not np.isfinite(t_max) or t_max <= t_min:
+        return {
+            'lower': lower,
+            'upper': upper,
+            'valid_counts': valid_counts,
+            'n_samples': int(n_samples),
+            'residual_std': residual_std,
+        }, 'Approximate inverse-prediction intervals require at least two distinct in vivo calibration times.'
+
+    rng = np.random.default_rng()
+    try:
+        parameter_distribution = sp.stats.multivariate_normal(
+            mean=param_values,
+            cov=covariance,
+            allow_singular=True,
+        )
+        parameter_samples = parameter_distribution.rvs(size=int(n_samples), random_state=rng)
+    except Exception as exc:
+        return {
+            'lower': lower,
+            'upper': upper,
+            'valid_counts': valid_counts,
+            'n_samples': int(n_samples),
+            'residual_std': residual_std,
+        }, f'Approximate inverse-prediction intervals were unavailable because parameter sampling failed: {exc}'
+
+    parameter_samples = np.asarray(parameter_samples, dtype=float)
+    if parameter_samples.ndim == 1:
+        parameter_samples = parameter_samples.reshape(1, -1)
+
+    t_grid = np.linspace(t_min, t_max, max(int(grid_points), 101))
+    try:
+        reference_y_grid = np.asarray(model_function(t_grid, **params), dtype=float)
+    except Exception:
+        reference_y_grid = np.full(t_grid.shape, np.nan, dtype=float)
+    if reference_y_grid.shape != t_grid.shape or not np.all(np.isfinite(reference_y_grid)):
+        return {
+            'lower': lower,
+            'upper': upper,
+            'valid_counts': valid_counts,
+            'n_samples': int(n_samples),
+            'residual_std': residual_std,
+        }, 'Approximate inverse-prediction intervals were unavailable because the fitted in vivo curve could not be evaluated over the calibration range.'
+    reference_span = float(np.max(reference_y_grid) - np.min(reference_y_grid))
+    reference_tol = max(1e-10, reference_span * 1e-8)
+    reference_dy = np.diff(reference_y_grid)
+    reference_nondecreasing = bool(np.all(reference_dy >= -reference_tol))
+    reference_nonincreasing = bool(np.all(reference_dy <= reference_tol))
+    if not (reference_nondecreasing or reference_nonincreasing) or reference_span <= reference_tol:
+        return {
+            'lower': lower,
+            'upper': upper,
+            'valid_counts': valid_counts,
+            'n_samples': int(n_samples),
+            'residual_std': residual_std,
+        }, 'Approximate inverse-prediction intervals were unavailable because the fitted in vivo curve is not one-to-one over the calibration range.'
+
+    time_samples = np.full((len(parameter_samples), targets.size), np.nan, dtype=float)
+    response_samples = targets.reshape(1, -1) + rng.normal(
+        loc=0.0,
+        scale=residual_std,
+        size=(len(parameter_samples), targets.size),
+    )
+
+    for sample_index, sample in enumerate(parameter_samples):
+        sample_params = dict(zip(param_names, sample))
+        try:
+            y_grid = np.asarray(model_function(t_grid, **sample_params), dtype=float)
+        except Exception:
+            continue
+        if y_grid.shape != t_grid.shape or not np.all(np.isfinite(y_grid)):
+            continue
+
+        y_span = float(np.max(y_grid) - np.min(y_grid))
+        monotonic_tol = max(1e-10, y_span * 1e-8)
+        dy = np.diff(y_grid)
+        nondecreasing = bool(np.all(dy >= -monotonic_tol))
+        nonincreasing = bool(np.all(dy <= monotonic_tol))
+        if not (nondecreasing or nonincreasing) or y_span <= monotonic_tol:
+            continue
+        if reference_nondecreasing and not nondecreasing:
+            continue
+        if reference_nonincreasing and not nonincreasing:
+            continue
+
+        if nondecreasing:
+            response_grid = y_grid
+            time_for_response = t_grid
+        else:
+            response_grid = y_grid[::-1]
+            time_for_response = t_grid[::-1]
+
+        sampled_targets = response_samples[sample_index]
+        in_range = (
+            np.isfinite(sampled_targets)
+            & (sampled_targets >= response_grid[0] - monotonic_tol)
+            & (sampled_targets <= response_grid[-1] + monotonic_tol)
+        )
+        if not np.any(in_range):
+            continue
+        clipped_targets = np.clip(sampled_targets[in_range], response_grid[0], response_grid[-1])
+        time_samples[sample_index, in_range] = np.interp(
+            clipped_targets,
+            response_grid,
+            time_for_response,
+        )
+
+    alpha = 1.0 - float(confidence_level)
+    lower_percentile = 100.0 * alpha / 2.0
+    upper_percentile = 100.0 * (1.0 - alpha / 2.0)
+    min_valid_samples = max(50, int(0.10 * int(n_samples)))
+
+    for flat_index in range(targets.size):
+        samples = time_samples[:, flat_index]
+        samples = samples[np.isfinite(samples)]
+        valid_counts.flat[flat_index] = len(samples)
+        if len(samples) < min_valid_samples:
+            continue
+        lower.flat[flat_index], upper.flat[flat_index] = np.percentile(
+            samples,
+            [lower_percentile, upper_percentile],
+        )
+
+    result = {
+        'lower': lower,
+        'upper': upper,
+        'valid_counts': valid_counts,
+        'n_samples': int(n_samples),
+        'residual_std': residual_std,
+    }
+
+    mapped_target_count = int(np.count_nonzero(np.isfinite(targets)))
+    interval_count = int(np.count_nonzero(np.isfinite(lower) & np.isfinite(upper)))
+    if interval_count == 0:
+        return result, (
+            'Approximate inverse-prediction intervals could not be estimated reliably for any mapped response. '
+            'Many Monte Carlo draws may have fallen outside the invertible calibration range or produced non-invertible sampled curves.'
+        )
+    if interval_count < mapped_target_count:
+        return result, (
+            f'Approximate 95% inverse-prediction intervals were available for {interval_count} of {mapped_target_count} mapped responses; '
+            'other intervals had too few valid Monte Carlo inverse solutions.'
+        )
+    return result, None
+
+
 def process_predictions(data, prediction_data, results, selected_approaches, interpolated_data=None):
     """Process predictions using fitted models on new dataset"""
     t1,m1,t2,m2,mm,tt,ti1,ti2,mi1,mi2 = data
@@ -690,7 +983,7 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                                 'params': model_results['params'],
                                 'pcov': model_results['pcov'],
                                 'residuals': model_results['residuals']
-                            })
+                            }, prediction_mode='value_ratio')
 
                             ## Rescale by tau ratio, if both tau values are valid
                             tau_skip_reason = describe_tau_prediction_skip_reason(model_results.get('tau'))
@@ -713,7 +1006,7 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                                         'model_name': models[model_name]['display_name'],
                                         'approach': approaches[approach_id]['display_name'],
                                         'model_function': models[model_name]['model_function'],
-                                    }, t_pred_vivo_err_tau)
+                                    }, t_pred_vivo_err_tau, prediction_mode='tau_ratio')
                                 except Exception as e:
                                     tau_skip_reason = f'Time-constant-ratio rescaling was not performed because plot generation failed: {e}'
                                     model_results['prediction_skip_reasons']['tau_ratio'] = tau_skip_reason
@@ -724,10 +1017,111 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                                 t_pred_vivo_tau = None
                                 plot_image_tau = None
 
+                            ## Map each observed prediction response to the corresponding fitted in vivo time.
+                            t_pred_vivo_inverse, inverse_status, inverse_skip_reason = _inverse_response_times(
+                                models[model_name]['model_function'],
+                                params2,
+                                m_pred,
+                                (np.min(t2), np.max(t2)),
+                            )
+                            valid_inverse = np.isfinite(t_pred_vivo_inverse)
+                            plot_image_inverse = None
+                            inverse_notes = []
+                            inverse_interval_result = {
+                                'lower': np.full(np.asarray(m_pred).shape, np.nan, dtype=float),
+                                'upper': np.full(np.asarray(m_pred).shape, np.nan, dtype=float),
+                                'valid_counts': np.zeros(np.asarray(m_pred).shape, dtype=int),
+                                'n_samples': 1000,
+                                'residual_std': np.nan,
+                            }
+                            inverse_interval_note = None
+                            if inverse_skip_reason is None and np.any(valid_inverse):
+                                inverse_interval_result, inverse_interval_note = _inverse_response_prediction_intervals(
+                                    models[model_name]['model_function'],
+                                    params2,
+                                    model_results['pcov'][1],
+                                    model_results['residuals'][1],
+                                    np.where(valid_inverse, m_pred, np.nan),
+                                    (np.min(t2), np.max(t2)),
+                                    confidence_level=0.95,
+                                    n_samples=1000,
+                                )
+
+                                inverse_lower = np.asarray(inverse_interval_result['lower'], dtype=float)
+                                inverse_upper = np.asarray(inverse_interval_result['upper'], dtype=float)
+                                interval_displayable = (
+                                    valid_inverse
+                                    & np.isfinite(inverse_lower)
+                                    & np.isfinite(inverse_upper)
+                                    & (inverse_lower <= t_pred_vivo_inverse)
+                                    & (inverse_upper >= t_pred_vivo_inverse)
+                                )
+                                inverse_error = None
+                                if np.any(interval_displayable):
+                                    error_lower = np.full(t_pred_vivo_inverse.shape, np.nan, dtype=float)
+                                    error_upper = np.full(t_pred_vivo_inverse.shape, np.nan, dtype=float)
+                                    error_lower[interval_displayable] = (
+                                        t_pred_vivo_inverse[interval_displayable] - inverse_lower[interval_displayable]
+                                    )
+                                    error_upper[interval_displayable] = (
+                                        inverse_upper[interval_displayable] - t_pred_vivo_inverse[interval_displayable]
+                                    )
+                                    inverse_error = {'lower': error_lower, 'upper': error_upper}
+
+                                plot_image_inverse = create_prediction_plot_a2(
+                                    data,
+                                    t_pred,
+                                    m_pred,
+                                    t_pred_vivo_inverse,
+                                    t_pred_plot,
+                                    model1_pred_plot,
+                                    model2_pred_plot,
+                                    {
+                                        'model_name': models[model_name]['display_name'],
+                                        'approach': approaches[approach_id]['display_name'],
+                                        'model_function': models[model_name]['model_function'],
+                                    },
+                                    t_pred_vivo_err=inverse_error,
+                                    prediction_mode='observed_response_inverse',
+                                )
+                                unavailable_count = int(np.size(valid_inverse) - np.count_nonzero(valid_inverse))
+                                if unavailable_count:
+                                    inverse_notes.append(
+                                        f'{unavailable_count} of {np.size(valid_inverse)} prediction response values could not be mapped '
+                                        'because they were outside the fitted in vivo response range over the observed in vivo calibration times.'
+                                    )
+                                if inverse_interval_note:
+                                    inverse_notes.append(inverse_interval_note)
+                                elif np.count_nonzero(interval_displayable) < np.count_nonzero(valid_inverse):
+                                    inverse_notes.append(
+                                        'Some approximate 95% inverse-prediction intervals were not displayed because the percentile interval '
+                                        'did not contain the point estimate or too few valid Monte Carlo inverse solutions were available.'
+                                    )
+                            elif inverse_skip_reason is None:
+                                inverse_skip_reason = (
+                                    'Observed-response inverse prediction was not performed because none of the prediction response values '
+                                    'fall within the fitted in vivo response range over the observed in vivo calibration times.'
+                                )
+                            inverse_note = ' '.join(inverse_notes) if inverse_notes else None
+
                         approach_predictions[model_name] = {
                             'plot': plot_image,
                             'plot_tau': plot_image_tau,
-                            'plot_tau_skip_reason': model_results.get('prediction_skip_reasons', {}).get('tau_ratio')
+                            'plot_tau_skip_reason': model_results.get('prediction_skip_reasons', {}).get('tau_ratio'),
+                            'plot_inverse_response': plot_image_inverse,
+                            'plot_inverse_response_skip_reason': inverse_skip_reason,
+                            'plot_inverse_response_note': inverse_note,
+                            'inverse_response_predictions': {
+                                'in_vitro_time': t_pred,
+                                'in_vitro_value': m_pred,
+                                'predicted_in_vivo_time': t_pred_vivo_inverse,
+                                'lower_95': inverse_interval_result['lower'],
+                                'upper_95': inverse_interval_result['upper'],
+                                'interval_valid_samples': inverse_interval_result['valid_counts'],
+                                'interval_total_samples': inverse_interval_result['n_samples'],
+                                'assumed_response_sd': inverse_interval_result['residual_std'],
+                                'status': inverse_status,
+                            },
                         }
                         
                     elif approach == 'approach3' and interpolated_data is not None:
@@ -2601,8 +2995,8 @@ def create_prediction_plot_a1(data, t_pred, m_pred, t_pred_vivo, model_info, inc
 
     return {'plot': plot_html, 'table_html': table_html}
 
-def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, model1_pred_plot, model2_pred_plot, model_info, t_pred_vivo_err=None, include_bands=True):
-    """Create prediction plot for approach 2 - value scaling using model ratio"""
+def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, model1_pred_plot, model2_pred_plot, model_info, t_pred_vivo_err=None, include_bands=True, prediction_mode='value_ratio'):
+    """Create an Approach 2 prediction plot for value or time mapping methods."""
     t1,m1,t2,m2,mm,tt,ti1,ti2,mi1,mi2 = data
     fig = go.Figure()
 
@@ -2636,7 +3030,7 @@ def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, m
     error_y_lower = None
     error_y_upper = None
     
-    if t_pred_vivo_err is None:
+    if prediction_mode == 'value_ratio':
         ## MASS SCALING WITH ERROR BARS
         title = f"In Vitro to In Vivo Value Prediction using value ratio rescaling with {model_info['model_name']}"
         if include_bands and 'pcov' in model_info and model_info['pcov'][0] is not None:
@@ -2681,10 +3075,19 @@ def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, m
             ))
 
     else:
-        ## TIME
-        # Predicted in vivo timeline with error bars
-        title = f"In Vitro to In Vivo Value Prediction using time constant ratio rescaling with {model_info['model_name']}"
+        ## TIME MAPPING
+        # Predicted in vivo timeline with optional horizontal error bars
+        if prediction_mode == 'observed_response_inverse':
+            title = f"In Vitro to In Vivo Time Prediction using observed-response inverse mapping with {model_info['model_name']}"
+        else:
+            title = f"In Vitro to In Vivo Time Prediction using time constant ratio rescaling with {model_info['model_name']}"
         if t_pred_vivo_err is not None:
+            if isinstance(t_pred_vivo_err, dict):
+                error_x_lower = np.asarray(t_pred_vivo_err.get('lower'), dtype=float)
+                error_x_upper = np.asarray(t_pred_vivo_err.get('upper'), dtype=float)
+            else:
+                error_x_lower = np.asarray(t_pred_vivo_err, dtype=float)
+                error_x_upper = np.asarray(t_pred_vivo_err, dtype=float)
             fig.add_trace(go.Scatter(
                 x=mt_pred_vivo, y=m_pred,
                 mode='markers',
@@ -2693,8 +3096,8 @@ def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, m
                 error_x=dict(
                     type='data',
                     symmetric=False,
-                    array=t_pred_vivo_err,      # Upper error
-                    arrayminus=t_pred_vivo_err, # Lower error
+                    array=error_x_upper,      # Upper error
+                    arrayminus=error_x_lower, # Lower error
                     visible=True,
                     color=colors['in_vivo_2'],
                     thickness=2,

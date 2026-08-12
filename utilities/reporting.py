@@ -25,7 +25,7 @@ def _plot_source(source_id, title):
     return {'source_id': source_id, 'title': title}
 
 
-def build_final_model_options(results, models, approaches, include_prediction_methods=False):
+def build_final_model_options(results, models, approaches, include_prediction_methods=False, prediction_results=None):
     """Build reportable final-model options from completed model results.
 
     When prediction data are not supplied, options are limited to fitted
@@ -37,6 +37,7 @@ def build_final_model_options(results, models, approaches, include_prediction_me
     automatic recommendation or ranking is applied here.
     """
     options = []
+    prediction_results = prediction_results or {}
 
     def add_option(model_key, approach_id, model_name, method_id=None, method_display='',
                    fit_plot_sources=None, prediction_plot_sources=None):
@@ -111,6 +112,15 @@ def build_final_model_options(results, models, approaches, include_prediction_me
                         method_display='Time-constant-ratio rescaling',
                         fit_plot_sources=fit_sources,
                         prediction_plot_sources=[_plot_source(f"plot-prediction-{model_dom_id}-tau", 'Time-constant-ratio prediction plot')],
+                    )
+                inverse_result = prediction_results.get('approach2', {}).get(model_name, {})
+                if inverse_result.get('plot_inverse_response') is not None:
+                    add_option(
+                        model_key, approach_id, model_name,
+                        method_id='observed_response_inverse',
+                        method_display='Observed-response inverse mapping',
+                        fit_plot_sources=fit_sources,
+                        prediction_plot_sources=[_plot_source(f"plot-prediction-{model_dom_id}-inverse", 'Observed-response inverse prediction plot')],
                     )
             else:
                 add_option(model_key, approach_id, model_name, fit_plot_sources=fit_sources)

@@ -91,6 +91,8 @@ Model parameter & Numerical quantity in a model equation that is estimated from 
 
 Normalization & Preprocessing that expresses response values relative to a reference, such as the first response value or the observed minimum and maximum, so datasets can be compared on a common relative scale. \\
 
+Observed-response inverse mapping & Approach 2 prediction method that maps each observed in vitro prediction response to the time at which the fitted in vivo calibration curve reaches that response. The app restricts the inverse to a one-to-one fitted curve over the observed in vivo calibration time range and does not extrapolate response values outside that fitted range. Approximate 95\% inverse-prediction intervals combine fitted in vivo parameter uncertainty with an assumed response uncertainty equal to the in vivo fit's residual standard error. \\
+
 %NRMSE (normalized root mean squared error) & RMSE divided by a selected normalization factor, such as the response mean or standard deviation. Interpretation depends on the normalization method used. \\
 
 Overfitting & Situation in which a model's flexibility allows it to follow random variation in the fitted data rather than only the underlying relationship. Overfitting can appear as excellent full-fit metrics accompanied by poorer CV performance or unstable parameters. \\

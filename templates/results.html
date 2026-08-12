@@ -880,6 +880,19 @@
                                             <h4>Time constant ratio rescaling</h4>
                                             <p class="prediction-skip-reason">{{ pred_result.plot_tau_skip_reason }}</p>
                                         {% endif %}
+                                        <h4>Observed-response inverse mapping</h4>
+                                        <p class="evidence-note">Maps each preprocessed observed in vitro prediction response to the corresponding time on the fitted in vivo calibration curve. Horizontal error bars show approximate 95% inverse-prediction intervals that combine fitted in vivo parameter uncertainty with an assumed response uncertainty equal to the in vivo fit's residual standard error. The mapping and intervals are limited to the observed in vivo calibration time range.</p>
+                                        {% if pred_result.plot_inverse_response is defined and pred_result.plot_inverse_response is not none %}
+                                            <div id="plot-prediction-{{ approach_id }}-{{ model_name }}-inverse" class="plot-container report-source-plot">
+                                                {{ pred_result.plot_inverse_response.plot | safe }}
+                                            </div>
+                                            {{ render_plot_data_downloads('approach2-' ~ model_name ~ '-table-pred-inverse', models[model_name].display_name ~ ' Approach 2 observed-response inverse prediction plot', pred_result['plot_inverse_response']['table_html']) }}
+                                            {% if pred_result.plot_inverse_response_note %}
+                                                <p class="prediction-skip-reason">{{ pred_result.plot_inverse_response_note }}</p>
+                                            {% endif %}
+                                        {% elif pred_result.plot_inverse_response_skip_reason %}
+                                            <p class="prediction-skip-reason">{{ pred_result.plot_inverse_response_skip_reason }}</p>
+                                        {% endif %}
 </div>
                                 {% endif %}
 

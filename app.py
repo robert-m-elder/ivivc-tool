@@ -278,7 +278,8 @@ def index():
             results,
             models,
             approaches,
-            include_prediction_methods=include_prediction_methods
+            include_prediction_methods=include_prediction_methods,
+            prediction_results=prediction_results,
         )
 
         return render_template('results.html', results=results, models=models, raw_data_info=raw_data_info, time_interpolation_info=time_interpolation_info, value_interpolation_info=value_interpolation_info, prediction_interpolation_info=prediction_interpolation_info,
