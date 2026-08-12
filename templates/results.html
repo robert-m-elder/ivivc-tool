@@ -510,17 +510,6 @@
                             <p class="residual-diagnostic-note">{{ model_results.cv_fit_variability_plot[0].message }}</p>
                             {% endif %}
                             {% endif %}
-                            {% if analysis_config.include_sampling_information_plot and model_results.sampling_information_plot is defined %}
-                            <h5>In vitro potential information from one additional observation</h5>
-                            {{ sampling_information_html | safe }}
-                            {% if model_results.sampling_information_plot[0].available %}
-                            <div class="report-plot-placeholder" data-plot-source="plot-sampling-information-{{ option.model_dom_id }}-in-vitro">
-                                <p class="plot-unavailable">In vitro sampling-information plot is not available.</p>
-                            </div>
-                            {% else %}
-                            <p class="residual-diagnostic-note">{{ model_results.sampling_information_plot[0].message }}</p>
-                            {% endif %}
-                            {% endif %}
                             <h5>In vivo data</h5>
                             {{ model_results.stats_table[1] | safe }}
                             {% if analysis_config.include_cv_fit_variability_plot and model_results.cv_fit_variability_plot is defined %}
@@ -531,16 +520,6 @@
                             </div>
                             {% else %}
                             <p class="residual-diagnostic-note">{{ model_results.cv_fit_variability_plot[1].message }}</p>
-                            {% endif %}
-                            {% endif %}
-                            {% if analysis_config.include_sampling_information_plot and model_results.sampling_information_plot is defined %}
-                            <h5>In vivo potential information from one additional observation</h5>
-                            {% if model_results.sampling_information_plot[1].available %}
-                            <div class="report-plot-placeholder" data-plot-source="plot-sampling-information-{{ option.model_dom_id }}-in-vivo">
-                                <p class="plot-unavailable">In vivo sampling-information plot is not available.</p>
-                            </div>
-                            {% else %}
-                            <p class="residual-diagnostic-note">{{ model_results.sampling_information_plot[1].message }}</p>
                             {% endif %}
                             {% endif %}
                             {% if analysis_config.include_raw_residual_plots or analysis_config.include_residual_qq_plots %}
@@ -718,18 +697,6 @@
                                         <p class="residual-diagnostic-note">{{ model_results.cv_fit_variability_plot[0].message }}</p>
                                         {% endif %}
                                         {% endif %}
-                                        {% if analysis_config.include_sampling_information_plot and model_results.sampling_information_plot is defined %}
-                                        <h4>Potential information from one additional observation</h4>
-                                        {{ sampling_information_html | safe }}
-                                        {% if model_results.sampling_information_plot[0].available %}
-                                        <div id="plot-sampling-information-{{ model_key|replace(':', '-') }}-in-vitro" class="plot-container report-source-plot">
-                                            {{ model_results.sampling_information_plot[0].plot | safe }}
-                                        </div>
-                                        {{ render_plot_data_downloads('approach2-' ~ model_name ~ '-sampling-information-table-in-vitro', models[model_name].display_name ~ ' Approach 2 in vitro potential information from one additional observation plot', model_results.sampling_information_plot[0].table_html) }}
-                                        {% else %}
-                                        <p class="residual-diagnostic-note">{{ model_results.sampling_information_plot[0].message }}</p>
-                                        {% endif %}
-                                        {% endif %}
                                         {% if analysis_config.include_raw_residual_plots or analysis_config.include_residual_qq_plots %}
                                         <h4>Residual diagnostics</h4>
                                         {{ residual_diagnostics_html | safe }}
@@ -780,17 +747,6 @@
                                     {{ render_plot_data_downloads('approach2-' ~ model_name ~ '-cv-fit-variability-table-in-vivo', models[model_name].display_name ~ ' Approach 2 in vivo CV fit variability plot', model_results.cv_fit_variability_plot[1].table_html) }}
                                     {% else %}
                                     <p class="residual-diagnostic-note">{{ model_results.cv_fit_variability_plot[1].message }}</p>
-                                    {% endif %}
-                                    {% endif %}
-                                    {% if analysis_config.include_sampling_information_plot and model_results.sampling_information_plot is defined %}
-                                    <h4>Potential information from one additional observation</h4>
-                                    {% if model_results.sampling_information_plot[1].available %}
-                                    <div id="plot-sampling-information-{{ model_key|replace(':', '-') }}-in-vivo" class="plot-container report-source-plot">
-                                        {{ model_results.sampling_information_plot[1].plot | safe }}
-                                    </div>
-                                    {{ render_plot_data_downloads('approach2-' ~ model_name ~ '-sampling-information-table-in-vivo', models[model_name].display_name ~ ' Approach 2 in vivo potential information from one additional observation plot', model_results.sampling_information_plot[1].table_html) }}
-                                    {% else %}
-                                    <p class="residual-diagnostic-note">{{ model_results.sampling_information_plot[1].message }}</p>
                                     {% endif %}
                                     {% endif %}
                                     {% if analysis_config.include_raw_residual_plots or analysis_config.include_residual_qq_plots %}

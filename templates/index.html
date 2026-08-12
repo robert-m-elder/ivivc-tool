@@ -263,13 +263,6 @@
                     </label>
                 </div>
                 <div class="diagnostic-option-group">
-                    <div class="diagnostic-option-heading">Additional sampling <button type="button" class="help-btn-small" data-modal="sampling-information-help" aria-label="Help for additional sampling diagnostic" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button></div>
-                    <label class="checkbox-item advanced-checkbox-option">
-                        <input type="checkbox" name="include_sampling_information_plot" id="include_sampling_information_plot">
-                        <span>Potential information from one additional observation (Approach 2 only)</span>
-                    </label>
-                </div>
-                <div class="diagnostic-option-group">
                     <div class="diagnostic-option-heading">Residuals <button type="button" class="help-btn-small" data-modal="residual-diagnostics-help" aria-label="Help for residual diagnostic display settings" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button></div>
                     <label class="checkbox-item advanced-checkbox-option">
                         <input type="checkbox" name="include_raw_residual_plots" checked>
@@ -430,10 +423,6 @@
 <div id="advanced-analysis-help-content">
             <h4>Advanced Analysis Parameters</h4>
             {{ modal_help['index']['advanced_analysis_overview_html'] | safe }}
-        </div>
-        <div id="sampling-information-help-content">
-            <h4>Potential information from one additional observation</h4>
-            {{ sampling_information_html | safe }}
         </div>
         <div id="residual-diagnostics-help-content">
             <h4>Residual diagnostics</h4>
