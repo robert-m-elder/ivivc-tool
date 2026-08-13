@@ -109,21 +109,17 @@ if errorlevel 1 goto fail
 echo.
 echo Installing tested Miniforge version %MINIFORGE_VERSION% for this user...
 echo.
-echo The Miniforge installer will open with the IVIVC App destination pre-filled.
-echo Keep the per-user / "Just Me" installation and the destination shown below:
-echo   %MINIFORGE_DIR%
+echo Installing Miniforge silently
 echo.
-echo Setup will continue automatically after the installer window is closed.
-echo.
->> "%LOG_FILE%" echo Starting interactive Miniforge installation with pre-filled options.
-start "" /wait "%INSTALLER%" /InstallationType=JustMe /RegisterPython=0 /D=%MINIFORGE_DIR%
+>> "%LOG_FILE%" echo Starting silent Miniforge installation.
+start "" /wait "%INSTALLER%" /InstallationType=JustMe /RegisterPython=0 /S /D=%MINIFORGE_DIR%
 set "MINIFORGE_EXIT=%ERRORLEVEL%"
->> "%LOG_FILE%" echo Interactive installer exit code: %MINIFORGE_EXIT%
+>> "%LOG_FILE%" echo Silent installer exit code: %MINIFORGE_EXIT%
 
 rem Verify the expected conda launcher instead of relying only on the installer
 rem exit code, since installer failures may not always return a useful status.
 if not exist "%CONDA%" (
-    >> "%LOG_FILE%" echo Interactive installation did not create %CONDA%
+    >> "%LOG_FILE%" echo Installation did not create %CONDA%
     echo.
     echo Miniforge %MINIFORGE_VERSION% did not install successfully at:
     echo   %MINIFORGE_DIR%
