@@ -11,7 +11,7 @@ set "CONDARC_FILE=%INSTALL_ROOT%\condarc"
 set "MINIFORGE_VERSION=26.1.0-0"
 set "ASSET=Miniforge3-Windows-x86_64.exe"
 set "DOWNLOAD_URL=https://github.com/conda-forge/miniforge/releases/download/%MINIFORGE_VERSION%/%ASSET%"
-set "INSTALLER=%TEMP%\%ASSET%"
+set "INSTALLER=%INSTALL_ROOT%\%ASSET%"
 set "LOG_FILE=%INSTALL_ROOT%\setup.log"
 
 cls
@@ -71,7 +71,7 @@ echo conda-forge release...
 if exist "%INSTALLER%" del /q "%INSTALLER%" >nul 2>&1
 
 powershell.exe -NoLogo -NoProfile -Command ^
-  "$ErrorActionPreference='Stop'; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -UseBasicParsing -Uri $env:DOWNLOAD_URL -OutFile $env:INSTALLER"
+  "$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -UseBasicParsing -Uri $env:DOWNLOAD_URL -OutFile $env:INSTALLER"
 
 if errorlevel 1 goto download_fallback
 if not exist "%INSTALLER%" goto download_fallback
