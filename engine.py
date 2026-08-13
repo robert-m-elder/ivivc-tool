@@ -625,13 +625,13 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
     _attach_residual_plots(results, analysis_config=analysis_config)
     return results
 
-def _inverse_response_times(model_function, params, target_responses, time_range, grid_points=1001):
+def _inverse_response_times(model_function, params, target_responses, time_range, observed_responses=None, grid_points=1001):
     """Map response values to unique fitted times over a bounded calibration range.
 
     The inverse is only used when the fitted curve is monotonic over the supplied
-    time range. Targets outside the fitted response range are returned as NaN so
-    the prediction method does not silently extrapolate beyond observed in vivo
-    calibration times.
+    time range. Targets outside the observed calibration response range are returned
+    as NaN. Targets supported by the observed response range but lying just beyond
+    the fitted curve at an endpoint are mapped to that calibration-time endpoint.
     """
     target_responses = np.asarray(target_responses, dtype=float)
     result = np.full(target_responses.shape, np.nan, dtype=float)
@@ -665,6 +665,18 @@ def _inverse_response_times(model_function, params, target_responses, time_range
     y_max = float(np.max(y_grid))
     response_tol = max(1e-10, y_span * 1e-8)
 
+    observed = np.asarray(observed_responses, dtype=float) if observed_responses is not None else y_grid
+    observed = observed[np.isfinite(observed)]
+    if observed.size == 0:
+        observed = y_grid
+    observed_min = float(np.min(observed))
+    observed_max = float(np.max(observed))
+    observed_span = float(observed_max - observed_min)
+    observed_tol = max(1e-10, observed_span * 1e-8)
+
+    high_response_time = t_grid[0] if y_grid[0] >= y_grid[-1] else t_grid[-1]
+    low_response_time = t_grid[-1] if y_grid[0] >= y_grid[-1] else t_grid[0]
+
     def root_function(time_value, target):
         value = np.asarray(model_function(np.asarray([time_value], dtype=float), **params), dtype=float).reshape(-1)[0]
         return float(value - target)
@@ -673,8 +685,16 @@ def _inverse_response_times(model_function, params, target_responses, time_range
         if not np.isfinite(target):
             status[index] = 'nonfinite input response'
             continue
-        if target < y_min - response_tol or target > y_max + response_tol:
-            status[index] = 'outside fitted in vivo response range'
+        if target < observed_min - observed_tol or target > observed_max + observed_tol:
+            status[index] = 'outside observed in vivo response range'
+            continue
+        if target > y_max + response_tol:
+            result[index] = high_response_time
+            status[index] = 'mapped to calibration endpoint'
+            continue
+        if target < y_min - response_tol:
+            result[index] = low_response_time
+            status[index] = 'mapped to calibration endpoint'
             continue
         if np.isclose(target, y_grid[0], atol=response_tol, rtol=0):
             result[index] = t_grid[0]
@@ -708,6 +728,7 @@ def _inverse_response_prediction_intervals(
     residuals,
     target_responses,
     time_range,
+    observed_responses=None,
     confidence_level=0.95,
     n_samples=1000,
     grid_points=501,
@@ -780,6 +801,13 @@ def _inverse_response_prediction_intervals(
             'n_samples': int(n_samples),
             'residual_std': residual_std,
         }, 'Approximate inverse-prediction intervals require at least two distinct in vivo calibration times.'
+
+    observed = np.asarray(observed_responses, dtype=float) if observed_responses is not None else np.asarray([], dtype=float)
+    observed = observed[np.isfinite(observed)]
+    observed_min = float(np.min(observed)) if observed.size else -np.inf
+    observed_max = float(np.max(observed)) if observed.size else np.inf
+    observed_span = float(observed_max - observed_min) if observed.size else 0.0
+    observed_tol = max(1e-10, observed_span * 1e-8) if observed.size else 0.0
 
     rng = np.random.default_rng()
     try:
@@ -865,15 +893,19 @@ def _inverse_response_prediction_intervals(
             time_for_response = t_grid[::-1]
 
         sampled_targets = response_samples[sample_index]
-        in_range = (
+        observed_supported = (
             np.isfinite(sampled_targets)
-            & (sampled_targets >= response_grid[0] - monotonic_tol)
-            & (sampled_targets <= response_grid[-1] + monotonic_tol)
+            & (sampled_targets >= observed_min - observed_tol)
+            & (sampled_targets <= observed_max + observed_tol)
         )
-        if not np.any(in_range):
+        if not np.any(observed_supported):
             continue
-        clipped_targets = np.clip(sampled_targets[in_range], response_grid[0], response_grid[-1])
-        time_samples[sample_index, in_range] = np.interp(
+        clipped_targets = np.clip(
+            sampled_targets[observed_supported],
+            response_grid[0],
+            response_grid[-1],
+        )
+        time_samples[sample_index, observed_supported] = np.interp(
             clipped_targets,
             response_grid,
             time_for_response,
@@ -1025,6 +1057,7 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                                 params2,
                                 m_pred,
                                 (np.min(t2), np.max(t2)),
+                                observed_responses=m2,
                             )
                             valid_inverse = np.isfinite(t_pred_vivo_inverse)
                             plot_image_inverse = None
@@ -1045,6 +1078,7 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                                     model_results['residuals'][1],
                                     np.where(valid_inverse, m_pred, np.nan),
                                     (np.min(t2), np.max(t2)),
+                                    observed_responses=m2,
                                     confidence_level=0.95,
                                     n_samples=1000,
                                 )
@@ -1090,7 +1124,7 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                                 if unavailable_count:
                                     inverse_notes.append(
                                         f'{unavailable_count} of {np.size(valid_inverse)} prediction response values could not be mapped '
-                                        'because they were outside the fitted in vivo response range over the observed in vivo calibration times.'
+                                        'because they were outside the observed in vivo calibration response range.'
                                     )
                                 if inverse_interval_note:
                                     inverse_notes.append(inverse_interval_note)
@@ -1102,7 +1136,7 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                             elif inverse_skip_reason is None:
                                 inverse_skip_reason = (
                                     'Observed-response inverse prediction was not performed because none of the prediction response values '
-                                    'fall within the fitted in vivo response range over the observed in vivo calibration times.'
+                                    'fall within the observed in vivo calibration response range.'
                                 )
                             inverse_note = ' '.join(inverse_notes) if inverse_notes else None
 

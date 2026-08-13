@@ -1,5 +1,5 @@
 display_name = "Power"
-approaches = ['approach1','approach2']
+approaches = ['approach1']
 fit_kwargs = {}
 latex_equation = r"y = a x^{b}"
 description = (
