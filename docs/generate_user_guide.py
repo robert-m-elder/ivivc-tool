@@ -299,6 +299,7 @@ def build_readme() -> str:
         ## Data handling
         The app does not save uploaded datasets or fitting results to persistent server storage. 
         Uploaded data are processed for the current analysis, and generated results and downloads are returned directly to the user.
+        When running the app locally (either via `python app.py` or the `local_install` launchers), no data leaves the user's computer.
         """
     ).lstrip()
 
