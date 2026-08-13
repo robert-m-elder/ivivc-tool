@@ -108,32 +108,22 @@ if errorlevel 1 goto fail
 :install_miniforge
 echo.
 echo Installing tested Miniforge version %MINIFORGE_VERSION% for this user...
->> "%LOG_FILE%" echo Starting silent Miniforge installation.
-start "" /wait "%INSTALLER%" /InstallationType=JustMe /RegisterPython=0 /S /D=%MINIFORGE_DIR%
+echo.
+echo The Miniforge installer will open with the IVIVC App destination pre-filled.
+echo Keep the per-user / "Just Me" installation and the destination shown below:
+echo   %MINIFORGE_DIR%
+echo.
+echo Setup will continue automatically after the installer window is closed.
+echo.
+>> "%LOG_FILE%" echo Starting interactive Miniforge installation with pre-filled options.
+start "" /wait "%INSTALLER%" /InstallationType=JustMe /RegisterPython=0 /D=%MINIFORGE_DIR%
 set "MINIFORGE_EXIT=%ERRORLEVEL%"
->> "%LOG_FILE%" echo Silent installer exit code: %MINIFORGE_EXIT%
+>> "%LOG_FILE%" echo Interactive installer exit code: %MINIFORGE_EXIT%
 
-rem Some Miniforge installer failures have historically returned success, so
-rem verify the expected conda launcher instead of trusting only the exit code.
+rem Verify the expected conda launcher instead of relying only on the installer
+rem exit code, since installer failures may not always return a useful status.
 if not exist "%CONDA%" (
-    >> "%LOG_FILE%" echo Silent installation did not create %CONDA%
-    echo.
-    echo The silent Miniforge installation did not complete successfully.
-    echo Setup will now open the same tested Miniforge installer interactively.
-    echo.
-    echo In the installer, keep "Just Me" selected and use this destination:
-    echo   %MINIFORGE_DIR%
-    echo.
-    echo Setup will continue after the installer window is closed.
-    echo.
-    pause
-    >> "%LOG_FILE%" echo Starting interactive Miniforge fallback.
-    start "" /wait "%INSTALLER%" /InstallationType=JustMe /RegisterPython=0 /D=%MINIFORGE_DIR%
-    call >> "%LOG_FILE%" echo Interactive installer exit code: %%ERRORLEVEL%%
-)
-
-if not exist "%CONDA%" (
-    >> "%LOG_FILE%" echo Interactive fallback did not create %CONDA%
+    >> "%LOG_FILE%" echo Interactive installation did not create %CONDA%
     echo.
     echo Miniforge %MINIFORGE_VERSION% did not install successfully at:
     echo   %MINIFORGE_DIR%
