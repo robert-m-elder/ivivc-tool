@@ -257,13 +257,17 @@ def build_readme() -> str:
 
         ## Quick start
 
-        1. Install the Python dependencies listed in `requirements.txt`.
+        Users comfortable with Python can run the app directly using the steps below. For users without Python experience, platform-specific local setup scripts are also provided for macOS and Windows under `local_install/`. These installers create a private Python/Conda environment for the IVIVC App and provide a separate double-click launcher for subsequent use; see the README in the corresponding `local_install/macos/` or `local_install/windows/` folder for instructions.
+
+        1. Install the Python dependencies listed in `requirements.txt`. For example, using `conda create -n ivivc-app -c conda-forge python=3.12 --file requirements.txt`, then `conda activate ivivc-app` to set up a separate environment.
         2. Start the Flask app with `python app.py`.
-        3. Open the local URL shown by Flask.
+        3. Open the local URL shown by Flask in a browser (`http://127.0.0.1:5000` by default).
         4. Upload a fitting dataset with four columns: in vitro time, in vitro value, in vivo time, and in vivo value.
         5. Select approaches, models, preprocessing options, metrics, and analysis parameters.
         6. Optionally upload a two-column in vitro prediction dataset.
         7. Review model outputs, plots, downloadable spreadsheets, and report outputs.
+
+        `requirements.txt` contains the packages needed to run the app. Documentation/tutorial generation additionally requires the packages in `requirements-docs.txt`.
 
         ## Main inputs
 

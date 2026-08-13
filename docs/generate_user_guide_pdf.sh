@@ -13,7 +13,8 @@ fi
 
 if ! python3 -c 'import pypdf' >/dev/null 2>&1; then
   echo "Error: pypdf is required for the post-build PDF tag repair." >&2
-  echo "Install project dependencies with: python3 -m pip install -r requirements.txt" >&2
+  echo "From the repository root, install documentation dependencies with:" >&2
+  echo "  python3 -m pip install -r requirements.txt -r requirements-docs.txt" >&2
   exit 1
 fi
 

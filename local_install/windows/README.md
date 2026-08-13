@@ -26,7 +26,7 @@ Uploaded datasets are sent by your browser only to the IVIVC App process running
 
 ## Updating this copy of the app
 
-After replacing the app source with a newer compatible version, rerun **Setup IVIVC App.bat**. The script updates the dedicated environment from `environment-windows.yml` and runs a basic import check.
+After replacing the app source with a newer compatible version, rerun **Setup IVIVC App.bat**. The script updates the dedicated environment from the shared `requirements.txt` runtime dependency list and runs a basic import check.
 
 ## Remove the local environment
 

@@ -7,7 +7,7 @@ INSTALL_ROOT="$HOME/.ivivc-app"
 MINIFORGE_DIR="$INSTALL_ROOT/miniforge3"
 ENV_DIR="$INSTALL_ROOT/env"
 CONDA="$MINIFORGE_DIR/bin/conda"
-ENV_FILE="$APP_DIR/environment-macos.yml"
+REQUIREMENTS_FILE="$APP_DIR/requirements.txt"
 CONDARC_FILE="$INSTALL_ROOT/condarc"
 
 finish() {
@@ -121,8 +121,8 @@ else
     echo "Using the IVIVC App Miniforge installation already present."
 fi
 
-if [ ! -f "$ENV_FILE" ]; then
-    echo "Cannot find environment definition: $ENV_FILE"
+if [ ! -f "$REQUIREMENTS_FILE" ]; then
+    echo "Cannot find runtime requirements: $REQUIREMENTS_FILE"
     finish 1
 fi
 
@@ -140,9 +140,9 @@ EOF_CONDARC
 echo
 echo "Creating/updating the IVIVC App Python environment..."
 if [ -x "$ENV_DIR/bin/python" ]; then
-    CONDARC="$CONDARC_FILE" "$CONDA" env update --prefix "$ENV_DIR" --file "$ENV_FILE" --prune -y
+    CONDARC="$CONDARC_FILE" "$CONDA" install --prefix "$ENV_DIR" python=3.12 --file "$REQUIREMENTS_FILE" -y
 else
-    CONDARC="$CONDARC_FILE" "$CONDA" env create --prefix "$ENV_DIR" --file "$ENV_FILE" -y
+    CONDARC="$CONDARC_FILE" "$CONDA" create --prefix "$ENV_DIR" python=3.12 --file "$REQUIREMENTS_FILE" -y
 fi
 
 echo

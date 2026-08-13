@@ -1,0 +1,4 @@
+# Additional dependencies used only to generate documentation/tutorial artifacts.
+# Install together with the runtime requirements when rebuilding those artifacts.
+matplotlib>=3.4.0
+pypdf>=5.0.0

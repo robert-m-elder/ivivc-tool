@@ -6,7 +6,7 @@ set "INSTALL_ROOT=%USERPROFILE%\.ivivc-app"
 set "MINIFORGE_DIR=%INSTALL_ROOT%\mf"
 set "ENV_DIR=%INSTALL_ROOT%\env"
 set "CONDA=%MINIFORGE_DIR%\condabin\conda.bat"
-set "ENV_FILE=%APP_DIR%\environment-windows.yml"
+set "REQUIREMENTS_FILE=%APP_DIR%\requirements.txt"
 set "CONDARC_FILE=%INSTALL_ROOT%\condarc"
 set "MINIFORGE_VERSION=26.1.0-0"
 set "ASSET=Miniforge3-Windows-x86_64.exe"
@@ -140,10 +140,10 @@ if not exist "%CONDA%" (
 if exist "%INSTALLER%" del /q "%INSTALLER%" >nul 2>&1
 
 :miniforge_ready
-if not exist "%ENV_FILE%" (
+if not exist "%REQUIREMENTS_FILE%" (
     echo.
-    echo Cannot find the environment definition:
-    echo   %ENV_FILE%
+    echo Cannot find the runtime requirements:
+    echo   %REQUIREMENTS_FILE%
     goto fail
 )
 
@@ -159,9 +159,9 @@ echo.
 echo Creating/updating the IVIVC App Python environment...
 >> "%LOG_FILE%" echo Creating/updating Conda environment at %ENV_DIR%
 if exist "%ENV_DIR%\python.exe" (
-    call "%CONDA%" env update --prefix "%ENV_DIR%" --file "%ENV_FILE%" --prune -y
+    call "%CONDA%" install --prefix "%ENV_DIR%" python=3.12 --file "%REQUIREMENTS_FILE%" -y
 ) else (
-    call "%CONDA%" env create --prefix "%ENV_DIR%" --file "%ENV_FILE%" -y
+    call "%CONDA%" create --prefix "%ENV_DIR%" python=3.12 --file "%REQUIREMENTS_FILE%" -y
 )
 set "CONDA_STATUS=%ERRORLEVEL%"
 >> "%LOG_FILE%" echo Conda environment command exit code: %CONDA_STATUS%
