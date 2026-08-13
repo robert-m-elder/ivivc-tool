@@ -7,6 +7,8 @@ Establishing an in vitro-in vivo correlation (IVIVC) can support the evaluation 
 
 ## Quick start
 
+Users comfortable with Python can run the app directly using the steps below. For users without Python experience, platform-specific local setup scripts are also provided for macOS and Windows under `local_install/`. These installers create a private Python/Conda environment for the IVIVC App and provide a separate double-click launcher for subsequent use; see the README in the corresponding `local_install/macos/` or `local_install/windows/` folder for instructions.
+
 1. Install the Python dependencies listed in `requirements.txt`.
 2. Start the Flask app with `python app.py`.
 3. Open the local URL shown by Flask.

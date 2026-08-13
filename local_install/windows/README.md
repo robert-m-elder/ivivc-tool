@@ -32,7 +32,7 @@ After replacing the app source with a newer compatible version, rerun **Setup IV
 
 Stop the app and delete this folder from your user profile:
 
-`%USERPROFILE%\.ivivc-app`
+`%USERPROFILE%\.ivivc-app` (e.g., `C:\Users\user.name\.ivivc-app`)
 
 This removes the private Miniforge installation and IVIVC Python environment but does not remove the IVIVC App source folder itself.
 
