@@ -257,7 +257,7 @@ def build_readme() -> str:
 
         ## Quick start
 
-        **For users without Python experience**, platform-specific local setup scripts are also provided for macOS and Windows under `local_install/`. These installers create a private Python/Conda environment for the IVIVC App and provide a separate double-click launcher for subsequent use; see the README in the corresponding `local_install/macos/` or `local_install/windows/` folder for instructions.
+        **For users without Python experience**, platform-specific local setup scripts are provided for Windows and macOS under `local_install/`. These installers (Setup IVIVC App) create a private Python environment for the IVIVC App and provide a separate double-click launcher (Start IVIVC App) for subsequent use. See the README in the corresponding `local_install/macos/` or `local_install/windows/` folder for instructions.
 
         Alternatively, **users comfortable with Python** can run the app directly using these steps: 
         1. Install the Python dependencies listed in `requirements.txt`. For example, using `conda create -n ivivc-app -c conda-forge python=3.12 --file requirements.txt`, then `conda activate ivivc-app` to set up a separate environment.
