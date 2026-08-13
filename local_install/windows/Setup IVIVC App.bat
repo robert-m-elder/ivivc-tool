@@ -183,6 +183,16 @@ popd >nul
 >> "%LOG_FILE%" echo Import check exit code: %CHECK_STATUS%
 if not "%CHECK_STATUS%"=="0" goto fail
 
+echo.
+echo Cleaning downloaded Conda packages and caches...
+>> "%LOG_FILE%" echo Running conda clean --all --yes
+call "%CONDA%" clean --all --yes
+set "CLEAN_STATUS=%ERRORLEVEL%"
+>> "%LOG_FILE%" echo Conda clean exit code: %CLEAN_STATUS%
+if not "%CLEAN_STATUS%"=="0" (
+    echo Warning: Conda package/cache cleanup did not complete; setup will continue.
+)
+
 >> "%LOG_FILE%" echo Setup completed successfully: %DATE% %TIME%
 echo.
 echo IVIVC App setup completed successfully.

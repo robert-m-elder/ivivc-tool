@@ -163,4 +163,12 @@ from app import app
 print("Python dependencies and IVIVC App imports: OK")
 PY
 
+echo
+echo "Cleaning downloaded Conda packages and caches..."
+if CONDARC="$CONDARC_FILE" "$CONDA" clean --all --yes; then
+    echo "Conda package/cache cleanup completed."
+else
+    echo "Warning: Conda package/cache cleanup did not complete; setup will continue."
+fi
+
 finish 0
