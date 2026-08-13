@@ -12,7 +12,7 @@ This first Windows prototype is intended for 64-bit x86 Windows 10 or later.
 4. Follow the prompts in the Command Prompt window. The first setup requires an internet connection to download Miniforge and the Python packages.
 5. When setup reports success, close the Command Prompt window.
 
-The setup uses Miniforge's per-user (`JustMe`) installation mode and creates a private installation under `%USERPROFILE%\.ivivc-app\`. It does not require administrator/root access, does not modify the system or user PATH, does not initialize Conda in PowerShell/Command Prompt, and does not modify another Python or Conda installation.
+The setup uses Miniforge's per-user (`JustMe`) installation mode and creates a private installation under `%USERPROFILE%\.ivivc-app\`. The Windows installer is pinned to Miniforge **26.1.0-0**, which has been tested with this setup, rather than automatically using the newest Miniforge release. It does not require administrator/root access, does not modify the system or user PATH, does not initialize Conda in PowerShell/Command Prompt, and does not modify another Python or Conda installation.
 
 ## Start the app
 
@@ -44,4 +44,4 @@ The private Conda environment is configured to use the operating-system certific
 
 ## If Miniforge installation is blocked
 
-The setup uses the official Miniforge silent per-user installation mode and verifies that Conda was actually installed before continuing. Some managed Windows computers use application-control policies that can block downloaded executables or files unpacked by installers. If the setup reports that Miniforge did not install, follow your organization's normal software-approval process or share the setup message with IT/support.
+The setup uses the official Miniforge silent per-user installation mode and verifies that Conda was actually installed before continuing. The installer is intentionally pinned to the tested Miniforge 26.1.0-0 release so that a later upstream installer change cannot silently alter this setup. Some managed Windows computers use application-control policies that can block downloaded executables or files unpacked by installers. If the setup reports that Miniforge did not install, follow your organization's normal software-approval process or share the setup message with IT/support.

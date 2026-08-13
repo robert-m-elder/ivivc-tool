@@ -8,8 +8,9 @@ set "ENV_DIR=%INSTALL_ROOT%\env"
 set "CONDA=%MINIFORGE_DIR%\condabin\conda.bat"
 set "ENV_FILE=%APP_DIR%\environment-windows.yml"
 set "CONDARC_FILE=%INSTALL_ROOT%\condarc"
+set "MINIFORGE_VERSION=26.1.0-0"
 set "ASSET=Miniforge3-Windows-x86_64.exe"
-set "DOWNLOAD_URL=https://github.com/conda-forge/miniforge/releases/latest/download/%ASSET%"
+set "DOWNLOAD_URL=https://github.com/conda-forge/miniforge/releases/download/%MINIFORGE_VERSION%/%ASSET%"
 set "INSTALLER=%TEMP%\%ASSET%"
 
 cls
@@ -52,7 +53,8 @@ if exist "%CONDA%" (
 )
 
 echo.
-echo Downloading Miniforge from the official conda-forge release...
+echo Downloading tested Miniforge version %MINIFORGE_VERSION% from the official
+echo conda-forge release...
 if exist "%INSTALLER%" del /q "%INSTALLER%" >nul 2>&1
 
 powershell.exe -NoLogo -NoProfile -Command ^
@@ -90,7 +92,7 @@ if errorlevel 1 goto fail
 
 :install_miniforge
 echo.
-echo Installing Miniforge for this user...
+echo Installing tested Miniforge version %MINIFORGE_VERSION% for this user...
 powershell.exe -NoLogo -NoProfile -Command ^
   "$arguments=@('/InstallationType=JustMe','/RegisterPython=0','/S',('/D=' + $env:MINIFORGE_DIR)); $process=Start-Process -FilePath $env:INSTALLER -ArgumentList $arguments -Wait -PassThru; exit $process.ExitCode"
 
@@ -98,8 +100,11 @@ rem Some Miniforge installer failures have historically returned success, so
 rem verify the expected conda launcher instead of trusting only the exit code.
 if not exist "%CONDA%" (
     echo.
-    echo Miniforge did not install successfully at:
+    echo Miniforge %MINIFORGE_VERSION% did not install successfully at:
     echo   %MINIFORGE_DIR%
+    echo.
+    echo The downloaded installer has been kept for troubleshooting at:
+    echo   %INSTALLER%
     echo.
     echo Windows application-control software can block installation even for a
     echo per-user installer. If your organization manages this computer, you may
