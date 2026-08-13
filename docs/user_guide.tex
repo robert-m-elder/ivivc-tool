@@ -96,6 +96,8 @@ Preprocessing prepares the uploaded data for comparison, fitting, and prediction
 
 \input{includes/generated/preprocessing_options.tex}
 
+The app preserves observed time zero as $t=0$ in processed data, fitting, plots, and downloads rather than replacing it with a small positive value. Because $\log_{10}(0)$ is undefined, Log10 time scaling cannot be applied when any analyzed time value is zero or negative. In that case, the app continues the analysis with unscaled time and displays a scaling-fallback warning in Data Processing. Similarly, if Log10 response scaling is selected but the processed response values contain zero or negative values, the app continues with unscaled response values and reports the fallback. The preprocessing table reports the scaling that was actually applied. Model-specific numerical/domain limitations at zero are handled during fitting rather than by changing the supplied time values. For Approach 3, an in vivo/in vitro time ratio with an in vitro time of zero is undefined and is reported as unavailable, although a prediction observed at time zero can still map to time zero.
+
 \subsubsection{How interpolation is used by each approach}
 
 When interpolation is selected, the app constructs two complementary representations of the preprocessed fitting data:

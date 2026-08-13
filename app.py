@@ -195,8 +195,22 @@ def index():
             ], status=400)
         t1,m1,t2,m2 = df.values.T
         
-        # Apply preprocessing
-        data = preprocess_data(t1, m1, t2, m2, selected_interpolation=selected_interpolation, selected_scalings=selected_scalings, selected_normalizations=selected_normalizations)
+        # Apply preprocessing after the uploaded data have been read. If a
+        # selected Log10 scaling is incompatible with the processed values,
+        # continue with that axis unscaled and report the fallback in results.
+        try:
+            data, preprocessing_metadata = preprocess_data(
+                t1, m1, t2, m2,
+                selected_interpolation=selected_interpolation,
+                selected_scalings=selected_scalings,
+                selected_normalizations=selected_normalizations,
+                fallback_invalid_log_scaling=True,
+                return_metadata=True,
+            )
+        except ValueError as exc:
+            return _render_index([{'message': str(exc)}], status=400)
+        selected_scalings = preprocessing_metadata['applied_scalings']
+        preprocessing_warnings = preprocessing_metadata['warnings']
         t1_scale,m1_scale,t2_scale,m2_scale,mm,tt,ti1,ti2,mi1,mi2 = data
 
         raw_data_info = create_initial_plotly(t1, m1, t2, m2)
@@ -238,6 +252,12 @@ def index():
             selected_scalings,
             selected_interpolation,
         )
+        if preprocessing_warnings and not selected_scalings:
+            for row in preprocessing_rows:
+                if row['category'] == 'Scaling' and row['name'] == 'None':
+                    row['name'] = 'None (fallback)'
+                    row['description'] = 'No scaling was applied because the selected Log10 scaling option could not be applied to the processed data; see the scaling fallback warning.'
+                    break
         preprocessing_summary = format_selected_preprocessing_summary(
             selected_normalizations,
             selected_scalings,
@@ -289,6 +309,7 @@ def index():
                                metrics=metrics, selected_metrics=selected_metrics, prediction_results=prediction_results,
                                analysis_config=analysis_config,
                                analysis_config_rows=analysis_config_rows, preprocessing_rows=preprocessing_rows,
+                               preprocessing_warnings=preprocessing_warnings,
                                preprocessing_summary=preprocessing_summary, metric_description_rows=metric_description_rows,
                                grid_search_description_html=GRID_SEARCH_DESCRIPTION_HTML, tool_purpose_html=TOOL_PURPOSE_HTML,
                                preprocessing_overview_summary_html=PREPROCESSING_OVERVIEW_SUMMARY_HTML,

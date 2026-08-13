@@ -28,8 +28,8 @@ Initial-value normalization & initial\_value & Expresses each response value rel
 \textbf{Option} & \textbf{Internal key} & \textbf{Description} \\
 \midrule
 \endhead
-Log10 time scaling & log\_x & Uses a base-10 log scale for time values before fitting or interpolation. \\
-Log10 response scaling & log\_y & Uses a base-10 log scale for response values before fitting or interpolation. \\
+Log10 time scaling & log\_x & Uses a base-10 log scale for time values before fitting or interpolation. All time values must be greater than zero. If this scaling is selected but the analyzed data contain a zero or negative time, the app leaves time unscaled, continues the analysis, and reports the fallback in Data Processing. \\
+Log10 response scaling & log\_y & Uses a base-10 log scale for response values before fitting or interpolation. All response values must be greater than zero after normalization. If this scaling is selected but the processed responses contain a zero or negative value, the app leaves response unscaled, continues the analysis, and reports the fallback in Data Processing. \\
 \bottomrule
 \end{longtable}
 

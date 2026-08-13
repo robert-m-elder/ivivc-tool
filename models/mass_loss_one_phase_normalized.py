@@ -9,7 +9,8 @@ latex_equation = r"y = 1 - 1/(1 + e^{-(x-t_{50})/s})"
 description = (
     "Less-flexible one-phase mass-remaining model for responses already normalized "
     "from 0 to 1. The baseline response and delayed-loss magnitude are fixed at 1, "
-    "leaving only the transition midpoint and width to be fitted."
+    "leaving only the transition midpoint and width to be fitted. "
+    "This is a shifted and inverted logistic (sigmoid) function."
 )
 
 

@@ -11,6 +11,15 @@
     {% endfor %}
 {%- endmacro %}
 
+
+{% macro render_preprocessing_warnings(warnings) -%}
+    {% for warning in warnings or [] %}
+        <div class="preprocessing-warning" role="note">
+            <strong>Scaling fallback:</strong> {{ warning.message }}
+        </div>
+    {% endfor %}
+{%- endmacro %}
+
 {% macro render_plot_data_downloads(target, plot_title, table_html) -%}
     <div class="plot-data-downloads"
          data-table-target="{{ target }}"
@@ -123,6 +132,7 @@
                 </button>
             </h2>
             <h3>Preprocessing Applied:</h3>
+            {{ render_preprocessing_warnings(preprocessing_warnings) }}
             <table class="settings-table description-table">
                 <thead>
                     <tr>
@@ -312,6 +322,7 @@
 
                         <h4>Preprocessing</h4>
                         {{ preprocessing_overview_summary_html | safe }}
+                        {{ render_preprocessing_warnings(preprocessing_warnings) }}
                         <table class="settings-table description-table">
                             <thead>
                                 <tr>
@@ -942,6 +953,7 @@
 <div id="data-processing-help-content">
             <h4>Data Processing</h4>
             <p>This section shows how your data were preprocessed before model fitting and prediction.</p>
+            {{ render_preprocessing_warnings(preprocessing_warnings) }}
             <ul>
                 {% for row in preprocessing_rows %}
                 <li><strong>{{ row.category }} - {{ row.name }}:</strong> {{ row.description }}</li>

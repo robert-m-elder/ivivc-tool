@@ -49,10 +49,8 @@ def _model_initial_points(model_name, x, y):
 colors = {
     'in_vitro': '#2E5F8A',      # Darker blue
     'in_vivo': '#8B3A6B',       # Darker purple-red
-    'in_vitro_2': '#006FA6',    # Accessible prediction blue
-    'in_vivo_2': '#A52A6A',     # Accessible prediction purple-red
-    'a2_prediction_input': '#4F91B9',   # Lighter blue for Approach 2 prediction input
-    'a2_prediction_output': '#C8799F'   # Lighter mauve for Approach 2 predicted output
+    'prediction_input': '#4F91B9',   # Lighter blue for prediction input
+    'prediction_output': '#C8799F'   # Lighter mauve for predicted in vivo output
 }
 
 
@@ -344,7 +342,8 @@ def _tau_interval_row(tau_value, multiplier, label='Tau'):
         row['half_width'] = 'N/A'
     return row
 
-def preprocess_data(t1, m1, t2, m2, selected_interpolation=None, selected_scalings=None, selected_normalizations=None):
+def preprocess_data(t1, m1, t2, m2, selected_interpolation=None, selected_scalings=None, selected_normalizations=None,
+                    fallback_invalid_log_scaling=False, return_metadata=False):
     selected_interpolation = selected_interpolation or []
     selected_scalings = selected_scalings or []
     selected_normalizations = selected_normalizations or []
@@ -353,11 +352,8 @@ def preprocess_data(t1, m1, t2, m2, selected_interpolation=None, selected_scalin
         two_datasets = True
     else:
         two_datasets = False
-    # Apply basic data cleaning
-    # set zero to small value to avoid division errors
-    t1[t1==0] = 1e-2; 
-    if two_datasets:
-        t2[t2==0] = 1e-2
+    # Apply basic data cleaning. Preserve true zero times; operations that do
+    # not support zero handle that domain restriction where they are applied.
     # remove missing values due to unequal number of points in spreadsheet
     mask = ~pd.isna(m1); t1,m1 = t1[mask], m1[mask]
     if two_datasets:
@@ -369,16 +365,46 @@ def preprocess_data(t1, m1, t2, m2, selected_interpolation=None, selected_scalin
         if two_datasets:
             m2 = preprocessing_options['normalization'][norm](m2)
 
-    # Apply scalings
+    applied_scalings = []
+    preprocessing_warnings = []
+
+    # Apply scalings. For browser analyses, invalid Log10 scaling can be
+    # skipped so the analysis continues on the unscaled axis. Transform all
+    # applicable datasets first and assign only after the scaling succeeds.
     for scale in selected_scalings:
-        if scale == 'log_x':
-            t1 = preprocessing_options['scaling'][scale](t1)
-            if two_datasets:
-                t2 = preprocessing_options['scaling'][scale](t2)
-        elif scale == 'log_y':
-            m1 = preprocessing_options['scaling'][scale](m1)
-            if two_datasets:
-                m2 = preprocessing_options['scaling'][scale](m2)
+        try:
+            if scale == 'log_x':
+                scaled_t1 = preprocessing_options['scaling'][scale](t1)
+                scaled_t2 = preprocessing_options['scaling'][scale](t2) if two_datasets else None
+                t1 = scaled_t1
+                if two_datasets:
+                    t2 = scaled_t2
+            elif scale == 'log_y':
+                scaled_m1 = preprocessing_options['scaling'][scale](m1)
+                scaled_m2 = preprocessing_options['scaling'][scale](m2) if two_datasets else None
+                m1 = scaled_m1
+                if two_datasets:
+                    m2 = scaled_m2
+            applied_scalings.append(scale)
+        except ValueError:
+            if not fallback_invalid_log_scaling or scale not in {'log_x', 'log_y'}:
+                raise
+            if scale == 'log_x':
+                values_to_check = (t1, t2) if two_datasets else (t1,)
+            else:
+                values_to_check = (m1, m2) if two_datasets else (m1,)
+            if any(np.any(~np.isfinite(np.asarray(values, dtype=float))) for values in values_to_check):
+                raise
+            if scale == 'log_x':
+                preprocessing_warnings.append({
+                    'option': 'Log10 time scaling',
+                    'message': 'Log10 time scaling was selected but was not applied because at least one analyzed time value is zero or negative. The analysis continued using unscaled time values.'
+                })
+            else:
+                preprocessing_warnings.append({
+                    'option': 'Log10 response scaling',
+                    'message': 'Log10 response scaling was selected but was not applied because at least one analyzed response value is zero or negative after normalization. The analysis continued using unscaled response values.'
+                })
 
     # Apply interpolation/alignment. If no interpolation option is supplied,
     # use exact raw alignment rather than failing with an unset data variable.
@@ -389,6 +415,11 @@ def preprocess_data(t1, m1, t2, m2, selected_interpolation=None, selected_scalin
     else:
         data = [t1, m1]
 
+    if return_metadata:
+        return data, {
+            'applied_scalings': applied_scalings,
+            'warnings': preprocessing_warnings,
+        }
     return data
 
 def process_data(data, selected_models, selected_approaches, selected_metrics, analysis_config=None):
@@ -950,6 +981,17 @@ def _inverse_response_prediction_intervals(
     return result, None
 
 
+def _safe_ratio(numerator, denominator):
+    """Elementwise ratio with undefined zero-denominator values returned as NaN."""
+    numerator = np.asarray(numerator, dtype=float)
+    denominator = np.asarray(denominator, dtype=float)
+    numerator, denominator = np.broadcast_arrays(numerator, denominator)
+    result = np.full(numerator.shape, np.nan, dtype=float)
+    valid = np.isfinite(numerator) & np.isfinite(denominator) & (denominator != 0)
+    np.divide(numerator, denominator, out=result, where=valid)
+    return result
+
+
 def process_predictions(data, prediction_data, results, selected_approaches, interpolated_data=None):
     """Process predictions using fitted models on new dataset"""
     t1,m1,t2,m2,mm,tt,ti1,ti2,mi1,mi2 = data
@@ -1166,13 +1208,19 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                         
                         # Method 1: Scale prediction values by (dataset2_value / dataset1_value)
                         # Interpolate scaling factors at prediction times
-                        value_ratio = np.interp(t_pred, tt, mi2/mi1, left=np.nan, right=np.nan)  # dataset2_value / dataset1_value
+                        value_mapping_ratio = _safe_ratio(mi2, mi1)
+                        value_ratio = np.interp(t_pred, tt, value_mapping_ratio, left=np.nan, right=np.nan)  # dataset2_value / dataset1_value
                         m_pred_scaled = m_pred * value_ratio
                         
                         # Method 2: Scale prediction times by (dataset2_time / dataset1_time)
                         mask = np.argsort(mm)
-                        time_ratio = np.interp(m_pred, mm[mask], (ti2/ti1)[mask], left=np.nan, right=np.nan)  # dataset2_time / dataset1_time
+                        time_mapping_ratio = _safe_ratio(ti2, ti1)
+                        time_ratio = np.interp(m_pred, mm[mask], time_mapping_ratio[mask], left=np.nan, right=np.nan)  # dataset2_time / dataset1_time
                         t_pred_scaled = t_pred * time_ratio
+                        # A time-ratio scaling factor is undefined when the paired
+                        # in vitro time is zero, but a prediction observed at true
+                        # time zero still maps naturally to in vivo time zero.
+                        t_pred_scaled[np.isfinite(t_pred) & (t_pred == 0)] = 0.0
                         
                         # Create plots for both methods
                         plot_method1 = create_prediction_plot_a3(data, t_pred, m_pred, m_pred_scaled, ptype='v')
@@ -2174,7 +2222,9 @@ def create_initial_plotly(t1, m1, t2, m2):
     plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
     return {'plot':plot_html, 'table_html': table_html}
 
-def _create_interpolation_plotly(t1, m1, t2, m2, interp_x1, interp_y1, interp_x2, interp_y2):
+def _create_interpolation_plotly(
+    t1, m1, t2, m2, interp_x1, interp_y1, interp_x2, interp_y2, point_count_note=None
+):
     fig = go.Figure()
     # Draw the measured/scaled points first so the larger open interpolation
     # markers remain visible when both series share a coordinate.
@@ -2204,13 +2254,26 @@ def _create_interpolation_plotly(t1, m1, t2, m2, interp_x1, interp_y1, interp_x2
         name='In Vivo Data (interpolated)',
         marker=dict(color=colors['in_vivo'], size=22, symbol='diamond-open', line=dict(color='#1f1f1f', width=2.5))
     ))
+    if point_count_note:
+        fig.add_annotation(
+            text=point_count_note,
+            xref='paper',
+            yref='paper',
+            x=0,
+            y=1.02,
+            showarrow=False,
+            xanchor='left',
+            yanchor='bottom',
+            align='left',
+            font=dict(size=12, color='rgba(80, 80, 80, 0.95)'),
+        )
     fig.update_layout(
         template='plotly_white',
         autosize=True, 
         xaxis_title='Time',
         yaxis_title='Value',
         legend=dict(font=dict(size=13)),
-        margin=dict(l=30, r=30, t=30, b=30),
+        margin=dict(l=30, r=30, t=60 if point_count_note else 30, b=30),
         font=dict(
             family="Arial, sans-serif",
             size=12,
@@ -2244,12 +2307,38 @@ def _create_interpolation_plotly(t1, m1, t2, m2, interp_x1, interp_y1, interp_x2
 
 def create_interpolation_plotly(t1, m1, t2, m2, tt, mi1, mi2):
     """Plot response values estimated at a shared time grid."""
-    return _create_interpolation_plotly(t1, m1, t2, m2, tt, mi1, tt, mi2)
+    raw_mask1 = np.isfinite(np.asarray(t1, dtype=float)) & np.isfinite(np.asarray(m1, dtype=float))
+    raw_mask2 = np.isfinite(np.asarray(t2, dtype=float)) & np.isfinite(np.asarray(m2, dtype=float))
+    interp_time = np.isfinite(np.asarray(tt, dtype=float))
+    raw_n1 = int(np.count_nonzero(raw_mask1))
+    raw_n2 = int(np.count_nonzero(raw_mask2))
+    interp_n1 = int(np.count_nonzero(interp_time & np.isfinite(np.asarray(mi1, dtype=float))))
+    interp_n2 = int(np.count_nonzero(interp_time & np.isfinite(np.asarray(mi2, dtype=float))))
+    point_count_note = (
+        f'Points in by-time datasets: in vitro {interp_n1} (raw {raw_n1}); '
+        f'in vivo {interp_n2} (raw {raw_n2}).'
+    )
+    return _create_interpolation_plotly(
+        t1, m1, t2, m2, tt, mi1, tt, mi2, point_count_note=point_count_note
+    )
 
 
 def create_value_interpolation_plotly(t1, m1, t2, m2, mm, ti1, ti2):
     """Plot times estimated at a shared response-value grid."""
-    return _create_interpolation_plotly(t1, m1, t2, m2, ti1, mm, ti2, mm)
+    raw_mask1 = np.isfinite(np.asarray(t1, dtype=float)) & np.isfinite(np.asarray(m1, dtype=float))
+    raw_mask2 = np.isfinite(np.asarray(t2, dtype=float)) & np.isfinite(np.asarray(m2, dtype=float))
+    shared_values = np.isfinite(np.asarray(mm, dtype=float))
+    raw_n1 = int(np.count_nonzero(raw_mask1))
+    raw_n2 = int(np.count_nonzero(raw_mask2))
+    interp_n1 = int(np.count_nonzero(shared_values & np.isfinite(np.asarray(ti1, dtype=float))))
+    interp_n2 = int(np.count_nonzero(shared_values & np.isfinite(np.asarray(ti2, dtype=float))))
+    point_count_note = (
+        f'Points in by-response-value datasets: in vitro {interp_n1} (raw {raw_n1}); '
+        f'in vivo {interp_n2} (raw {raw_n2}).'
+    )
+    return _create_interpolation_plotly(
+        t1, m1, t2, m2, ti1, mm, ti2, mm, point_count_note=point_count_note
+    )
 
 def create_prediction_interpolation_plotly(t1, m1):
     fig = go.Figure()
@@ -2258,7 +2347,7 @@ def create_prediction_interpolation_plotly(t1, m1):
         x=t1, y=m1,
         mode='markers',
         name='In Vitro Data (scaled/normed)',
-        marker=dict(color=colors['in_vitro_2'], size=15, line=dict(color='white', width=2))
+        marker=dict(color=colors['prediction_input'], size=15, line=dict(color='white', width=2))
     ))
     fig.update_layout(
         template='plotly_white',
@@ -2849,12 +2938,12 @@ def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
 
 def create_plotly_a3(x, y1, y2, ptype='v'):
     if ptype == 'v':
-        y = y2 / y1
+        y = _safe_ratio(y2, y1)
         x_label = 'Time'
         y_label = 'In Vivo Value / In Vitro Value'
         plot_name = 'Value vs. time'
     elif ptype == 't':
-        y = y2 / y1
+        y = _safe_ratio(y2, y1)
         x_label = 'Value'
         y_label = 'In Vivo Time / In Vitro Time'
         plot_name = 'Time vs. value'
@@ -2955,7 +3044,7 @@ def create_prediction_plot_a1(data, t_pred, m_pred, t_pred_vivo, model_info, inc
         x=t_pred, y=m_pred,
         mode='markers',
         name='In Vitro (Input)',
-        marker=dict(color=colors['in_vitro_2'], size=15, line=dict(color='white', width=2))
+        marker=dict(color=colors['prediction_input'], size=15, line=dict(color='white', width=2))
     ))
 
     # Calculate prediction bands for the predicted in vivo times if available
@@ -2986,14 +3075,14 @@ def create_prediction_plot_a1(data, t_pred, m_pred, t_pred_vivo, model_info, inc
             x=t_pred_vivo, y=m_pred,
             mode='markers',
             name='In Vivo (Predicted)',
-            marker=dict(color=colors['in_vivo_2'], size=15, line=dict(color='white', width=2)),
+            marker=dict(color=colors['prediction_output'], size=15, line=dict(color='white', width=2)),
             error_x=dict(
                 type='data',
                 symmetric=False,
                 array=error_x_upper,      # Upper error
                 arrayminus=error_x_lower, # Lower error
                 visible=True,
-                color=colors['in_vivo_2'],
+                color=colors['prediction_output'],
                 thickness=2,
                 width=8
             )
@@ -3004,7 +3093,7 @@ def create_prediction_plot_a1(data, t_pred, m_pred, t_pred_vivo, model_info, inc
             x=t_pred_vivo, y=m_pred,
             mode='markers',
             name='In Vivo (Predicted)',
-            marker=dict(color=colors['in_vivo_2'], size=15, line=dict(color='white', width=2))
+            marker=dict(color=colors['prediction_output'], size=15, line=dict(color='white', width=2))
         ))
 
     fig.update_layout(
@@ -3057,7 +3146,7 @@ def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, m
         x=t_pred, y=m_pred,
         mode='markers',
         name='In Vitro (Input)',
-        marker=dict(color=colors['a2_prediction_input'], size=15, line=dict(color='white', width=2))
+        marker=dict(color=colors['prediction_input'], size=15, line=dict(color='white', width=2))
     ))
 
     # Calculate prediction bands/error bars for the predicted in vivo values or times if available
@@ -3089,14 +3178,14 @@ def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, m
                 x=t_pred, y=mt_pred_vivo,
                 mode='markers',
                 name='In Vivo (Predicted)',
-                marker=dict(color=colors['a2_prediction_output'], size=15, line=dict(color='white', width=2)),
+                marker=dict(color=colors['prediction_output'], size=15, line=dict(color='white', width=2)),
                 error_y=dict(
                     type='data',
                     symmetric=False,
                     array=error_y_upper,      # Upper error
                     arrayminus=error_y_lower, # Lower error
                     visible=True,
-                    color=colors['a2_prediction_output'],
+                    color=colors['prediction_output'],
                     thickness=2,
                     width=8
                 )
@@ -3107,7 +3196,7 @@ def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, m
                 x=t_pred, y=mt_pred_vivo,
                 mode='markers',
                 name='In Vivo (Predicted)',
-                marker=dict(color=colors['a2_prediction_output'], size=15, line=dict(color='white', width=2))
+                marker=dict(color=colors['prediction_output'], size=15, line=dict(color='white', width=2))
             ))
 
     else:
@@ -3128,14 +3217,14 @@ def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, m
                 x=mt_pred_vivo, y=m_pred,
                 mode='markers',
                 name='In Vivo (Predicted)',
-                marker=dict(color=colors['a2_prediction_output'], size=15, line=dict(color='white', width=2)),
+                marker=dict(color=colors['prediction_output'], size=15, line=dict(color='white', width=2)),
                 error_x=dict(
                     type='data',
                     symmetric=False,
                     array=error_x_upper,      # Upper error
                     arrayminus=error_x_lower, # Lower error
                     visible=True,
-                    color=colors['a2_prediction_output'],
+                    color=colors['prediction_output'],
                     thickness=2,
                     width=8
                 )
@@ -3146,7 +3235,7 @@ def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, m
                 x=mt_pred_vivo, y=m_pred,
                 mode='markers',
                 name='In Vivo (Predicted)',
-                marker=dict(color=colors['a2_prediction_output'], size=15, line=dict(color='white', width=2))
+                marker=dict(color=colors['prediction_output'], size=15, line=dict(color='white', width=2))
             ))
     if 0:
         ## MASS, no error bars
@@ -3155,7 +3244,7 @@ def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, m
             x=mt_pred_vivo, y=m_pred,
             mode='markers',
             name='In Vivo (Predicted)',
-            marker=dict(color=colors['a2_prediction_output'], size=15, line=dict(color='white', width=2))
+            marker=dict(color=colors['prediction_output'], size=15, line=dict(color='white', width=2))
         ))
 
         # Connection lines to show time scaling
@@ -3236,14 +3325,14 @@ def create_prediction_plot_a3(data, t_pred, m_pred, var_pred_scaled, ptype='v'):
             x=t_pred, y=m_pred,
             mode='markers',
             name='In Vitro (Input)',
-            marker=dict(color=colors['in_vitro_2'], size=15, line=dict(color='white', width=2))
+            marker=dict(color=colors['prediction_input'], size=15, line=dict(color='white', width=2))
         ))
 
         fig.add_trace(go.Scatter(
             x=t_pred, y=var_pred_scaled,
             mode='markers',
             name='In Vivo (Predicted)',
-            marker=dict(color=colors['in_vivo_2'], size=15, line=dict(color='white', width=2))
+            marker=dict(color=colors['prediction_output'], size=15, line=dict(color='white', width=2))
         ))
 
         # Connection lines to show time scaling
@@ -3294,14 +3383,14 @@ def create_prediction_plot_a3(data, t_pred, m_pred, var_pred_scaled, ptype='v'):
             x=t_pred, y=m_pred, 
             mode='markers',
             name='In Vitro (Input)',
-            marker=dict(color=colors['in_vitro_2'], size=15, line=dict(color='white', width=2))
+            marker=dict(color=colors['prediction_input'], size=15, line=dict(color='white', width=2))
         ))
 
         fig.add_trace(go.Scatter(
             x=var_pred_scaled, y=m_pred, 
             mode='markers',
             name='In Vivo (Predicted)',
-            marker=dict(color=colors['in_vivo_2'], size=15, line=dict(color='white', width=2))
+            marker=dict(color=colors['prediction_output'], size=15, line=dict(color='white', width=2))
         ))
 
         # Connection lines to show time scaling
