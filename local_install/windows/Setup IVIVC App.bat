@@ -12,6 +12,7 @@ set "MINIFORGE_VERSION=26.1.0-0"
 set "ASSET=Miniforge3-Windows-x86_64.exe"
 set "DOWNLOAD_URL=https://github.com/conda-forge/miniforge/releases/download/%MINIFORGE_VERSION%/%ASSET%"
 set "INSTALLER=%TEMP%\%ASSET%"
+set "LOG_FILE=%INSTALL_ROOT%\setup.log"
 
 cls
 echo IVIVC App - Windows local setup
@@ -46,15 +47,27 @@ if errorlevel 1 (
     goto fail
 )
 
+rem Keep a small persistent setup log for troubleshooting.
+> "%LOG_FILE%" echo IVIVC App Windows setup log
+>> "%LOG_FILE%" echo Started: %DATE% %TIME%
+>> "%LOG_FILE%" echo App directory: %APP_DIR%
+>> "%LOG_FILE%" echo Install root: %INSTALL_ROOT%
+>> "%LOG_FILE%" echo Miniforge target: %MINIFORGE_DIR%
+>> "%LOG_FILE%" echo Miniforge version: %MINIFORGE_VERSION%
+>> "%LOG_FILE%" echo Installer path: %INSTALLER%
+>> "%LOG_FILE%" echo.
+
 if exist "%CONDA%" (
     echo.
     echo Using the IVIVC App Miniforge installation already present.
+    >> "%LOG_FILE%" echo Existing Miniforge installation found.
     goto miniforge_ready
 )
 
 echo.
 echo Downloading tested Miniforge version %MINIFORGE_VERSION% from the official
 echo conda-forge release...
+>> "%LOG_FILE%" echo Downloading %DOWNLOAD_URL%
 if exist "%INSTALLER%" del /q "%INSTALLER%" >nul 2>&1
 
 powershell.exe -NoLogo -NoProfile -Command ^
@@ -67,6 +80,7 @@ for %%I in ("%INSTALLER%") do if %%~zI LSS 1000000 goto download_fallback
 goto install_miniforge
 
 :download_fallback
+>> "%LOG_FILE%" echo Command-line download failed or produced an invalid installer.
 echo.
 echo The secure command-line download did not complete. This can happen on
 echo managed networks that inspect HTTPS traffic. Setup will not disable
@@ -89,19 +103,43 @@ if not exist "%MANUAL_INSTALLER%" (
 )
 copy /y "%MANUAL_INSTALLER%" "%INSTALLER%" >nul
 if errorlevel 1 goto fail
+>> "%LOG_FILE%" echo Browser-downloaded installer copied from %MANUAL_INSTALLER%
 
 :install_miniforge
 echo.
 echo Installing tested Miniforge version %MINIFORGE_VERSION% for this user...
-powershell.exe -NoLogo -NoProfile -Command ^
-  "$arguments=@('/InstallationType=JustMe','/RegisterPython=0','/S',('/D=' + $env:MINIFORGE_DIR)); $process=Start-Process -FilePath $env:INSTALLER -ArgumentList $arguments -Wait -PassThru; exit $process.ExitCode"
+>> "%LOG_FILE%" echo Starting silent Miniforge installation.
+start "" /wait "%INSTALLER%" /InstallationType=JustMe /RegisterPython=0 /S /D=%MINIFORGE_DIR%
+set "MINIFORGE_EXIT=%ERRORLEVEL%"
+>> "%LOG_FILE%" echo Silent installer exit code: %MINIFORGE_EXIT%
 
 rem Some Miniforge installer failures have historically returned success, so
 rem verify the expected conda launcher instead of trusting only the exit code.
 if not exist "%CONDA%" (
+    >> "%LOG_FILE%" echo Silent installation did not create %CONDA%
+    echo.
+    echo The silent Miniforge installation did not complete successfully.
+    echo Setup will now open the same tested Miniforge installer interactively.
+    echo.
+    echo In the installer, keep "Just Me" selected and use this destination:
+    echo   %MINIFORGE_DIR%
+    echo.
+    echo Setup will continue after the installer window is closed.
+    echo.
+    pause
+    >> "%LOG_FILE%" echo Starting interactive Miniforge fallback.
+    start "" /wait "%INSTALLER%" /InstallationType=JustMe /RegisterPython=0 /D=%MINIFORGE_DIR%
+    call >> "%LOG_FILE%" echo Interactive installer exit code: %%ERRORLEVEL%%
+)
+
+if not exist "%CONDA%" (
+    >> "%LOG_FILE%" echo Interactive fallback did not create %CONDA%
     echo.
     echo Miniforge %MINIFORGE_VERSION% did not install successfully at:
     echo   %MINIFORGE_DIR%
+    echo.
+    echo Setup details were written to:
+    echo   %LOG_FILE%
     echo.
     echo The downloaded installer has been kept for troubleshooting at:
     echo   %INSTALLER%
@@ -112,6 +150,7 @@ if not exist "%CONDA%" (
     goto fail
 )
 
+>> "%LOG_FILE%" echo Miniforge installation verified at %CONDA%
 if exist "%INSTALLER%" del /q "%INSTALLER%" >nul 2>&1
 
 :miniforge_ready
@@ -132,12 +171,15 @@ set "CONDARC=%CONDARC_FILE%"
 
 echo.
 echo Creating/updating the IVIVC App Python environment...
+>> "%LOG_FILE%" echo Creating/updating Conda environment at %ENV_DIR%
 if exist "%ENV_DIR%\python.exe" (
     call "%CONDA%" env update --prefix "%ENV_DIR%" --file "%ENV_FILE%" --prune -y
 ) else (
     call "%CONDA%" env create --prefix "%ENV_DIR%" --file "%ENV_FILE%" -y
 )
-if errorlevel 1 goto conda_fail
+set "CONDA_STATUS=%ERRORLEVEL%"
+>> "%LOG_FILE%" echo Conda environment command exit code: %CONDA_STATUS%
+if not "%CONDA_STATUS%"=="0" goto conda_fail
 
 if not exist "%ENV_DIR%\python.exe" (
     echo.
@@ -152,8 +194,10 @@ pushd "%APP_DIR%" >nul
 "%ENV_DIR%\python.exe" -c "import flask,numpy,pandas,scipy,sklearn,uncertainties,yaml,openpyxl,docx,plotly; from app import app; print('Python dependencies and IVIVC App imports: OK')"
 set "CHECK_STATUS=%ERRORLEVEL%"
 popd >nul
+>> "%LOG_FILE%" echo Import check exit code: %CHECK_STATUS%
 if not "%CHECK_STATUS%"=="0" goto fail
 
+>> "%LOG_FILE%" echo Setup completed successfully: %DATE% %TIME%
 echo.
 echo IVIVC App setup completed successfully.
 echo You can close this window and double-click "Start IVIVC App.bat".
@@ -171,9 +215,11 @@ echo IT/support group rather than disabling SSL verification.
 goto fail
 
 :fail
+if exist "%INSTALL_ROOT%" >> "%LOG_FILE%" echo Setup failed: %DATE% %TIME%
 echo.
 echo IVIVC App setup did not complete.
 echo Review the message above or share it with the app support contact.
+if exist "%LOG_FILE%" echo Setup log: %LOG_FILE%
 echo.
 pause
 exit /b 1
