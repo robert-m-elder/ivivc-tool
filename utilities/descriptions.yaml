@@ -99,11 +99,11 @@ relative_model_evidence_html: |-
   <p>Relative model evidence compares candidate parametric models fitted to the same dataset using the same preprocessing settings and IVIVC approach. The table is shown only for selected information-criterion metrics: AIC, AICc, and/or BIC.</p>
   <p>In this context, empirical support means that the observed data provide more support for one model than another within the displayed candidate set, based on the selected information criterion. Lower information-criterion values indicate stronger relative support. The absolute values are not quality grades, and negative values are allowed.</p>
   <p><strong>Table definitions:</strong> <strong>n</strong> is the number of fitted observations; <strong>k</strong> is the number of fitted model parameters; <strong>Delta</strong> is the difference between a model's criterion value and the lowest value in the displayed candidate set; <strong>weight</strong> is the normalized relative support for that model under the criterion; and <strong>evidence ratio</strong> compares the highest weight in the set with the model's weight. Delta values near 0 indicate similar support; larger delta values indicate lower support relative to the leading candidate under that criterion.</p>
-  <p>Similar empirical support does not mean the models are scientifically equivalent. Other considerations for choosing a final model include prediction error, cross-validation behavior, residual patterns, parameter uncertainty, model simplicity, and biological or degradation-mechanism plausibility. The app reports these summaries to support user review; it does not determine model selection or acceptability.</p>
+  <p>Similar empirical support does not mean the models are scientifically equivalent. Other considerations when documenting a user-selected model can include prediction error, cross-validation behavior, residual patterns, parameter uncertainty, model simplicity, and biological or degradation-mechanism plausibility. The app reports these summaries to support user review; it does not determine model selection or acceptability.</p>
 cross_validation_summary_html: |-
-  <p>The Cross-Validation Summary table reports mean CV scores for selected eligible metrics where cross-validation was run successfully. Ratio columns show the full-fit score divided by the cross-validation score for the same metric, and the CV comparison badge summarizes whether prediction performance on test data warrants closer review. Adjusted R² and information criteria (AIC, AICc, BIC) are excluded because the final model and cross-validation models are fitted using different data subsets. Detailed interpretation guidance is provided in the user guide.</p>
+  <p>The Cross-Validation Summary table reports mean CV scores for selected eligible metrics where cross-validation was run successfully. Ratio columns show the full-fit score divided by the cross-validation score for the same metric, and the CV comparison badge summarizes whether prediction performance on test data warrants closer review. Adjusted R² and information criteria (AIC, AICc, BIC) are excluded because the full-data model and cross-validation models are fitted using different data subsets. Detailed interpretation guidance is provided in the user guide.</p>
 goodness_validation_table_html: |-
-  <p>This table reports final scores for the fitted model for all selected metrics and mean cross-validation (CV) scores for eligible prediction metrics. Ratio rows show the full-fit score divided by the CV score for the same metric where that comparison is meaningful. Adjusted R² and information criteria (AIC, AICc, BIC) are shown for the final model but are not given CV values or ratios because the final model and cross-validation models are fitted using different data subsets. Detailed interpretation guidance is provided in the user guide.</p>
+  <p>This table reports full-data scores for the fitted model for all selected metrics and mean cross-validation (CV) scores for eligible prediction metrics. Ratio rows show the full-fit score divided by the CV score for the same metric where that comparison is meaningful. Adjusted R² and information criteria (AIC, AICc, BIC) are shown for the full-data fit but are not given CV values or ratios because the full-data and cross-validation models are fitted using different data subsets. Detailed interpretation guidance is provided in the user guide.</p>
 cv_fit_variability_html: |-
   <p>The CV fit variability plot compares the model fitted to all observations with the mean curve from the CV training-set fits. The shaded band is the pointwise mean ± one standard deviation across those CV fits. A wider band indicates that the fitted curve changes more depending on which observations are used for training. This band is a descriptive sensitivity diagnostic; it is not a confidence interval, prediction interval, or parameter-uncertainty interval.</p>
 residual_diagnostics_html: |-
@@ -164,7 +164,7 @@ analysis_parameters:
     description: Shows qualitative normal quantile-quantile (Q-Q) diagnostics when residual variation is large enough to make the plot informative. Selected by default; users can hide it for a more compact results view.
   include_cv_fit_variability_plot:
     display_name: CV fit variability (mean ± SD)
-    description: Shows the final full-data fit together with the mean and pointwise standard deviation of curves fitted to the cross-validation training subsets. The band describes sensitivity to the selected CV splits and is not a confidence or prediction interval.
+    description: Shows the full-data fit together with the mean and pointwise standard deviation of curves fitted to the cross-validation training subsets. The band describes sensitivity to the selected CV splits and is not a confidence or prediction interval.
 modal_help:
   index:
     preprocessing_overview_html: |-
@@ -179,10 +179,10 @@ modal_help:
       <p>Advanced analysis parameters control three parts of the analysis workflow:</p>
       <ul>
         <li><strong>Cross-validation:</strong> how the app checks prediction performance by repeatedly setting aside part of the data and fitting to the rest, and whether the CV fit variability plot is shown.</li>
-        <li><strong>Grid search:</strong> how the app searches for suitable starting parameter values before nonlinear least-squares fitting.</li>
+        <li><strong>Grid search:</strong> how the app searches for candidate starting parameter values before nonlinear least-squares fitting.</li>
         <li><strong>Residual diagnostics:</strong> whether raw residual (error) and normal quantile-quantile (Q-Q) plots are included in the results. Both are selected by default and can be hidden for a more compact results view.</li>
       </ul>
-      <p>The default settings are intended as reasonable starting points. Possible reasons to adjust them include small datasets, unstable fits or cross-validation results, excessive runtime, or a preference for a more compact results view.</p>
+      <p>The displayed defaults are the app's initial configuration. Settings can be adjusted for dataset characteristics, fitting or cross-validation stability, runtime, or a more compact results view.</p>
     residual_diagnostics_html: |-
       <p>Residual diagnostics help assess whether model errors show patterns that may not be apparent from fit metrics alone.</p>
       <ul>
@@ -192,7 +192,7 @@ modal_help:
       <p>Both options are selected by default. Deselect either option for a more compact results view.</p>
     cross_validation_html: |-
       <p>Cross-validation checks how selected fitted models predict data that were not used to fit that model. It is available for Approaches 1 and 2, where parametric models are fitted.</p>
-      <p>The optional <strong>CV fit variability (mean ± SD)</strong> plot evaluates each CV training-set fit over the full displayed x-range, then shows the mean curve and a pointwise ±1 SD band together with the final full-data fit. The band shows how much the fitted relationship changes across CV splits. It is not a confidence or prediction interval.</p>
+      <p>The optional <strong>CV fit variability (mean ± SD)</strong> plot evaluates each CV training-set fit over the full displayed x-range, then shows the mean curve and a pointwise ±1 SD band together with the full-data fit. The band shows how much the fitted relationship changes across CV splits. It is not a confidence or prediction interval.</p>
       <p>For time-course data, the main question is what kind of data are set aside for the prediction check. This app usually evaluates whether a fitted curve captures the overall response pattern, not whether early time points can forecast later time points. Shuffle split is the default because it provides a general robustness check of the fitted curve form. Even so, time order matters because nearby observations can be strongly related. Omitting one point is a gentle check, omitting a contiguous block is a stricter check of a time region, and shuffled splits do not preserve time order.</p>
       <ul>
         <li><strong>Shuffle split:</strong> default scheme. Repeatedly makes random training and test subsets and may be informative as a general robustness check of whether the fitted curve captures the overall response pattern. It is not time-aware and can look overly reassuring when neighboring time points are strongly related.</li>
@@ -210,11 +210,11 @@ modal_help:
         <li><strong>Parameter max:</strong> upper bound for candidate starting values.</li>
         <li><strong>Random seed:</strong> makes the random sampling of candidate starting values reproducible. Changing the seed can help if a fit appears unreasonable, because different seeds will lead to different candidate starting value sets.</li>
       </ul>
-      <p>The default settings are intended as reasonable starting points. Possible reasons to adjust them include small datasets, unstable fits, or excessive runtime.</p>
+      <p>The displayed defaults are the app's initial configuration. Settings can be adjusted for dataset characteristics, fitting stability, or runtime.</p>
   results:
     model_comparison_html: |-
       <p>This tab provides side-by-side summaries of the fitted candidate models. It includes selected metric definitions, performance metrics, cross-validation summaries, fitted parameter diagnostic badges and Relative Model Evidence where information criteria are selected.</p>
-      <p>Use the comparison tables together with the individual fitting plots, parameter diagnostics, residual plots, cross-validation behavior, and scientific expectations for the system.</p>
+      <p>The comparison tables are intended to be interpreted together with the individual fitting plots, parameter diagnostics, residual plots, cross-validation behavior, and scientific expectations for the system.</p>
       <ul>
         <li><strong>Performance Metrics:</strong> fitted-data metrics selected by the user.</li>
         <li><strong>Cross-Validation Summary:</strong> CV scores and fit/CV ratios for eligible prediction metrics.</li>

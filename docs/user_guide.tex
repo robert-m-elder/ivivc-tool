@@ -39,7 +39,7 @@ The IVIVC app requires paired in vitro and in vivo degradation data, along with 
 \item optionally, preprocessing options, such as normalization, interpolation, and scaling;
 \item selected performance metrics to display in the results and reports;
 \item optionally, cross-validation settings for applicable approaches; and
-\item grid-search settings for model initialization, where the options can usually be left to their default values.
+\item grid-search settings for model initialization, for which the app provides default values.
 \end{itemize}
 
 The sections below provide additional detail on input file structure, required data columns, preprocessing options, model selection, and optional analysis settings.
@@ -98,7 +98,7 @@ Candidate models are the mathematical equations available for fitting within the
 
 The surface erosion mass loss form is based on geometry-controlled surface erosion concepts from the erodible slab, cylinder, and sphere model \cite{hopfenberg1976}. The one-phase mass loss model uses a logistic/sigmoidal transition to represent a delayed loss phase \cite{tsoularis2002}. The two-phase mass loss model combines an early burst-like loss term with a delayed sigmoidal loss phase. Burst and delayed/multiphase behavior in degradable polymer systems is discussed in the polymer erosion and PLGA release literature \cite{gopferich1997,fredenberg2011,allison2008}. The Gompertz mass loss model is a mathematical adaptation of the modified Gompertz form originally developed for microbial growth kinetics \cite{zwietering1990}. Modified Gompertz functions have also been used as empirical models of polymer biodegradation weight-loss profiles \cite{dragomir2021}. Its inclusion in the app provides an empirical sigmoidal option with lag and maximum-rate parameters rather than a mechanistic model specific to absorbable medical-device polymers.
 
-Each mass loss model also has a less-flexible normalized version for response data already expressed on a 0--1 scale. These versions fix the baseline response level at 1 rather than estimating it. For the one-phase and Gompertz forms, the total loss magnitude is also fixed at 1, which fixes the upper and lower asymptotes at 1 and 0. The normalized surface-erosion form fixes the response at time zero at 1. The normalized two-phase form fixes the baseline level at 1 but retains separate fitted early and delayed loss magnitudes ($B$ and $D$). These constraints reduce the number of fitted parameters and are appropriate only when the fixed 0--1 response assumptions match the analyzed data. Selecting a normalized model does not itself normalize the data; use an appropriate preprocessing normalization or provide data already on the 0--1 scale.
+Each mass loss model also has a less-flexible normalized version for response data already expressed on a 0--1 scale. These versions fix the baseline response level at 1 rather than estimating it. For the one-phase and Gompertz forms, the total loss magnitude is also fixed at 1, which fixes the upper and lower asymptotes at 1 and 0. The normalized surface-erosion form fixes the response at time zero at 1. The normalized two-phase form fixes the baseline level at 1 but retains separate fitted early and delayed loss magnitudes ($B$ and $D$). These constraints reduce the number of fitted parameters and assume that the analyzed response already matches the fixed 0--1 response scale. Selecting a normalized model does not itself normalize the data; a preprocessing normalization or input data already on the 0--1 scale is therefore needed for those fixed-response assumptions to hold.
 
 \subsection{Preprocessing options}
 
@@ -147,7 +147,7 @@ Cross-validation provides an estimate of the model's ability to predict observat
 
 In this app, CV is intended as a \textbf{prediction-error diagnostic} and sensitivity check, not as a confidence interval or parameter uncertainty estimate. If the error from the model fitted to the full dataset is similar to the CV error, that provides reassurance that the fitted relationship is not overly dependent on a particular subset of observations. If the CV error is much worse, the fitted relationship might be sensitive to the available data, the selected splitting scheme, or the number and placement of time points.
 
-An optional \textbf{CV fit variability (mean $\pm$ SD)} plot provides a complementary view of that sensitivity. For every CV split that fits successfully, the app evaluates the model fitted to the training subset over the full displayed x-range. At each x-value, it calculates the mean fitted response and standard deviation across the CV fits. The plot shows the final model fitted to all observations, the mean CV-training fit, and a shaded mean $\pm$ one-standard-deviation band. A wider band indicates that the fitted curve changes more depending on which observations are included in the training data. This band summarizes variation among CV fits; it is not a confidence interval, prediction interval, or parameter-uncertainty interval. Its appearance depends on the selected CV splitting scheme and the number of successful CV fits.
+An optional \textbf{CV fit variability (mean $\pm$ SD)} plot provides a complementary view of that sensitivity. For every CV split that fits successfully, the app evaluates the model fitted to the training subset over the full displayed x-range. At each x-value, it calculates the mean fitted response and standard deviation across the CV fits. The plot shows the full-data model fitted to all observations, the mean CV-training fit, and a shaded mean $\pm$ one-standard-deviation band. A wider band indicates that the fitted curve changes more depending on which observations are included in the training data. This band summarizes variation among CV fits; it is not a confidence interval, prediction interval, or parameter-uncertainty interval. Its appearance depends on the selected CV splitting scheme and the number of successful CV fits.
 
 For time-course data, the splitting scheme matters because nearby observations can contain related information, and early, middle, and late time points can represent different parts of the degradation process. Setting aside a random subset is a general check of whether the fitted curve captures the overall response pattern, but it is less time-aware. Setting aside one time point mainly asks whether the model can recover an individual omitted observation. Setting aside a contiguous block asks whether the model can bridge a missing region of the profile.
 
@@ -172,8 +172,8 @@ The table below summarizes the schemes available in the app. The ``CV error desc
 \endhead
 Shuffle split & Prediction error for repeated random subsets of observations set aside from fitting. & Default general robustness check for whether the fitted curve captures the overall response pattern. & Not time-aware; can appear overly reassuring when nearby time points carry similar information. \\
 Leave-one-timepoint-out & Prediction error when one time point is omitted at a time; sensitivity to setting aside one observation. & Useful for very small datasets because each repeated fit still uses nearly all of the available data. & Can be a gentle test when neighboring time points have similar response values to the omitted point. \\
-Leave-contiguous-block-out & Prediction error when a block of adjacent time points is omitted; sensitivity to a gap in the observed profile. & Primary time-aware sensitivity check, especially when a missing time region is a practical concern. & Larger blocks make the test harder but can leave too few points for the model to fit stably. Start with small blocks and increase cautiously. \\
-None & No cross-validation is performed; only the model fitted to the full dataset is summarized. & Useful when there are too few observations to split meaningfully, repeated fits are numerically unstable, or the goal is simply to examine the fitted model itself. & Removes one diagnostic tool. When CV is skipped, place greater emphasis on fitted plots, residuals, final-fit metrics, parameter diagnostics, and scientific plausibility. \\
+Leave-contiguous-block-out & Prediction error when a block of adjacent time points is omitted; sensitivity to a gap in the observed profile. & Primary time-aware sensitivity check, especially when a missing time region is a practical concern. & Larger blocks make the test harder but can leave too few points for the model to fit stably. Smaller blocks retain more observations for each repeated fit. \\
+None & No cross-validation is performed; only the model fitted to the full dataset is summarized. & Useful when there are too few observations to split meaningfully, repeated fits are numerically unstable, or the goal is simply to examine the fitted model itself. & Removes one diagnostic tool. When CV is skipped, other outputs like fitted plots, residuals, full-fit metrics, parameter diagnostics, and scientific plausibility provide the remaining model-review context. \\
 \bottomrule
 \end{longtable}
 
@@ -185,7 +185,7 @@ None & No cross-validation is performed; only the model fitted to the full datas
 
 \input{includes/generated/grid_search_description.tex}
 
-The default grid-search settings can usually be left unchanged. Options for addressing unstable fitting include increasing the number of random starts, adjusting the candidate starting-value range, changing the random seed, or evaluating whether the selected model form is appropriate for the data.
+The app provides default grid-search settings as its initial configuration. Options for addressing unstable fitting include increasing the number of random starts, adjusting the candidate starting-value range, changing the random seed, or evaluating whether the selected model form describes the data adequately.
 
 \input{includes/generated/grid_search_parameter_table.tex}
 
@@ -219,7 +219,7 @@ Selected model \& summary of outputs & User-selected report summaries and option
 
 Relative model evidence tables compare candidate parametric models using information criteria (i.e., AIC, AIC\textsubscript{c}, and/or BIC), showing which models have more support from the observed data after balancing fit quality against model complexity. These comparisons are only meaningful among models fitted to the same data, with the same preprocessing settings, and within the same IVIVC approach.
 
-These tables are shown only when one or more information criteria are selected as metrics. Interpret each selected criterion separately---AIC, AIC\textsubscript{c}, and BIC can occasionally rank the same models differently. See the appendix for interpretation guidance, rules of thumb, and limitations.
+These tables are shown only when one or more information criteria are selected as metrics. Each selected criterion is interpreted separately because AIC, AIC\textsubscript{c}, and BIC can occasionally rank the same models differently. See Appendix~\ref{app:model-performance} for interpretation guidance, rules of thumb, and limitations.
 
 The relative model evidence tables contain the following quantities. 
 
@@ -247,7 +247,7 @@ Support badge & Rule-of-thumb label based on the delta value. Intended to aid us
 
 These displays show how much fitted curves or predictions vary based on the fitted model and residual error. They describe approximate model-based uncertainty and are not intended to define acceptability thresholds for regulatory submissions. Applicable credibility and evidence considerations depend on the intended use and applicable FDA guidance \cite{fda_modeling_guidance,fda_reporting_guidance}.
 
-Very large uncertainty bands can extend beyond the initial plot range and remain out of view until the plot is rescaled. When this occurs, the app displays an informational badge near the affected fitting plot. A separate warning is shown if one or more uncertainty bounds are nonfinite or the uncertainty band cannot be calculated. The badge describes the display condition but does not identify its cause; review the fitted parameter diagnostics, model form, and available data when it appears.
+Very large uncertainty bands can extend beyond the initial plot range and remain out of view until the plot is rescaled. When this occurs, the app displays an informational badge near the affected fitting plot. A separate warning is shown if one or more uncertainty bounds are nonfinite or the uncertainty band cannot be calculated. The badge describes the display condition but does not identify its cause; the fitted parameter diagnostics, model form, and available data provide context for interpreting it.
 
 The following descriptions summarize how fitted-parameter uncertainty, fitting-plot bands, and prediction error bars are calculated or interpreted for each approach.
 

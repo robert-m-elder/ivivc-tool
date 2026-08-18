@@ -24,7 +24,7 @@ In particular, AIC, AIC\textsubscript{c}, and BIC values are not comparable acro
 \textbf{Metric} & \textbf{Range / direction} & \textbf{Interpretation guidance} \\
 \midrule
 \endhead
-    \(R^2\) & Best possible value is 1. Values near 0 indicate little improvement over predicting the mean response. Can be negative if the model performs worse than the mean-response baseline. Higher is better. & Proportion of response variance explained by the model \cite{miles2014}. High \(R^2\) does not establish that the model is mechanistic, causal, predictive outside the fitted data range, or suitable for the intended use. \\
+    \(R^2\) & Best possible value is 1. Values near 0 indicate little improvement over predicting the mean response. Can be negative if the model performs worse than the mean-response baseline. Higher is better. & Proportion of response variance explained by the model \cite{miles2014}. High \(R^2\) does not establish that the model is mechanistic, causal, predictive outside the fitted data range, or adequately supported for the intended use. \\
     Adjusted \(R^2\) & Higher is better. Can be lower than \(R^2\). & Penalizes additional fitted parameters, making it more informative than \(R^2\) when comparing models of different complexity \cite{miles2014}. \\ 
     MAE & Lower is better. Units match the response units. & Mean absolute error on the response scale \cite{hodson2022}. Interpret relative to assay variability, measurement uncertainty, and the intended use. \\
     MSE & Lower is better. Units are squared response units. & Mean squared prediction error \cite{hodson2022}. Useful computationally, but less intuitive than RMSE because the units are squared. \\
@@ -34,7 +34,7 @@ In particular, AIC, AIC\textsubscript{c}, and BIC values are not comparable acro
     AIC\textsubscript{c} & Lower is better, but only relative to other comparable models. Undefined when there are too few observations relative to the number of fitted parameters. & A small-sample correction to AIC that is most relevant when the observation-to-parameter ratio is low \cite{hurvich1989, burnham2002, wagenmakers2004}; \(n/k < 40\) is a rule of thumb \cite{burnham2002}. \\
     BIC & Lower is better, but only relative to other comparable models. No fixed bounds; negative values are allowed. & Balances goodness of fit against model complexity, typically applying a stronger penalty for additional parameters than AIC \cite{schwarz1978,burnham2002,wagenmakers2004}. \\
     Cross-validation metrics & Direction follows the underlying metric: higher is better for \(R^2\)-type metrics, lower is better for error metrics. & Estimate prediction performance under the selected splitting scheme \cite{arlot2010, bergmeir2012, roberts2017, bergmeir2018}. Can help identify overfitting, instability, or sensitivity to individual observations or data splits. \\
-    Fit/CV ratio & Values near 1 indicate similar fitted and cross-validation performance. & A ratio near 1 suggests the model generalizes consistently. Substantial deviations can indicate overfitting, instability, or sensitivity to the splitting scheme, though no universal acceptance threshold exists. \\
+    Fit/CV ratio & Values near 1 indicate similar fitted and cross-validation performance. & A ratio near 1 suggests similar full-fit and cross-validation behavior. Substantial deviations can indicate overfitting, instability, or sensitivity to the splitting scheme. \\
 \bottomrule
 \end{longtable}
 
@@ -43,7 +43,7 @@ In particular, AIC, AIC\textsubscript{c}, and BIC values are not comparable acro
 
 Goodness-of-fit metrics---\(R^2\), adjusted \(R^2\), MSE, MAE, RMSE, and NRMSE---describe how well the model fits the data used to estimate its parameters. Their interpretation depends on practical context, not just numerical value. The app does not apply a universal IVIVC performance cutoff; interpretation depends on the intended use and, for regulatory contexts, applicable FDA guidance \cite{fda_modeling_guidance,fda_reporting_guidance}.
 
-Strong goodness-of-fit is encouraging but can be misleading, particularly for small datasets or models with many parameters. Excellent fit metrics do not rule out unstable parameters, poor cross-validation performance, systematic residual patterns, or a fitted curve shape that is not scientifically plausible for the degradation process being modeled.
+Strong goodness-of-fit can still be misleading, particularly for small datasets or models with many parameters. Favorable fit metrics do not rule out unstable parameters, poor cross-validation performance, systematic residual patterns, or a fitted curve shape that is not scientifically plausible for the degradation process being modeled.
 
 RMSE is often the most intuitive error metric because it is expressed in the same units as the response. NRMSE can be useful for comparing error across different response scales, but the choice of denominator changes what the metric actually measures \cite{hyndman2006}:
 
@@ -52,7 +52,7 @@ RMSE is often the most intuitive error metric because it is expressed in the sam
     \item \textbf{NRMSE normalized by the response standard deviation} answers: ``How large is the typical prediction error relative to the natural spread of the observed responses?'' This normalization is useful for gauging how much of the variability in the data the model fails to capture. A value approaching or exceeding 1 indicates that the typical prediction error is as large as the spread of the data itself, suggesting the model explains little of the observed variability, analogous to an $R^2$ near zero.
 \end{itemize}
 
-Take care when comparing NRMSE values across datasets or response scales if the normalization method differs. More broadly, the practical importance of a given error level depends on context: a numerically small error may still matter when the relevant degradation endpoint has narrow variation, while a larger error may be less consequential during exploratory model development when high predictive precision is not central to the analysis.
+NRMSE values are not directly comparable across datasets or response scales when the normalization method differs. More broadly, the practical importance of a given error level depends on context: a numerically small error may still matter when the relevant degradation endpoint has narrow variation, while a larger error may be less consequential during exploratory model development when high predictive precision is not central to the analysis.
 
 
 \subsection{Interpreting relative model evidence}
@@ -80,7 +80,7 @@ where $\Delta_i$ is the delta value for model $i$ and $J$ is the number of candi
 
 \subsubsection*{When multiple models have similar support}
 
-If several models have similar delta values or weights, relative support alone is not sufficient to choose among them. Other considerations include model simplicity, parameter plausibility, residual behavior, cross-validation performance, and scientific interpretability.
+If several models have similar delta values or weights, additional considerations can include model simplicity, parameter plausibility, residual behavior, cross-validation performance, and scientific interpretability.
 
 
 \subsection{Interpreting cross-validation performance}
@@ -95,7 +95,7 @@ These distinctions matter because adjacent time points in a degradation profile 
 
 \subsubsection*{Interpreting results for small IVIVC datasets}
 
-For the small datasets typical in IVIVC development, cross-validation results are intended as an exploratory diagnostic or sensitivity analysis rather than a definitive performance benchmark. Compare the CV metric with the corresponding metric for the model fitted to the full dataset, but also consider whether the chosen splitting pattern reflects the practical prediction question of interest.
+For the small datasets typical in IVIVC development, cross-validation results are intended as an exploratory diagnostic or sensitivity analysis rather than a definitive performance benchmark. Interpretation can include comparison of the CV metric with the corresponding metric for the model fitted to the full dataset together with whether the chosen splitting pattern reflects the practical prediction question of interest.
 
 For example, strong leave-one-timepoint-out performance alongside weaker leave-contiguous-block-out performance may indicate that the model can interpolate individual missing points well, but becomes less reliable when an entire local region of the profile is absent from fitting. The importance of that distinction depends on the intended use of the model. For credibility assessment in the context of regulatory submissions, see FDA guidance on computational modeling credibility and reporting \cite{fda_modeling_guidance,fda_reporting_guidance}.
 
@@ -103,9 +103,9 @@ For example, strong leave-one-timepoint-out performance alongside weaker leave-c
 
 Average CV performance metrics summarize prediction performance across the held-out observations and CV splits, but they do not show how much the fitted curve itself changes from one training subset to another. Two models can therefore have similar average CV errors even when one produces nearly the same fitted relationship across splits and the other changes appreciably depending on which observations are withheld.
 
-The optional CV fit variability plot provides this complementary information by showing the final fit to all observations together with the mean fitted curve and mean $\pm$ one standard deviation across the successful CV training-set fits. A narrow band indicates that the fitted relationship changes relatively little across the CV splits. A wider band, or widening confined to a particular part of the curve, identifies regions where the fitted relationship is more sensitive to the training data, suggesting that additional data in that region may be particularly informative. A noticeable difference between the mean CV fit and the final fit can likewise indicate that repeatedly leaving out observations changes the fitted relationship in a systematic way.
+The optional CV fit variability plot provides this complementary information by showing the full-data fit together with the mean fitted curve and mean $\pm$ one standard deviation across the successful CV training-set fits. A narrow band indicates that the fitted relationship changes relatively little across the CV splits. A wider band, or widening confined to a particular part of the curve, identifies regions where the fitted relationship is more sensitive to the training data, suggesting that additional data in that region may be particularly informative. A noticeable difference between the mean CV fit and the full-data fit can likewise indicate that repeatedly leaving out observations changes the fitted relationship in a systematic way.
 
-The band is a descriptive sensitivity diagnostic, not a confidence interval, prediction interval, or parameter-uncertainty interval. Its appearance depends on the selected CV scheme and the number of successful CV fits, so interpret it together with the average CV metrics and the prediction task represented by the chosen splitting scheme.
+The band is a descriptive sensitivity diagnostic, not a confidence interval, prediction interval, or parameter-uncertainty interval. Its appearance depends on the selected CV scheme and the number of successful CV fits; interpretation therefore also depends on the average CV metrics and the prediction task represented by the chosen splitting scheme.
 
 \subsubsection*{Fit/CV ratios}
 
@@ -128,11 +128,11 @@ These thresholds are heuristic review aids to help flag results that warrant clo
 The app does not include adjusted $R^2$, information criteria (AIC, AIC\textsubscript{c}, and BIC), or normalized RMSE (NRMSE) in cross-validation comparison tables. The reason is that these metrics are not directly comparable across fits that use different numbers of observations:
 
 \begin{itemize}
-    \item \textbf{Adjusted $R^2$ and information criteria} incorporate the number of observations or fitted parameters as part of their calculation. Because the final model and each cross-validation model are fitted to different subsets of the data, these quantities are not on the same scale and are not directly comparable.
-    \item \textbf{NRMSE} is normalized by a factor that generally differs across subsets. This means the final-fit and CV values can have different denominators, making a direct comparison misleading.
+    \item \textbf{Adjusted $R^2$ and information criteria} incorporate the number of observations or fitted parameters as part of their calculation. Because the full-data model and each cross-validation model are fitted to different subsets of the data, these quantities are not on the same scale and are not directly comparable.
+    \item \textbf{NRMSE} is normalized by a factor that generally differs across subsets. This means the full-fit and CV values can have different denominators, making a direct comparison misleading.
 \end{itemize}
 
-Use the eligible cross-validation metrics to assess prediction behavior during CV. The ineligible CV metrics remain available for evaluating and comparing fitted models. Note that not all eligible metrics are available for every cross-validation scheme. Some metrics require more than one observation to be defined or stable. For example, \(R^2\) cannot be calculated for a single omitted point and will be unavailable under leave-one-timepoint-out CV. Where a metric is unavailable for the selected scheme, rely on the metrics that are reported.
+Eligible cross-validation metrics summarize prediction behavior during CV, while the ineligible CV metrics remain available for evaluating and comparing fitted models. Not all eligible metrics are available for every cross-validation scheme because some require more than one observation to be defined or stable. For example, \(R^2\) cannot be calculated for a single omitted point and will be unavailable under leave-one-timepoint-out CV; interpretation then depends on the metrics that are reported.
 
 
 \subsection{Interpreting residual diagnostics}
@@ -141,7 +141,7 @@ Residuals are the differences between observed and predicted values (i.e., the e
 
 \subsubsection*{Residual-vs-time plots}
 
-Residuals are plotted in the same units as the fitted response. The axis covers the largest absolute residual for each model but is not allowed to shrink below a small fraction of the observed response range. This minimum prevents extremely small numerical residuals from being expanded to fill the plot and appearing more important than they are. To compare model performance, use an overall error metric like RMSE or MAE rather than residual plots.
+Residuals are plotted in the same units as the fitted response. The axis covers the largest absolute residual for each model but is not allowed to shrink below a small fraction of the observed response range. This minimum prevents extremely small numerical residuals from being expanded to fill the plot and appearing more important than they are. Overall error metrics such as RMSE or MAE provide a more direct comparison of error magnitude across models than residual plots.
 
 \subsubsection*{Q-Q plots}
 
@@ -156,14 +156,14 @@ Residual diagnostics are intended for qualitative review---by eye---rather than 
     \item Clustering, where residuals at adjacent time points are consistently on the same side of zero.
 \end{itemize}
 
-When any of these patterns appear, consider whether a different model form or a transformed (i.e., normalized or scaled) response might better describe the underlying relationship. 
+When any of these patterns appear, they can motivate evaluation of whether a different model form or a transformed (i.e., normalized or scaled) response better describes the underlying relationship.
 
 
 \subsection{Interpreting parameter uncertainty}
 
 Model parameters cannot always be estimated precisely from the available data. The app reports each parameter estimate $\pm$ 95\% confidence interval. The plus-minus value represents the confidence interval half-width around the estimate. In practical terms, a wide interval means the data do not pin down that parameter precisely, while a narrow interval means the estimate is more stable.
 
-The interval is calculated from the fitted model’s covariance matrix and residual degrees of freedom. This calculation estimates uncertainty from the behavior of the model near the fitted parameter values. For nonlinear models, especially with small datasets, the true uncertainty can be wider, asymmetric, or more strongly affected by relationships among parameters than the reported interval suggests. Interpret the interval together with the relative standard errors, parameter-coupling diagnostics, fitted curves, and scientific plausibility rather than treating it as a precise boundary for the parameter. For a practical overview of nonlinear regression and interpretation of fitted results, see \cite{motulsky1987}. For a technical treatment of covariance-based parameter uncertainty and approximate confidence intervals in nonlinear least-squares models, see \cite{bates2007}.
+The interval is calculated from the fitted model's covariance matrix and residual degrees of freedom. This calculation estimates uncertainty from the behavior of the model near the fitted parameter values. For nonlinear models, especially with small datasets, the true uncertainty can be wider, asymmetric, or more strongly affected by relationships among parameters than the reported interval suggests. The interval is most informative when considered together with the relative standard errors, parameter-coupling diagnostics, fitted curves, and scientific plausibility rather than as a precise boundary for the parameter. For a practical overview of nonlinear regression and interpretation of fitted results, see \cite{motulsky1987}. For a technical treatment of covariance-based parameter uncertainty and approximate confidence intervals in nonlinear least-squares models, see \cite{bates2007}.
 
 The app summarizes parameter uncertainty using informational badges as screening aids, not acceptance criteria. They highlight fitted-parameter uncertainty that may affect interpretation or prediction.
 
@@ -181,9 +181,9 @@ Parameter coupling / correlation & How strongly pairs of parameter estimates mov
 \bottomrule
 \end{longtable}
 
-If no parameter uncertainty concerns are flagged, the app did not detect large relative standard errors or strong parameter coupling under these screening checks. This does not establish mechanistic correctness, predictive adequacy for a particular use, or regulatory acceptability. Conversely, a coupling or warning badge does not by itself establish that a model is unsuitable; rather, it identifies parameter behavior that can be reviewed alongside the fitted curves, residuals, cross-validation behavior, and scientific plausibility.
+If no parameter uncertainty concerns are flagged, the app did not detect large relative standard errors or strong parameter coupling under these screening checks. This does not establish mechanistic correctness, predictive adequacy for a particular use, or regulatory acceptability. Conversely, a coupling or warning badge does not by itself determine whether the model can support a particular use; rather, it identifies parameter behavior that can be reviewed alongside the fitted curves, residuals, cross-validation behavior, and scientific plausibility.
 
-Parameter uncertainty deserves particular attention when a model will be interpreted mechanistically, used to extrapolate beyond the observed data range, or used to compare degradation behavior across materials, processes, or test conditions. In these situations, review whether the reported intervals are wide, parameters are strongly coupled, fitted parameter values are extreme or scientifically implausible, or small changes in the data or fitting settings produce substantially different estimates. Strong fit metrics alone may not be sufficient to address concerns about poorly estimated parameters or scientifically implausible values; these aspects warrant separate review.
+Parameter uncertainty deserves particular attention when a model will be interpreted mechanistically, used to extrapolate beyond the observed data range, or used to compare degradation behavior across materials, processes, or test conditions. In these situations, relevant considerations include whether the reported intervals are wide, parameters are strongly coupled, fitted parameter values are extreme or scientifically implausible, or small changes in the data or fitting settings produce substantially different estimates. Strong fit metrics alone may not be sufficient to address concerns about poorly estimated parameters or scientifically implausible values; these aspects warrant separate review.
 
 
 \subsection{Considering model complexity}
@@ -212,7 +212,7 @@ The following is one possible sequence of review steps for illustrative referenc
     \item Review relative model evidence using information criteria to compare fit quality against model complexity.
     \item Review fitted-parameter estimates, 95\% confidence intervals, uncertainty diagnostics, and scientific plausibility.
     \item Consider whether model complexity is justified by the available data and the degradation mechanism.
-    \item Document the user-selected final model based on a balance of statistical performance, scientific plausibility, and intended use.
+    \item Document the rationale for the user-selected model based on a balance of statistical performance, scientific plausibility, and intended use.
 \end{enumerate}
 
 
@@ -245,7 +245,7 @@ The following questions illustrate considerations that a user might explore. The
         \item Are individual parameter values being interpreted mechanistically, or is the model being used mainly to describe the overall curve shape?
     \end{itemize}
 
-    A model can have a visually reasonable fitted curve while still having uncertain or coupled parameters. In that case, the curve may be useful for empirical description within the observed data range. Interpret individual parameter values cautiously.
+    A model can have a fitted curve that closely follows the observed data while still having uncertain or coupled parameters. In that case, the curve may be useful for empirical description within the observed data range. Interpret individual parameter values cautiously.
 
     \item \textbf{Is the model unnecessarily complex?}
     \begin{itemize}
@@ -264,16 +264,16 @@ The following questions illustrate considerations that a user might explore. The
 
     A statistically competitive model may still warrant additional rationale if its shape, parameter values, or extrapolated behavior conflict with the known degradation process.
 
-    \item \textbf{Is the model appropriate for the intended use?}
+    \item \textbf{How does the intended use affect interpretation of the model?}
     \begin{itemize}
         \item Is the model being used for exploratory analysis, interpolation, prediction, comparison across conditions, or support for a regulatory rationale?
         \item How does the level of uncertainty affect interpretation for that purpose?
         \item Are the model's limitations clearly documented?
-        \item Would an independent reviewer understand the rationale for selecting this model over reasonable alternatives?
+        \item Would an independent reviewer understand the rationale for selecting this model over other candidate models?
     \end{itemize}
 \end{enumerate}
 
-Potential elements of a final model rationale include fitted performance, cross-validation behavior, relative empirical support, parameter diagnostics, residual behavior, scientific plausibility, and intended use.
+Potential elements of a model-selection rationale include fitted performance, cross-validation behavior, relative empirical support, parameter diagnostics, residual behavior, scientific plausibility, and intended use.
 
 
 \subsection{Example interpretation statements}
@@ -282,7 +282,7 @@ The following passages illustrate how model results might be described in a tech
 
 \begin{itemize}
     \item Model A had the lowest RMSE and highest adjusted $R^2$ among the evaluated models, indicating the strongest goodness-of-fit under the selected preprocessing conditions.
-    \item Model A was selected over the more complex Model B because both models showed similar fit and AIC\textsubscript{c} support (Delta AIC\textsubscript{c} $<2$), indicating that the additional complexity of Model B was not justified by the data.
+    \item Model A was selected over the more complex Model B because both models showed similar fit and AIC\textsubscript{c} support (Delta AIC\textsubscript{c} $<2$), so the observed data provided little additional support for the added complexity of Model B.
     \item Although Model C had strong goodness-of-fit, its cross-validation error was substantially higher than its fitted error, suggesting sensitivity to which observations were included in fitting.
     \item Residuals for Model A were scattered around zero without obvious systematic patterns, consistent with a model form that captures the observed data.
     \item Model B showed a systematic trend in the residuals across time, suggesting the selected model form does not fully capture the degradation profile.

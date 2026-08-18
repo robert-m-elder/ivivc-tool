@@ -367,11 +367,11 @@
             <p><strong>Method:</strong></p>
             <ul>
                 <li>Fits the selected model form independently to each dataset.</li>
-                <li>Can calculate predictions using fitted response ratios or fitted time constants, when available.</li>
+                <li>Can generate predictions using fitted response ratios, fitted time constants when available, or observed-response inverse mapping through the fitted in vivo curve.</li>
                 <li>Does not require matching time points or response values; interpolation is not used for Approach 2 fitting.</li>
             </ul>
-            <p><strong>Useful when:</strong> datasets have different time scales or sampling schedules, or when a specific degradation-curve shape is scientifically meaningful for both datasets.</p>
-            <p>Mass-loss models labeled <strong>Normalized 0-1</strong> use fewer fitted parameters by fixing response levels that are already defined by 0-1 normalization. Select these variants only when the analyzed response is on that scale.</p>
+            <p><strong>May be relevant when:</strong> datasets have different time scales or sampling schedules, or when a specific degradation-curve shape is scientifically meaningful for both datasets.</p>
+            <p>Mass-loss models labeled <strong>Normalized 0-1</strong> use fewer fitted parameters by fixing response levels defined by a 0-1 response scale. These variants assume that the analyzed response is already on that scale.</p>
         </div>
 
         <div id="approach3-help-content">
@@ -384,7 +384,7 @@
                 <li>Provides two scaling options for predictions.</li>
                 <li>Does not assume a specific equation for the degradation pattern.</li>
             </ul>
-            <p><strong>Useful when:</strong> the analysis is exploratory, a simple equation does not describe the observed pattern well, or a direct data-based mapping is preferred.</p>
+            <p><strong>May be relevant when:</strong> the analysis is exploratory, a simple equation does not describe the observed pattern well, or a direct data-based mapping is preferred.</p>
         </div>
 <div id="preprocessing-help-content">
             <h4>Data Preprocessing</h4>
@@ -438,8 +438,8 @@
         </div>
 <div id="metrics-help-content">
             <h4>Performance Metrics</h4>
-            <p>Choose metrics that match the question you want the results to answer. The selected metric definitions are included in the report.</p>
-            <p>The default set gives a compact starting point: <strong>R²</strong> is familiar and summarizes how closely the fitted curve follows the observed pattern; <strong>RMSE</strong> reports typical error in the original response units; and <strong>AICc</strong> helps compare fitted candidate models while penalizing unnecessary complexity, with a correction that is useful for smaller datasets.</p>
+            <p>Different metrics summarize different aspects of model performance, and the selected metric definitions are included in the report.</p>
+            <p>The default set is a compact software starting configuration: <strong>R²</strong> summarizes how closely the fitted curve follows the observed pattern; <strong>RMSE</strong> reports typical error in the original response units; and <strong>AICc</strong> compares fitted candidate models while penalizing additional complexity, with a correction that is useful for smaller datasets. These defaults do not establish preferred analysis choices.</p>
             <ul>
                 {% for metric in metric_description_rows %}
                 <li><strong>{{ metric.name }}:</strong> {{ metric.description }} {% if metric.direction %}<em>{{ metric.direction }}.</em>{% endif %}</li>

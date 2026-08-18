@@ -962,7 +962,7 @@
             <p><strong>Interpolation displays:</strong> the by-time plot shows response values estimated at shared times; the by-response-value plot shows times estimated at shared response values. Approach 1 uses the by-response-value representation, Approach 3 uses both representations, and Approach 2 fits each preprocessed observed dataset independently without interpolation.</p>
             <h4>Grid-search initialization</h4>
             {{ grid_search_description_html | safe }}
-            <p><strong>For model review:</strong> Review both interpolation plots when using Approach 1 or 3. Sparse overlap or implausible interpolation may indicate that the selected interpolation option is not suitable for the available data.</p>
+            <p><strong>For model review:</strong> Both interpolation plots can provide context for Approaches 1 and 3. Sparse overlap or interpolation that is inconsistent with the observed data may indicate limitations of the selected interpolation option for the available data.</p>
         </div>
 <div id="model-comparison-help-content">
             <h4>Model Comparison</h4>
@@ -1008,10 +1008,10 @@
             </ul>
             <h4>Uncertainty and fitting plot bands</h4>
             {{ approach_descriptions['approach3']['fit_uncertainty_html'] | safe }}
-            <p><strong>For Model Selection:</strong></p>
+            <p><strong>Interpretation considerations:</strong></p>
             <ul>
-<li>Identify <strong>trends or patterns</strong> that could inform model-based correlation strategies</li>
-<li>Consider this approach when <strong>model-based methods fail</strong> or show poor fits</li>
+<li>The direct mappings can show <strong>trends or patterns</strong> that may inform comparison with model-based correlation strategies.</li>
+<li>Approach 3 may be relevant when a simple parametric model does not describe the observed pattern well or when a direct data-based mapping is preferred.</li>
             </ul>
         </div>
 <div id="prediction-approach1-help-content">
@@ -1027,16 +1027,17 @@
 
         <div id="prediction-approach2-help-content">
             <h4>Approach 2: Prediction Results</h4>
-            <p>Shows predictions using independent model ratios:</p>
+            <p>Shows predictions using the independently fitted in vitro and in vivo model family:</p>
             <ul>
-                <li><strong>Input Data:</strong> Your in vitro prediction dataset</li>
-                <li><strong>Predicted Data:</strong> In vivo predictions where the in vitro time in the prediction dataset has been scaled using either:
+                <li><strong>Input Data:</strong> Your in vitro prediction dataset.</li>
+                <li><strong>Prediction methods:</strong>
                     <ul>
-                        <li>the ratio of the in vivo/in vitro times from the fitted models that correspond to the in vitro prediction response values; or</li>
-                        <li>the ratio of the time constants, if available.</li>
+                        <li>response-value ratio rescaling using the fitted in vivo/in vitro response ratio;</li>
+                        <li>time-constant-ratio rescaling, when both fitted time constants are available; or</li>
+                        <li>observed-response inverse mapping, which maps each new observed in vitro response to the corresponding time on the fitted in vivo calibration curve.</li>
                     </ul>
                 </li>
-                <li><strong>Fitted Models:</strong> Both in vitro and in vivo model curves</li>
+                <li><strong>Fitted Models:</strong> Both in vitro and in vivo model curves.</li>
 </ul>
             <h4>Error propagation and uncertainty</h4>
             {{ approach_descriptions['approach2']['prediction_error_html'] | safe }}
@@ -1060,10 +1061,10 @@
             <ul>
                 <li><strong>User selection:</strong> the app does not rank or recommend a model in this tab. The first option is only the initial UI default.</li>
                 <li><strong>Fit-only reports:</strong> if no prediction dataset was supplied, the selector lists only approach/model combinations and omits prediction-method choices.</li>
-                <li><strong>Prediction reports:</strong> if prediction data were supplied, the selector also lists available prediction methods such as response-value ratio or time-constant-ratio rescaling.</li>
+                <li><strong>Prediction reports:</strong> if prediction data were supplied, the selector also lists available prediction methods such as response-value-ratio rescaling, time-constant-ratio rescaling, or observed-response inverse mapping.</li>
                 <li><strong>Report summary:</strong> includes preprocessing choices, analysis settings, method description, relevant plots, parameter estimates, goodness-of-fit statistics, and uncertainty/error-bar assumptions.</li>
                 <li><strong>Word export:</strong> creates an editable .docx from the selected report content. Plotly figures are exported as static images and embedded in the Word file.</li>
-                <li><strong>Manual review:</strong> confirm that plots, residuals, parameter uncertainty, cross-validation behavior, and scientific expectations support the chosen model.</li>
+                <li><strong>Manual review:</strong> plots, residuals, parameter uncertainty, cross-validation behavior, and scientific expectations can be considered together when documenting the rationale for the user-selected model.</li>
             </ul>
         </div>
 
