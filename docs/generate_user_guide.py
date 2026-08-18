@@ -311,12 +311,24 @@ def build_approach_model_table() -> str:
         model_names = [models[m].get("display_name", m) for m in approach_info.get("models", []) if m in models]
         model_text = ", ".join(model_names) if model_names else "No parametric model selection"
         method_text = html_to_text(desc.get("method_html", ""))
+        paragraphs = [p.strip() for p in re.split(r"\n\s*\n", method_text) if p.strip()]
+        if len(paragraphs) > 1:
+            description_text = "\n\n".join(paragraphs[:-1])
+            relevance_text = paragraphs[-1]
+        else:
+            description_text = method_text
+            relevance_text = ""
         approach_rows.append([
             desc.get("title", approach_info.get("display_name", approach_key)),
-            method_text,
+            description_text,
+            relevance_text,
             model_text,
         ])
-    return latex_table(["Approach", "Description", "Available models"], approach_rows, ["0.18\\textwidth", "0.46\\textwidth", "0.28\\textwidth"])
+    return latex_table(
+        ["Approach", "Description", "May be relevant when", "Available models"],
+        approach_rows,
+        ["0.14\\textwidth", "0.31\\textwidth", "0.22\\textwidth", "0.25\\textwidth"],
+    )
 
 
 def build_candidate_model_functional_forms_table() -> str:
@@ -341,10 +353,17 @@ def build_candidate_model_functional_forms_table() -> str:
 def build_preprocessing_options() -> str:
     parts: list[str] = []
     for category in ["normalization", "scaling", "interpolation"]:
-        parts.append(latex_section(2, category.title()))
+        parts.append(latex_section(3, category.title()))
+        guide_intro = PREPROCESSING_DESCRIPTIONS.get(category, {}).get("_guide_intro", "")
+        if guide_intro:
+            parts.append(latex_paragraphs(guide_intro))
         keys = list(preprocessing_options.get(category, {}).keys())
         if not keys:
-            keys = list(PREPROCESSING_DESCRIPTIONS.get(category, {}).keys())
+            keys = [
+                key
+                for key in PREPROCESSING_DESCRIPTIONS.get(category, {}).keys()
+                if not str(key).startswith("_")
+            ]
         rows = [[preprocessing_label(category, key), key, preprocessing_description(category, key)] for key in keys]
         parts.append(latex_table(["Option", "Internal key", "Description"], rows, ["0.22\\textwidth", "0.20\\textwidth", "0.50\\textwidth"]))
     return "".join(parts)

@@ -195,7 +195,7 @@ When two models have similar fit and similar empirical support, model simplicity
 
 \subsection{Scientific plausibility and intended use}
 
-Statistical performance alone is not sufficient to evaluate a model. Scientific plausibility also depends on what is known about the polymer, degradation mechanism, and test conditions. A model that is statistically competitive but produces a fitted shape, parameter values, or extrapolated behavior that conflicts with known degradation behavior may be difficult to justify regardless of its metrics.
+Statistical performance alone is not sufficient to evaluate a model. Scientific plausibility also depends on what is known about the polymer, degradation mechanism, and test conditions. A model that is statistically competitive but produces a fitted shape, parameter values, or extrapolated behavior that conflicts with known degradation behavior may warrant additional rationale regardless of its metrics.
 
 The intended use of the model---including whether it will inform a regulatory submission---affects the type and depth of supporting evidence that may be relevant. Applicable considerations are described in FDA guidance on computational modeling credibility and reporting \cite{fda_modeling_guidance,fda_reporting_guidance}.
 
@@ -220,62 +220,58 @@ The following is one possible sequence of review steps for illustrative referenc
 
 The following questions illustrate considerations that a user might explore. They do not define a required review process or imply that each question must be addressed in a regulatory submission.
 
-\subsubsection{Does the model describe the observed data well?}
+\begin{enumerate}
+    \item \textbf{Does the model describe the observed data well?}
+    \begin{itemize}
+        \item Does the fitted curve follow the main trend in the data?
+        \item How do performance metrics such as $R^2$, RMSE, and NRMSE compare in the context of the intended use?
+        \item How large is the prediction error relative to assay variability, measurement uncertainty, or the degradation endpoint being evaluated?
+        \item Are there regions where the model consistently overpredicts or underpredicts?
+    \end{itemize}
 
-\begin{itemize}
-    \item Does the fitted curve follow the main trend in the data?
-    \item Are performance metrics such as $R^2$, RMSE, and NRMSE reasonable for the intended use?
-    \item Is the prediction error small enough to be meaningful relative to assay variability, measurement uncertainty, or the degradation endpoint being evaluated?
-    \item Are there regions where the model consistently overpredicts or underpredicts?
-\end{itemize}
+    \item \textbf{Does the model generalize beyond the fitted data?}
+    \begin{itemize}
+        \item Are cross-validation metrics similar to the metrics for the model fitted to the full dataset, and are fit/CV ratios near 1?
+        \item Could the cross-validation result be sensitive to the splitting scheme, number of observations, or a small number of influential points?
+        \item If cross-validation performance is poor, how does that affect interpretation of the model for its intended purpose, including whether a simpler or more stable form may warrant consideration?
+    \end{itemize}
 
-\subsubsection{Does the model generalize beyond the fitted data?}
+    \item \textbf{Are the model parameters interpretable and stable?}
+    \begin{itemize}
+        \item Are the fitted parameter values scientifically plausible?
+        \item What do the 95\% confidence intervals indicate about the precision of the parameter estimates?
+        \item Are any parameters strongly coupled---meaning different combinations of parameter values could produce a similar fitted curve?
+        \item If coupling is present, does it coincide with large parameter uncertainty or an identifiability caution?
+        \item Are individual parameter values being interpreted mechanistically, or is the model being used mainly to describe the overall curve shape?
+    \end{itemize}
 
-\begin{itemize}
-    \item Are cross-validation metrics similar to the metrics for the model fitted to the full dataset, and are fit/CV ratios near 1?
-    \item Could the cross-validation result be sensitive to the splitting scheme, number of observations, or a small number of influential points?
-    \item If cross-validation performance is poor, is the model still useful as an exploratory description, or would a simpler or more stable model be more appropriate?
-\end{itemize}
+    A model can have a visually reasonable fitted curve while still having uncertain or coupled parameters. In that case, the curve may be useful for empirical description within the observed data range. Interpret individual parameter values cautiously.
 
-\subsubsection{Are the model parameters interpretable and stable?}
+    \item \textbf{Is the model unnecessarily complex?}
+    \begin{itemize}
+        \item Does the more complex model improve fit, cross-validation behavior, or relative model evidence enough to support the added parameters?
+        \item Do AIC, AIC\textsubscript{c}, or BIC provide support for the additional complexity within the candidate model set?
+        \item If two models perform similarly, how do model simplicity and scientific plausibility contribute to the rationale for the selected model?
+        \item Does the dataset contain enough observations to inform the fitted parameters?
+    \end{itemize}
 
-\begin{itemize}
-    \item Are the fitted parameter values scientifically plausible?
-    \item Are the 95\% confidence intervals narrow enough that the parameter estimates appear reasonably precise?
-    \item Are any parameters strongly coupled---meaning different combinations of parameter values could produce a similar fitted curve?
-    \item If coupling is present, does it coincide with large parameter uncertainty or an identifiability caution?
-    \item Are individual parameter values being interpreted mechanistically, or is the model being used mainly to describe the overall curve shape?
-\end{itemize}
+    \item \textbf{Is the model scientifically plausible?}
+    \begin{itemize}
+        \item Is the fitted curve shape consistent with expected polymer degradation behavior?
+        \item How do the model assumptions align with the material, test conditions, and degradation endpoint?
+        \item How does the model behave near the edges of the observed data range, and how would that behavior affect interpolation or extrapolation?
+    \end{itemize}
 
-A model can have a visually reasonable fitted curve while still having uncertain or coupled parameters. In that case, the curve may be useful for empirical description within the observed data range. Interpret individual parameter values cautiously.
+    A statistically competitive model may still warrant additional rationale if its shape, parameter values, or extrapolated behavior conflict with the known degradation process.
 
-\subsubsection{Is the model unnecessarily complex?}
-
-\begin{itemize}
-    \item Does the more complex model improve fit, cross-validation behavior, or relative model evidence enough to justify the added parameters?
-    \item Do AIC, AIC\textsubscript{c}, or BIC support the additional complexity within the candidate model set?
-    \item If two models perform similarly, is the simpler one easier to explain and justify?
-    \item Does the dataset contain enough observations to support the number of fitted parameters?
-\end{itemize}
-
-\subsubsection{Is the model scientifically plausible?}
-
-\begin{itemize}
-    \item Is the fitted curve shape consistent with expected polymer degradation behavior?
-    \item Are the model assumptions reasonable for the material, test conditions, and degradation endpoint?
-    \item Does the model behave plausibly near the edges of the observed data range, and would it remain plausible if used for interpolation or extrapolation?
-\end{itemize}
-
-A statistically competitive model may still be difficult to justify if its shape, parameter values, or extrapolated behavior conflict with the known degradation process.
-
-\subsubsection{Is the model appropriate for the intended use?}
-
-\begin{itemize}
-    \item Is the model being used for exploratory analysis, interpolation, prediction, comparison across conditions, or support for a regulatory rationale?
-    \item Is the level of uncertainty acceptable for that purpose?
-    \item Are the model's limitations clearly documented?
-    \item Would an independent reviewer understand why this model was selected over reasonable alternatives?
-\end{itemize}
+    \item \textbf{Is the model appropriate for the intended use?}
+    \begin{itemize}
+        \item Is the model being used for exploratory analysis, interpolation, prediction, comparison across conditions, or support for a regulatory rationale?
+        \item How does the level of uncertainty affect interpretation for that purpose?
+        \item Are the model's limitations clearly documented?
+        \item Would an independent reviewer understand the rationale for selecting this model over reasonable alternatives?
+    \end{itemize}
+\end{enumerate}
 
 Potential elements of a final model rationale include fitted performance, cross-validation behavior, relative empirical support, parameter diagnostics, residual behavior, scientific plausibility, and intended use.
 

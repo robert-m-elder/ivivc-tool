@@ -31,9 +31,9 @@ Approach 3: Direct Mapping & Uses response-at-shared-time and time-at-shared-res
 
 Candidate model & A mathematical form considered for fitting within an applicable analysis approach. Candidate models can differ in shape, number of parameters, and flexibility. \\
 
-Confidence interval (parameter) & Approximate range used to summarize uncertainty in a fitted parameter. The app reports each parameter as the estimate \(\pm\) the half-width of a 95\% confidence interval when the required covariance information is available. \\
-
 %Confidence interval half-width & Distance from a parameter estimate to either endpoint of the reported symmetric confidence interval. This is the value shown after the \(\pm\) sign in the app. \\
+
+Confidence interval (parameter) & Approximate range used to summarize uncertainty in a fitted parameter. The app reports each parameter as the estimate \(\pm\) the half-width of a 95\% confidence interval when the required covariance information is available. \\
 
 Covariance matrix & Matrix calculated from the fitted model that summarizes approximate parameter variances and how parameter estimates vary together. It is used for parameter standard errors, confidence intervals, and parameter-correlation diagnostics. \\
 
@@ -91,9 +91,9 @@ Model parameter & Numerical quantity in a model equation that is estimated from 
 
 Normalization & Preprocessing that expresses response values relative to a reference, such as the first response value or the observed minimum and maximum, so datasets can be compared on a common relative scale. \\
 
-Observed-response inverse mapping & Approach 2 prediction method that maps each observed in vitro prediction response to the time at which the fitted in vivo calibration curve reaches that response. The app restricts the inverse to a one-to-one fitted curve over the observed in vivo calibration time range and does not extrapolate response values outside that fitted range. Approximate 95\% inverse-prediction intervals combine fitted in vivo parameter uncertainty with an assumed response uncertainty equal to the in vivo fit's residual standard error. \\
-
 %NRMSE (normalized root mean squared error) & RMSE divided by a selected normalization factor, such as the response mean or standard deviation. Interpretation depends on the normalization method used. \\
+
+Observed-response inverse mapping & Approach 2 prediction method that maps each observed in vitro prediction response to the time at which the fitted in vivo calibration curve reaches that response. The app restricts the inverse to a one-to-one fitted curve over the observed in vivo calibration time range and does not extrapolate response values outside that fitted range. Approximate 95\% inverse-prediction intervals combine fitted in vivo parameter uncertainty with an assumed response uncertainty equal to the in vivo fit's residual standard error. \\
 
 Overfitting & Situation in which a model's flexibility allows it to follow random variation in the fitted data rather than only the underlying relationship. Overfitting can appear as excellent full-fit metrics accompanied by poorer CV performance or unstable parameters. \\
 
@@ -115,8 +115,6 @@ Prediction error & Difference between an observed response and the corresponding
 
 Preprocessing & Operations applied to uploaded data before fitting, comparison, or prediction. In this app, preprocessing can include normalization, scaling, and interpolation. \\
 
-Shared-grid interpolation & Interpolation option that estimates response values at the union of observed time points and estimates times at the union of observed response values. Estimates outside the overlapping range are unavailable. \\
-
 Q--Q plot (quantile--quantile plot) & Graph that compares ordered standardized residuals with the quantiles expected from a normal distribution. It is used as a qualitative diagnostic for residual-distribution shape. \\
 
 %\(R^2\) (coefficient of determination) & Measure of how much of the observed response variation is represented by the fitted model relative to a mean-response baseline. Higher values indicate closer agreement with the observed pattern, but a high \(R^2\) does not establish model suitability. \\
@@ -129,9 +127,9 @@ Relative standard error (RSE) & Parameter standard error expressed as a percenta
 
 Residual & Observed response minus the fitted or predicted response (i.e., the error in a given prediction). Residual patterns over time can reveal systematic lack of fit that is not obvious from the fitted curve alone. \\
 
-Residual plot & Plot of residuals against time or another fitted quantity. In this app, raw residual plots show observed-minus-predicted response values versus time in the original response units. \\
-
 Residual degrees of freedom & Number of fitted observations minus the number of estimated model parameters, \(n-p\). It is used in estimating residual variance and in the app's approximate parameter confidence intervals. \\
+
+Residual plot & Plot of residuals against time or another fitted quantity. In this app, raw residual plots show observed-minus-predicted response values versus time in the original response units. \\
 
 Response value & Measured y-axis quantity that changes with time, such as mass remaining, molecular weight, strength, or another degradation-related endpoint. \\
 
@@ -140,6 +138,8 @@ Response value & Measured y-axis quantity that changes with time, such as mass r
 Scaling & Preprocessing that changes the numerical scale of time or response values, such as applying a base-10 logarithm, without changing which observations are present. \\
 
 Scientific plausibility & Consistency of the fitted relationship, parameter values, and predicted behavior with relevant knowledge of the polymer, degradation mechanism, test conditions, and intended use. \\
+
+Shared-grid interpolation & Interpolation option that estimates response values at the union of observed time points and estimates times at the union of observed response values. Estimates outside the overlapping range are unavailable. \\
 
 %Shuffle split & Default CV scheme that repeatedly divides observations at random into training and test subsets. It provides a general robustness check but does not preserve time order. \\
 
