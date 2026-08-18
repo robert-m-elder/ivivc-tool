@@ -235,7 +235,8 @@ def build_parameter_diagnostics_html(params, pcov):
         badges.append(_badge('No parameter uncertainty concerns identified', 'ok'))
         summary = (
             'Screening checks did not identify large parameter uncertainty or strong '
-            'parameter coupling. This does not by itself validate the model.'
+            'parameter coupling. This screening result does not summarize other '
+            'aspects of model performance.'
         )
     elif concern_details:
         if has_identifiability_correlation:
