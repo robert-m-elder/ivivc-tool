@@ -7,7 +7,7 @@
 
 \input{includes/generated/app_purpose.tex}
 
-This guide describes the app and offers considerations for reviewing its outputs. The app provides information to support user review of models; it does not select or recommend a model or determine regulatory acceptability. The app and user guide are advisory and do not establish requirements, acceptance criteria, or a prescribed model-selection process. Users determine how to analyze and interpret their data for the intended use.
+This guide describes the app and offers considerations for reviewing its outputs. The app provides information to support user review of models; it does not select or recommend a model or determine regulatory acceptability. The app and user guide are advisory and do not establish requirements, acceptance criteria, or a prescribed model-selection process. Users are responsible for determining how to document their model-selection rationale and other analysis decisions, consistent with the intended use and applicable credibility considerations.
 
 For general background on credibility assessment and reporting of computational modeling studies in medical device submissions, see FDA guidance on computational modeling credibility and reporting \cite{fda_modeling_guidance,fda_reporting_guidance}. 
 
@@ -117,7 +117,7 @@ The Data Processing results tab shows these two representations separately so th
 
 With \textbf{No interpolation}, Approaches 1 and 3 can use only the matching points that are actually present in both datasets. If the datasets have few or no matching times or response values, there may be too few points for the comparison. Interpolation can provide additional matched points. 
 
-Interpolation by response value assumes that each response value corresponds to a single time. If the response rises and falls over the analyzed range, the same response value may occur at more than one time, making this mapping unclear. Check the by-response-value interpolation plot to ensure the results appear reasonable before relying on this mapping.
+Interpolation by response value assumes that each response value corresponds to a single time. If the response rises and falls over the analyzed range, the same response value may occur at more than one time, making this mapping unclear. Review the by-response-value interpolation plot to confirm the results appear consistent with the data before using this mapping.
 
 \subsection{Performance metrics}
 
@@ -129,7 +129,7 @@ For additional background on common error metrics, scale-dependent accuracy meas
 
 AIC\textsubscript{c} adds a small-sample correction to AIC that is relevant when the ratio of fitted observations to estimated parameters is small. A commonly cited rule of thumb is \(n/k < 40\), where \(n\) is the number of fitted observations and \(k\) is the number of model parameters \cite{burnham2002}; this condition is common in typical IVIVC datasets.
 
-By default, the app selects \(R^2\), RMSE, and AIC\textsubscript{c}. This default set has been useful in internal testing with real datasets, but it is not intended as a universal metric set. Additional metrics are available when they provide useful context for a specific analysis. The default set gives three complementary views of model performance. \(R^2\) is widely known and describes how well the fitted curve follows the observed response pattern. RMSE reports typical error in the original response units, making it easier to judge whether the error is practically large or small. AIC\textsubscript{c} supports comparison among fitted candidate models by balancing fit quality with a penalty for unnecessary model complexity, with a correction that is useful for smaller datasets.
+By default, the app selects \(R^2\), RMSE, and AIC\textsubscript{c}. This default set reflects the tool developers' experience with representative IVIVC datasets and is not intended as a universal or required metric set. Additional metrics are available when they provide useful context for a specific analysis. The default set gives three complementary views of model performance. \(R^2\) is widely known and describes how well the fitted curve follows the observed response pattern. RMSE reports typical error in the original response units, making it easier to judge whether the error is practically large or small. AIC\textsubscript{c} supports comparison among fitted candidate models by balancing fit quality with a penalty for unnecessary model complexity, with a correction that is useful for smaller datasets.
 
 \subsection{Cross-validation options}
 
@@ -143,7 +143,7 @@ For time-course data, the splitting scheme matters because nearby observations c
 
 Shuffle split is the default CV scheme because it provides a general robustness check of whether the selected curve form captures the overall degradation or correlation pattern. It is not a time-aware forecasting test. Leave-contiguous-block-out may be informative when sensitivity to a missing time region is a primary concern; leave-one-timepoint-out may be informative when the dataset is too small to set aside larger groups of observations. When results change substantially across CV schemes, the fitted plots, residual diagnostics, parameter uncertainty, model complexity, and scientific plausibility provide additional context rather than treating CV as a pass/fail result.
 
-The default CV settings have been useful in internal testing with real datasets but are not intended to be universally applicable. Possible reasons to adjust them include small datasets or unstable cross-validation results.
+The default CV settings reflect the tool developers' experience with representative IVIVC datasets and are not intended to be universally applicable. Alternative settings may be appropriate depending on the characteristics of the specific dataset and analysis goals.
 
 For background on cross-validation procedures and their use in model assessment and selection, including issues that arise with time series, see references \cite{arlot2010, bergmeir2012, roberts2017, bergmeir2018}.
 
@@ -175,7 +175,7 @@ None & No cross-validation is performed; only the model fitted to the full datas
 
 \input{includes/generated/grid_search_description.tex}
 
-The default grid-search settings can usually be left unchanged. If fitting fails or appears unstable, consider increasing the number of random starts, adjusting the candidate starting-value range, changing the random seed, or reviewing whether the selected model form is suitable for the data.
+The default grid-search settings can usually be left unchanged. Options for addressing unstable fitting include increasing the number of random starts, adjusting the candidate starting-value range, changing the random seed, or evaluating whether the selected model form is appropriate for the data.
 
 \input{includes/generated/grid_search_parameter_table.tex}
 

@@ -35,7 +35,7 @@ Alternatively, **users comfortable with Python** can run the app directly using 
 - Fits user-selected IVIVC approaches and model families to paired in vitro and in vivo data.
 - Calculates selected goodness-of-fit, model-comparison, and cross-validation metrics.
 - Generates fitting, comparison, and prediction plots with uncertainty displays where supported.
-- Creates summaries for user-selected final approaches or models.
+- Creates summaries for user-selected approaches or models for downstream review and documentation.
 
 ## Main outputs
 

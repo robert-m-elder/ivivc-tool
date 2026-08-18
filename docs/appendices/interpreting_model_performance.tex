@@ -3,7 +3,7 @@
 
 No single metric determines whether an IVIVC model is meaningful. An evaluation of model performance can include goodness of fit, prediction error, model complexity, cross-validation behavior, residual patterns, parameter uncertainty, and whether the fitted relationship is scientifically plausible for the polymer degradation mechanism and intended use. Performance metrics are descriptive and comparative tools, not acceptance criteria. Small datasets can produce unstable estimates, and similar metric values do not necessarily indicate equivalent scientific validity. For analyses intended to support regulatory submissions, the depth of supporting evidence depends on the model's intended use and applicable credibility considerations \cite{fda_modeling_guidance,fda_reporting_guidance}.
 
-The app reports metrics and comparison tables as descriptive aids for user review; the scope and advisory status described in the Introduction apply throughout this appendix. Users determine whether and how to document preprocessing assumptions, fitting settings, model selection rationale, limitations, and any planned use of the model outside the fitted data range.
+The app reports metrics and comparison tables as descriptive aids for user review; the scope and advisory status described in the Introduction apply throughout this appendix. Users are responsible for determining how to document preprocessing assumptions, fitting settings, model-selection rationale, limitations, and any planned use of the model outside the fitted data range, consistent with the intended use and applicable credibility considerations.
 
 
 \subsection{Model comparability before interpreting metrics}
@@ -24,11 +24,11 @@ In particular, AIC, AIC\textsubscript{c}, and BIC values are not comparable acro
 \textbf{Metric} & \textbf{Range / direction} & \textbf{Interpretation guidance} \\
 \midrule
 \endhead
-    \(R^2\) & Best possible value is 1. Values near 0 indicate little improvement over predicting the mean response. Can be negative if the model performs worse than the mean-response baseline. Higher is better. & Proportion of response variance explained by the model \cite{scikit_regression_metrics}. High \(R^2\) does not establish that the model is mechanistic, causal, predictive outside the fitted data range, or suitable for the intended use. \\
+    \(R^2\) & Best possible value is 1. Values near 0 indicate little improvement over predicting the mean response. Can be negative if the model performs worse than the mean-response baseline. Higher is better. & Proportion of response variance explained by the model \cite{miles2014}. High \(R^2\) does not establish that the model is mechanistic, causal, predictive outside the fitted data range, or suitable for the intended use. \\
     Adjusted \(R^2\) & Higher is better. Can be lower than \(R^2\). & Penalizes additional fitted parameters, making it more informative than \(R^2\) when comparing models of different complexity \cite{miles2014}. \\ 
-    MAE & Lower is better. Units match the response units. & Mean absolute error on the response scale \cite{scikit_regression_metrics}. Interpret relative to assay variability, measurement uncertainty, and the intended use. \\ 
-    MSE & Lower is better. Units are squared response units. & Mean squared prediction error \cite{hodson2022, scikit_regression_metrics}. Useful computationally, but less intuitive than RMSE because the units are squared. \\ 
-    RMSE & Lower is better. Units match the response units. & Root mean squared error, the typical prediction error on the response scale \cite{hodson2022, scikit_regression_metrics}. Interpret relative to assay variability, measurement uncertainty, and the intended use. Penalizes larger errors more heavily than MAE. \\
+    MAE & Lower is better. Units match the response units. & Mean absolute error on the response scale \cite{hodson2022}. Interpret relative to assay variability, measurement uncertainty, and the intended use. \\
+    MSE & Lower is better. Units are squared response units. & Mean squared prediction error \cite{hodson2022}. Useful computationally, but less intuitive than RMSE because the units are squared. \\
+    RMSE & Lower is better. Units match the response units. & Root mean squared error, the typical prediction error on the response scale \cite{hodson2022}. Interpret relative to assay variability, measurement uncertainty, and the intended use. Penalizes larger errors more heavily than MAE. \\
     NRMSE & Lower is better. Normalized to allow more meaningful comparison across response scales. & RMSE prediction error expressed relative to a normalization factor such as the response mean or standard deviation. Interpretation depends on the normalization method used. \\
     AIC & Lower is better, but only relative to other comparable models. No fixed bounds; negative values are allowed. & Balances goodness of fit against model complexity \cite{akaike1974,burnham2002,wagenmakers2004}. A lower value indicates a model that explains the data well without unnecessary parameters. Absolute values are not standalone quality grades. \\
     AIC\textsubscript{c} & Lower is better, but only relative to other comparable models. Undefined when there are too few observations relative to the number of fitted parameters. & A small-sample correction to AIC that is most relevant when the observation-to-parameter ratio is low \cite{hurvich1989, burnham2002, wagenmakers2004}; \(n/k < 40\) is a rule of thumb \cite{burnham2002}. \\
@@ -57,7 +57,7 @@ Take care when comparing NRMSE values across datasets or response scales if the 
 
 \subsection{Interpreting relative model evidence}
 
-Relative model evidence tables compare candidate models using information criteria (i.e., AIC, AIC\textsubscript{c}, and BIC), which balance goodness of fit against model complexity. In this context, \textit{empirical support} means that the observed data provide more support for one model than another within the displayed candidate set, based on the selected information criterion. It does not prove that a model is correct, mechanistic, predictive outside the observed range, or suitable for a regulatory submission.
+Relative model evidence tables compare candidate models using information criteria (i.e., AIC, AIC\textsubscript{c}, and BIC), which balance goodness of fit against model complexity. In this context, \textit{empirical support} means that the observed data provide more support for one model than another within the displayed candidate set, based on the selected information criterion. It does not establish that a model is correct, mechanistic, or predictive outside the observed range. Whether the evidence base is sufficient to support a regulatory submission depends on the intended use and applicable FDA guidance \cite{fda_modeling_guidance,fda_reporting_guidance}.
 
 \subsubsection*{Rules of thumb for delta values}
 
@@ -97,7 +97,7 @@ These distinctions matter because adjacent time points in a degradation profile 
 
 For the small datasets typical in IVIVC development, cross-validation results are intended as an exploratory diagnostic or sensitivity analysis rather than a definitive performance benchmark. Compare the CV metric with the corresponding metric for the model fitted to the full dataset, but also consider whether the chosen splitting pattern reflects the practical prediction question of interest.
 
-For example, strong leave-one-timepoint-out performance alongside weaker leave-contiguous-block-out performance may indicate that the model can interpolate individual missing points well, but becomes less reliable when an entire local region of the profile is absent from fitting. The importance of that distinction depends on the intended use of the model.
+For example, strong leave-one-timepoint-out performance alongside weaker leave-contiguous-block-out performance may indicate that the model can interpolate individual missing points well, but becomes less reliable when an entire local region of the profile is absent from fitting. The importance of that distinction depends on the intended use of the model. For credibility assessment in the context of regulatory submissions, see FDA guidance on computational modeling credibility and reporting \cite{fda_modeling_guidance,fda_reporting_guidance}.
 
 \subsubsection*{CV fit variability plots}
 
@@ -190,7 +190,7 @@ Parameter uncertainty deserves particular attention when a model will be interpr
 
 More complex models (i.e., those with more parameters) may fit observed data more closely, but with small datasets this may be a liability rather than an asset. A flexible model may trace the noise in the data rather than the underlying pattern, and its parameters may be poorly estimated as a result, an issue called \textit{overfitting}. Adjusted \(R^2\), AIC, AIC\textsubscript{c}, BIC, cross-validation metrics, and residual diagnostics provide complementary information about whether added complexity is justified \cite{heinze2018}.
 
-When two models have similar fit and similar empirical support, a simpler model is often easier to justify when it is scientifically plausible and consistent with the intended use.
+When two models have similar fit and similar empirical support, model simplicity and scientific plausibility are among the factors that may support the rationale for the selected model.
 
 
 \subsection{Scientific plausibility and intended use}
@@ -200,7 +200,9 @@ Statistical performance alone is not sufficient to evaluate a model. Scientific 
 The intended use of the model---including whether it will inform a regulatory submission---affects the type and depth of supporting evidence that may be relevant. Applicable considerations are described in FDA guidance on computational modeling credibility and reporting \cite{fda_modeling_guidance,fda_reporting_guidance}.
 
 
-\subsection{Suggested model review workflow}
+\subsection{Example model review workflow}
+
+The following is one possible sequence of review steps for illustrative reference. It does not establish a required procedure or replace applicable credibility and submission guidance \cite{fda_modeling_guidance,fda_reporting_guidance}.
 
 \begin{enumerate}
     \item Confirm that the dataset, preprocessing choices, and selected response values (the measured values being modeled) are appropriate for the intended analysis.
@@ -216,7 +218,7 @@ The intended use of the model---including whether it will inform a regulatory su
 
 \subsection{Questions to guide model review}
 
-The following questions are intended as practical prompts for reviewing model results, not as formal acceptance criteria.
+The following questions illustrate considerations that a user might explore. They do not define a required review process or imply that each question must be addressed in a regulatory submission.
 
 \subsubsection{Does the model describe the observed data well?}
 
@@ -280,7 +282,7 @@ Potential elements of a final model rationale include fitted performance, cross-
 
 \subsection{Example interpretation statements}
 
-The following examples illustrate wording for possible adaptation in reports. Adapt the language to the specific analysis and supporting evidence.
+The following passages illustrate how model results might be described in a technical context. They are examples only and are not FDA-endorsed language for regulatory submissions. Adapt all language to the specific analysis and supporting evidence.
 
 \begin{itemize}
     \item Model A had the lowest RMSE and highest adjusted $R^2$ among the evaluated models, indicating the strongest goodness-of-fit under the selected preprocessing conditions.
