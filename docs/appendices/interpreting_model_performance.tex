@@ -3,7 +3,7 @@
 
 No single metric determines whether an IVIVC model is meaningful. An evaluation of model performance can include goodness of fit, prediction error, model complexity, cross-validation behavior, residual patterns, parameter uncertainty, and whether the fitted relationship is scientifically plausible for the polymer degradation mechanism and intended use. Performance metrics are descriptive and comparative tools, not acceptance criteria. Small datasets can produce unstable estimates, and similar metric values do not necessarily indicate equivalent scientific validity. For analyses intended to support regulatory submissions, the depth of supporting evidence depends on the model's intended use and applicable credibility considerations \cite{fda_modeling_guidance,fda_reporting_guidance}.
 
-The app reports metrics and comparison tables to support user review. It does not select, recommend, validate, or establish regulatory acceptability for any model. Users determine whether and how to document preprocessing assumptions, fitting settings, model selection rationale, limitations, and any planned use of the model outside the fitted data range.
+The app reports metrics and comparison tables as descriptive aids for user review; the scope and advisory status described in the Introduction apply throughout this appendix. Users determine whether and how to document preprocessing assumptions, fitting settings, model selection rationale, limitations, and any planned use of the model outside the fitted data range.
 
 
 \subsection{Model comparability before interpreting metrics}
@@ -41,7 +41,7 @@ In particular, AIC, AIC\textsubscript{c}, and BIC values are not comparable acro
 
 \subsection{Interpreting goodness of fit and prediction error}
 
-Goodness-of-fit metrics---\(R^2\), adjusted \(R^2\), MSE, MAE, RMSE, and NRMSE---describe how well the model fits the data used to estimate its parameters. Their interpretation depends on practical context, not just numerical value, and there is no universal IVIVC performance cutoff.
+Goodness-of-fit metrics---\(R^2\), adjusted \(R^2\), MSE, MAE, RMSE, and NRMSE---describe how well the model fits the data used to estimate its parameters. Their interpretation depends on practical context, not just numerical value. The app does not apply a universal IVIVC performance cutoff; interpretation depends on the intended use and, for regulatory contexts, applicable FDA guidance \cite{fda_modeling_guidance,fda_reporting_guidance}.
 
 Strong goodness-of-fit is encouraging but can be misleading, particularly for small datasets or models with many parameters. Excellent fit metrics do not rule out unstable parameters, poor cross-validation performance, systematic residual patterns, or a fitted curve shape that is not scientifically plausible for the degradation process being modeled.
 
@@ -181,9 +181,9 @@ Parameter coupling / correlation & How strongly pairs of parameter estimates mov
 \bottomrule
 \end{longtable}
 
-If no parameter uncertainty concerns are flagged, the app did not detect large relative standard errors or strong parameter coupling under these screening checks. This does not validate the model, confirm mechanistic correctness, or establish regulatory acceptability. Conversely, a coupling or warning badge does not automatically invalidate a model; rather, it is a prompt to review the flagged parameters alongside the fitted curves, residuals, cross-validation behavior, and scientific plausibility.
+If no parameter uncertainty concerns are flagged, the app did not detect large relative standard errors or strong parameter coupling under these screening checks. This does not establish mechanistic correctness, predictive adequacy for a particular use, or regulatory acceptability. Conversely, a coupling or warning badge does not by itself establish that a model is unsuitable; rather, it identifies parameter behavior that can be reviewed alongside the fitted curves, residuals, cross-validation behavior, and scientific plausibility.
 
-Parameter uncertainty deserves particular attention when a model will be interpreted mechanistically, used to extrapolate beyond the observed data range, or used to compare degradation behavior across materials, processes, or test conditions. In these situations, review whether the reported intervals are wide, parameters are strongly coupled, fitted parameter values are extreme or scientifically implausible, or small changes in the data or fitting settings produce substantially different estimates. Strong fit metrics do not compensate for parameters that are poorly estimated or scientifically implausible.
+Parameter uncertainty deserves particular attention when a model will be interpreted mechanistically, used to extrapolate beyond the observed data range, or used to compare degradation behavior across materials, processes, or test conditions. In these situations, review whether the reported intervals are wide, parameters are strongly coupled, fitted parameter values are extreme or scientifically implausible, or small changes in the data or fitting settings produce substantially different estimates. Strong fit metrics alone may not be sufficient to address concerns about poorly estimated parameters or scientifically implausible values; these aspects warrant separate review.
 
 
 \subsection{Considering model complexity}
@@ -197,7 +197,7 @@ When two models have similar fit and similar empirical support, a simpler model 
 
 Statistical performance alone is not sufficient to evaluate a model. Scientific plausibility also depends on what is known about the polymer, degradation mechanism, and test conditions. A model that is statistically competitive but produces a fitted shape, parameter values, or extrapolated behavior that conflicts with known degradation behavior may be difficult to justify regardless of its metrics.
 
-The intended use also affects the amount of supporting evidence and uncertainty relevant to the analysis. Exploratory model development may accommodate more uncertainty than a model intended to support a regulatory argument, a design change, or a prediction of in vivo performance.
+The intended use of the model---including whether it will inform a regulatory submission---affects the type and depth of supporting evidence that may be relevant. Applicable considerations are described in FDA guidance on computational modeling credibility and reporting \cite{fda_modeling_guidance,fda_reporting_guidance}.
 
 
 \subsection{Suggested model review workflow}
