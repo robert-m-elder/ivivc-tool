@@ -277,7 +277,7 @@ def build_readme() -> str:
 
         After installing and launching the app:
 
-        1. Upload a fitting dataset with four columns: in vitro time, in vitro response, in vivo time, and in vivo response.
+        1. Upload a fitting dataset with four columns: in vitro time, in vitro response, in vivo time, and in vivo response. (The included `toy-data.xlsx` file can be used as a test.)
         2. Optionally upload a two-column in vitro prediction dataset if predictions are desired.
         3. Select at least one analysis approach and, for model-based approaches, at least one candidate model.
         4. Review or modify the preprocessing, performance-metric, cross-validation, diagnostic-plot, and other analysis options as applicable.
