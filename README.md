@@ -5,20 +5,19 @@
 Establishing an in vitro-in vivo correlation (IVIVC) can support the evaluation of medical devices that include absorbable polymers by relating in vivo changes in material properties over time to corresponding in vitro test results, such as degradation profiles. Potential uses of IVIVCs include evaluating manufacturing or material changes and supporting predictions of in vivo performance when modifying an existing device design. This tool is intended to facilitate IVIVC development. The user supplies paired in vitro and in vivo fitting data; an optional in vitro prediction dataset can also be supplied. The app applies selected preprocessing steps, fits and compares multiple correlation approaches and model families, evaluates selected performance metrics and cross-validation results, generates fitting and prediction plots, and produces report-ready summaries for user review and external documentation.
 
 
-## Quick start
+## Installation
 
-**For users without Python experience**, platform-specific local setup scripts are provided for Windows and macOS under `local_install/`. These installers (Setup IVIVC App) create a private Python environment for the IVIVC App and provide a separate double-click launcher (Start IVIVC App) for subsequent use. See the README in the corresponding `local_install/macos/` or `local_install/windows/` folder for instructions.
+**For users without Python experience**, platform-specific local setup scripts are provided for Windows and macOS under `local_install/`. These installers (Setup IVIVC App) create a private Python environment for the IVIVC App and provide a separate double-click launcher (Start IVIVC App) for subsequent use. See the README in the corresponding `local_install/macos/` or `local_install/windows/` folder for instructions. 
 
 Alternatively, **users comfortable with Python** can run the app directly using these steps: 
-1. Install the Python dependencies listed in `requirements.txt`. For example, using `conda create -n ivivc-app -c conda-forge python=3.12 --file requirements.txt`, then `conda activate ivivc-app` to set up a separate environment.
-2. Start the Flask app with `python app.py`.
+1. Install the Python dependencies listed in `requirements.txt`. For example, set up a separate environment using `conda create -n ivivc-app -c conda-forge python=3.12 --file requirements.txt`, followed by `conda activate ivivc-app`.
+2. From a terminal window, start the Flask app with `python app.py`.
 3. Open the local URL shown by Flask in a browser (`http://127.0.0.1:5000` by default).
 4. Upload a fitting dataset with four columns: in vitro time, in vitro value, in vivo time, and in vivo value.
-5. Select approaches, models, preprocessing options, metrics, and analysis parameters.
-6. Optionally upload a two-column in vitro prediction dataset.
-7. Review model outputs, plots, downloadable spreadsheets, and report outputs.
-
-`requirements.txt` contains the packages needed to run the app. Documentation/tutorial generation additionally requires the packages in `requirements-docs.txt`.
+5. Optionally upload a two-column in vitro prediction dataset.
+6. Select approaches, models, preprocessing options, metrics, and analysis parameters.
+7. Click the 'Analyze' button.
+8. Review model outputs, plots, downloadable spreadsheets, and report outputs.
 
 ## Main inputs
 
@@ -27,7 +26,7 @@ Alternatively, **users comfortable with Python** can run the app directly using 
 - **Approaches/models:** mathematical methods and candidate functions to evaluate.
 - **Preprocessing:** optional normalization, scaling, and interpolation settings.
 - **Metrics:** goodness-of-fit and model-comparison metrics.
-- **Analysis parameters:** cross-validation and grid-search settings.
+- **Analysis parameters:** cross-validation and grid-search settings, and optional advanced analysis plots.
 
 ## What the app does
 
@@ -51,6 +50,6 @@ Alternatively, **users comfortable with Python** can run the app directly using 
 See [`docs/user_guide.pdf`](docs/user_guide.pdf) for detailed descriptions of inputs, options, methods, and outputs. 
 
 ## Data handling
-The app does not save uploaded datasets or fitting results to persistent server storage. 
+The app does not save uploaded datasets or fitting results to persistent storage. 
 Uploaded data are processed for the current analysis, and generated results and downloads are returned directly to the user.
 When running the app locally (either via `python app.py` or the `local_install` launchers), no data leaves the user's computer.
