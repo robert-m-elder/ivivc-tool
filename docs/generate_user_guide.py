@@ -255,7 +255,7 @@ def build_readme() -> str:
 
         {APP_DESCRIPTION}
 
-        The app provides information to support user review of models; it does not select or recommend a model or determine regulatory acceptability. The app is advisory and do not establish requirements, acceptance criteria, or a prescribed model-selection process. Users are responsible for determining how to document their model-selection rationale and other analysis decisions, consistent with the intended use and applicable credibility considerations.
+        The app provides information to support user review of models; it does not select or recommend a model or determine regulatory acceptability. The app and related content do not establish requirements, acceptance criteria, or a prescribed model-selection process. Users are responsible for determining how to document their model-selection rationale and other analysis decisions, consistent with the intended use and applicable credibility considerations.
 
         ## Installation
 
