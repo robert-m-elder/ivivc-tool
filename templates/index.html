@@ -123,14 +123,14 @@
                         <button type="button" class="help-btn-small" data-modal="{{ approach_id }}-help" aria-label="Help for {{ approach.display_name }}" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button>
                     </legend>
                     <label class="approach-option-label">
-                        <input type="checkbox" name="approaches" value="{{ approach_id }}" aria-controls="{{ approach_id }}-models" checked>
+                        <input type="checkbox" name="approaches" value="{{ approach_id }}" aria-controls="{{ approach_id }}-models">
                         Include {{ approach.display_name }}
                     </label>
                     <fieldset id="{{ approach_id }}-models" class="model-fieldset">
                         <legend>Models</legend>
                         {% for model_name in approach.models %}
                         <label class="model-option-label">
-                            <input type="checkbox" name="models" value="{{ approach_id }}:{{ model_name }}" checked>
+                            <input type="checkbox" name="models" value="{{ approach_id }}:{{ model_name }}">
                             {{ models[model_name].display_name }}
                         </label>
                         {% endfor %}
@@ -258,18 +258,18 @@
                 <div class="diagnostic-option-group">
                     <div class="diagnostic-option-heading">Cross-validation <button type="button" class="help-btn-small" data-modal="cross-validation-help" aria-label="Help for cross-validation diagnostic display settings" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button></div>
                     <label class="checkbox-item advanced-checkbox-option">
-                        <input type="checkbox" name="include_cv_fit_variability_plot" id="include_cv_fit_variability_plot" checked>
+                        <input type="checkbox" name="include_cv_fit_variability_plot" id="include_cv_fit_variability_plot">
                         <span>Fit variability (mean ± SD)</span>
                     </label>
                 </div>
                 <div class="diagnostic-option-group">
                     <div class="diagnostic-option-heading">Residuals <button type="button" class="help-btn-small" data-modal="residual-diagnostics-help" aria-label="Help for residual diagnostic display settings" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button></div>
                     <label class="checkbox-item advanced-checkbox-option">
-                        <input type="checkbox" name="include_raw_residual_plots" checked>
+                        <input type="checkbox" name="include_raw_residual_plots">
                         <span>Raw residuals</span>
                     </label>
                     <label class="checkbox-item advanced-checkbox-option">
-                        <input type="checkbox" name="include_residual_qq_plots" checked>
+                        <input type="checkbox" name="include_residual_qq_plots">
                         <span>Quantile-quantile (Q-Q)</span>
                     </label>
                 </div>

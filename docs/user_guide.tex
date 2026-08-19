@@ -17,15 +17,19 @@ For additional discussion of model performance, cross-validation results, uncert
 
 \input{includes/generated/capability_summary.tex}
 
+
 \section{Getting started}
 
 The following provides a brief orientation for a first run of the app. The settings described here as defaults are software defaults only; they do not establish preferred analysis choices or regulatory expectations. Detailed descriptions and interpretation considerations are provided in the sections that follow.
 
 \textbf{Minimum input.} A fitting dataset is required with four columns containing in vitro time, in vitro response, in vivo time, and in vivo response. A separate two-column in vitro prediction dataset is optional and is needed only when generating predictions from fitted or mapped relationships.
 
-\textbf{Current software defaults.} The setup page initially includes all three analysis approaches and all available candidate models. No normalization or scaling is selected. Shared-grid interpolation is selected for approaches that use matched quantities. The default displayed metrics are \(R^2\), RMSE, and AIC\textsubscript{c}; shuffle-split cross-validation and the available CV-fit-variability, raw-residual, and Q--Q diagnostic plots are also enabled. These defaults provide a starting configuration and can be changed to match the dataset and analysis purpose.
+\textbf{From setup to results.} On the setup page, upload the fitting dataset and, if desired, a prediction dataset. Select at least one analysis approach and, for model-based approaches, at least one candidate model. Review or modify the preprocessing, model-fitting, performance-metric, cross-validation, and diagnostic-plot options as applicable, then select \textbf{Analyze}. The app processes the uploaded data, performs the selected analyses, and opens the results page, where results are organized by processing, fitting, model comparison, and prediction outputs as applicable.
+
+\textbf{Current software defaults.} No analysis approaches or candidate models are selected initially. No normalization or scaling is selected. Shared-grid interpolation is selected for approaches that use matched quantities. The default displayed metrics are $R^2$, RMSE, and AIC\textsubscript{c}. Shuffle-split cross-validation is selected by default. The available CV-fit-variability, raw-residual, and Q--Q diagnostic plots are not enabled by default. These defaults provide a starting configuration and can be changed to match the dataset and analysis purpose.
 
 \textbf{Main outputs.} After analysis, the results include the processed data used by each approach, fitted or mapped relationships, selected performance and cross-validation summaries, diagnostic plots, model-comparison information where applicable, and prediction outputs when a prediction dataset is supplied. User-selected results can also be assembled into a downloadable summary report.
+
 
 \section{Inputs}
 
@@ -38,8 +42,9 @@ The IVIVC app requires paired in vitro and in vivo degradation data, along with 
 \item selection of candidate models to evaluate, where applicable;
 \item optionally, preprocessing options, such as normalization, interpolation, and scaling;
 \item selected performance metrics to display in the results and reports;
-\item optionally, cross-validation settings for applicable approaches; and
-\item grid-search settings for model initialization, for which the app provides default values.
+\item optionally, cross-validation settings for applicable approaches;
+\item grid-search settings for model initialization, for which the app provides default values; and
+\item optionally, advanced analysis plotting settings;
 \end{itemize}
 
 The sections below provide additional detail on input file structure, required data columns, preprocessing options, model selection, and optional analysis settings.
@@ -191,7 +196,7 @@ The app provides default grid-search settings as its initial configuration. Opti
 
 \subsection{Diagnostic plot display}
 
-The CV fit variability plot, raw residual plots, and normal quantile-quantile (Q-Q) plots are selected by default in the Advanced Analysis section and can be hidden before analysis for a more compact results view. The CV fit variability plot is available only when cross-validation is performed. It is placed below the goodness-of-fit table for the corresponding fitted dataset.
+The CV fit variability plot, raw residual plots, and normal quantile-quantile (Q-Q) plots are not selected by default in the Advanced Analysis section to produce a more compact results view. These plots can be selected to analyze the stability of CV and the residual behavior. The CV fit variability plot is available only when cross-validation is performed. It is placed below the goodness-of-fit table for the corresponding fitted dataset.
 
 \section{Outputs}
 
