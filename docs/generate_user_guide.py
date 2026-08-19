@@ -260,14 +260,27 @@ def build_readme() -> str:
         **For users without Python experience**, platform-specific local setup scripts are provided for Windows and macOS under `local_install/`. These installers (Setup IVIVC App) create a private Python environment for the IVIVC App and provide a separate double-click launcher (Start IVIVC App) for subsequent use. See the README in the corresponding `local_install/macos/` or `local_install/windows/` folder for instructions. 
 
         Alternatively, **users comfortable with Python** can run the app directly using these steps: 
-        1. Install the Python dependencies listed in `requirements.txt`. For example, set up a separate environment using `conda create -n ivivc-app -c conda-forge python=3.12 --file requirements.txt`, followed by `conda activate ivivc-app`.
-        2. From a terminal window, start the Flask app with `python app.py`.
+        1. Install the Python dependencies listed in `requirements.txt`. For example, create and activate a separate Conda environment:
+            ```bash
+            conda create -n ivivc-app -c conda-forge python=3.12 --file requirements.txt
+            conda activate ivivc-app
+            ```
+        2. From the repository root (the folder containing `app.py`), launch the Flask app:
+            ```bash
+            python app.py
+            ```
         3. Open the local URL shown by Flask in a browser (`http://127.0.0.1:5000` by default).
-        4. Upload a fitting dataset with four columns: in vitro time, in vitro value, in vivo time, and in vivo value.
-        5. Optionally upload a two-column in vitro prediction dataset.
-        6. Select approaches, models, preprocessing options, metrics, and analysis parameters.
-        7. Click the 'Analyze' button.
-        8. Review model outputs, plots, downloadable spreadsheets, and report outputs.
+
+        ## Quick start
+
+        After installing and launching the app, [fill in here]
+
+        1. Upload a fitting dataset with four columns: in vitro time, in vitro response, in vivo time, and in vivo response.
+        2. Optionally upload a two-column in vitro prediction dataset if predictions are desired.
+        3. Select at least one analysis approach and, for model-based approaches, at least one candidate model.
+        4. Review or modify the preprocessing, performance-metric, cross-validation, diagnostic-plot, and other analysis options as applicable.
+        5. Select **Analyze** to process the data and open the results page.
+        6. Review the processed data, fitted or mapped relationships, model-comparison and diagnostic results, predictions where applicable, downloadable data, and report outputs.
 
         ## Main inputs
 
