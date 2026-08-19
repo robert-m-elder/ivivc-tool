@@ -255,6 +255,8 @@ def build_readme() -> str:
 
         {APP_DESCRIPTION}
 
+        The app provides information to support user review of models; it does not select or recommend a model or determine regulatory acceptability. The app is advisory and do not establish requirements, acceptance criteria, or a prescribed model-selection process. Users are responsible for determining how to document their model-selection rationale and other analysis decisions, consistent with the intended use and applicable credibility considerations.
+
         ## Installation
 
         The IVIVC App is a Python Flask web application that can be run locally and can be used on a system with a compatible Python environment and a web browser.
@@ -308,12 +310,12 @@ def build_readme() -> str:
 
         ## User guide
 
-        See [`docs/user_guide.pdf`](docs/user_guide.pdf) for detailed descriptions of inputs, options, methods, and outputs. 
+        See [`docs/user_guide.pdf`](docs/user_guide.pdf) for detailed descriptions of inputs, options, methods, and outputs, along with advice on interpreting model performance. 
 
         ## Data handling
         The app does not save uploaded datasets or fitting results to persistent storage. 
         Uploaded data are processed for the current analysis, and generated results and downloads are returned directly to the user.
-        When running the app locally (either via `python app.py` or the `local_install` launchers), no data leaves the user's computer.
+        When running the app locally (either via `python app.py` or the `local_install` launchers), no data leaves the user's system.
         """
     ).lstrip()
 
