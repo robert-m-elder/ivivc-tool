@@ -7,15 +7,17 @@ Establishing an in vitro-in vivo correlation (IVIVC) can support the evaluation 
 
 ## Installation
 
-**For users without Python experience**, platform-specific local setup scripts are provided for Windows and macOS under `local_install/`. These installers (Setup IVIVC App) create a private Python environment for the IVIVC App and provide a separate double-click launcher (Start IVIVC App) for subsequent use. See the README in the corresponding `local_install/macos/` or `local_install/windows/` folder for instructions. 
+The IVIVC App is a Python Flask web application that can be run locally and can be used on a system with a compatible Python environment and a web browser.
 
-Alternatively, **users comfortable with Python** can run the app directly using these steps: 
+**For users without Python experience and/or without Python installed**, platform-specific local setup scripts are provided for Windows and macOS under `local_install/`. These installers (Setup IVIVC App) create a private Python environment for the IVIVC App and provide a separate double-click launcher (Start IVIVC App) for subsequent use. See the README in the corresponding `local_install/macos/` or `local_install/windows/` folder for instructions. 
+
+Alternatively, **users with some Python experience and/or with Python already installed** can run the app directly using these steps from the repository root (the folder containing this README.md): 
 1. Install the Python dependencies listed in `requirements.txt`. For example, create and activate a separate Conda environment:
     ```bash
     conda create -n ivivc-app -c conda-forge python=3.12 --file requirements.txt
     conda activate ivivc-app
     ```
-2. From the repository root (the folder containing `app.py`), launch the Flask app:
+2. Launch the Flask app:
     ```bash
     python app.py
     ```
@@ -23,7 +25,7 @@ Alternatively, **users comfortable with Python** can run the app directly using 
 
 ## Quick start
 
-After installing and launching the app, [fill in here]
+After installing and launching the app:
 
 1. Upload a fitting dataset with four columns: in vitro time, in vitro response, in vivo time, and in vivo response.
 2. Optionally upload a two-column in vitro prediction dataset if predictions are desired.
