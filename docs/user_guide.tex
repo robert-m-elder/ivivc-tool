@@ -85,7 +85,7 @@ For Approach 2 models where a finite value can be calculated, the app summarizes
 \[
 \tau = \frac{1}{f(0)}\int_0^\infty f(t)\,dt,
 \]
-which is the area under the fitted curve after normalizing its fitted value at time zero to 1. It provides a single characteristic time scale for comparing fitted in vitro and in vivo profiles; for positive decay profiles, a larger value generally corresponds to slower overall decay. The ratio of the in vivo and in vitro time constants can also be used to rescale prediction times. This integral definition provides a characteristic time scale based on the area under a normalized relaxation or decay curve \cite{coffey2017}. 
+which is the area under the fitted curve after normalizing its fitted value at time zero to 1 \cite{coffey2017}. It provides a single characteristic time scale for comparing fitted in vitro and in vivo profiles; a larger value generally corresponds to slower overall decay. For a simple exponential decay, the integral equation yields the time constant. The ratio of the in vivo and in vitro time constants can be used to rescale in vitro times to predict corresponding in vivo times. 
 
 When a prediction dataset is supplied, Approach 2 also provides an \textbf{observed-response inverse mapping}. For each preprocessed observed in vitro prediction response $y_{\mathrm{pred}}$, the app solves the fitted in vivo model for the corresponding time,
 \[
