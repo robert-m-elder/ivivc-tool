@@ -333,7 +333,7 @@
                 <li>Contains in vitro data for which you want to predict in vivo outcomes</li>
             </ul>
             <p><strong>Value</strong> means the in vitro response value measured at each time point.</p>
-            <p>The fitted models will be applied to this data to generate in vivo predictions.</p>
+            <p>The app uses these in vitro time and response values to generate in vivo predictions. Depending on the selected approach and prediction method, the calculation may use the time, the response value, or both, and the result may be a predicted in vivo time or a predicted in vivo response.</p>
         </div>
 
         <div id="prediction-sheet-help-content">
@@ -356,7 +356,7 @@
             <ul>
                 <li>Fits a model to paired in vitro and in vivo times at common response values.</li>
                 <li>Uses time interpolated at shared response values when exact response-value matches are unavailable.</li>
-                <li>Uses the fitted relationship as a time-scaling function.</li>
+                <li>For prediction, applies the fitted relationship to each in vitro prediction time to calculate a corresponding in vivo time.</li>
             </ul>
             <p><strong>May be relevant when:</strong> a key analytical question concerns how in vitro time at a given response corresponds to in vivo time at that response.</p>
         </div>
@@ -367,7 +367,7 @@
             <p><strong>Method:</strong></p>
             <ul>
                 <li>Fits the selected model form independently to each dataset.</li>
-                <li>Can generate predictions using fitted response ratios, fitted time constants when available, or observed-response inverse mapping through the fitted in vivo curve.</li>
+                <li>For prediction, can scale the observed response using the fitted response ratio, scale prediction time using fitted time constants when available, or map an observed prediction response to a time on the fitted in vivo curve.</li>
                 <li>Does not require matching time points or response values; interpolation is not used for Approach 2 fitting.</li>
             </ul>
             <p><strong>May be relevant when:</strong> datasets have different time scales or sampling schedules, or when a specific degradation-curve shape is scientifically meaningful for both datasets.</p>
@@ -381,7 +381,7 @@
             <ul>
                 <li>Uses response values interpolated at shared times for response-value mappings.</li>
                 <li>Uses times interpolated at shared response values for time mappings.</li>
-                <li>Provides two scaling options for predictions.</li>
+                <li>For prediction, can scale the observed response using a response ratio at the prediction time or scale the prediction time using a time ratio associated with the observed response.</li>
                 <li>Does not assume a specific equation for the degradation pattern.</li>
             </ul>
             <p><strong>May be relevant when:</strong> the analysis is exploratory, a simple equation does not describe the observed pattern well, or a direct data-based mapping is preferred.</p>

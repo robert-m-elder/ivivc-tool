@@ -81,17 +81,13 @@ Approaches differ in how the in vitro and in vivo time courses are related to on
 
 \input{includes/generated/approach_model_table.tex}
 
+When a prediction dataset is supplied, each approach uses the prediction data differently. See Section~\ref{sec:prediction-outputs} for the available prediction methods and outputs.
+
 For Approach 2 models where a finite value can be calculated, the app summarizes each fitted decay curve with an \textbf{integral time constant}. For a fitted model $f(t)$, the time constant is defined as
 \[
 \tau = \frac{1}{f(0)}\int_0^\infty f(t)\,dt,
 \]
-which is the area under the fitted curve after normalizing its fitted value at time zero to 1 \cite{coffey2017}. It provides a single characteristic time scale for comparing fitted in vitro and in vivo profiles; a larger value generally corresponds to slower overall decay. For a simple exponential decay, the integral equation yields the time constant. The ratio of the in vivo and in vitro time constants can be used to rescale in vitro times to predict corresponding in vivo times. 
-
-When a prediction dataset is supplied, Approach 2 also provides an \textbf{observed-response inverse mapping}. For each preprocessed observed in vitro prediction response $y_{\mathrm{pred}}$, the app solves the fitted in vivo model for the corresponding time,
-\[
-t_{\mathrm{vivo,pred}} = f_{\mathrm{vivo}}^{-1}(y_{\mathrm{pred}}).
-\]
-Unlike time-constant-ratio rescaling, this method uses the new in vitro response values directly rather than predicting only from their sampling times. The inverse is evaluated only over the observed in vivo calibration time range and only when the fitted in vivo curve is one-to-one over that range. Prediction response values outside the observed in vivo calibration response range are reported as unavailable rather than extrapolated. If a response lies within the observed calibration response range but just beyond the fitted curve at an endpoint, it is mapped to that calibration-time endpoint rather than discarded. The inverse-mapping plot includes an approximate 95\% inverse-prediction interval. For each mapped response, the app repeatedly samples the fitted in vivo parameter covariance, perturbs the response by normally distributed error with a standard deviation equal to the residual standard error of the in vivo calibration fit, and inverse-maps each valid draw. The 2.5th and 97.5th percentiles of the resulting mapped times define the interval. Using the in vivo residual standard error for the new in vitro response is an explicit surrogate assumption because the app does not have a separately measured error model for the prediction dataset; the interval should therefore be interpreted as an approximate sensitivity/uncertainty estimate rather than a directly measured prediction error.
+which is the area under the fitted curve after normalizing its fitted value at time zero to 1 \cite{coffey2017}. It provides a single characteristic time scale for comparing fitted in vitro and in vivo profiles; a larger value generally corresponds to slower overall decay. For a simple exponential decay, the integral equation yields the time constant. The fitted time constants are also used by one of the optional Approach 2 prediction methods described in Section~\ref{sec:prediction-outputs}.
 
 \subsubsection{Models}
 
@@ -214,7 +210,7 @@ The IVIVC app generates interactive results and downloadable reports that summar
 Preprocessing outputs & Processed data tables and plots showing the data used for fitting and prediction. \\
 Model fitting outputs & Parameter estimates reported as estimate $\pm$ 95\% confidence interval where available, fitted plots with error bars, optional CV fit-variability and residual diagnostic plots, and selected performance metrics. \\
 Model comparison outputs & Tables comparing selected approaches, models, metrics, relative model evidence, and cross-validation summaries. \\
-Prediction outputs & Prediction plots and downloadable tables when a prediction dataset is supplied and the selected method can be applied. \\
+Prediction outputs & Prediction plots and downloadable tables when a prediction dataset is supplied. Depending on the approach and prediction method, the output is either a predicted in vivo time or a predicted in vivo response value. \\
 Selected model \& summary of outputs & User-selected report summaries and optional report export for incorporation into external documentation. \\
 \bottomrule
 \end{longtable}
@@ -248,7 +244,40 @@ Support badge & Rule-of-thumb label based on the delta value. Intended to aid us
 \end{longtable}
 
 
+\subsection{Prediction outputs}
+\label{sec:prediction-outputs}
+
+The optional prediction dataset contains new in vitro time and response values. After the selected preprocessing is applied, the app uses those values with the relationship established from the fitting dataset. Different prediction methods use the prediction time, the prediction response, or both, and they do not all predict the same quantity. Some methods predict the corresponding \textbf{in vivo time}, while others predict the corresponding \textbf{in vivo response value}.
+
+The table below summarizes what each prediction method uses and how the result is calculated. These methods answer different prediction questions and should not be treated as interchangeable outputs.
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.20\textwidth}>{\raggedright\arraybackslash}p{0.16\textwidth}>{\raggedright\arraybackslash}p{0.38\textwidth}>{\raggedright\arraybackslash}p{0.16\textwidth}@{}}
+\toprule
+\textbf{Approach / method} & \textbf{Prediction data used} & \textbf{How the prediction is made} & \textbf{Output} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Approach / method} & \textbf{Prediction data used} & \textbf{How the prediction is made} & \textbf{Output} \\
+\midrule
+\endhead
+Approach 1: Direct correlation & In vitro time & Applies the fitted relationship between in vitro time and in vivo time: $t_{\mathrm{vivo,pred}}=f(t_{\mathrm{vitro,pred}})$. The prediction response value is not used in this calculation. & In vivo time \\
+Approach 2: Response-value ratio & In vitro time and response & Evaluates the fitted in vitro and in vivo curves at the prediction time, calculates their response ratio, and uses that ratio to scale the observed prediction response: $y_{\mathrm{vivo,pred}}=y_{\mathrm{vitro,pred}}\,f_{\mathrm{vivo}}(t)/f_{\mathrm{vitro}}(t)$. & In vivo response \\
+Approach 2: Time-constant ratio & In vitro time & Scales the prediction time by the ratio of the fitted in vivo and in vitro time constants: $t_{\mathrm{vivo,pred}}=t_{\mathrm{vitro,pred}}(\tau_{\mathrm{vivo}}/\tau_{\mathrm{vitro}})$. The prediction response value is not used in this calculation. & In vivo time \\
+Approach 2: Observed-response inverse mapping & In vitro response & Finds the time at which the fitted in vivo curve reaches the observed prediction response: $t_{\mathrm{vivo,pred}}=f_{\mathrm{vivo}}^{-1}(y_{\mathrm{vitro,pred}})$. The prediction time is not used to calculate the mapped time. & In vivo time \\
+Approach 3: Response-value scaling & In vitro time and response & Uses the fitting datasets to estimate the in vivo/in vitro response ratio at the prediction time, then multiplies the observed prediction response by that ratio. & In vivo response \\
+Approach 3: Time scaling & In vitro time and response & Uses the fitting datasets to estimate the in vivo/in vitro time ratio associated with the prediction response, then multiplies the prediction time by that ratio. & In vivo time \\
+\bottomrule
+\end{longtable}
+
+The available range also depends on the method. Approach 2 observed-response inverse mapping is limited to the observed in vivo calibration range and requires the fitted in vivo curve to be one-to-one over that range; response values outside the observed calibration response range are reported as unavailable rather than extrapolated. Approach 3 uses interpolation-based mappings, so prediction points outside the applicable time or response range are also unavailable. Model-based methods that evaluate a fitted equation beyond the range of the fitting data rely on extrapolation and should be interpreted with additional caution.
+
+For Approach 2, response-value-ratio predictions can become unstable when the fitted in vitro response in the denominator is close to zero. Time-constant-ratio scaling uses one overall time scale for each fitted curve, so it is most useful when the in vitro and in vivo profiles have similar shapes and mainly differ in timing. It may not capture differences that change over the course of degradation, such as multiple degradation phases.
+
+Where supported, prediction plots include error bars or intervals that summarize model-based uncertainty. Their calculation and limitations are described in Section~\ref{sec:uncertainty}.
+
+
 \subsection{Uncertainty and error bars}
+\label{sec:uncertainty}
 
 These displays show how much fitted curves or predictions vary based on the fitted model and residual error. They describe approximate model-based uncertainty and are not intended to define acceptability thresholds for regulatory submissions. Applicable credibility and evidence considerations depend on the intended use and applicable FDA guidance \cite{fda_modeling_guidance,fda_reporting_guidance}.
 

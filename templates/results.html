@@ -1016,10 +1016,11 @@
         </div>
 <div id="prediction-approach1-help-content">
             <h4>Approach 1: Prediction Results</h4>
-            <p>Shows predictions made using the in vitro to in vivo time correlation models:</p>
+            <p>Applies the fitted in vitro-to-in vivo time relationship to the prediction dataset.</p>
             <ul>
-                <li><strong>Input Data:</strong> Your in vitro prediction dataset</li>
-                <li><strong>Predicted Data:</strong> Corresponding in vivo time points calculated using fitted correlation between in vitro and in vivo time</li>
+                <li><strong>Uses:</strong> in vitro prediction time. The prediction response value is not used to calculate the mapped time.</li>
+                <li><strong>Calculation:</strong> each in vitro prediction time is entered into the fitted correlation model.</li>
+                <li><strong>Output:</strong> predicted in vivo time.</li>
 </ul>
             <h4>Error propagation and uncertainty</h4>
             {{ approach_descriptions['approach1']['prediction_error_html'] | safe }}
@@ -1027,17 +1028,11 @@
 
         <div id="prediction-approach2-help-content">
             <h4>Approach 2: Prediction Results</h4>
-            <p>Shows predictions using the independently fitted in vitro and in vivo model family:</p>
+            <p>Uses the separately fitted in vitro and in vivo curves in three different ways, depending on the prediction method.</p>
             <ul>
-                <li><strong>Input Data:</strong> Your in vitro prediction dataset.</li>
-                <li><strong>Prediction methods:</strong>
-                    <ul>
-                        <li>response-value ratio rescaling using the fitted in vivo/in vitro response ratio;</li>
-                        <li>time-constant-ratio rescaling, when both fitted time constants are available; or</li>
-                        <li>observed-response inverse mapping, which maps each new observed in vitro response to the corresponding time on the fitted in vivo calibration curve.</li>
-                    </ul>
-                </li>
-                <li><strong>Fitted Models:</strong> Both in vitro and in vivo model curves.</li>
+                <li><strong>Response-value ratio:</strong> uses both prediction time and response. The app compares the fitted in vivo and in vitro responses at the prediction time and uses that ratio to scale the observed prediction response. <strong>Output:</strong> predicted in vivo response.</li>
+                <li><strong>Time-constant ratio:</strong> uses prediction time. When both fitted time constants are available, their ratio is used to scale the prediction time. <strong>Output:</strong> predicted in vivo time.</li>
+                <li><strong>Observed-response inverse mapping:</strong> uses the observed prediction response. The app finds the time at which the fitted in vivo curve reaches that response. <strong>Output:</strong> predicted in vivo time.</li>
 </ul>
             <h4>Error propagation and uncertainty</h4>
             {{ approach_descriptions['approach2']['prediction_error_html'] | safe }}
@@ -1045,13 +1040,12 @@
 
         <div id="prediction-approach3-help-content">
             <h4>Approach 3: Prediction Results</h4>
-            <p>Shows direct mapping predictions:</p>
+            <p>Uses interpolation-based mappings from the fitting datasets rather than a fitted parametric model.</p>
             <ul>
-                <li><strong>Input Data:</strong> Your in vitro prediction dataset</li>
-                <li><strong>Predicted Data:</strong> In vivo predictions where the in vitro time in the prediction dataset has been directly scaled by the ratio of in vivo/in vitro times in the fitting datasets</li>
-                <li><strong>Connection Lines:</strong> Show the time scaling transformation</li>
-            <p>Points in the in vitro prediction dataset that are outside the range of the fitting datasets (time range when scaling by response value, or response-value range when scaling by time) are excluded.</p>
+                <li><strong>Response-value scaling:</strong> uses both prediction time and response. The prediction time determines the in vivo/in vitro response ratio, which is then applied to the observed prediction response. <strong>Output:</strong> predicted in vivo response.</li>
+                <li><strong>Time scaling:</strong> uses both prediction response and time. The observed response determines the in vivo/in vitro time ratio, which is then applied to the prediction time. <strong>Output:</strong> predicted in vivo time.</li>
             </ul>
+            <p>Prediction points outside the applicable interpolation range are reported as unavailable rather than extrapolated.</p>
             <h4>Error propagation and uncertainty</h4>
             {{ approach_descriptions['approach3']['prediction_error_html'] | safe }}
 </div>
