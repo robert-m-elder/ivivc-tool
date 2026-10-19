@@ -135,13 +135,13 @@ def build_accessible_excel(payload: dict[str, Any]) -> tuple[io.BytesIO, str]:
     properties = workbook.properties
     properties.title = title
     properties.subject = "IVIVC App data table export"
-    properties.creator = "IVIVC App for Absorbable Polymers"
-    properties.lastModifiedBy = "IVIVC App for Absorbable Polymers"
+    properties.creator = "IVIVC App for Absorbable Materials"
+    properties.lastModifiedBy = "IVIVC App for Absorbable Materials"
     properties.description = (
         f"Accessible table export from the IVIVC App. Worksheet '{worksheet.title}' "
         "contains one header row followed by the exported data rows."
     )
-    properties.keywords = "IVIVC, absorbable polymers, data export, accessible spreadsheet"
+    properties.keywords = "IVIVC, absorbable materials, data export, accessible spreadsheet"
     properties.category = "Data export"
     properties.language = "en-US"
     properties.created = datetime.now(timezone.utc).replace(tzinfo=None)

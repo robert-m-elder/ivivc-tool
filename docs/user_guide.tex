@@ -7,6 +7,8 @@
 
 \input{includes/generated/app_purpose.tex}
 
+The app fits empirical relationships between the in vitro and in vivo time courses supplied by the user. The scope includes absorbable polymers that degrade by hydrolysis or enzymatic action, as well as absorbable metals. It does not directly model material chemistry, device geometry, implantation conditions, or degradation mechanisms.
+
 This guide describes the app and offers considerations for reviewing its outputs. The app provides information to support user review of models; it does not select or recommend a model or determine regulatory acceptability. The app and user guide are advisory and do not establish requirements, acceptance criteria, or a prescribed model-selection process. Users are responsible for determining how to document their model-selection rationale and other analysis decisions, consistent with the intended use and applicable credibility considerations.
 
 For general background on credibility assessment and reporting of computational modeling studies in medical device submissions, see FDA guidance on computational modeling credibility and reporting \cite{fda_modeling_guidance,fda_reporting_guidance}. 
@@ -53,7 +55,9 @@ The sections below provide additional detail on input file structure, required d
 
 The app uses separate fitting and prediction datasets. The fitting dataset is required because it provides the paired in vitro and in vivo data used to establish the IVIVC relationship. The prediction dataset is optional and is used only when applying a fitted relationship to new in vitro observations in order to predict the corresponding in vivo behavior.
 
-In this guide, \textbf{response value} means the measured y-axis value that changes with time, such as mass remaining, molecular weight, strength, or another degradation-related endpoint. In the input files, these are the in vitro and in vivo value columns.
+In this guide, \textbf{response value} means the measured y-axis value that changes with time, such as mass remaining, molecular weight, a mechanical property (e.g., tensile or burst strength), or another quantitative degradation-related endpoint. In the input files, these are the in vitro and in vivo value columns.
+
+When interpreting an IVIVC, consider measurement reliability, sample size, comparability of the in vitro and in vivo measurements, and experimental limitations such as incomplete material recovery or contamination, because a good statistical fit does not rule out systematic measurement error.
 
 \begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.24\textwidth}>{\raggedright\arraybackslash}p{0.68\textwidth}@{}}
 \toprule
@@ -77,7 +81,7 @@ In this app, an analysis \textbf{approach} is the overarching method used to est
 
 \subsubsection{Approaches}
 
-Approaches differ in how the in vitro and in vivo time courses are related to one another. 
+Approaches differ in how the in vitro and in vivo time courses are related to one another. Approach numbers identify the methods and do not indicate a ranking or preference.
 
 \input{includes/generated/approach_model_table.tex}
 
@@ -99,7 +103,9 @@ Candidate models are the mathematical equations available for fitting within the
 
 The surface erosion mass loss form is based on geometry-controlled surface erosion concepts from the erodible slab, cylinder, and sphere model \cite{hopfenberg1976}. The one-phase mass loss model uses a logistic/sigmoidal transition to represent a delayed loss phase \cite{tsoularis2002}. The two-phase mass loss model combines an early burst-like loss term with a delayed sigmoidal loss phase. Burst and delayed/multiphase behavior in degradable polymer systems is discussed in the polymer erosion and PLGA release literature \cite{gopferich1997,fredenberg2011,allison2008}. The Gompertz mass loss model is a mathematical adaptation of the modified Gompertz form originally developed for microbial growth kinetics \cite{zwietering1990}. Modified Gompertz functions have also been used as empirical models of polymer biodegradation weight-loss profiles \cite{dragomir2021}. Its inclusion in the app provides an empirical sigmoidal option with lag and maximum-rate parameters rather than a mechanistic model specific to absorbable medical-device polymers.
 
-Each mass loss model also has a less-flexible normalized version for response data already expressed on a 0--1 scale. These versions fix the baseline response level at 1 rather than estimating it. For the one-phase and Gompertz forms, the total loss magnitude is also fixed at 1, which fixes the upper and lower asymptotes at 1 and 0. The normalized surface-erosion form fixes the response at time zero at 1. The normalized two-phase form fixes the baseline level at 1 but retains separate fitted early and delayed loss magnitudes ($B$ and $D$). These constraints reduce the number of fitted parameters and assume that the analyzed response already matches the fixed 0--1 response scale. Selecting a normalized model does not itself normalize the data; a preprocessing normalization or input data already on the 0--1 scale is therefore needed for those fixed-response assumptions to hold.
+The mass loss and linear-plus-power models also have less-flexible normalized versions for response data already expressed on a 0--1 scale. These versions fix the baseline response level at 1 rather than estimating it. For the one-phase and Gompertz forms, the total loss magnitude is also fixed at 1, which fixes the upper and lower asymptotes at 1 and 0. The normalized surface-erosion and linear-plus-power forms fix the response at time zero at 1. The normalized two-phase form fixes the baseline level at 1 but retains separate fitted early and delayed loss magnitudes ($B$ and $D$). These constraints reduce the number of fitted parameters and assume that the analyzed response already matches the fixed 0--1 response scale. Selecting a normalized model does not itself normalize the data; a preprocessing normalization or input data already on the 0--1 scale is therefore needed for those fixed-response assumptions to hold.
+
+The Linear + Power Decay form is an empirical option for remaining mass, strength, or another declining response. Its $t_f$ parameter scales the power term; when $k>0$, the curve reaches zero before $t_f$. When $n=1$, the two loss terms combine into one slope, so $k$ and $t_f$ cannot be estimated separately. Time must be nonnegative after preprocessing. The flat zero tail does not identify a unique time at zero response, and response-value-ratio predictions are undefined where the fitted in vitro response is zero. Uncertainty near the zero cutoff needs particular care because clipping introduces a corner in the fitted curve.
 
 \subsection{Preprocessing options}
 
@@ -198,6 +204,8 @@ The CV fit variability plot, raw residual plots, and normal quantile-quantile (Q
 
 The IVIVC app generates interactive results and downloadable reports that summarize fitted model behavior, model-comparison metrics, diagnostic information, and user-selected analysis settings. Output availability depends on the selected approaches, whether fitting succeeds, and whether a prediction dataset was supplied.
 
+Goodness of fit describes agreement with the data used for fitting. Cross-validation checks predictions against observations set aside from that dataset, giving an approximate indication of how well the fitted models may predict similar new observations. Independent (external) validation provides a more direct test of the resulting IVIVC using additional paired in vitro and in vivo experimental data that were not used to develop or select the relationship; an in vitro prediction dataset alone does not provide this independent comparison. Prediction intervals summarize approximate uncertainty under the fitted model and its error assumptions.
+
 \begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.24\textwidth}>{\raggedright\arraybackslash}p{0.68\textwidth}@{}}
 \toprule
 \textbf{Output} & \textbf{Description} \\
@@ -269,11 +277,15 @@ Approach 3: Time scaling & In vitro time and response & Uses the fitting dataset
 \bottomrule
 \end{longtable}
 
-The available range also depends on the method. Approach 2 observed-response inverse mapping is limited to the observed in vivo calibration range and requires the fitted in vivo curve to be one-to-one over that range; response values outside the observed calibration response range are reported as unavailable rather than extrapolated. Approach 3 uses interpolation-based mappings, so prediction points outside the applicable time or response range are also unavailable. Model-based methods that evaluate a fitted equation beyond the range of the fitting data rely on extrapolation and should be interpreted with additional caution.
+Interpolation estimates between calibration observations; extrapolation extends a relationship beyond the range used to establish it. The available prediction range depends on the method.
+
+Approach 1 can evaluate its fitted time relationship beyond the paired time range used for fitting. Approach 2 response-value-ratio predictions evaluate both fitted curves at the prediction time, which can fall outside either dataset's observed time range. Time-constant-ratio scaling does not restrict input or predicted times to the observed ranges. The app does not automatically identify these results as extrapolations; they require additional caution.
+
+Approach 2 observed-response inverse mapping restricts predicted times to the observed in vivo calibration time range and requires the fitted curve to be one-to-one over that range. Responses outside the observed in vivo calibration response range are reported as unavailable. Approach 3 interpolates scaling factors within the supported calibration time or response range. These lookup limits do not restrict the resulting scaled in vivo response or time to the observed in vivo range.
 
 For Approach 2, response-value-ratio predictions can become unstable when the fitted in vitro response in the denominator is close to zero. Time-constant-ratio scaling uses one overall time scale for each fitted curve, so it is most useful when the in vitro and in vivo profiles have similar shapes and mainly differ in timing. It may not capture differences that change over the course of degradation, such as multiple degradation phases.
 
-Where supported, prediction plots include error bars or intervals that summarize model-based uncertainty. Their calculation and limitations are described in Section~\ref{sec:uncertainty}.
+Where supported, prediction plots include error bars or intervals that summarize uncertainty under the selected model and method. Narrow intervals do not establish that extrapolated predictions are reliable. For observed-response inverse mapping, interval bounds are restricted to the calibration time range by construction. Their calculation and limitations are described in Section~\ref{sec:uncertainty}.
 
 
 \subsection{Uncertainty and error bars}
@@ -289,6 +301,10 @@ The following descriptions summarize how fitted-parameter uncertainty, fitting-p
 
 
 \section{Miscellaneous}
+
+\subsection{Software verification and validation}
+
+Software verification concerns whether the app works as described and performs its calculations correctly. Software validation concerns whether it supports its intended empirical correlation tasks. Sponsors using the app as provided do not need to verify or validate its software functionality. These questions are separate from assessing whether an individual IVIVC is suitable for its intended use.
 
 \subsection{Command-line interface}
 

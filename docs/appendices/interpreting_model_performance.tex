@@ -1,7 +1,7 @@
 \section{How to Interpret Model Performance}
 \label{app:model-performance}
 
-No single metric determines whether an IVIVC model is meaningful. An evaluation of model performance can include goodness of fit, prediction error, model complexity, cross-validation behavior, residual patterns, parameter uncertainty, and whether the fitted relationship is scientifically plausible for the polymer degradation mechanism and intended use. Performance metrics are descriptive and comparative tools, not acceptance criteria. Small datasets can produce unstable estimates, and similar metric values do not necessarily indicate equivalent scientific validity. For analyses intended to support regulatory submissions, the depth of supporting evidence depends on the model's intended use and applicable credibility considerations \cite{fda_modeling_guidance,fda_reporting_guidance}.
+No single metric determines whether an IVIVC model is meaningful. An evaluation of model performance can include goodness of fit, prediction error, model complexity, cross-validation behavior, residual patterns, parameter uncertainty, and whether the fitted relationship is scientifically plausible for the material, degradation mechanism, and intended use. Performance metrics are descriptive and comparative tools, not acceptance criteria. Small datasets can produce unstable estimates, and similar metric values do not necessarily indicate equivalent scientific validity. For analyses intended to support regulatory submissions, the depth of supporting evidence depends on the model's intended use and applicable credibility considerations \cite{fda_modeling_guidance,fda_reporting_guidance}.
 
 The app reports metrics and comparison tables as descriptive aids for user review; the scope and advisory status described in the Introduction apply throughout this appendix. Users are responsible for determining how to document preprocessing assumptions, fitting settings, model-selection rationale, limitations, and any planned use of the model outside the fitted data range, consistent with the intended use and applicable credibility considerations.
 
@@ -195,7 +195,7 @@ When two models have similar fit and similar empirical support, model simplicity
 
 \subsection{Scientific plausibility and intended use}
 
-Statistical performance alone is not sufficient to evaluate a model. Scientific plausibility also depends on what is known about the polymer, degradation mechanism, and test conditions. A model that is statistically competitive but produces a fitted shape, parameter values, or extrapolated behavior that conflicts with known degradation behavior may warrant additional rationale regardless of its metrics.
+Statistical performance alone is not sufficient to evaluate a model. Scientific plausibility also depends on what is known about the material, degradation mechanism, and test conditions. A model that is statistically competitive but produces a fitted shape, parameter values, or extrapolated behavior that conflicts with known degradation behavior may warrant additional rationale regardless of its metrics.
 
 The intended use of the model---including whether it will inform a regulatory submission---affects the type and depth of supporting evidence that may be relevant. Applicable considerations are described in FDA guidance on computational modeling credibility and reporting \cite{fda_modeling_guidance,fda_reporting_guidance}.
 
@@ -257,7 +257,7 @@ The following questions illustrate considerations that a user might explore. The
 
     \item \textbf{Is the model scientifically plausible?}
     \begin{itemize}
-        \item Is the fitted curve shape consistent with expected polymer degradation behavior?
+        \item Is the fitted curve shape consistent with expected material degradation behavior?
         \item How do the model assumptions align with the material, test conditions, and degradation endpoint?
         \item How does the model behave near the edges of the observed data range, and how would that behavior affect interpolation or extrapolation?
     \end{itemize}
