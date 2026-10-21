@@ -13,7 +13,8 @@ import uncertainties as unc
 
 from metrics import calculate_metric, metrics
 from models import approaches, models
-from preprocessing import preprocessing_options
+from ivivc_core.fitting import fit_profile
+from ivivc_core.preprocessing import prepare_data
 from utilities.evaluation import (
     auto_grid_search,
     calculate_tau_with_uncertainty,
@@ -344,83 +345,85 @@ def _tau_interval_row(tau_value, multiplier, label='Tau'):
 
 def preprocess_data(t1, m1, t2, m2, selected_interpolation=None, selected_scalings=None, selected_normalizations=None,
                     fallback_invalid_log_scaling=False, return_metadata=False):
-    selected_interpolation = selected_interpolation or []
-    selected_scalings = selected_scalings or []
-    selected_normalizations = selected_normalizations or []
-
-    if (t2 is not None) and (m2 is not None):
-        two_datasets = True
-    else:
-        two_datasets = False
-    # Apply basic data cleaning. Preserve true zero times; operations that do
-    # not support zero handle that domain restriction where they are applied.
-    # remove missing values due to unequal number of points in spreadsheet
-    mask = ~pd.isna(m1); t1,m1 = t1[mask], m1[mask]
-    if two_datasets:
-        mask = ~pd.isna(m2); t2,m2 = t2[mask], m2[mask]
-
-    # Apply normalizations
-    for norm in selected_normalizations:
-        m1 = preprocessing_options['normalization'][norm](m1)
-        if two_datasets:
-            m2 = preprocessing_options['normalization'][norm](m2)
-
-    applied_scalings = []
-    preprocessing_warnings = []
-
-    # Apply scalings. For browser analyses, invalid Log10 scaling can be
-    # skipped so the analysis continues on the unscaled axis. Transform all
-    # applicable datasets first and assign only after the scaling succeeds.
-    for scale in selected_scalings:
-        try:
-            if scale == 'log_x':
-                scaled_t1 = preprocessing_options['scaling'][scale](t1)
-                scaled_t2 = preprocessing_options['scaling'][scale](t2) if two_datasets else None
-                t1 = scaled_t1
-                if two_datasets:
-                    t2 = scaled_t2
-            elif scale == 'log_y':
-                scaled_m1 = preprocessing_options['scaling'][scale](m1)
-                scaled_m2 = preprocessing_options['scaling'][scale](m2) if two_datasets else None
-                m1 = scaled_m1
-                if two_datasets:
-                    m2 = scaled_m2
-            applied_scalings.append(scale)
-        except ValueError:
-            if not fallback_invalid_log_scaling or scale not in {'log_x', 'log_y'}:
-                raise
-            if scale == 'log_x':
-                values_to_check = (t1, t2) if two_datasets else (t1,)
-            else:
-                values_to_check = (m1, m2) if two_datasets else (m1,)
-            if any(np.any(~np.isfinite(np.asarray(values, dtype=float))) for values in values_to_check):
-                raise
-            if scale == 'log_x':
-                preprocessing_warnings.append({
-                    'option': 'Log10 time scaling',
-                    'message': 'Log10 time scaling was selected but was not applied because at least one analyzed time value is zero or negative. The analysis continued using unscaled time values.'
-                })
-            else:
-                preprocessing_warnings.append({
-                    'option': 'Log10 response scaling',
-                    'message': 'Log10 response scaling was selected but was not applied because at least one analyzed response value is zero or negative after normalization. The analysis continued using unscaled response values.'
-                })
-
-    # Apply interpolation/alignment. If no interpolation option is supplied,
-    # use exact raw alignment rather than failing with an unset data variable.
-    if two_datasets:
-        interpolation_choices = selected_interpolation or ['none']
-        for interp in interpolation_choices:
-            data = preprocessing_options['interpolation'][interp](t1, m1, t2, m2)
-    else:
-        data = [t1, m1]
-
+    """Backward-compatible adapter over structured core preprocessing."""
+    prepared = prepare_data(
+        t1,
+        m1,
+        t2,
+        m2,
+        selected_interpolation=selected_interpolation,
+        selected_scalings=selected_scalings,
+        selected_normalizations=selected_normalizations,
+        fallback_invalid_log_scaling=fallback_invalid_log_scaling,
+    )
+    data = prepared.to_legacy_data()
     if return_metadata:
-        return data, {
-            'applied_scalings': applied_scalings,
-            'warnings': preprocessing_warnings,
-        }
+        return data, prepared.preprocessing.to_legacy_dict()
     return data
+
+def _profile_fit_to_legacy_components(profile_fit, *, include_tau=False):
+    """Convert a numerical ``ProfileFit`` into current app-facing components."""
+    parameter_values = profile_fit.parameter_vector
+    uncertain_parameters = unc.correlated_values(parameter_values, profile_fit.covariance)
+    uncertain_parameters = dict(zip(profile_fit.parameter_names, uncertain_parameters))
+    parameter_ci_multiplier = _ci_multiplier_95(
+        len(profile_fit.response),
+        profile_fit.n_parameters,
+    )
+    parameter_intervals = _interval_rows_from_uparams(
+        uncertain_parameters,
+        parameter_ci_multiplier,
+    )
+
+    stats = pd.concat(
+        [
+            pd.DataFrame(profile_fit.fit_metrics, index=[0]),
+            pd.DataFrame(
+                {
+                    f'CV {metric}': value
+                    for metric, value in profile_fit.cv_means.items()
+                },
+                index=[0],
+            ),
+        ],
+        axis=1,
+    )
+    stats_table = _goodness_cv_comparison_table(
+        profile_fit.fit_metrics,
+        profile_fit.cv_means,
+    )
+
+    components = {
+        'params': profile_fit.parameters,
+        'uparams': uncertain_parameters,
+        'parameter_intervals': parameter_intervals,
+        'pcov': profile_fit.covariance,
+        'residuals': profile_fit.residuals,
+        'residual_x': profile_fit.time,
+        'residual_y': profile_fit.response,
+        'cv_fit_params': profile_fit.cv_parameter_sets,
+        'stats': stats,
+        'predictions': profile_fit.fitted_values,
+        'residual_dof': profile_fit.residual_dof,
+        'evidence_data': {
+            'n': int(len(profile_fit.response)),
+            'rss': float(np.sum(profile_fit.residuals ** 2)),
+            'n_params': int(profile_fit.n_parameters),
+        },
+        'stats_table': stats_table,
+        'parameter_diagnostics_html': build_parameter_diagnostics_html(
+            profile_fit.parameters,
+            profile_fit.covariance,
+        ),
+    }
+
+    if include_tau:
+        tau = unc.ufloat(profile_fit.tau_estimate, profile_fit.tau_sd)
+        components['tau'] = tau
+        components['tau_interval'] = _tau_interval_row(tau, parameter_ci_multiplier)
+
+    return components
+
 
 def process_data(data, selected_models, selected_approaches, selected_metrics, analysis_config=None):
     analysis_config = analysis_config or {}
@@ -429,219 +432,150 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
     grid_search_param_min = float(analysis_config.get('grid_search_param_min', -1e6))
     grid_search_param_max = float(analysis_config.get('grid_search_param_max', 1e6))
     grid_search_random_state = analysis_config.get('grid_search_random_state', 12345)
-    include_cv_fit_variability = bool(analysis_config.get('include_cv_fit_variability_plot', False))
+    fit_analysis_config = dict(analysis_config)
+    fit_analysis_config.update({
+        'grid_search_num_points': grid_search_num_points,
+        'grid_search_num_cores': grid_search_num_cores,
+        'grid_search_param_min': grid_search_param_min,
+        'grid_search_param_max': grid_search_param_max,
+        'grid_search_random_state': grid_search_random_state,
+    })
+    fit_config_defaults = {
+        'grid_search_num_points': num_points_for_grid_search,
+        'grid_search_num_cores': num_cores_for_grid_search,
+        'grid_search_param_min': -1e6,
+        'grid_search_param_max': 1e6,
+        'grid_search_random_state': 12345,
+    }
     t1,m1,t2,m2,mm,tt,ti1,ti2,mi1,mi2 = data
-    
+
     results = {}
-    
+
     for model_key in selected_models:
         if len(model_key.split(':'))>1:
             approach_id, model_name = model_key.split(':')
         else:
             approach_id = model_key
-        
+
         try:
             if approach_id == 'approach1':
-                cv = make_cross_validator(analysis_config, approach_id)
-                # process data for this approach
-                m = ~np.isnan(ti1) & ~np.isnan(ti2)
-                x,y = ti1[m], ti2[m]
-                # get rough initial estimate of parameters
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore", category=RuntimeWarning)
-                    p0 = auto_grid_search(models[model_name]['model_function'], x, y, param_min=grid_search_param_min, param_max=grid_search_param_max, 
-                                          num_points=grid_search_num_points, num_cores=grid_search_num_cores, random_state=grid_search_random_state,
-                                          initial_points=_model_initial_points(model_name, x, y))
-                # cross-validation
-                cv_output = cross_validation_curve_fit(
-                    x, y, models[model_name]['model_function'], cv, selected_metrics,
-                    p0=p0, kwargs=models[model_name]['fit_kwargs'],
-                    return_fit_params=include_cv_fit_variability,
+                profile_fit = fit_profile(
+                    ti1,
+                    ti2,
+                    model_name=model_name,
+                    selected_metrics=selected_metrics,
+                    analysis_config=fit_analysis_config,
+                    approach_id=approach_id,
+                    calculate_tau=False,
+                    config_defaults=fit_config_defaults,
                 )
-                if include_cv_fit_variability:
-                    cvs, cv_fit_params = cv_output
-                else:
-                    cvs, cv_fit_params = cv_output, []
-                cvs_mean = {f'{metric}':np.nanmean(values[np.isfinite(values)]) for metric,values in cvs.items()}
-                # fit final model
-                model_result = models[model_name]['fit_model'](x, y, p0=p0)
-                y_pred = model_result['predict'](x)
-                # Evaluate goodness of fit
-                gof = {metric: calculate_metric(metric, y, y_pred, len(p0)) for metric in selected_metrics}
-                stats = pd.concat([pd.DataFrame(gof, index=[0]), pd.DataFrame({'CV '+metric:v for metric,v in cvs_mean.items()}, index=[0])], axis=1)
-                stats_table = _goodness_cv_comparison_table(gof, cvs_mean)
-                popt, pcov = list(model_result['params'].values()), model_result['pcov']
-                upopt = unc.correlated_values(popt, pcov)
-                upopt = dict(zip(model_result['params'].keys(),upopt))
-                parameter_ci_multiplier = _ci_multiplier_95(len(y), len(popt))
-                parameter_intervals = _interval_rows_from_uparams(upopt, parameter_ci_multiplier)
-                # outputs
-                plot_image = create_plotly_a1(x, y, {
-                    'model_name': models[model_name]['display_name'],
-                    'model_function': models[model_name]['model_function'],
-                    'params': model_result['params'],
-                    'pcov': model_result['pcov'],
-                    'residuals': y-y_pred,
-                    'approach': approaches[approach_id]['display_name']
-                })
-                residuals = y - y_pred
-                results[model_key] = {
-                    'params': model_result['params'],
-                    'uparams': upopt,
-                    'parameter_intervals': parameter_intervals,
-                    'pcov': model_result['pcov'],
-                    'residuals': residuals,
-                    'residual_x': x,
-                    'residual_y': y,
-                    'cv_fit_params': cv_fit_params,
-                    'stats': stats,
-                    'predictions': y_pred,
-                    'evidence_data': {
-                        'fit': {
-                            'n': int(len(y)),
-                            'rss': float(np.sum(residuals ** 2)),
-                            'n_params': int(len(model_result['params']))
-                        }
+                legacy = _profile_fit_to_legacy_components(profile_fit)
+                plot_image = create_plotly_a1(
+                    profile_fit.time,
+                    profile_fit.response,
+                    {
+                        'model_name': models[model_name]['display_name'],
+                        'model_function': models[model_name]['model_function'],
+                        'params': profile_fit.parameters,
+                        'pcov': profile_fit.covariance,
+                        'residuals': profile_fit.residuals,
+                        'approach': approaches[approach_id]['display_name'],
                     },
-                    'stats_table': stats_table,
-                    'parameter_diagnostics_html': build_parameter_diagnostics_html(model_result['params'], model_result['pcov']),
-                    'plot': plot_image
+                )
+                results[model_key] = {
+                    'params': legacy['params'],
+                    'uparams': legacy['uparams'],
+                    'parameter_intervals': legacy['parameter_intervals'],
+                    'pcov': legacy['pcov'],
+                    'residuals': legacy['residuals'],
+                    'residual_x': legacy['residual_x'],
+                    'residual_y': legacy['residual_y'],
+                    'cv_fit_params': legacy['cv_fit_params'],
+                    'stats': legacy['stats'],
+                    'predictions': legacy['predictions'],
+                    'evidence_data': {'fit': legacy['evidence_data']},
+                    'stats_table': legacy['stats_table'],
+                    'parameter_diagnostics_html': legacy['parameter_diagnostics_html'],
+                    'plot': plot_image,
                 }
             elif approach_id == 'approach2':
-                cv = make_cross_validator(analysis_config, approach_id)
-                # Approach 2 fits the two preprocessed datasets independently.
-                # No interpolation/alignment is needed because the datasets do
-                # not need matched times or matched response values for separate
-                # curve fitting. Using only observed/preprocessed points also
-                # avoids treating deterministic interpolation estimates as
-                # additional fitting observations.
-                m = ~np.isnan(t1) & ~np.isnan(m1)
-                x1,y1 = t1[m], m1[m]
-                m = ~np.isnan(t2) & ~np.isnan(m2)
-                x2,y2 = t2[m], m2[m]
-                # Dataset 1
-                # get rough initial estimate of parameters
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore", category=RuntimeWarning)
-                    p0 = auto_grid_search(models[model_name]['model_function'], x1, y1, param_min=grid_search_param_min, param_max=grid_search_param_max, 
-                                          num_points=grid_search_num_points, num_cores=grid_search_num_cores, random_state=grid_search_random_state,
-                                          initial_points=_model_initial_points(model_name, x1, y1))
-                # cross-validation
-                cv_output1 = cross_validation_curve_fit(
-                    x1, y1, models[model_name]['model_function'], cv, selected_metrics,
-                    p0=p0, kwargs=models[model_name]['fit_kwargs'],
-                    return_fit_params=include_cv_fit_variability,
+                profile_fit1 = fit_profile(
+                    t1,
+                    m1,
+                    model_name=model_name,
+                    selected_metrics=selected_metrics,
+                    analysis_config=fit_analysis_config,
+                    approach_id=approach_id,
+                    calculate_tau=True,
+                    config_defaults=fit_config_defaults,
                 )
-                if include_cv_fit_variability:
-                    cvs1, cv_fit_params1 = cv_output1
-                else:
-                    cvs1, cv_fit_params1 = cv_output1, []
-                cvs1_mean = {f'{metric}':np.nanmean(v[np.isfinite(v)]) for metric,v in cvs1.items()}
-                # fit final model
-                model_result1 = models[model_name]['fit_model'](x1, y1, p0=p0)
-                y_pred1 = model_result1['predict'](x1)
-                # Evaluate goodness of fit
-                gof1 = {metric: calculate_metric(metric, y1, y_pred1, len(p0)) for metric in selected_metrics}
-                stats1 = pd.concat([pd.DataFrame(gof1, index=[0]), pd.DataFrame({'CV '+metric:v for metric,v in cvs1_mean.items()}, index=[0])], axis=1)
-                stats_table1 = _goodness_cv_comparison_table(gof1, cvs1_mean)
-                popt1, pcov1 = list(model_result1['params'].values()), model_result1['pcov']
-                upopt1 = unc.correlated_values(popt1, pcov1)
-                upopt1 = dict(zip(model_result1['params'].keys(),upopt1))
-                parameter_ci_multiplier1 = _ci_multiplier_95(len(y1), len(popt1))
-                parameter_intervals1 = _interval_rows_from_uparams(upopt1, parameter_ci_multiplier1)
-                tau1 = calculate_tau_with_uncertainty(models[model_name]['model_function'], popt1, pcov1)
-                # deal with integration failure
-                if tau1[0]>0 and np.isfinite(tau1[0]):
-                    tau1 = unc.ufloat(*tau1)
-                else:
-                    tau1 = unc.ufloat(0,1)
-                tau_interval1 = _tau_interval_row(tau1, parameter_ci_multiplier1)
-                # Dataset 2
-                # get rough initial estimate of parameters
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore", category=RuntimeWarning)
-                    p0 = auto_grid_search(models[model_name]['model_function'], x2, y2, param_min=grid_search_param_min, param_max=grid_search_param_max, 
-                                          num_points=grid_search_num_points, num_cores=grid_search_num_cores, random_state=grid_search_random_state,
-                                          initial_points=_model_initial_points(model_name, x2, y2))
-                # cross-validation
-                cv_output2 = cross_validation_curve_fit(
-                    x2, y2, models[model_name]['model_function'], cv, selected_metrics,
-                    p0=p0, kwargs=models[model_name]['fit_kwargs'],
-                    return_fit_params=include_cv_fit_variability,
+                legacy1 = _profile_fit_to_legacy_components(profile_fit1, include_tau=True)
+
+                profile_fit2 = fit_profile(
+                    t2,
+                    m2,
+                    model_name=model_name,
+                    selected_metrics=selected_metrics,
+                    analysis_config=fit_analysis_config,
+                    approach_id=approach_id,
+                    calculate_tau=True,
+                    config_defaults=fit_config_defaults,
                 )
-                if include_cv_fit_variability:
-                    cvs2, cv_fit_params2 = cv_output2
-                else:
-                    cvs2, cv_fit_params2 = cv_output2, []
-                cvs2_mean = {f'{metric}':np.nanmean(v[np.isfinite(v)]) for metric,v in cvs2.items()}
-                # fit final model
-                model_result2 = models[model_name]['fit_model'](x2, y2, p0=p0)
-                y_pred2 = model_result2['predict'](x2)
-                # Evaluate goodness of fit
-                gof2 = {metric: calculate_metric(metric, y2, y_pred2, len(p0)) for metric in selected_metrics}
-                stats2 = pd.concat([pd.DataFrame(gof2, index=[0]), pd.DataFrame({'CV '+metric:v for metric,v in cvs2_mean.items()}, index=[0])], axis=1)
-                stats_table2 = _goodness_cv_comparison_table(gof2, cvs2_mean)
-                popt2, pcov2 = list(model_result2['params'].values()), model_result2['pcov']
-                upopt2 = unc.correlated_values(popt2, pcov2)
-                upopt2 = dict(zip(model_result2['params'].keys(),upopt2))
-                parameter_ci_multiplier2 = _ci_multiplier_95(len(y2), len(popt2))
-                parameter_intervals2 = _interval_rows_from_uparams(upopt2, parameter_ci_multiplier2)
-                tau2 = calculate_tau_with_uncertainty(models[model_name]['model_function'], popt2, pcov2)
-                # deal with integration failure
-                if tau2[0]>0 and np.isfinite(tau2[0]):
-                    tau2 = unc.ufloat(*tau2)
-                else:
-                    tau2 = unc.ufloat(0,1)
-                tau_interval2 = _tau_interval_row(tau2, parameter_ci_multiplier2)
-                # outputs
-                plot_image = create_plotly_a2(x1, y1, x2, y2, {
-                    'model_name': models[model_name]['display_name'],
-                    'model_function': models[model_name]['model_function'],
-                    'params1': model_result1['params'],
-                    'params2': model_result2['params'],
-                    'pcov1': model_result1['pcov'],  # Add this line
-                    'pcov2': model_result2['pcov'],  # Add this line
-                    'residuals1': y1-y_pred1,
-                    'residuals2': y2-y_pred2,
-                    'approach': approaches[approach_id]['display_name']
-                })
-                residuals1 = y1 - y_pred1
-                residuals2 = y2 - y_pred2
+                legacy2 = _profile_fit_to_legacy_components(profile_fit2, include_tau=True)
+
+                plot_image = create_plotly_a2(
+                    profile_fit1.time,
+                    profile_fit1.response,
+                    profile_fit2.time,
+                    profile_fit2.response,
+                    {
+                        'model_name': models[model_name]['display_name'],
+                        'model_function': models[model_name]['model_function'],
+                        'params1': profile_fit1.parameters,
+                        'params2': profile_fit2.parameters,
+                        'pcov1': profile_fit1.covariance,
+                        'pcov2': profile_fit2.covariance,
+                        'residuals1': profile_fit1.residuals,
+                        'residuals2': profile_fit2.residuals,
+                        'approach': approaches[approach_id]['display_name'],
+                    },
+                )
                 results[model_key] = {
-                    'params': [model_result1['params'],model_result2['params']],
-                    'uparams': [upopt1,upopt2],
-                    'parameter_intervals': [parameter_intervals1, parameter_intervals2],
-                    'tau': [tau1,tau2],
-                    'tau_intervals': [tau_interval1, tau_interval2],
-                    'stats': [stats1,stats2],
-                    'predictions': [y_pred1,y_pred2],
-                    'pcov': [pcov1,pcov2],
-                    'residuals': [residuals1,residuals2],
-                    'residual_x': [x1, x2],
-                    'residual_y': [y1, y2],
-                    'cv_fit_params': [cv_fit_params1, cv_fit_params2],
+                    'params': [legacy1['params'], legacy2['params']],
+                    'uparams': [legacy1['uparams'], legacy2['uparams']],
+                    'parameter_intervals': [
+                        legacy1['parameter_intervals'],
+                        legacy2['parameter_intervals'],
+                    ],
+                    'tau': [legacy1['tau'], legacy2['tau']],
+                    'tau_intervals': [
+                        legacy1['tau_interval'],
+                        legacy2['tau_interval'],
+                    ],
+                    'stats': [legacy1['stats'], legacy2['stats']],
+                    'predictions': [legacy1['predictions'], legacy2['predictions']],
+                    'pcov': [legacy1['pcov'], legacy2['pcov']],
+                    'residuals': [legacy1['residuals'], legacy2['residuals']],
+                    'residual_x': [legacy1['residual_x'], legacy2['residual_x']],
+                    'residual_y': [legacy1['residual_y'], legacy2['residual_y']],
+                    'cv_fit_params': [
+                        legacy1['cv_fit_params'],
+                        legacy2['cv_fit_params'],
+                    ],
                     'residual_dof': [
-                        int(len(y1) - len(model_result1['params'])),
-                        int(len(y2) - len(model_result2['params']))
+                        legacy1['residual_dof'],
+                        legacy2['residual_dof'],
                     ],
                     'evidence_data': {
-                        'in_vitro': {
-                            'n': int(len(y1)),
-                            'rss': float(np.sum(residuals1 ** 2)),
-                            'n_params': int(len(model_result1['params']))
-                        },
-                        'in_vivo': {
-                            'n': int(len(y2)),
-                            'rss': float(np.sum(residuals2 ** 2)),
-                            'n_params': int(len(model_result2['params']))
-                        }
+                        'in_vitro': legacy1['evidence_data'],
+                        'in_vivo': legacy2['evidence_data'],
                     },
-                    'stats_table': [stats_table1, stats_table2],
+                    'stats_table': [legacy1['stats_table'], legacy2['stats_table']],
                     'parameter_diagnostics_html': [
-                        build_parameter_diagnostics_html(model_result1['params'], pcov1),
-                        build_parameter_diagnostics_html(model_result2['params'], pcov2)
+                        legacy1['parameter_diagnostics_html'],
+                        legacy2['parameter_diagnostics_html'],
                     ],
-                    'plot': plot_image
+                    'plot': plot_image,
                 }
             elif approach_id == 'approach3':
                 plot_image_v = create_plotly_a3(tt,mi1,mi2,ptype='v')
@@ -651,10 +585,11 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
             # If an error occurs, store the error message
             results[model_key] = {'error': str(e)}
             traceback.print_exc()
-    
+
     _attach_cv_fit_variability_plots(results, analysis_config=analysis_config)
     _attach_residual_plots(results, analysis_config=analysis_config)
     return results
+
 
 def _inverse_response_times(model_function, params, target_responses, time_range, observed_responses=None, grid_points=1001):
     """Map response values to unique fitted times over a bounded calibration range.

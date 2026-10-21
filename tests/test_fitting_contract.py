@@ -184,3 +184,43 @@ def test_cv_training_parameter_sets_are_retained_when_requested(
     assert len(result['cv_fit_params']) == 5
     assert all(params is not None and np.asarray(params).shape == (1,) for params in result['cv_fit_params'])
     assert result['cv_fit_variability_plot'] == sentinel
+
+
+def test_process_data_delegates_profile_fits_to_reusable_core(
+    monkeypatch,
+    fast_analysis_config,
+    stub_fit_plots,
+):
+    t1 = np.linspace(0.0, 5.0, 8)
+    m1 = np.exp(-0.20 * t1)
+    t2 = np.linspace(0.0, 10.0, 8)
+    m2 = np.exp(-0.10 * t2)
+    data = preprocess_data(t1, m1, t2, m2, selected_interpolation=['none'])
+
+    def exponential_initial_guess(x, y):
+        rate = np.log(y[-1] / y[0]) / (x[-1] - x[0])
+        return np.array([y[0], rate])
+
+    monkeypatch.setitem(models['exponential'], 'initial_guess', exponential_initial_guess)
+
+    original_fit_profile = engine.fit_profile
+    calls = []
+
+    def recording_fit_profile(*args, **kwargs):
+        calls.append(kwargs.copy())
+        return original_fit_profile(*args, **kwargs)
+
+    monkeypatch.setattr(engine, 'fit_profile', recording_fit_profile)
+    result = process_data(
+        data,
+        selected_models=['approach2:exponential'],
+        selected_approaches=['approach2'],
+        selected_metrics=['rmse'],
+        analysis_config=fast_analysis_config,
+    )['approach2:exponential']
+
+    assert 'error' not in result
+    assert len(calls) == 2
+    assert all(call['model_name'] == 'exponential' for call in calls)
+    assert all(call['approach_id'] == 'approach2' for call in calls)
+    assert all(call['calculate_tau'] is True for call in calls)
