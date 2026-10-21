@@ -98,3 +98,54 @@ selection minimizes the uncertainty-averaged I criterion. Optional coordinate
 exchange refines each design size without preserving nesting. These information
 scores are screening and optimization quantities; later Monte Carlo validation
 will provide user-facing expected recovery performance.
+
+## Simulation-based design evaluation
+
+Patch 9 adds Monte Carlo validation of proposed schedules. A
+`SimulationPlan` selects plausible reference trajectories and stores
+standard-normal errors for every available candidate time. Reusing one plan
+across schedules applies common random numbers, so differences between designs
+are less obscured by Monte Carlo noise.
+
+```python
+from study_design_core import (
+    compare_designs_by_simulation,
+    create_simulation_plan,
+    equally_spaced_design,
+)
+
+plan = create_simulation_plan(
+    reference,
+    observation,
+    constraints.all_available_times,
+    n_simulations=1000,
+    random_state=123,
+)
+comparison = compare_designs_by_simulation(
+    reference,
+    {
+        'optimized': optimized_times,
+        'equal_time': equally_spaced_design(constraints, len(optimized_times)),
+    },
+    observation,
+    model_name='stretched_exponential',
+    constraints=constraints,
+    simulation_plan=plan,
+)
+```
+
+For every simulated study, the engine samples future observations, fits the
+selected analysis model with `fit_model_once()`, and compares the recovered
+curve with the complete generating trajectory. The primary metric is integrated
+root mean square error (IRMSE). Additional outputs include normalized IRMSE,
+maximum absolute error, approximate mean-curve interval width, optional
+threshold-time error, parameter-bound hits, and fit-failure rate.
+
+Fit failures remain explicit. Successful-study metrics exclude failed fits,
+while `penalized_mean_irmse` assigns a configurable response-scale penalty to
+failures for design ranking. The default failure penalty is twice the response
+range represented by the simulated reference curves.
+
+Simple comparison schedules are available for equal calendar-time spacing,
+shifted-log spacing, and equal-response spacing. The equal-response baseline
+requires a monotonic central reference trajectory.

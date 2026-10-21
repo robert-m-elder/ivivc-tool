@@ -650,3 +650,285 @@ class DesignOptimizationResult:
                 return step
         label = 'refined' if refined else 'nested'
         raise KeyError(f'No {label} design is available for N={int(number_of_times)}.')
+
+@dataclass
+class SimulationPlan:
+    """Reusable trajectory selections and standard-normal errors.
+
+    Designs evaluated against the same plan share both the selected reference
+    trajectories and the error draws at common candidate times.
+    """
+
+    master_times: np.ndarray
+    trajectory_draw_indices: np.ndarray
+    standard_normal_errors: np.ndarray
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.master_times = np.asarray(self.master_times, dtype=float).copy()
+        self.trajectory_draw_indices = np.asarray(
+            self.trajectory_draw_indices,
+            dtype=int,
+        ).copy()
+        self.standard_normal_errors = np.asarray(
+            self.standard_normal_errors,
+            dtype=float,
+        ).copy()
+        if self.master_times.ndim != 1 or len(self.master_times) == 0:
+            raise ValueError('master_times must be a nonempty one-dimensional array.')
+        if np.any(~np.isfinite(self.master_times)) or np.any(np.diff(self.master_times) <= 0):
+            raise ValueError('master_times must be finite and strictly increasing.')
+        if self.trajectory_draw_indices.ndim != 1 or len(self.trajectory_draw_indices) == 0:
+            raise ValueError('trajectory_draw_indices must be a nonempty one-dimensional array.')
+        if np.any(self.trajectory_draw_indices < 0):
+            raise ValueError('trajectory_draw_indices cannot be negative.')
+        if self.standard_normal_errors.ndim != 3:
+            raise ValueError(
+                'standard_normal_errors must have simulation, replicate, and time dimensions.'
+            )
+        expected_shape = (len(self.trajectory_draw_indices), len(self.master_times))
+        if (
+            self.standard_normal_errors.shape[0] != expected_shape[0]
+            or self.standard_normal_errors.shape[2] != expected_shape[1]
+        ):
+            raise ValueError(
+                'standard_normal_errors must match the simulation count and master time grid.'
+            )
+        if self.standard_normal_errors.shape[1] < 1:
+            raise ValueError('Simulation plans require at least one replicate error draw.')
+        if np.any(~np.isfinite(self.standard_normal_errors)):
+            raise ValueError('standard_normal_errors must be finite.')
+        self.metadata = dict(self.metadata)
+
+    @property
+    def n_simulations(self) -> int:
+        return int(len(self.trajectory_draw_indices))
+
+    @property
+    def n_replicates(self) -> int:
+        return int(self.standard_normal_errors.shape[1])
+
+    def indices_for_times(self, times) -> np.ndarray:
+        """Return master-grid positions for the requested design times."""
+        requested = np.asarray(times, dtype=float)
+        if requested.ndim != 1 or np.any(~np.isfinite(requested)):
+            raise ValueError('Requested plan times must be finite and one-dimensional.')
+        indices = []
+        for value in requested:
+            matches = np.flatnonzero(
+                np.isclose(self.master_times, value, rtol=0.0, atol=1e-12)
+            )
+            if len(matches) != 1:
+                raise ValueError(
+                    f'Time {float(value):g} is not uniquely represented in the simulation plan.'
+                )
+            indices.append(int(matches[0]))
+        return np.asarray(indices, dtype=int)
+
+
+@dataclass
+class DesignSimulationResult:
+    """Complete Monte Carlo recovery results for one proposed design."""
+
+    design_times: np.ndarray
+    model_name: str
+    evaluation_times: np.ndarray
+    evaluation_weights: np.ndarray
+    trajectory_draw_indices: np.ndarray
+    expected_values: np.ndarray
+    observed_means: np.ndarray
+    true_curves: np.ndarray
+    fitted_curves: np.ndarray
+    parameter_estimates: np.ndarray
+    parameter_bound_hits: np.ndarray
+    fit_success: np.ndarray
+    fit_messages: Sequence[str | None]
+    integrated_rmse: np.ndarray
+    normalized_integrated_rmse: np.ndarray
+    maximum_absolute_error: np.ndarray
+    mean_curve_interval_width: np.ndarray
+    true_target_times: np.ndarray
+    fitted_target_times: np.ndarray
+    target_time_errors: np.ndarray
+    response_scale: float
+    failure_penalty: float
+    penalized_integrated_rmse: np.ndarray
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.design_times = np.unique(np.asarray(self.design_times, dtype=float))
+        self.evaluation_times = np.asarray(self.evaluation_times, dtype=float).copy()
+        self.evaluation_weights = np.asarray(self.evaluation_weights, dtype=float).copy()
+        self.trajectory_draw_indices = np.asarray(
+            self.trajectory_draw_indices,
+            dtype=int,
+        ).copy()
+        self.expected_values = np.asarray(self.expected_values, dtype=float).copy()
+        self.observed_means = np.asarray(self.observed_means, dtype=float).copy()
+        self.true_curves = np.asarray(self.true_curves, dtype=float).copy()
+        self.fitted_curves = np.asarray(self.fitted_curves, dtype=float).copy()
+        self.parameter_estimates = np.asarray(self.parameter_estimates, dtype=float).copy()
+        self.parameter_bound_hits = np.asarray(self.parameter_bound_hits, dtype=bool).copy()
+        self.fit_success = np.asarray(self.fit_success, dtype=bool).copy()
+        self.fit_messages = tuple(self.fit_messages)
+        self.integrated_rmse = np.asarray(self.integrated_rmse, dtype=float).copy()
+        self.normalized_integrated_rmse = np.asarray(
+            self.normalized_integrated_rmse,
+            dtype=float,
+        ).copy()
+        self.maximum_absolute_error = np.asarray(
+            self.maximum_absolute_error,
+            dtype=float,
+        ).copy()
+        self.mean_curve_interval_width = np.asarray(
+            self.mean_curve_interval_width,
+            dtype=float,
+        ).copy()
+        self.true_target_times = np.asarray(self.true_target_times, dtype=float).copy()
+        self.fitted_target_times = np.asarray(self.fitted_target_times, dtype=float).copy()
+        self.target_time_errors = np.asarray(self.target_time_errors, dtype=float).copy()
+        self.penalized_integrated_rmse = np.asarray(
+            self.penalized_integrated_rmse,
+            dtype=float,
+        ).copy()
+
+        if self.design_times.ndim != 1 or len(self.design_times) == 0:
+            raise ValueError('design_times must be a nonempty one-dimensional array.')
+        if self.evaluation_times.ndim != 1 or len(self.evaluation_times) < 2:
+            raise ValueError('evaluation_times must contain at least two points.')
+        if np.any(np.diff(self.evaluation_times) <= 0):
+            raise ValueError('evaluation_times must be strictly increasing.')
+        if self.evaluation_weights.shape != self.evaluation_times.shape:
+            raise ValueError('evaluation_weights must match evaluation_times.')
+        if np.any(~np.isfinite(self.evaluation_weights)) or np.any(self.evaluation_weights < 0):
+            raise ValueError('evaluation_weights must be finite and nonnegative.')
+        if not np.sum(self.evaluation_weights) > 0:
+            raise ValueError('evaluation_weights must contain positive total weight.')
+        self.evaluation_weights /= np.sum(self.evaluation_weights)
+
+        simulation_count = len(self.trajectory_draw_indices)
+        design_shape = (simulation_count, len(self.design_times))
+        curve_shape = (simulation_count, len(self.evaluation_times))
+        if self.expected_values.shape != design_shape or self.observed_means.shape != design_shape:
+            raise ValueError('Expected and observed mean arrays have an invalid design shape.')
+        if self.true_curves.shape != curve_shape or self.fitted_curves.shape != curve_shape:
+            raise ValueError('True and fitted curve arrays have an invalid evaluation shape.')
+        if self.parameter_estimates.ndim != 2 or self.parameter_estimates.shape[0] != simulation_count:
+            raise ValueError('parameter_estimates must contain one row per simulation.')
+        if self.parameter_bound_hits.shape != self.parameter_estimates.shape:
+            raise ValueError('parameter_bound_hits must match parameter_estimates.')
+        per_simulation = (
+            self.fit_success,
+            self.integrated_rmse,
+            self.normalized_integrated_rmse,
+            self.maximum_absolute_error,
+            self.mean_curve_interval_width,
+            self.true_target_times,
+            self.fitted_target_times,
+            self.target_time_errors,
+            self.penalized_integrated_rmse,
+        )
+        if any(values.ndim != 1 or len(values) != simulation_count for values in per_simulation):
+            raise ValueError('Per-simulation outputs must match the simulation count.')
+        if len(self.fit_messages) != simulation_count:
+            raise ValueError('fit_messages must contain one entry per simulation.')
+        self.response_scale = float(self.response_scale)
+        self.failure_penalty = float(self.failure_penalty)
+        if not self.response_scale > 0 or not np.isfinite(self.response_scale):
+            raise ValueError('response_scale must be finite and positive.')
+        if self.failure_penalty < 0 or not np.isfinite(self.failure_penalty):
+            raise ValueError('failure_penalty must be finite and nonnegative.')
+        self.metadata = dict(self.metadata)
+
+    @property
+    def n_simulations(self) -> int:
+        return int(len(self.fit_success))
+
+    @property
+    def n_successful(self) -> int:
+        return int(np.count_nonzero(self.fit_success))
+
+    @property
+    def failure_rate(self) -> float:
+        return float(1.0 - self.n_successful / self.n_simulations)
+
+
+@dataclass
+class DesignPerformanceSummary:
+    """Compact user-facing performance summary for one design."""
+
+    design_times: np.ndarray
+    n_simulations: int
+    n_successful: int
+    failure_rate: float
+    response_scale: float
+    failure_penalty: float
+    mean_irmse: float
+    median_irmse: float
+    p90_irmse: float
+    p95_irmse: float
+    mean_normalized_irmse: float
+    median_normalized_irmse: float
+    p90_normalized_irmse: float
+    penalized_mean_irmse: float
+    penalized_mean_normalized_irmse: float
+    mean_maximum_absolute_error: float
+    p90_maximum_absolute_error: float
+    mean_curve_interval_width: float
+    median_curve_interval_width: float
+    median_absolute_target_time_error: float
+    p90_absolute_target_time_error: float
+    parameter_bound_hit_rate: float
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.design_times = np.unique(np.asarray(self.design_times, dtype=float))
+        self.n_simulations = int(self.n_simulations)
+        self.n_successful = int(self.n_successful)
+        self.failure_rate = float(self.failure_rate)
+        self.response_scale = float(self.response_scale)
+        self.failure_penalty = float(self.failure_penalty)
+        for name in (
+            'mean_irmse',
+            'median_irmse',
+            'p90_irmse',
+            'p95_irmse',
+            'mean_normalized_irmse',
+            'median_normalized_irmse',
+            'p90_normalized_irmse',
+            'penalized_mean_irmse',
+            'penalized_mean_normalized_irmse',
+            'mean_maximum_absolute_error',
+            'p90_maximum_absolute_error',
+            'mean_curve_interval_width',
+            'median_curve_interval_width',
+            'median_absolute_target_time_error',
+            'p90_absolute_target_time_error',
+            'parameter_bound_hit_rate',
+        ):
+            setattr(self, name, float(getattr(self, name)))
+        if self.n_simulations < 1 or not 0 <= self.n_successful <= self.n_simulations:
+            raise ValueError('Simulation summary counts are invalid.')
+        self.metadata = dict(self.metadata)
+
+
+@dataclass
+class DesignSimulationComparison:
+    """Named design results evaluated using one shared simulation plan."""
+
+    simulation_plan: SimulationPlan
+    results: Mapping[str, DesignSimulationResult]
+    summaries: Mapping[str, DesignPerformanceSummary]
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.results = dict(self.results)
+        self.summaries = dict(self.summaries)
+        if not self.results:
+            raise ValueError('At least one design result is required.')
+        if set(self.results) != set(self.summaries):
+            raise ValueError('Simulation result and summary labels must match.')
+        for result in self.results.values():
+            if result.n_simulations != self.simulation_plan.n_simulations:
+                raise ValueError('All results must use the stored simulation plan.')
+        self.metadata = dict(self.metadata)
