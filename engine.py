@@ -11,7 +11,7 @@ import plotly.graph_objects as go
 import plotly.io as pio
 import uncertainties as unc
 
-from metrics import calculate_metric, metrics
+from metrics import metrics
 from models import approaches, models
 from ivivc_core.fitting import fit_profile
 from ivivc_core.predictions import (
@@ -28,12 +28,8 @@ from ivivc_core.predictions import (
 from ivivc_core.preprocessing import prepare_data
 from ivivc_core.types import TimeCourse
 from utilities.evaluation import (
-    auto_grid_search,
-    calculate_tau_with_uncertainty,
-    cross_validation_curve_fit,
     generate_prediction_bands,
     generate_ratio_prediction_bands,
-    make_cross_validator,
 )
 from utilities.misc import hex_to_rgba
 from utilities.parameter_diagnostics import (
@@ -50,13 +46,6 @@ else:
     num_cores_for_grid_search = None
     num_points_for_grid_search = 200
 
-
-def _model_initial_points(model_name, x, y):
-    """Return optional model-specific/data-driven starting points."""
-    initial_guess = models[model_name].get('initial_guess')
-    if initial_guess is None:
-        return None
-    return initial_guess(x, y)
 
 colors = {
     'in_vitro': '#2E5F8A',      # Darker blue

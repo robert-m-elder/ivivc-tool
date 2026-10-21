@@ -9,7 +9,7 @@ current browser or CLI contracts.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any, Generic, Iterator, Mapping, TypeVar
 
 import numpy as np
 
@@ -432,3 +432,156 @@ class TrajectoryEnsemble:
     @property
     def n_valid_draws(self) -> int:
         return int(np.count_nonzero(self.valid_draws))
+
+
+T = TypeVar('T')
+
+
+@dataclass(frozen=True)
+class AnalysisError:
+    """Structured error captured by a batch-oriented public API call.
+
+    Numerical primitives such as :func:`fit_profile` continue to raise their
+    original exceptions.  The higher-level API can instead collect independent
+    model or prediction failures so one unsuccessful candidate does not discard
+    successful results from other candidates.
+    """
+
+    message: str
+    exception_type: str
+
+    @classmethod
+    def from_exception(cls, exception: BaseException) -> 'AnalysisError':
+        """Create an error record without retaining the exception object."""
+        return cls(
+            message=str(exception),
+            exception_type=type(exception).__name__,
+        )
+
+
+@dataclass
+class ResultBatch(Generic[T]):
+    """Successful keyed results and independently captured failures."""
+
+    results: Mapping[str, T]
+    errors: Mapping[str, AnalysisError] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.results = dict(self.results)
+        self.errors = dict(self.errors)
+
+    def __getitem__(self, key: str) -> T:
+        return self.results[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.results)
+
+    def __len__(self) -> int:
+        return len(self.results)
+
+    @property
+    def successful_keys(self) -> tuple[str, ...]:
+        return tuple(self.results)
+
+    @property
+    def failed_keys(self) -> tuple[str, ...]:
+        return tuple(self.errors)
+
+
+@dataclass
+class IVIVCModelFit:
+    """Structured fit result for one IVIVC approach/model selection.
+
+    Approach 1 stores a single fitted time-to-time mapping. Approach 2 stores
+    independent in vitro and in vivo profile fits. Approach 3 has no parametric
+    fit and therefore stores only its approach identifier.
+    """
+
+    approach_id: str
+    model_name: str | None = None
+    time_mapping_fit: ProfileFit | None = None
+    in_vitro_fit: ProfileFit | None = None
+    in_vivo_fit: ProfileFit | None = None
+
+    def __post_init__(self) -> None:
+        if self.approach_id == 'approach1':
+            if self.model_name is None or self.time_mapping_fit is None:
+                raise ValueError(
+                    'Approach 1 results require a model name and time-mapping fit.'
+                )
+            if self.in_vitro_fit is not None or self.in_vivo_fit is not None:
+                raise ValueError('Approach 1 results cannot contain profile fits.')
+        elif self.approach_id == 'approach2':
+            if (
+                self.model_name is None
+                or self.in_vitro_fit is None
+                or self.in_vivo_fit is None
+            ):
+                raise ValueError(
+                    'Approach 2 results require a model name and both profile fits.'
+                )
+            if self.time_mapping_fit is not None:
+                raise ValueError('Approach 2 results cannot contain a time-mapping fit.')
+        elif self.approach_id == 'approach3':
+            if self.model_name is not None:
+                raise ValueError('Approach 3 does not have a model name.')
+            if any(
+                fit is not None
+                for fit in (
+                    self.time_mapping_fit,
+                    self.in_vitro_fit,
+                    self.in_vivo_fit,
+                )
+            ):
+                raise ValueError('Approach 3 does not contain parametric fits.')
+        else:
+            raise ValueError(f'Unknown IVIVC approach: {self.approach_id!r}')
+
+    @property
+    def key(self) -> str:
+        if self.model_name is None:
+            return self.approach_id
+        return f'{self.approach_id}:{self.model_name}'
+
+    @property
+    def profile_fits(self) -> Mapping[str, ProfileFit]:
+        """Return the component fits using stable, descriptive keys."""
+        if self.approach_id == 'approach1':
+            assert self.time_mapping_fit is not None
+            return {'time_mapping': self.time_mapping_fit}
+        if self.approach_id == 'approach2':
+            assert self.in_vitro_fit is not None
+            assert self.in_vivo_fit is not None
+            return {
+                'in_vitro': self.in_vitro_fit,
+                'in_vivo': self.in_vivo_fit,
+            }
+        return {}
+
+
+@dataclass
+class IVIVCAnalysis:
+    """Reusable numerical result from fitting selected IVIVC approaches."""
+
+    prepared_data: PreparedIVIVCData
+    model_results: Mapping[str, IVIVCModelFit]
+    errors: Mapping[str, AnalysisError] = field(default_factory=dict)
+    selected_metrics: tuple[str, ...] = ()
+    analysis_config: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.model_results = dict(self.model_results)
+        self.errors = dict(self.errors)
+        self.selected_metrics = tuple(self.selected_metrics)
+        self.analysis_config = dict(self.analysis_config)
+
+    def __getitem__(self, key: str) -> IVIVCModelFit:
+        return self.model_results[key]
+
+    @property
+    def successful_keys(self) -> tuple[str, ...]:
+        return tuple(self.model_results)
+
+    @property
+    def failed_keys(self) -> tuple[str, ...]:
+        return tuple(self.errors)

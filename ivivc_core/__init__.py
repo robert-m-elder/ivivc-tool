@@ -1,5 +1,12 @@
 """Reusable numerical core for IVIVC analysis."""
 
+from .api import (
+    DEFAULT_PREDICTION_METHODS,
+    fit_ivivc,
+    fit_time_course,
+    generate_trajectory_ensembles,
+    predict_in_vivo,
+)
 from .fitting import fit_profile
 from .predictions import (
     inverse_response_prediction_intervals,
@@ -33,8 +40,11 @@ from .uncertainty import (
     summarize_draws,
 )
 from .types import (
+    AnalysisError,
     CurveDraws,
     IntervalSummary,
+    IVIVCAnalysis,
+    IVIVCModelFit,
     NormalizationRecord,
     ParameterSamples,
     PreparedIVIVCData,
@@ -42,11 +52,17 @@ from .types import (
     PreprocessingMetadata,
     PreprocessingWarning,
     ProfileFit,
+    ResultBatch,
     TimeCourse,
     TrajectoryEnsemble,
 )
 
 __all__ = [
+    'ResultBatch',
+    'IVIVCModelFit',
+    'IVIVCAnalysis',
+    'DEFAULT_PREDICTION_METHODS',
+    'AnalysisError',
     'ApproachSpec',
     'CurveDraws',
     'IntervalSummary',
@@ -62,7 +78,11 @@ __all__ = [
     'TrajectoryEnsemble',
     'deterministic_trajectory_ensemble',
     'evaluate_curve_draws',
+    'fit_ivivc',
+    'fit_time_course',
     'fit_profile',
+    'generate_trajectory_ensembles',
+    'predict_in_vivo',
     'get_approach_spec',
     'get_model_spec',
     'iter_approach_specs',
