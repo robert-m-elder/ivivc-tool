@@ -194,3 +194,88 @@ class ProfileFit:
     @property
     def n_parameters(self) -> int:
         return len(self.parameter_names)
+
+
+@dataclass
+class PredictedTrajectory:
+    """Numerical in vivo trajectory produced by one prediction method.
+
+    All prediction approaches are represented on the same paired axes. Methods
+    that map time retain the supplied response as ``in_vivo_value``; methods
+    that map response retain the supplied time as ``in_vivo_time``. Optional
+    bounds are kept separate from the central trajectory so presentation code
+    can decide whether and how to display them.
+    """
+
+    source_approach: str
+    source_method: str
+    in_vitro_time: np.ndarray
+    in_vitro_value: np.ndarray
+    in_vivo_time: np.ndarray
+    in_vivo_value: np.ndarray
+    model_name: str | None = None
+    available: bool = True
+    skip_reason: str | None = None
+    note: str | None = None
+    status: np.ndarray | None = None
+    time_lower: np.ndarray | None = None
+    time_upper: np.ndarray | None = None
+    time_error_lower: np.ndarray | None = None
+    time_error_upper: np.ndarray | None = None
+    value_lower: np.ndarray | None = None
+    value_upper: np.ndarray | None = None
+    scaling_factor: np.ndarray | None = None
+    auxiliary: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        array_fields = (
+            'in_vitro_time',
+            'in_vitro_value',
+            'in_vivo_time',
+            'in_vivo_value',
+            'status',
+            'time_lower',
+            'time_upper',
+            'time_error_lower',
+            'time_error_upper',
+            'value_lower',
+            'value_upper',
+            'scaling_factor',
+        )
+        for field_name in array_fields:
+            value = getattr(self, field_name)
+            if value is not None:
+                setattr(self, field_name, np.asarray(value).copy())
+
+        expected_length = len(self.in_vitro_time)
+        required_fields = (
+            'in_vitro_value',
+            'in_vivo_time',
+            'in_vivo_value',
+        )
+        optional_fields = (
+            'status',
+            'time_lower',
+            'time_upper',
+            'time_error_lower',
+            'time_error_upper',
+            'value_lower',
+            'value_upper',
+            'scaling_factor',
+        )
+        for field_name in required_fields:
+            if len(getattr(self, field_name)) != expected_length:
+                raise ValueError(
+                    f'Predicted-trajectory field {field_name!r} must match the input length.'
+                )
+        for field_name in optional_fields:
+            value = getattr(self, field_name)
+            if value is not None and len(value) != expected_length:
+                raise ValueError(
+                    f'Predicted-trajectory field {field_name!r} must match the input length.'
+                )
+
+        copied_auxiliary: dict[str, Any] = {}
+        for key, value in dict(self.auxiliary).items():
+            copied_auxiliary[key] = value.copy() if isinstance(value, np.ndarray) else value
+        self.auxiliary = copied_auxiliary
