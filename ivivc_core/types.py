@@ -279,3 +279,156 @@ class PredictedTrajectory:
         for key, value in dict(self.auxiliary).items():
             copied_auxiliary[key] = value.copy() if isinstance(value, np.ndarray) else value
         self.auxiliary = copied_auxiliary
+
+
+@dataclass
+class ParameterSamples:
+    """Joint samples from a fitted parameter distribution.
+
+    Rows represent complete parameter vectors. Keeping the vectors together is
+    important because parameter covariance determines how complete fitted
+    trajectories vary across time.
+    """
+
+    parameter_names: tuple[str, ...]
+    values: np.ndarray
+    requested_samples: int | None = None
+
+    def __post_init__(self) -> None:
+        self.parameter_names = tuple(self.parameter_names)
+        self.values = np.asarray(self.values, dtype=float).copy()
+        if self.values.ndim == 0:
+            self.values = self.values.reshape(1, 1)
+        elif self.values.ndim == 1:
+            self.values = self.values.reshape(1, -1)
+        if self.values.ndim != 2:
+            raise ValueError('Parameter samples must be a two-dimensional array.')
+        if self.values.shape[1] != len(self.parameter_names):
+            raise ValueError(
+                'The number of sampled parameter columns must match parameter_names.'
+            )
+        if self.requested_samples is None:
+            self.requested_samples = int(self.values.shape[0])
+        else:
+            self.requested_samples = int(self.requested_samples)
+            if self.requested_samples < self.values.shape[0]:
+                raise ValueError(
+                    'requested_samples cannot be smaller than the returned sample count.'
+                )
+
+    @property
+    def n_samples(self) -> int:
+        return int(self.values.shape[0])
+
+    @property
+    def n_parameters(self) -> int:
+        return int(self.values.shape[1])
+
+
+@dataclass
+class CurveDraws:
+    """Model evaluations for complete joint parameter draws.
+
+    Invalid model evaluations are retained as NaN rows and identified by
+    ``valid_draws`` so callers can report the requested and usable draw counts.
+    """
+
+    x: np.ndarray
+    values: np.ndarray
+    valid_draws: np.ndarray
+
+    def __post_init__(self) -> None:
+        self.x = np.asarray(self.x, dtype=float).copy()
+        self.values = np.asarray(self.values, dtype=float).copy()
+        self.valid_draws = np.asarray(self.valid_draws, dtype=bool).copy()
+        if self.x.ndim != 1:
+            raise ValueError('Curve-draw x values must be one-dimensional.')
+        if self.values.ndim == 1:
+            self.values = self.values.reshape(1, -1)
+        if self.values.ndim != 2:
+            raise ValueError('Curve draws must be a two-dimensional array.')
+        if self.values.shape[1] != len(self.x):
+            raise ValueError('Each curve draw must contain one value per x value.')
+        if self.valid_draws.ndim != 1 or len(self.valid_draws) != self.values.shape[0]:
+            raise ValueError('valid_draws must contain one flag per curve draw.')
+
+    @property
+    def n_draws(self) -> int:
+        return int(self.values.shape[0])
+
+    @property
+    def n_valid_draws(self) -> int:
+        return int(np.count_nonzero(self.valid_draws))
+
+
+@dataclass
+class IntervalSummary:
+    """Pointwise summary of a set of complete trajectory draws."""
+
+    lower: np.ndarray
+    upper: np.ndarray
+    mean: np.ndarray
+    std: np.ndarray
+    valid_counts: np.ndarray
+    confidence_level: float
+
+    def __post_init__(self) -> None:
+        array_fields = ('lower', 'upper', 'mean', 'std', 'valid_counts')
+        for field_name in array_fields:
+            value = np.asarray(getattr(self, field_name)).copy()
+            if value.ndim != 1:
+                raise ValueError('Interval summary arrays must be one-dimensional.')
+            setattr(self, field_name, value)
+        lengths = {len(getattr(self, field_name)) for field_name in array_fields}
+        if len(lengths) != 1:
+            raise ValueError('Interval summary arrays must have the same length.')
+        self.confidence_level = float(self.confidence_level)
+
+
+@dataclass
+class TrajectoryEnsemble:
+    """A central predicted trajectory and complete plausible trajectory draws.
+
+    ``time_draws`` and ``value_draws`` have shape ``(draws, points)``. Keeping
+    complete rows intact preserves temporal dependence and allows the future
+    design engine to sample one plausible true trajectory at a time.
+    """
+
+    central: PredictedTrajectory
+    time_draws: np.ndarray
+    value_draws: np.ndarray
+    valid_draws: np.ndarray
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.time_draws = np.asarray(self.time_draws, dtype=float).copy()
+        self.value_draws = np.asarray(self.value_draws, dtype=float).copy()
+        self.valid_draws = np.asarray(self.valid_draws, dtype=bool).copy()
+        if self.time_draws.ndim == 1:
+            self.time_draws = self.time_draws.reshape(1, -1)
+        if self.value_draws.ndim == 1:
+            self.value_draws = self.value_draws.reshape(1, -1)
+        if self.time_draws.ndim != 2 or self.value_draws.ndim != 2:
+            raise ValueError('Trajectory draws must be two-dimensional arrays.')
+        if self.time_draws.shape != self.value_draws.shape:
+            raise ValueError('Time and response trajectory draws must have matching shapes.')
+        expected_points = len(self.central.in_vivo_time)
+        if self.time_draws.shape[1] != expected_points:
+            raise ValueError(
+                'Each trajectory draw must match the central trajectory length.'
+            )
+        if self.valid_draws.ndim != 1 or len(self.valid_draws) != self.time_draws.shape[0]:
+            raise ValueError('valid_draws must contain one flag per trajectory draw.')
+
+        copied_metadata: dict[str, Any] = {}
+        for key, value in dict(self.metadata).items():
+            copied_metadata[key] = value.copy() if isinstance(value, np.ndarray) else value
+        self.metadata = copied_metadata
+
+    @property
+    def n_draws(self) -> int:
+        return int(self.time_draws.shape[0])
+
+    @property
+    def n_valid_draws(self) -> int:
+        return int(np.count_nonzero(self.valid_draws))

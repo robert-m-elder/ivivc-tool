@@ -141,6 +141,7 @@ def inverse_response_prediction_intervals(
     confidence_level=0.95,
     n_samples=1000,
     grid_points=501,
+    random_state=None,
 ):
     """Approximate inverse-prediction intervals by Monte Carlo propagation."""
     targets = np.asarray(target_responses, dtype=float)
@@ -208,15 +209,14 @@ def inverse_response_prediction_intervals(
     observed_span = float(observed_max - observed_min) if observed.size else 0.0
     observed_tol = max(1e-10, observed_span * 1e-8) if observed.size else 0.0
 
-    rng = np.random.default_rng()
+    from .uncertainty import sample_parameter_sets
+
+    rng = np.random.default_rng(random_state)
     try:
-        parameter_distribution = sp.stats.multivariate_normal(
-            mean=param_values,
-            cov=covariance,
-            allow_singular=True,
-        )
-        parameter_samples = parameter_distribution.rvs(
-            size=int(n_samples),
+        sampled_parameters = sample_parameter_sets(
+            params,
+            covariance,
+            n_samples=int(n_samples),
             random_state=rng,
         )
     except Exception as exc:
@@ -228,9 +228,7 @@ def inverse_response_prediction_intervals(
             'residual_std': residual_std,
         }, f'Approximate inverse-prediction intervals were unavailable because parameter sampling failed: {exc}'
 
-    parameter_samples = np.asarray(parameter_samples, dtype=float)
-    if parameter_samples.ndim == 1:
-        parameter_samples = parameter_samples.reshape(1, -1)
+    parameter_samples = sampled_parameters.values
 
     t_grid = np.linspace(t_min, t_max, max(int(grid_points), 101))
     try:
