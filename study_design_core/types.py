@@ -1,0 +1,390 @@
+"""Structured numerical types for study-design calculations.
+
+These objects are intentionally independent of Flask, Plotly, and the legacy
+IVIVC result dictionaries.  They form the boundary between the existing
+``ivivc_core`` calculations and the future time-point optimization engine.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Literal, Mapping, Sequence
+
+import numpy as np
+
+
+InterpolationMethod = Literal['linear', 'pchip']
+ObservationModelKind = Literal['constant_sd', 'constant_cv']
+
+
+@dataclass
+class ReferenceTrajectoryEnsemble:
+    """Plausible in vivo trajectories evaluated on one common time grid.
+
+    Rows of ``value_draws`` are complete plausible true trajectories.  Keeping
+    each row intact preserves dependence across time.  Invalid rows can remain
+    in the object for traceability but receive zero weight.
+    """
+
+    time_grid: np.ndarray
+    value_draws: np.ndarray
+    valid_draws: np.ndarray
+    draw_weights: np.ndarray | None = None
+    central_curve: np.ndarray | None = None
+    supported_time_range: tuple[float, float] | None = None
+    interpolation: InterpolationMethod = 'pchip'
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.time_grid = np.asarray(self.time_grid, dtype=float).copy()
+        self.value_draws = np.asarray(self.value_draws, dtype=float).copy()
+        self.valid_draws = np.asarray(self.valid_draws, dtype=bool).copy()
+
+        if self.time_grid.ndim != 1 or len(self.time_grid) < 2:
+            raise ValueError('Reference time_grid must be one-dimensional with at least two points.')
+        if not np.all(np.isfinite(self.time_grid)):
+            raise ValueError('Reference time_grid must contain only finite values.')
+        if np.any(np.diff(self.time_grid) <= 0):
+            raise ValueError('Reference time_grid must be strictly increasing.')
+
+        if self.value_draws.ndim == 1:
+            self.value_draws = self.value_draws.reshape(1, -1)
+        if self.value_draws.ndim != 2:
+            raise ValueError('Reference value_draws must be a two-dimensional array.')
+        if self.value_draws.shape[1] != len(self.time_grid):
+            raise ValueError('Each reference trajectory must contain one value per time-grid point.')
+        if self.valid_draws.ndim != 1 or len(self.valid_draws) != self.value_draws.shape[0]:
+            raise ValueError('valid_draws must contain one flag per reference trajectory.')
+
+        finite_rows = np.all(np.isfinite(self.value_draws), axis=1)
+        self.valid_draws &= finite_rows
+        if not np.any(self.valid_draws):
+            raise ValueError('At least one finite, valid reference trajectory is required.')
+
+        if self.draw_weights is None:
+            weights = self.valid_draws.astype(float)
+        else:
+            weights = np.asarray(self.draw_weights, dtype=float).copy()
+            if weights.ndim != 1 or len(weights) != self.value_draws.shape[0]:
+                raise ValueError('draw_weights must contain one value per trajectory draw.')
+            if np.any(~np.isfinite(weights)) or np.any(weights < 0):
+                raise ValueError('draw_weights must be finite and nonnegative.')
+            weights[~self.valid_draws] = 0.0
+        total_weight = float(np.sum(weights))
+        if not total_weight > 0:
+            raise ValueError('At least one valid reference trajectory must have positive weight.')
+        self.draw_weights = weights / total_weight
+
+        if self.central_curve is None:
+            self.central_curve = np.average(
+                self.value_draws[self.valid_draws],
+                axis=0,
+                weights=self.draw_weights[self.valid_draws],
+            )
+        else:
+            self.central_curve = np.asarray(self.central_curve, dtype=float).copy()
+            if self.central_curve.ndim != 1 or len(self.central_curve) != len(self.time_grid):
+                raise ValueError('central_curve must contain one value per time-grid point.')
+            if not np.all(np.isfinite(self.central_curve)):
+                raise ValueError('central_curve must contain only finite values.')
+
+        if self.supported_time_range is None:
+            supported_range = (float(self.time_grid[0]), float(self.time_grid[-1]))
+        else:
+            if len(self.supported_time_range) != 2:
+                raise ValueError('supported_time_range must contain exactly two values.')
+            supported_range = tuple(float(value) for value in self.supported_time_range)
+        if not all(np.isfinite(supported_range)) or supported_range[0] >= supported_range[1]:
+            raise ValueError('supported_time_range must be finite and increasing.')
+        if (
+            supported_range[0] < self.time_grid[0]
+            or supported_range[1] > self.time_grid[-1]
+        ):
+            raise ValueError('supported_time_range must lie within the common time grid.')
+        self.supported_time_range = supported_range
+
+        if self.interpolation not in ('linear', 'pchip'):
+            raise ValueError("interpolation must be either 'linear' or 'pchip'.")
+
+        copied_metadata: dict[str, Any] = {}
+        for key, value in dict(self.metadata).items():
+            copied_metadata[key] = value.copy() if isinstance(value, np.ndarray) else value
+        self.metadata = copied_metadata
+
+    @property
+    def n_draws(self) -> int:
+        return int(self.value_draws.shape[0])
+
+    @property
+    def n_valid_draws(self) -> int:
+        return int(np.count_nonzero(self.valid_draws))
+
+    @property
+    def valid_weights(self) -> np.ndarray:
+        return self.draw_weights[self.valid_draws].copy()
+
+    def evaluate(
+        self,
+        times,
+        *,
+        draw_indices: Sequence[int] | None = None,
+        method: InterpolationMethod | None = None,
+        allow_extrapolation: bool = False,
+    ) -> np.ndarray:
+        """Evaluate selected complete trajectories at arbitrary in-range times."""
+        from .reference import evaluate_reference_trajectories
+
+        return evaluate_reference_trajectories(
+            self,
+            times,
+            draw_indices=draw_indices,
+            method=method,
+            allow_extrapolation=allow_extrapolation,
+        )
+
+    def evaluate_central(
+        self,
+        times,
+        *,
+        method: InterpolationMethod | None = None,
+        allow_extrapolation: bool = False,
+    ) -> np.ndarray:
+        """Evaluate the central reference curve at arbitrary in-range times."""
+        from .reference import evaluate_central_trajectory
+
+        return evaluate_central_trajectory(
+            self,
+            times,
+            method=method,
+            allow_extrapolation=allow_extrapolation,
+        )
+
+
+@dataclass(frozen=True)
+class ObservationModel:
+    """Future-study variability around one assumed true trajectory."""
+
+    kind: ObservationModelKind
+    value: float
+    replicates_per_time: int = 1
+    minimum_sd: float = 0.0
+    source: str = 'user'
+
+    def __post_init__(self) -> None:
+        if self.kind not in ('constant_sd', 'constant_cv'):
+            raise ValueError("Observation-model kind must be 'constant_sd' or 'constant_cv'.")
+        if not np.isfinite(self.value) or self.value < 0:
+            raise ValueError('Observation-model value must be finite and nonnegative.')
+        if int(self.replicates_per_time) != self.replicates_per_time or self.replicates_per_time < 1:
+            raise ValueError('replicates_per_time must be a positive integer.')
+        if not np.isfinite(self.minimum_sd) or self.minimum_sd < 0:
+            raise ValueError('minimum_sd must be finite and nonnegative.')
+
+    def standard_deviation(self, expected_value) -> np.ndarray:
+        """Return the observation SD at each expected response value."""
+        expected = np.asarray(expected_value, dtype=float)
+        if self.kind == 'constant_sd':
+            sd = np.full(expected.shape, self.value, dtype=float)
+        else:
+            sd = self.value * np.abs(expected)
+        return np.maximum(sd, self.minimum_sd)
+
+    def variance_of_mean(self, expected_value) -> np.ndarray:
+        """Return the variance of a mean across the configured replicates."""
+        sd = self.standard_deviation(expected_value)
+        return sd ** 2 / int(self.replicates_per_time)
+
+    def simulate(
+        self,
+        expected_value,
+        *,
+        random_state=None,
+        replicates_per_time: int | None = None,
+    ) -> np.ndarray:
+        """Generate independent replicate observations around expected values.
+
+        The returned shape is ``(replicates, *expected_value.shape)``.
+        """
+        expected = np.asarray(expected_value, dtype=float)
+        replicates = (
+            int(self.replicates_per_time)
+            if replicates_per_time is None
+            else int(replicates_per_time)
+        )
+        if replicates < 1:
+            raise ValueError('replicates_per_time must be at least one.')
+        rng = np.random.default_rng(random_state)
+        loc = np.broadcast_to(expected, (replicates,) + expected.shape)
+        scale = np.broadcast_to(
+            self.standard_deviation(expected),
+            (replicates,) + expected.shape,
+        )
+        return rng.normal(loc=loc, scale=scale)
+
+
+@dataclass
+class DesignConstraints:
+    """User-defined numerical constraints for future time-point selection.
+
+    These fields are not a regulatory rules engine.  They simply encode the
+    design limits the user chooses to impose for one optimization run.
+    """
+
+    candidate_times: np.ndarray
+    fixed_times: np.ndarray = field(default_factory=lambda: np.array([], dtype=float))
+    min_time: float | None = None
+    max_time: float | None = None
+    minimum_spacing: float = 0.0
+    min_number_of_times: int = 1
+    max_number_of_times: int | None = None
+    replicates_per_time: int = 1
+
+    def __post_init__(self) -> None:
+        candidates = np.asarray(self.candidate_times, dtype=float)
+        fixed = np.asarray(self.fixed_times, dtype=float)
+        if candidates.ndim != 1 or fixed.ndim != 1:
+            raise ValueError('candidate_times and fixed_times must be one-dimensional.')
+        if len(candidates) == 0:
+            raise ValueError('At least one candidate time is required.')
+        if np.any(~np.isfinite(candidates)) or np.any(~np.isfinite(fixed)):
+            raise ValueError('Design times must be finite.')
+        self.candidate_times = np.unique(candidates)
+        self.fixed_times = np.unique(fixed)
+
+        combined = np.union1d(self.candidate_times, self.fixed_times)
+        min_time = float(np.min(combined)) if self.min_time is None else float(self.min_time)
+        max_time = float(np.max(combined)) if self.max_time is None else float(self.max_time)
+        if not np.isfinite(min_time) or not np.isfinite(max_time) or min_time >= max_time:
+            raise ValueError('min_time and max_time must be finite and increasing.')
+        if np.any(self.candidate_times < min_time) or np.any(self.candidate_times > max_time):
+            raise ValueError('All candidate times must lie within min_time and max_time.')
+        if np.any(self.fixed_times < min_time) or np.any(self.fixed_times > max_time):
+            raise ValueError('All fixed times must lie within min_time and max_time.')
+        self.min_time = min_time
+        self.max_time = max_time
+
+        self.minimum_spacing = float(self.minimum_spacing)
+        if not np.isfinite(self.minimum_spacing) or self.minimum_spacing < 0:
+            raise ValueError('minimum_spacing must be finite and nonnegative.')
+        if len(self.fixed_times) > 1 and np.any(np.diff(self.fixed_times) < self.minimum_spacing):
+            raise ValueError('Fixed times violate the requested minimum spacing.')
+
+        self.min_number_of_times = int(self.min_number_of_times)
+        if self.min_number_of_times < 1:
+            raise ValueError('min_number_of_times must be at least one.')
+        maximum_available = len(combined)
+        if self.max_number_of_times is None:
+            self.max_number_of_times = maximum_available
+        else:
+            self.max_number_of_times = int(self.max_number_of_times)
+        if self.max_number_of_times < self.min_number_of_times:
+            raise ValueError('max_number_of_times cannot be smaller than min_number_of_times.')
+        if self.max_number_of_times > maximum_available:
+            raise ValueError('max_number_of_times exceeds the number of available unique times.')
+        if self.max_number_of_times < len(self.fixed_times):
+            raise ValueError('max_number_of_times cannot be smaller than the number of fixed times.')
+        if self.min_number_of_times < len(self.fixed_times):
+            self.min_number_of_times = len(self.fixed_times)
+
+        self.replicates_per_time = int(self.replicates_per_time)
+        if self.replicates_per_time < 1:
+            raise ValueError('replicates_per_time must be at least one.')
+
+    @property
+    def all_available_times(self) -> np.ndarray:
+        return np.union1d(self.candidate_times, self.fixed_times)
+
+    def available_candidates(self, selected_times=()) -> np.ndarray:
+        """Return candidate times compatible with selected and fixed times."""
+        selected = np.union1d(np.asarray(selected_times, dtype=float), self.fixed_times)
+        available = []
+        for candidate in self.candidate_times:
+            if np.any(np.isclose(selected, candidate, rtol=0.0, atol=1e-12)):
+                continue
+            if len(selected) and np.any(np.abs(selected - candidate) < self.minimum_spacing):
+                continue
+            available.append(candidate)
+        return np.asarray(available, dtype=float)
+
+    def validate_design(self, times) -> np.ndarray:
+        """Validate and return a sorted unique candidate design."""
+        design = np.unique(np.asarray(times, dtype=float))
+        if design.ndim != 1 or np.any(~np.isfinite(design)):
+            raise ValueError('Design times must be a finite one-dimensional array.')
+        if len(design) < self.min_number_of_times or len(design) > self.max_number_of_times:
+            raise ValueError('Design contains an invalid number of distinct time points.')
+        if np.any(design < self.min_time) or np.any(design > self.max_time):
+            raise ValueError('Design times lie outside the allowed time range.')
+        allowed = self.all_available_times
+        if not all(np.any(np.isclose(allowed, value, rtol=0.0, atol=1e-12)) for value in design):
+            raise ValueError('Design includes a time that is not fixed or selectable.')
+        if not all(np.any(np.isclose(design, value, rtol=0.0, atol=1e-12)) for value in self.fixed_times):
+            raise ValueError('Design omits one or more fixed times.')
+        if len(design) > 1 and np.any(np.diff(design) < self.minimum_spacing):
+            raise ValueError('Design violates the requested minimum spacing.')
+        return design
+
+    def total_experimental_units(self, number_of_times: int) -> int:
+        number_of_times = int(number_of_times)
+        if number_of_times < 0:
+            raise ValueError('number_of_times must be nonnegative.')
+        return number_of_times * self.replicates_per_time
+
+
+@dataclass
+class ModelFitResult:
+    """Lightweight result from one repeated nonlinear model fit."""
+
+    model_name: str
+    success: bool
+    time: np.ndarray
+    response: np.ndarray
+    parameter_names: tuple[str, ...]
+    parameters: Mapping[str, float]
+    covariance: np.ndarray
+    initial_parameters: np.ndarray | None
+    fitted_values: np.ndarray
+    residuals: np.ndarray
+    residual_dof: int
+    residual_sd: float
+    used_grid_search: bool = False
+    message: str | None = None
+    exception_type: str | None = None
+
+    def __post_init__(self) -> None:
+        self.time = np.asarray(self.time, dtype=float).copy()
+        self.response = np.asarray(self.response, dtype=float).copy()
+        self.parameter_names = tuple(self.parameter_names)
+        self.parameters = dict(self.parameters)
+        self.covariance = np.asarray(self.covariance, dtype=float).copy()
+        self.initial_parameters = (
+            None
+            if self.initial_parameters is None
+            else np.asarray(self.initial_parameters, dtype=float).copy()
+        )
+        self.fitted_values = np.asarray(self.fitted_values, dtype=float).copy()
+        self.residuals = np.asarray(self.residuals, dtype=float).copy()
+        if len(self.time) != len(self.response):
+            raise ValueError('Fit time and response arrays must have matching lengths.')
+        if len(self.fitted_values) != len(self.time) or len(self.residuals) != len(self.time):
+            raise ValueError('Fitted values and residuals must match the fitted data length.')
+        expected_covariance_shape = (len(self.parameter_names), len(self.parameter_names))
+        if self.covariance.shape != expected_covariance_shape:
+            raise ValueError('Fit covariance has the wrong shape for the model parameters.')
+        self.residual_dof = int(self.residual_dof)
+        self.residual_sd = float(self.residual_sd)
+
+    @property
+    def parameter_vector(self) -> np.ndarray:
+        if not self.success:
+            return np.full(len(self.parameter_names), np.nan, dtype=float)
+        return np.asarray([self.parameters[name] for name in self.parameter_names], dtype=float)
+
+    def predict(self, time) -> np.ndarray:
+        """Evaluate the fitted model at new times."""
+        if not self.success:
+            raise RuntimeError(self.message or 'The model fit was unsuccessful.')
+        from ivivc_core import get_model_spec
+
+        spec = get_model_spec(self.model_name)
+        return np.asarray(spec.model_function(np.asarray(time, dtype=float), **self.parameters))
