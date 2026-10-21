@@ -388,3 +388,265 @@ class ModelFitResult:
 
         spec = get_model_spec(self.model_name)
         return np.asarray(spec.model_function(np.asarray(time, dtype=float), **self.parameters))
+
+
+@dataclass
+class ReferenceModelEnsemble:
+    """Analysis-model parameter draws fitted to plausible reference curves.
+
+    Each valid row of ``parameter_draws`` corresponds to one complete reference
+    trajectory.  The rows and weights retain the same uncertainty structure as
+    the source trajectory ensemble after unsuccessful model fits are excluded.
+    """
+
+    model_name: str
+    parameter_names: tuple[str, ...]
+    parameter_draws: np.ndarray
+    valid_draws: np.ndarray
+    draw_weights: np.ndarray
+    central_parameters: np.ndarray
+    time_grid: np.ndarray
+    supported_time_range: tuple[float, float]
+    fit_messages: Sequence[str | None] = field(default_factory=tuple)
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.parameter_names = tuple(self.parameter_names)
+        self.parameter_draws = np.asarray(self.parameter_draws, dtype=float).copy()
+        self.valid_draws = np.asarray(self.valid_draws, dtype=bool).copy()
+        self.draw_weights = np.asarray(self.draw_weights, dtype=float).copy()
+        self.central_parameters = np.asarray(self.central_parameters, dtype=float).copy()
+        self.time_grid = np.asarray(self.time_grid, dtype=float).copy()
+
+        if self.parameter_draws.ndim == 1:
+            self.parameter_draws = self.parameter_draws.reshape(1, -1)
+        if self.parameter_draws.ndim != 2:
+            raise ValueError('parameter_draws must be a two-dimensional array.')
+        if self.parameter_draws.shape[1] != len(self.parameter_names):
+            raise ValueError('parameter_draws has the wrong number of model parameters.')
+        if self.valid_draws.ndim != 1 or len(self.valid_draws) != self.parameter_draws.shape[0]:
+            raise ValueError('valid_draws must contain one flag per parameter draw.')
+        if self.draw_weights.ndim != 1 or len(self.draw_weights) != self.parameter_draws.shape[0]:
+            raise ValueError('draw_weights must contain one value per parameter draw.')
+
+        finite_rows = np.all(np.isfinite(self.parameter_draws), axis=1)
+        self.valid_draws &= finite_rows
+        if not np.any(self.valid_draws):
+            raise ValueError('At least one finite, valid parameter draw is required.')
+        if np.any(~np.isfinite(self.draw_weights)) or np.any(self.draw_weights < 0):
+            raise ValueError('draw_weights must be finite and nonnegative.')
+        self.draw_weights[~self.valid_draws] = 0.0
+        weight_total = float(np.sum(self.draw_weights))
+        if not weight_total > 0:
+            raise ValueError('At least one valid parameter draw must have positive weight.')
+        self.draw_weights /= weight_total
+
+        if self.central_parameters.ndim != 1 or len(self.central_parameters) != len(self.parameter_names):
+            raise ValueError('central_parameters must contain one value per model parameter.')
+        if np.any(~np.isfinite(self.central_parameters)):
+            raise ValueError('central_parameters must be finite.')
+
+        if self.time_grid.ndim != 1 or len(self.time_grid) < 2:
+            raise ValueError('time_grid must contain at least two points.')
+        if np.any(~np.isfinite(self.time_grid)) or np.any(np.diff(self.time_grid) <= 0):
+            raise ValueError('time_grid must be finite and strictly increasing.')
+
+        if len(self.supported_time_range) != 2:
+            raise ValueError('supported_time_range must contain exactly two values.')
+        supported = tuple(float(value) for value in self.supported_time_range)
+        if not all(np.isfinite(supported)) or supported[0] >= supported[1]:
+            raise ValueError('supported_time_range must be finite and increasing.')
+        if supported[0] < self.time_grid[0] or supported[1] > self.time_grid[-1]:
+            raise ValueError('supported_time_range must lie within time_grid.')
+        self.supported_time_range = supported
+
+        messages = tuple(self.fit_messages)
+        if messages and len(messages) != self.parameter_draws.shape[0]:
+            raise ValueError('fit_messages must contain one entry per parameter draw.')
+        if not messages:
+            messages = tuple(None for _ in range(self.parameter_draws.shape[0]))
+        self.fit_messages = messages
+
+        copied_metadata: dict[str, Any] = {}
+        for key, value in dict(self.metadata).items():
+            copied_metadata[key] = value.copy() if isinstance(value, np.ndarray) else value
+        self.metadata = copied_metadata
+
+    @property
+    def n_draws(self) -> int:
+        return int(self.parameter_draws.shape[0])
+
+    @property
+    def n_valid_draws(self) -> int:
+        return int(np.count_nonzero(self.valid_draws))
+
+    @property
+    def n_parameters(self) -> int:
+        return len(self.parameter_names)
+
+    @property
+    def valid_weights(self) -> np.ndarray:
+        return self.draw_weights[self.valid_draws].copy()
+
+    @property
+    def central_parameter_mapping(self) -> dict[str, float]:
+        return dict(zip(self.parameter_names, self.central_parameters))
+
+
+@dataclass
+class DesignInformationScore:
+    """Uncertainty-averaged information diagnostics for one candidate design."""
+
+    criterion: float
+    parameter_count: int
+    per_draw_criteria: np.ndarray
+    per_draw_ranks: np.ndarray
+    per_draw_log_pseudodeterminants: np.ndarray
+    valid_draws: np.ndarray
+    draw_weights: np.ndarray
+
+    def __post_init__(self) -> None:
+        self.criterion = float(self.criterion)
+        self.parameter_count = int(self.parameter_count)
+        self.per_draw_criteria = np.asarray(self.per_draw_criteria, dtype=float).copy()
+        self.per_draw_ranks = np.asarray(self.per_draw_ranks, dtype=int).copy()
+        self.per_draw_log_pseudodeterminants = np.asarray(
+            self.per_draw_log_pseudodeterminants,
+            dtype=float,
+        ).copy()
+        self.valid_draws = np.asarray(self.valid_draws, dtype=bool).copy()
+        self.draw_weights = np.asarray(self.draw_weights, dtype=float).copy()
+
+        count = len(self.valid_draws)
+        for values, label in (
+            (self.per_draw_criteria, 'per_draw_criteria'),
+            (self.per_draw_ranks, 'per_draw_ranks'),
+            (self.per_draw_log_pseudodeterminants, 'per_draw_log_pseudodeterminants'),
+            (self.draw_weights, 'draw_weights'),
+        ):
+            if values.ndim != 1 or len(values) != count:
+                raise ValueError(f'{label} must contain one value per draw.')
+        if self.parameter_count < 1:
+            raise ValueError('parameter_count must be at least one.')
+        if np.any(self.per_draw_ranks < 0) or np.any(self.per_draw_ranks > self.parameter_count):
+            raise ValueError('Per-draw information ranks are outside the valid range.')
+        if np.any(~np.isfinite(self.draw_weights)) or np.any(self.draw_weights < 0):
+            raise ValueError('draw_weights must be finite and nonnegative.')
+        self.draw_weights[~self.valid_draws] = 0.0
+        total = float(np.sum(self.draw_weights))
+        if not total > 0:
+            raise ValueError('At least one valid draw must have positive weight.')
+        self.draw_weights /= total
+
+    @property
+    def full_rank_fraction(self) -> float:
+        mask = self.valid_draws & (self.per_draw_ranks == self.parameter_count)
+        return float(np.sum(self.draw_weights[mask]))
+
+    @property
+    def min_rank(self) -> int:
+        effective = self.valid_draws & (self.draw_weights > 0)
+        return int(np.min(self.per_draw_ranks[effective]))
+
+    @property
+    def mean_rank(self) -> float:
+        return float(np.sum(self.draw_weights * self.per_draw_ranks))
+
+    @property
+    def mean_log_pseudodeterminant(self) -> float:
+        values = self.per_draw_log_pseudodeterminants
+        mask = self.valid_draws & (self.draw_weights > 0) & np.isfinite(values)
+        if not np.any(mask):
+            return float('-inf')
+        weights = self.draw_weights[mask]
+        weights = weights / np.sum(weights)
+        return float(np.sum(weights * values[mask]))
+
+    @property
+    def is_full_rank(self) -> bool:
+        return bool(np.isclose(self.full_rank_fraction, 1.0, rtol=0.0, atol=1e-12))
+
+
+@dataclass
+class DesignStep:
+    """One optimized design at a particular number of distinct time points."""
+
+    times: np.ndarray
+    score: DesignInformationScore
+    method: str
+    added_time: float | None = None
+    n_exchanges: int = 0
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.times = np.unique(np.asarray(self.times, dtype=float))
+        if self.times.ndim != 1 or len(self.times) == 0 or np.any(~np.isfinite(self.times)):
+            raise ValueError('DesignStep times must be a nonempty finite one-dimensional array.')
+        if self.added_time is not None:
+            self.added_time = float(self.added_time)
+        self.n_exchanges = int(self.n_exchanges)
+        if self.n_exchanges < 0:
+            raise ValueError('n_exchanges must be nonnegative.')
+        self.metadata = dict(self.metadata)
+
+    @property
+    def number_of_times(self) -> int:
+        return int(len(self.times))
+
+
+@dataclass
+class CoordinateExchangeResult:
+    """Result of single-coordinate exchange refinement at fixed design size."""
+
+    initial_times: np.ndarray
+    times: np.ndarray
+    score: DesignInformationScore
+    exchanges: Sequence[tuple[float, float]] = field(default_factory=tuple)
+    converged: bool = True
+
+    def __post_init__(self) -> None:
+        self.initial_times = np.unique(np.asarray(self.initial_times, dtype=float))
+        self.times = np.unique(np.asarray(self.times, dtype=float))
+        if len(self.initial_times) != len(self.times):
+            raise ValueError('Coordinate exchange must preserve the number of time points.')
+        self.exchanges = tuple((float(old), float(new)) for old, new in self.exchanges)
+        self.converged = bool(self.converged)
+
+
+@dataclass
+class DesignOptimizationResult:
+    """Nested greedy designs and optional coordinate-exchange refinements."""
+
+    model_name: str
+    nested_steps: Sequence[DesignStep]
+    refined_steps: Sequence[DesignStep]
+    evaluation_times: np.ndarray
+    evaluation_weights: np.ndarray
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.nested_steps = tuple(self.nested_steps)
+        self.refined_steps = tuple(self.refined_steps)
+        self.evaluation_times = np.asarray(self.evaluation_times, dtype=float).copy()
+        self.evaluation_weights = np.asarray(self.evaluation_weights, dtype=float).copy()
+        if self.evaluation_times.ndim != 1 or len(self.evaluation_times) < 2:
+            raise ValueError('evaluation_times must contain at least two points.')
+        if np.any(~np.isfinite(self.evaluation_times)) or np.any(np.diff(self.evaluation_times) <= 0):
+            raise ValueError('evaluation_times must be finite and strictly increasing.')
+        if self.evaluation_weights.shape != self.evaluation_times.shape:
+            raise ValueError('evaluation_weights must match evaluation_times.')
+        if np.any(~np.isfinite(self.evaluation_weights)) or np.any(self.evaluation_weights < 0):
+            raise ValueError('evaluation_weights must be finite and nonnegative.')
+        if not np.sum(self.evaluation_weights) > 0:
+            raise ValueError('evaluation_weights must contain positive total weight.')
+        self.evaluation_weights /= np.sum(self.evaluation_weights)
+        self.metadata = dict(self.metadata)
+
+    def design_for_n(self, number_of_times: int, *, refined: bool = False) -> DesignStep:
+        """Return the stored design with the requested number of time points."""
+        steps = self.refined_steps if refined else self.nested_steps
+        for step in steps:
+            if step.number_of_times == int(number_of_times):
+                return step
+        label = 'refined' if refined else 'nested'
+        raise KeyError(f'No {label} design is available for N={int(number_of_times)}.')
