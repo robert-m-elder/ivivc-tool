@@ -236,3 +236,36 @@ def test_equal_response_baseline_rejects_nonmonotonic_reference():
     )
     with pytest.raises(ValueError, match='monotonic'):
         equal_response_spaced_design(reference, _constraints(), 3)
+
+
+def test_simulation_uses_data_driven_fit_initialization_by_default(monkeypatch):
+    import study_design_core.simulation as simulation_module
+
+    reference = _linear_reference()
+    constraints = _constraints(replicates=2)
+    observation = ObservationModel(
+        kind='constant_sd',
+        value=0.03,
+        replicates_per_time=2,
+    )
+    starts = []
+    original = simulation_module.fit_model_once
+
+    def recording_fit(*args, **kwargs):
+        starts.append(kwargs.get('initial_parameters'))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(simulation_module, 'fit_model_once', recording_fit)
+    result = simulation_module.simulate_design(
+        reference,
+        [0.0, 2.0, 4.0],
+        observation,
+        model_name='linear',
+        constraints=constraints,
+        n_simulations=6,
+        random_state=91,
+    )
+
+    assert starts
+    assert all(start is None for start in starts)
+    assert result.metadata['fit_initialization'] == 'data_driven'

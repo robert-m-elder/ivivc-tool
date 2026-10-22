@@ -4,6 +4,10 @@ import numpy as np
 display_name = "Mass Loss (One-Phase)"
 approaches = ['approach2']
 fit_kwargs = {'maxfev': 20000, 'ftol': 1e-6, 'xtol': 1e-6}
+parameter_bounds = (
+    [0.0, 0.0, -np.inf, np.finfo(float).eps],
+    [np.inf, np.inf, np.inf, np.inf],
+)
 latex_equation = r"y = y_0 - A/(1 + e^{-(x-t_{50})/s})"
 description = (
     "Mass-remaining model with a delayed sigmoidal loss phase. It is intended "
@@ -46,7 +50,7 @@ def initial_guess(x, y):
     y = np.asarray(y, dtype=float)
     mask = np.isfinite(x) & np.isfinite(y)
     if not np.any(mask):
-        return np.array([100.0, 0.0, 1.0, 1.0, 1.0, 1.0])
+        return np.array([1.0, 1.0, 1.0, 1.0], dtype=float)
 
     x = x[mask]
     y = y[mask]

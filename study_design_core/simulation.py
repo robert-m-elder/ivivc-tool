@@ -113,6 +113,7 @@ def _parameter_start_for_source_draw(
     reference_model: ReferenceModelEnsemble,
     source_draw_index: int,
 ) -> np.ndarray:
+    """Return the generating draw's parameters for explicit oracle diagnostics."""
     source_indices = reference_model.metadata.get('source_draw_indices')
     if source_indices is not None:
         source_indices = np.asarray(source_indices, dtype=int)
@@ -122,6 +123,23 @@ def _parameter_start_for_source_draw(
             if reference_model.valid_draws[row]:
                 return reference_model.parameter_draws[row].copy()
     return reference_model.central_parameters.copy()
+
+
+def _fit_start_parameters(
+    mode: str,
+    reference_model: ReferenceModelEnsemble,
+    source_draw_index: int,
+) -> np.ndarray | None:
+    mode = str(mode).strip().lower()
+    if mode == 'data_driven':
+        return None
+    if mode == 'central_reference':
+        return reference_model.central_parameters.copy()
+    if mode == 'oracle':
+        return _parameter_start_for_source_draw(reference_model, source_draw_index)
+    raise ValueError(
+        "fit_initialization must be 'data_driven', 'central_reference', or 'oracle'."
+    )
 
 
 def simulate_design(
@@ -143,8 +161,20 @@ def simulate_design(
     failure_penalty: float | None = None,
     fallback_grid_search: bool = True,
     grid_search_config: Mapping[str, object] | None = None,
+    fit_initialization: str = 'data_driven',
 ) -> DesignSimulationResult:
-    """Simulate, refit, and score one proposed time-point design."""
+    """Simulate, refit, and score one proposed time-point design.
+
+    The default ``data_driven`` initialization uses only the simulated
+    dataset and the registered model heuristic. ``central_reference`` uses
+    one common prior starting vector. ``oracle`` is retained only as an
+    explicit diagnostic because it uses the unknown generating parameters.
+    """
+    fit_initialization = str(fit_initialization).strip().lower()
+    if fit_initialization not in {'data_driven', 'central_reference', 'oracle'}:
+        raise ValueError(
+            "fit_initialization must be 'data_driven', 'central_reference', or 'oracle'."
+        )
     if constraints is not None:
         design = constraints.validate_design(design_times)
         replicates = constraints.replicates_per_time
@@ -206,7 +236,8 @@ def simulate_design(
     repeated_times = np.tile(design, replicates)
     for simulation_index in range(n_simulations):
         response = observations[simulation_index].reshape(-1)
-        start = _parameter_start_for_source_draw(
+        start = _fit_start_parameters(
+            fit_initialization,
             reference_model,
             int(draw_indices[simulation_index]),
         )
@@ -312,6 +343,7 @@ def simulate_design(
             'target_direction': target_direction,
             'confidence_level': confidence_level,
             'replicates_per_time': replicates,
+            'fit_initialization': fit_initialization,
             'common_random_numbers': bool(
                 simulation_plan.metadata.get('common_random_numbers', False)
             ),

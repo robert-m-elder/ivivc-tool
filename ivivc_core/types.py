@@ -287,12 +287,15 @@ class ParameterSamples:
 
     Rows represent complete parameter vectors. Keeping the vectors together is
     important because parameter covariance determines how complete fitted
-    trajectories vary across time.
+    trajectories vary across time. When model constraints are supplied, invalid
+    draws are rejected and resampled before this object is constructed.
     """
 
     parameter_names: tuple[str, ...]
     values: np.ndarray
     requested_samples: int | None = None
+    attempted_samples: int | None = None
+    rejection_counts: Mapping[str, int] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.parameter_names = tuple(self.parameter_names)
@@ -315,6 +318,19 @@ class ParameterSamples:
                 raise ValueError(
                     'requested_samples cannot be smaller than the returned sample count.'
                 )
+        if self.attempted_samples is None:
+            self.attempted_samples = int(self.values.shape[0])
+        else:
+            self.attempted_samples = int(self.attempted_samples)
+            if self.attempted_samples < self.values.shape[0]:
+                raise ValueError(
+                    'attempted_samples cannot be smaller than the returned sample count.'
+                )
+        self.rejection_counts = {
+            str(reason): int(count)
+            for reason, count in dict(self.rejection_counts).items()
+            if int(count) > 0
+        }
 
     @property
     def n_samples(self) -> int:

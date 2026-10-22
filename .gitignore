@@ -7,3 +7,5 @@ docs/tutorial/generated/fitted_curves_presentation.pdf
 .pytest_cache/
 .coverage
 htmlcov/
+
+study_design_poc_output/

@@ -5,6 +5,10 @@ import numpy as np
 display_name = "Mass Loss (One-Phase, Normalized)"
 approaches = ['approach2']
 fit_kwargs = {'maxfev': 20000, 'ftol': 1e-6, 'xtol': 1e-6}
+parameter_bounds = (
+    [-np.inf, np.finfo(float).eps],
+    [np.inf, np.inf],
+)
 latex_equation = r"y = 1 - 1/(1 + e^{-(x-t_{50})/s})"
 description = (
     "Less-flexible one-phase mass-remaining model for responses already normalized "

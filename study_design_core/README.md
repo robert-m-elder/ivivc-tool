@@ -136,7 +136,12 @@ comparison = compare_designs_by_simulation(
 
 For every simulated study, the engine samples future observations, fits the
 selected analysis model with `fit_model_once()`, and compares the recovered
-curve with the complete generating trajectory. The primary metric is integrated
+curve with the complete generating trajectory. By default, each fit uses only
+the simulated dataset and the model's registered data-driven initial guess. A
+common central-reference start is available when prior information is intended
+to guide fitting. The generating draw's true parameters are available only
+through an explicitly requested `oracle` diagnostic mode and are not used by
+default. The primary metric is integrated
 root mean square error (IRMSE). Additional outputs include normalized IRMSE,
 maximum absolute error, approximate mean-curve interval width, optional
 threshold-time error, parameter-bound hits, and fit-failure rate.
@@ -149,3 +154,40 @@ range represented by the simulated reference curves.
 Simple comparison schedules are available for equal calendar-time spacing,
 shifted-log spacing, and equal-response spacing. The equal-response baseline
 requires a monotonic central reference trajectory.
+
+## Proof-of-concept runner
+
+`examples/study_design_proof_of_concept.py` composes the refactored IVIVC core,
+information optimizer, and simulation evaluator into three backend-only
+examples:
+
+- measured in vivo data used as the reference;
+- an IVIVC-derived predicted in vivo trajectory;
+- adaptive refinement with completed time points held fixed.
+
+Run a small demonstration from the repository root with:
+
+```bash
+python examples/study_design_proof_of_concept.py --quick
+```
+
+The default output directory, `study_design_poc_output/`, contains transparent
+CSV and JSON files for each scenario and optional static Plotly HTML summaries.
+The examples use constant absolute future-study error by default (`SD = 0.05`)
+and the unnormalized registered one-phase mass-loss model. Both are configurable:
+
+```bash
+python examples/study_design_proof_of_concept.py \
+    --analysis-model mass_loss_one_phase \
+    --observation-sd 0.05 \
+    --fit-initialization data_driven
+```
+
+Any model registered for Approach 2 in the existing `models` directory can be
+selected. Optional `parameter_bounds` declared by a model (or its existing fit bounds)
+are used by the study-design backend to constrain repeated fits and to reject
+and resample implausible parameter draws before trajectory ensembles are
+constructed. This does not change the existing IVIVC fitting path. The runner encodes
+no regulatory minimums; all candidate grids, fixed times, replicates, and
+design-size ranges are ordinary `DesignConstraints` supplied by the example
+definitions.

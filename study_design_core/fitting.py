@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 import warnings
 
 import numpy as np
+import scipy as sp
 
 from ivivc_core import get_model_spec
 from utilities.evaluation import auto_grid_search
@@ -20,6 +21,20 @@ _DEFAULT_GRID_SEARCH = {
     'num_cores': 1,
     'random_state': 12345,
 }
+
+
+def _clip_to_registered_bounds(spec, parameters) -> np.ndarray | None:
+    if parameters is None:
+        return None
+    values = np.asarray(parameters, dtype=float).copy()
+    bounds = spec.parameter_bounds
+    if bounds is None:
+        bounds = spec.fit_kwargs.get('bounds')
+    if bounds is None:
+        return values
+    lower = np.broadcast_to(np.asarray(bounds[0], dtype=float), values.shape)
+    upper = np.broadcast_to(np.asarray(bounds[1], dtype=float), values.shape)
+    return np.minimum(np.maximum(values, lower), upper)
 
 
 def _coerce_initial_parameters(
@@ -107,7 +122,7 @@ def _grid_search_start(
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', category=RuntimeWarning)
-        return np.asarray(
+        result = np.asarray(
             auto_grid_search(
                 spec.model_function,
                 time,
@@ -121,6 +136,7 @@ def _grid_search_start(
             ),
             dtype=float,
         )
+    return _clip_to_registered_bounds(spec, result)
 
 
 def _failed_result(
@@ -205,6 +221,7 @@ def fit_model_once(
             response,
             model_candidates,
         )
+    start = _clip_to_registered_bounds(spec, start)
 
     used_grid_search = bool(perform_grid_search)
     if perform_grid_search:
@@ -231,20 +248,33 @@ def fit_model_once(
             )
 
     def run_fit(p0):
+        fit_kwargs = dict(spec.fit_kwargs)
+        if 'bounds' not in fit_kwargs and spec.parameter_bounds is not None:
+            fit_kwargs['bounds'] = spec.parameter_bounds
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', category=RuntimeWarning)
-            result = spec.fit_function(time, response, p0=p0)
-        parameters = dict(result['params'])
-        parameter_vector = np.asarray(
-            [parameters[name] for name in spec.parameter_names],
-            dtype=float,
-        )
+            parameter_vector, covariance = sp.optimize.curve_fit(
+                spec.model_function,
+                time,
+                response,
+                p0=p0,
+                **fit_kwargs,
+            )
+        parameter_vector = np.asarray(parameter_vector, dtype=float)
+        parameters = dict(zip(spec.parameter_names, parameter_vector))
         if np.any(~np.isfinite(parameter_vector)):
             raise ValueError('The fitted parameter vector contains nonfinite values.')
-        fitted_values = np.asarray(result['predict'](time), dtype=float)
+        if spec.parameter_validator is not None:
+            mapping = dict(zip(spec.parameter_names, parameter_vector))
+            if not bool(spec.parameter_validator(mapping)):
+                raise ValueError('The fitted parameter vector fails the model validator.')
+        fitted_values = np.asarray(
+            spec.model_function(time, *parameter_vector),
+            dtype=float,
+        )
         if fitted_values.shape != response.shape or np.any(~np.isfinite(fitted_values)):
             raise ValueError('The fitted model returned invalid values.')
-        covariance = np.asarray(result['pcov'], dtype=float)
+        covariance = np.asarray(covariance, dtype=float)
         expected_shape = (len(spec.parameter_names), len(spec.parameter_names))
         if covariance.shape != expected_shape:
             raise ValueError('The fitted covariance matrix has an unexpected shape.')

@@ -220,3 +220,20 @@ def test_legacy_band_wrappers_keep_contract_and_allow_reproducible_sampling():
     )
     assert set(prediction) == {'lower', 'upper', 'mean', 'std'}
     assert all(np.asarray(prediction[key]).shape == x.shape for key in prediction)
+
+
+def test_registered_model_bounds_reject_and_resample_invalid_parameter_draws():
+    samples = sample_parameter_sets(
+        {'y0': 1.0, 'A': 1.0, 't50': 20.0, 's': 0.1},
+        np.diag([1e-4, 1e-4, 1e-2, 1.0]),
+        n_samples=100,
+        random_state=2026,
+        model_name='mass_loss_one_phase',
+    )
+
+    assert samples.values.shape == (100, 4)
+    assert np.all(samples.values[:, 0] >= 0.0)
+    assert np.all(samples.values[:, 1] >= 0.0)
+    assert np.all(samples.values[:, 3] > 0.0)
+    assert samples.attempted_samples > samples.requested_samples
+    assert samples.rejection_counts['outside_registered_bounds'] > 0

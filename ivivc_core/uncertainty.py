@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 import warnings
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 import scipy as sp
@@ -70,6 +70,74 @@ def _split_random_state(random_state, count: int) -> list[Any]:
     return [random_state] * count
 
 
+def _reshape_sampled_values(values, parameter_count: int) -> np.ndarray:
+    values = np.asarray(values, dtype=float)
+    if values.ndim == 0:
+        values = values.reshape(1, 1)
+    elif values.ndim == 1:
+        if parameter_count == 1:
+            values = values.reshape(-1, 1)
+        else:
+            values = values.reshape(1, -1)
+    return values
+
+
+def _registered_parameter_constraints(
+    model_name: str | None,
+    parameter_names: tuple[str, ...],
+) -> tuple[np.ndarray, np.ndarray, Callable[[Mapping[str, float]], bool] | None]:
+    count = len(parameter_names)
+    lower = np.full(count, -np.inf, dtype=float)
+    upper = np.full(count, np.inf, dtype=float)
+    validator = None
+    if model_name is None:
+        return lower, upper, validator
+
+    spec = get_model_spec(model_name)
+    if tuple(spec.parameter_names) != tuple(parameter_names):
+        raise ValueError(
+            'The sampled parameter order does not match the registered model.'
+        )
+    bounds = spec.parameter_bounds
+    if bounds is None:
+        bounds = spec.fit_kwargs.get('bounds')
+    if bounds is not None:
+        if len(bounds) != 2:
+            raise ValueError('Registered model bounds must contain lower and upper values.')
+        lower = np.broadcast_to(np.asarray(bounds[0], dtype=float), (count,)).copy()
+        upper = np.broadcast_to(np.asarray(bounds[1], dtype=float), (count,)).copy()
+    validator = spec.parameter_validator
+    return lower, upper, validator
+
+
+def _validate_parameter_rows(
+    values: np.ndarray,
+    *,
+    parameter_names: tuple[str, ...],
+    lower: np.ndarray,
+    upper: np.ndarray,
+    validator: Callable[[Mapping[str, float]], bool] | None,
+) -> tuple[np.ndarray, dict[str, int]]:
+    finite = np.all(np.isfinite(values), axis=1)
+    within_bounds = np.all((values >= lower) & (values <= upper), axis=1)
+    valid = finite & within_bounds
+    counts = {
+        'nonfinite': int(np.count_nonzero(~finite)),
+        'outside_registered_bounds': int(np.count_nonzero(finite & ~within_bounds)),
+    }
+    if validator is not None:
+        validator_valid = np.zeros(len(values), dtype=bool)
+        for index in np.flatnonzero(valid):
+            mapping = dict(zip(parameter_names, values[index]))
+            try:
+                validator_valid[index] = bool(validator(mapping))
+            except Exception:
+                validator_valid[index] = False
+        counts['model_validator'] = int(np.count_nonzero(valid & ~validator_valid))
+        valid &= validator_valid
+    return valid, {key: value for key, value in counts.items() if value > 0}
+
+
 def sample_parameter_sets(
     parameters: Mapping[str, float] | Sequence[float] | np.ndarray,
     covariance,
@@ -78,13 +146,24 @@ def sample_parameter_sets(
     n_samples: int = 1000,
     random_state=None,
     allow_singular: bool = True,
+    model_name: str | None = None,
+    max_resample_batches: int = 50,
 ) -> ParameterSamples:
-    """Draw complete parameter vectors from a multivariate normal model."""
+    """Draw complete parameter vectors from a multivariate normal model.
+
+    When ``model_name`` is supplied, registered model bounds and an optional
+    model-level ``parameter_validator`` are applied. Rejected vectors are
+    resampled so the returned object contains the requested number of valid
+    joint draws whenever feasible.
+    """
     names, mean = _parameter_input(parameters, parameter_names)
     covariance = np.asarray(covariance, dtype=float)
     n_samples = int(n_samples)
+    max_resample_batches = int(max_resample_batches)
     if n_samples < 1:
         raise ValueError('n_samples must be at least one.')
+    if max_resample_batches < 1:
+        raise ValueError('max_resample_batches must be at least one.')
     expected_shape = (len(mean), len(mean))
     if covariance.shape != expected_shape:
         raise ValueError(
@@ -93,24 +172,81 @@ def sample_parameter_sets(
     if not np.all(np.isfinite(mean)) or not np.all(np.isfinite(covariance)):
         raise ValueError('Parameter values and covariance must be finite.')
 
+    lower, upper, validator = _registered_parameter_constraints(model_name, names)
+    if np.any(mean < lower) or np.any(mean > upper):
+        raise ValueError('The fitted parameter vector violates registered model bounds.')
+    if validator is not None:
+        try:
+            mean_valid = bool(validator(dict(zip(names, mean))))
+        except Exception:
+            mean_valid = False
+        if not mean_valid:
+            raise ValueError('The fitted parameter vector fails the model parameter validator.')
+
     distribution = sp.stats.multivariate_normal(
         mean=mean,
         cov=covariance,
         allow_singular=allow_singular,
     )
-    values = distribution.rvs(size=n_samples, random_state=random_state)
-    values = np.asarray(values, dtype=float)
-    if values.ndim == 0:
-        values = values.reshape(1, 1)
-    elif values.ndim == 1:
-        if len(mean) == 1 and n_samples > 1:
-            values = values.reshape(-1, 1)
-        else:
-            values = values.reshape(1, -1)
+
+    constraints_active = (
+        np.any(np.isfinite(lower))
+        or np.any(np.isfinite(upper))
+        or validator is not None
+    )
+    if not constraints_active:
+        values = distribution.rvs(size=n_samples, random_state=random_state)
+        values = _reshape_sampled_values(values, len(mean))
+        return ParameterSamples(
+            parameter_names=names,
+            values=values,
+            requested_samples=n_samples,
+            attempted_samples=n_samples,
+        )
+
+    rng = (
+        np.random.default_rng(int(random_state))
+        if isinstance(random_state, (int, np.integer))
+        else random_state
+    )
+    accepted: list[np.ndarray] = []
+    attempted = 0
+    rejection_counts: dict[str, int] = {}
+    remaining = n_samples
+    for _ in range(max_resample_batches):
+        batch_size = remaining
+        sampled = distribution.rvs(size=batch_size, random_state=rng)
+        sampled = _reshape_sampled_values(sampled, len(mean))
+        attempted += len(sampled)
+        valid, counts = _validate_parameter_rows(
+            sampled,
+            parameter_names=names,
+            lower=lower,
+            upper=upper,
+            validator=validator,
+        )
+        for reason, count in counts.items():
+            rejection_counts[reason] = rejection_counts.get(reason, 0) + count
+        if np.any(valid):
+            accepted.append(sampled[valid])
+            accepted_count = sum(len(batch) for batch in accepted)
+            remaining = n_samples - accepted_count
+            if remaining <= 0:
+                break
+
+    if not accepted or sum(len(batch) for batch in accepted) < n_samples:
+        accepted_count = sum(len(batch) for batch in accepted)
+        raise ValueError(
+            f'Only {accepted_count} of {n_samples} valid parameter draws could be '
+            f'generated after {attempted} attempts.'
+        )
+    values = np.vstack(accepted)[:n_samples]
     return ParameterSamples(
         parameter_names=names,
         values=values,
         requested_samples=n_samples,
+        attempted_samples=attempted,
+        rejection_counts=rejection_counts,
     )
 
 
@@ -241,6 +377,7 @@ def sample_profile_trajectory(
         fit.covariance,
         n_samples=n_samples,
         random_state=random_state,
+        model_name=fit.model_name,
     )
     curve_draws = evaluate_curve_draws(
         spec.model_function,
@@ -269,6 +406,8 @@ def sample_profile_trajectory(
             'parameter_names': parameter_samples.parameter_names,
             'parameter_samples': parameter_samples.values,
             'requested_samples': parameter_samples.requested_samples,
+            'attempted_samples': parameter_samples.attempted_samples,
+            'rejected_parameter_draws': dict(parameter_samples.rejection_counts),
         },
     )
 
@@ -296,6 +435,7 @@ def sample_time_mapping_trajectories(
         covariance,
         n_samples=n_samples,
         random_state=random_state,
+        model_name=model_name,
     )
     time_draws = evaluate_curve_draws(
         spec.model_function,
@@ -314,6 +454,8 @@ def sample_time_mapping_trajectories(
             'parameter_names': parameter_samples.parameter_names,
             'parameter_samples': parameter_samples.values,
             'requested_samples': parameter_samples.requested_samples,
+            'attempted_samples': parameter_samples.attempted_samples,
+            'rejected_parameter_draws': dict(parameter_samples.rejection_counts),
         },
     )
 
@@ -339,12 +481,14 @@ def sample_value_ratio_trajectories(
         in_vitro_covariance,
         n_samples=n_samples,
         random_state=random_states[0],
+        model_name=model_name,
     )
     in_vivo_samples = sample_parameter_sets(
         in_vivo_parameters,
         in_vivo_covariance,
         n_samples=n_samples,
         random_state=random_states[1],
+        model_name=model_name,
     )
     in_vitro_draws = evaluate_curve_draws(
         spec.model_function,
@@ -396,6 +540,10 @@ def sample_value_ratio_trajectories(
             'in_vivo_parameter_samples': in_vivo_samples.values,
             'ratio_draws': ratio_draws,
             'requested_samples': int(n_samples),
+            'in_vitro_attempted_samples': in_vitro_samples.attempted_samples,
+            'in_vivo_attempted_samples': in_vivo_samples.attempted_samples,
+            'in_vitro_rejected_parameter_draws': dict(in_vitro_samples.rejection_counts),
+            'in_vivo_rejected_parameter_draws': dict(in_vivo_samples.rejection_counts),
         },
     )
 
@@ -442,12 +590,14 @@ def sample_tau_ratio_trajectories(
         in_vitro_covariance,
         n_samples=n_samples,
         random_state=random_states[0],
+        model_name=model_name,
     )
     in_vivo_samples = sample_parameter_sets(
         in_vivo_parameters,
         in_vivo_covariance,
         n_samples=n_samples,
         random_state=random_states[1],
+        model_name=model_name,
     )
 
     in_vitro_tau = np.asarray(
@@ -533,6 +683,10 @@ def sample_tau_ratio_trajectories(
             'in_vivo_tau_draws': in_vivo_tau,
             'ratio_draws': ratio_draws,
             'requested_samples': int(n_samples),
+            'in_vitro_attempted_samples': in_vitro_samples.attempted_samples,
+            'in_vivo_attempted_samples': in_vivo_samples.attempted_samples,
+            'in_vitro_rejected_parameter_draws': dict(in_vitro_samples.rejection_counts),
+            'in_vivo_rejected_parameter_draws': dict(in_vivo_samples.rejection_counts),
         },
     )
 
@@ -581,6 +735,7 @@ def sample_inverse_response_trajectories(
         covariance,
         n_samples=n_samples,
         random_state=random_state,
+        model_name=model_name,
     )
     time_draws = np.full(
         (parameter_samples.n_samples, len(prediction.time)),
@@ -617,5 +772,7 @@ def sample_inverse_response_trajectories(
             'parameter_samples': parameter_samples.values,
             'central_supported': central_supported,
             'requested_samples': parameter_samples.requested_samples,
+            'attempted_samples': parameter_samples.attempted_samples,
+            'rejected_parameter_draws': dict(parameter_samples.rejection_counts),
         },
     )

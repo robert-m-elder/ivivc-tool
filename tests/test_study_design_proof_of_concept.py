@@ -1,0 +1,138 @@
+from __future__ import annotations
+
+import json
+
+import numpy as np
+import pandas as pd
+
+from examples.study_design_proof_of_concept import (
+    ProofOfConceptSettings,
+    build_adaptive_refinement_scenario,
+    build_ivivc_prediction_scenario,
+    build_measured_in_vivo_scenario,
+    run_proof_of_concept,
+    write_proof_of_concept_outputs,
+)
+
+
+def _small_settings(*, write_html: bool = False) -> ProofOfConceptSettings:
+    return ProofOfConceptSettings(
+        n_reference_draws=8,
+        n_simulations=8,
+        random_seed=1234,
+        refine=True,
+        write_html=write_html,
+        max_design_sizes=1,
+    )
+
+
+def test_scenario_builders_cover_measured_ivivc_and_adaptive_inputs():
+    settings = _small_settings()
+    measured = build_measured_in_vivo_scenario(settings)
+    ivivc = build_ivivc_prediction_scenario(settings)
+    adaptive = build_adaptive_refinement_scenario(settings)
+
+    assert measured.metadata['reference_source'] == 'measured_in_vivo_replicates'
+    assert measured.reference.n_valid_draws == settings.n_reference_draws
+    assert measured.analysis_model == 'mass_loss_one_phase'
+    assert measured.observation_model.kind == 'constant_sd'
+    assert measured.observation_model.value == settings.observation_sd
+    assert measured.metadata['reference_data_sd'] == settings.observation_sd
+    assert {'time', 'response', 'replicate_id'}.issubset(measured.observed_data)
+
+    assert ivivc.metadata['reference_source'] == 'ivivc_approach1_prediction'
+    assert ivivc.reference.n_valid_draws > 1
+    assert ivivc.analysis_model == settings.analysis_model
+    assert ivivc.observation_model.value == settings.observation_sd
+    assert {'in_vitro_time', 'in_vivo_time'}.issubset(ivivc.observed_data)
+
+    assert adaptive.metadata['reference_source'] == 'partial_target_in_vivo_study'
+    assert adaptive.analysis_model == settings.analysis_model
+    assert adaptive.observation_model.value == settings.observation_sd
+    assert adaptive.metadata['reference_data_sd'] == settings.observation_sd
+    np.testing.assert_allclose(
+        adaptive.constraints.fixed_times,
+        adaptive.metadata['completed_times'],
+    )
+    assert adaptive.constraints.min_number_of_times == len(
+        adaptive.constraints.fixed_times
+    ) + 1
+
+
+def test_proof_of_concept_uses_common_optimizer_and_simulation_pipeline():
+    run = run_proof_of_concept(
+        ('measured_in_vivo', 'adaptive_refinement'),
+        settings=_small_settings(),
+    )
+
+    assert set(run.scenarios) == {'measured_in_vivo', 'adaptive_refinement'}
+    for result in run.scenarios.values():
+        assert len(result.comparisons_by_n) == 1
+        labels = set(result.performance_table['design'])
+        assert {'optimized_nested', 'optimized_refined', 'equal_time', 'log_time'} <= labels
+        assert np.all(np.isfinite(result.performance_table['failure_rate']))
+        assert np.all(
+            np.isfinite(
+                result.performance_table['penalized_mean_normalized_irmse']
+            )
+        )
+
+    adaptive = run.scenarios['adaptive_refinement']
+    fixed = adaptive.definition.constraints.fixed_times
+    optimized = adaptive.selected_times_table[
+        adaptive.selected_times_table['design'] == 'optimized_refined'
+    ]['time'].to_numpy(dtype=float)
+    for value in fixed:
+        assert np.any(np.isclose(optimized, value, rtol=0.0, atol=1e-12))
+
+
+def test_output_writer_creates_transparent_machine_readable_bundle(tmp_path):
+    run = run_proof_of_concept(
+        ('ivivc_prediction',),
+        settings=_small_settings(write_html=False),
+    )
+    written = write_proof_of_concept_outputs(run, tmp_path)
+
+    assert written.output_directory == tmp_path
+    scenario_dir = tmp_path / 'ivivc_prediction'
+    expected = {
+        'observed_or_calibration_data.csv',
+        'reference_trajectory.csv',
+        'design_performance.csv',
+        'selected_times.csv',
+        'metadata.json',
+    }
+    assert expected == {path.name for path in scenario_dir.iterdir()}
+    assert (tmp_path / 'combined_design_performance.csv').exists()
+    assert (tmp_path / 'combined_selected_times.csv').exists()
+    assert (tmp_path / 'manifest.json').exists()
+    assert not (tmp_path / 'index.html').exists()
+
+    performance = pd.read_csv(scenario_dir / 'design_performance.csv')
+    assert {'design', 'number_of_times', 'penalized_mean_irmse'} <= set(
+        performance.columns
+    )
+    metadata = json.loads((scenario_dir / 'metadata.json').read_text())
+    assert metadata['name'] == 'ivivc_prediction'
+    assert metadata['constraints']['fixed_times'] == [0.0]
+
+
+def test_runner_model_and_absolute_noise_are_configurable():
+    settings = ProofOfConceptSettings(
+        n_reference_draws=8,
+        n_simulations=8,
+        random_seed=4321,
+        refine=False,
+        write_html=False,
+        max_design_sizes=1,
+        analysis_model='mass_loss_one_phase_normalized',
+        observation_sd=0.07,
+        fit_initialization='central_reference',
+    )
+    scenario = build_measured_in_vivo_scenario(settings)
+
+    assert scenario.analysis_model == 'mass_loss_one_phase_normalized'
+    assert scenario.observation_model.kind == 'constant_sd'
+    assert scenario.observation_model.value == 0.07
+    assert scenario.metadata['reference_data_sd'] == 0.07
+    assert settings.fit_initialization == 'central_reference'

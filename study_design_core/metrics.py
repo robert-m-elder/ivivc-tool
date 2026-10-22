@@ -197,7 +197,9 @@ def parameter_near_bounds(
     spec = get_model_spec(model_name)
     if len(parameters) != len(spec.parameter_names):
         raise ValueError('Parameter vector length does not match the registered model.')
-    bounds = spec.fit_kwargs.get('bounds')
+    bounds = spec.parameter_bounds
+    if bounds is None:
+        bounds = spec.fit_kwargs.get('bounds')
     if bounds is None:
         return np.zeros(len(parameters), dtype=bool)
     lower, upper = bounds

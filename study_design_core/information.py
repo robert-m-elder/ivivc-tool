@@ -45,7 +45,9 @@ def _coerce_parameter_vector(
 
 def _parameter_bounds(model_name: str) -> tuple[np.ndarray, np.ndarray]:
     spec = get_model_spec(model_name)
-    bounds = spec.fit_kwargs.get('bounds')
+    bounds = spec.parameter_bounds
+    if bounds is None:
+        bounds = spec.fit_kwargs.get('bounds')
     count = len(spec.parameter_names)
     if bounds is None:
         return (

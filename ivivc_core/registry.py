@@ -26,6 +26,8 @@ class ModelSpec:
     latex_equation: str | None = None
     initial_guess: Callable[..., Any] | None = None
     supports_tau: bool = False
+    parameter_bounds: tuple[Any, Any] | None = None
+    parameter_validator: Callable[[Mapping[str, float]], bool] | None = None
 
 
 @dataclass(frozen=True)
@@ -70,6 +72,8 @@ def get_model_spec(model_name: str) -> ModelSpec:
         supports_tau=bool(
             entry.get('supports_tau', getattr(model_function, 'supports_tau', True))
         ),
+        parameter_bounds=entry.get('parameter_bounds'),
+        parameter_validator=entry.get('parameter_validator'),
     )
 
 
