@@ -1,5 +1,6 @@
 """Reusable numerical foundation for degradation study-design assessment."""
 
+from .adaptive import reweight_reference_ensemble
 from .fitting import fit_model_once
 from .information import (
     ensemble_i_optimality,
@@ -20,9 +21,13 @@ from .metrics import (
 )
 from .observation import observation_model_from_residuals
 from .optimize import (
+    coordinate_exchange_local_i_optimal_design,
     coordinate_exchange_i_optimal_design,
+    evaluate_local_i_optimal_design,
     evaluate_i_optimal_design,
+    greedy_local_i_optimal_designs,
     greedy_i_optimal_designs,
+    optimize_local_i_optimal_designs,
     optimize_i_optimal_designs,
 )
 from .simulation import (
@@ -44,6 +49,7 @@ from .reference import (
 from .types import (
     CoordinateExchangeResult,
     DesignConstraints,
+    ExistingObservations,
     DesignInformationScore,
     DesignPerformanceSummary,
     DesignSimulationComparison,
@@ -53,6 +59,7 @@ from .types import (
     ModelFitResult,
     ObservationModel,
     ReferenceModelEnsemble,
+    ReferenceUpdateResult,
     ReferenceTrajectoryEnsemble,
     SimulationPlan,
 )
@@ -60,6 +67,7 @@ from .types import (
 __all__ = [
     'CoordinateExchangeResult',
     'DesignConstraints',
+    'ExistingObservations',
     'DesignInformationScore',
     'DesignPerformanceSummary',
     'DesignSimulationComparison',
@@ -69,21 +77,25 @@ __all__ = [
     'ModelFitResult',
     'ObservationModel',
     'ReferenceModelEnsemble',
+    'ReferenceUpdateResult',
     'ReferenceTrajectoryEnsemble',
     'SimulationPlan',
     'approximate_mean_curve_interval_width',
     'compare_designs_by_simulation',
     'create_simulation_plan',
+    'coordinate_exchange_local_i_optimal_design',
     'coordinate_exchange_i_optimal_design',
     'ensemble_i_optimality',
     'equal_response_spaced_design',
     'equally_spaced_design',
     'evaluate_central_trajectory',
+    'evaluate_local_i_optimal_design',
     'evaluate_i_optimal_design',
     'evaluate_reference_trajectories',
     'finite_difference_sensitivities',
     'fit_model_once',
     'fit_reference_model_ensemble',
+    'greedy_local_i_optimal_designs',
     'greedy_i_optimal_designs',
     'information_matrix',
     'integrated_root_mean_square_error',
@@ -92,8 +104,10 @@ __all__ = [
     'parameter_near_bounds',
     'local_i_optimality',
     'observation_model_from_residuals',
+    'optimize_local_i_optimal_designs',
     'optimize_i_optimal_designs',
     'reference_response_scale',
+    'reweight_reference_ensemble',
     'simulate_design',
     'summarize_simulation',
     'reference_from_profile_fit',

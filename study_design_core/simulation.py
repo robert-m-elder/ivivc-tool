@@ -20,6 +20,7 @@ from .metrics import (
 )
 from .types import (
     DesignConstraints,
+    ExistingObservations,
     DesignPerformanceSummary,
     DesignSimulationComparison,
     DesignSimulationResult,
@@ -150,6 +151,7 @@ def simulate_design(
     model_name: str,
     constraints: DesignConstraints | None = None,
     reference_model: ReferenceModelEnsemble | None = None,
+    existing_observations: ExistingObservations | None = None,
     simulation_plan: SimulationPlan | None = None,
     n_simulations: int = 1000,
     random_state=None,
@@ -192,6 +194,32 @@ def simulate_design(
     if design[0] < lower - 1e-12 or design[-1] > upper + 1e-12:
         raise ValueError('Design times extend beyond the supported reference domain.')
 
+    if existing_observations is None:
+        existing_times = np.array([], dtype=float)
+    else:
+        existing_times = existing_observations.unique_times
+        if (
+            existing_times[0] < lower - 1e-12
+            or existing_times[-1] > upper + 1e-12
+        ):
+            raise ValueError('Existing observations extend beyond the supported reference domain.')
+        if not all(
+            np.any(np.isclose(design, value, rtol=0.0, atol=1e-12))
+            for value in existing_times
+        ):
+            raise ValueError('Adaptive designs must retain every completed observation time.')
+        if constraints is not None and not all(
+            np.any(np.isclose(constraints.fixed_times, value, rtol=0.0, atol=1e-12))
+            for value in existing_times
+        ):
+            raise ValueError('Completed observation times must be represented as fixed design times.')
+
+    future_design = np.asarray([
+        value
+        for value in design
+        if not np.any(np.isclose(existing_times, value, rtol=0.0, atol=1e-12))
+    ], dtype=float)
+
     if simulation_plan is None:
         simulation_plan = create_simulation_plan(
             reference,
@@ -202,7 +230,11 @@ def simulate_design(
         )
     if simulation_plan.n_replicates < replicates:
         raise ValueError('Simulation plan does not contain enough replicate error draws.')
-    design_indices = simulation_plan.indices_for_times(design)
+    future_plan_indices = (
+        simulation_plan.indices_for_times(future_design)
+        if len(future_design)
+        else np.array([], dtype=int)
+    )
     draw_indices = simulation_plan.trajectory_draw_indices
     n_simulations = simulation_plan.n_simulations
 
@@ -213,12 +245,32 @@ def simulate_design(
     )
     true_at_design = reference.evaluate(design, draw_indices=draw_indices)
     true_curves = reference.evaluate(evaluation_times, draw_indices=draw_indices)
-    standard_deviation = observation_model.standard_deviation(true_at_design)
-    errors = simulation_plan.standard_normal_errors[
-        :, :replicates, :
-    ][:, :, design_indices]
-    observations = true_at_design[:, None, :] + standard_deviation[:, None, :] * errors
-    observed_means = np.mean(observations, axis=1)
+    observed_means = np.full((n_simulations, len(design)), np.nan, dtype=float)
+
+    if existing_observations is not None:
+        mean_times, mean_responses = existing_observations.mean_response_by_time()
+        for value, response in zip(mean_times, mean_responses):
+            column = int(np.flatnonzero(np.isclose(design, value, rtol=0.0, atol=1e-12))[0])
+            observed_means[:, column] = response
+
+    if len(future_design):
+        true_at_future = reference.evaluate(future_design, draw_indices=draw_indices)
+        standard_deviation = observation_model.standard_deviation(true_at_future)
+        errors = simulation_plan.standard_normal_errors[
+            :, :replicates, :
+        ][:, :, future_plan_indices]
+        future_observations = (
+            true_at_future[:, None, :]
+            + standard_deviation[:, None, :] * errors
+        )
+        future_means = np.mean(future_observations, axis=1)
+        for future_column, value in enumerate(future_design):
+            design_column = int(
+                np.flatnonzero(np.isclose(design, value, rtol=0.0, atol=1e-12))[0]
+            )
+            observed_means[:, design_column] = future_means[:, future_column]
+    else:
+        future_observations = np.empty((n_simulations, replicates, 0), dtype=float)
 
     if reference_model is None:
         reference_model = fit_reference_model_ensemble(reference, model_name=model_name)
@@ -233,16 +285,27 @@ def simulate_design(
     fit_messages: list[str | None] = []
     interval_widths = np.full(n_simulations, np.nan, dtype=float)
 
-    repeated_times = np.tile(design, replicates)
+    repeated_future_times = np.tile(future_design, replicates)
+    if existing_observations is None:
+        existing_fit_times = np.array([], dtype=float)
+        existing_fit_response = np.array([], dtype=float)
+    else:
+        existing_fit_times = existing_observations.time
+        existing_fit_response = existing_observations.response
+    fit_times = np.concatenate([existing_fit_times, repeated_future_times])
+
     for simulation_index in range(n_simulations):
-        response = observations[simulation_index].reshape(-1)
+        response = np.concatenate([
+            existing_fit_response,
+            future_observations[simulation_index].reshape(-1),
+        ])
         start = _fit_start_parameters(
             fit_initialization,
             reference_model,
             int(draw_indices[simulation_index]),
         )
         fit = fit_model_once(
-            repeated_times,
+            fit_times,
             response,
             model_name=model_name,
             initial_parameters=start,
@@ -344,6 +407,13 @@ def simulate_design(
             'confidence_level': confidence_level,
             'replicates_per_time': replicates,
             'fit_initialization': fit_initialization,
+            'existing_observation_count': (
+                0 if existing_observations is None else existing_observations.n_observations
+            ),
+            'existing_time_point_count': (
+                0 if existing_observations is None else existing_observations.n_time_points
+            ),
+            'future_design_times': future_design.copy(),
             'common_random_numbers': bool(
                 simulation_plan.metadata.get('common_random_numbers', False)
             ),

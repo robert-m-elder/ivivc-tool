@@ -223,6 +223,89 @@ class ObservationModel:
 
 
 @dataclass
+class ExistingObservations:
+    """Completed observations that remain fixed during adaptive design.
+
+    Repeated times are allowed so replicate-level observations can be retained
+    exactly as measured.  These values are never resimulated by the Monte
+    Carlo study-design evaluator.
+    """
+
+    time: np.ndarray
+    response: np.ndarray
+    label: str = 'completed in vivo observations'
+
+    def __post_init__(self) -> None:
+        self.time = np.asarray(self.time, dtype=float).copy()
+        self.response = np.asarray(self.response, dtype=float).copy()
+        if self.time.ndim != 1 or self.response.ndim != 1:
+            raise ValueError('Existing observation time and response must be one-dimensional.')
+        if len(self.time) == 0 or len(self.time) != len(self.response):
+            raise ValueError('Existing observations require equally sized nonempty time and response arrays.')
+        if np.any(~np.isfinite(self.time)) or np.any(~np.isfinite(self.response)):
+            raise ValueError('Existing observations must contain only finite values.')
+        self.label = str(self.label)
+
+    @property
+    def unique_times(self) -> np.ndarray:
+        return np.unique(self.time)
+
+    @property
+    def latest_time(self) -> float:
+        return float(np.max(self.time))
+
+    @property
+    def n_observations(self) -> int:
+        return int(len(self.time))
+
+    @property
+    def n_time_points(self) -> int:
+        return int(len(self.unique_times))
+
+    def mean_response_by_time(self) -> tuple[np.ndarray, np.ndarray]:
+        times = self.unique_times
+        means = np.asarray([np.mean(self.response[self.time == value]) for value in times])
+        return times, means
+
+
+@dataclass
+class ReferenceUpdateResult:
+    """Likelihood reweighting of a reference ensemble by completed data."""
+
+    reference: ReferenceTrajectoryEnsemble
+    prior_weights: np.ndarray
+    posterior_weights: np.ndarray
+    log_likelihood: np.ndarray
+    effective_sample_size: float
+    log_normalizing_constant: float
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.prior_weights = np.asarray(self.prior_weights, dtype=float).copy()
+        self.posterior_weights = np.asarray(self.posterior_weights, dtype=float).copy()
+        self.log_likelihood = np.asarray(self.log_likelihood, dtype=float).copy()
+        expected = self.reference.n_draws
+        for name, values in (
+            ('prior_weights', self.prior_weights),
+            ('posterior_weights', self.posterior_weights),
+            ('log_likelihood', self.log_likelihood),
+        ):
+            if values.ndim != 1 or len(values) != expected:
+                raise ValueError(f'{name} must contain one value per reference draw.')
+        if np.any(~np.isfinite(self.prior_weights)) or np.any(self.prior_weights < 0):
+            raise ValueError('prior_weights must be finite and nonnegative.')
+        if np.any(~np.isfinite(self.posterior_weights)) or np.any(self.posterior_weights < 0):
+            raise ValueError('posterior_weights must be finite and nonnegative.')
+        if not np.isclose(np.sum(self.posterior_weights), 1.0):
+            raise ValueError('posterior_weights must sum to one.')
+        if not np.isfinite(self.effective_sample_size) or self.effective_sample_size <= 0:
+            raise ValueError('effective_sample_size must be finite and positive.')
+        self.effective_sample_size = float(self.effective_sample_size)
+        self.log_normalizing_constant = float(self.log_normalizing_constant)
+        self.metadata = dict(self.metadata)
+
+
+@dataclass
 class DesignConstraints:
     """User-defined numerical constraints for future time-point selection.
 
@@ -495,7 +578,11 @@ class ReferenceModelEnsemble:
 
 @dataclass
 class DesignInformationScore:
-    """Uncertainty-averaged information diagnostics for one candidate design."""
+    """Information diagnostics for one candidate design.
+
+    Ensemble-based scoring stores one row per reference-parameter draw. Local
+    scoring uses a single row corresponding to the fitted central reference.
+    """
 
     criterion: float
     parameter_count: int

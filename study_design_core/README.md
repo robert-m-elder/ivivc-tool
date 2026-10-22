@@ -63,10 +63,9 @@ reference_model = fit_reference_model_ensemble(
 ```
 
 Each successful fit produces one complete parameter draw with the source draw's
-weight. The optimizer then uses finite-difference model sensitivities and the
-future-study observation model to calculate local Fisher-information matrices.
-The default criterion is uncertainty-averaged I-optimality: integrated fitted
-mean-curve variance over a user-specified evaluation grid.
+weight. The backend retains the uncertainty-averaged I-optimality functions
+introduced for early method development. They average integrated fitted
+mean-curve variance over the parameter-draw ensemble.
 
 ```python
 from study_design_core import (
@@ -92,12 +91,28 @@ result = optimize_i_optimal_designs(
 )
 ```
 
-The greedy sequence is nested. Before a design is full rank, selection is based
-on robust rank and pseudo-determinant diagnostics; after full rank is attained,
-selection minimizes the uncertainty-averaged I criterion. Optional coordinate
-exchange refines each design size without preserving nesting. These information
-scores are screening and optimization quantities; later Monte Carlo validation
-will provide user-facing expected recovery performance.
+The proof-of-concept runner now uses the simpler
+`optimize_local_i_optimal_designs()` path. It evaluates the information
+calculation only at the parameter vector fitted to the central reference
+trajectory. Before that information matrix is full rank, candidate additions
+are selected by rank and then log pseudo-determinant. Once full rank is reached,
+selection minimizes local I-optimality.
+
+The runner presents two versions of this same information-based design.
+**I-optimal (add-one-at-a-time)** greedily adds one time while retaining all
+previously selected times; this is why the internal implementation calls the
+sequence *nested*. **I-optimal (refined at fixed N)** starts from that schedule
+and uses coordinate exchange to move nonfixed times for each design size.
+Coordinate exchange is not Monte Carlo optimization; both schedules use the
+same local I-optimal criterion. Monte Carlo simulation is applied afterward to
+evaluate finite-sample curve recovery and fit failure.
+
+Reference-trajectory uncertainty is deliberately not averaged into the
+analytical optimizer in this default workflow. Instead it is retained for the
+Monte Carlo recovery assessment below. The information calculation is therefore
+a fast schedule generator, while Monte Carlo recovery error and fit failure are
+the primary measures used to compare schedules. The ensemble optimizer remains
+available for method-development experiments.
 
 ## Simulation-based design evaluation
 
@@ -155,15 +170,36 @@ Simple comparison schedules are available for equal calendar-time spacing,
 shifted-log spacing, and equal-response spacing. The equal-response baseline
 requires a monotonic central reference trajectory.
 
+## Adaptive study support
+
+`ExistingObservations` stores replicate-level measurements that have already
+been collected. Adaptive simulations keep these values fixed and simulate only
+new measurements at proposed future times. `reweight_reference_ensemble()` can
+update the weights of complete IVIVC-predicted trajectories using the
+likelihood of those completed observations; trajectory shapes are retained and
+the effective sample size of the reweighted ensemble is reported.
+
+The backend therefore supports two distinct adaptive use cases:
+
+- **in vivo-only adaptive refinement:** fit a provisional reference from an
+  incomplete target in vivo study and use it to select later observations;
+- **IVIVC-informed adaptive refinement:** predict a target in vivo ensemble from
+  calibration IVIVC data and a target in vitro profile, reweight that ensemble
+  with completed target in vivo observations, and select later observations.
+
+In both cases, completed times are fixed and selectable candidate times are
+strictly later than the latest completed observation.
+
 ## Proof-of-concept runner
 
 `examples/study_design_proof_of_concept.py` composes the refactored IVIVC core,
-information optimizer, and simulation evaluator into three backend-only
+local information optimizer, and simulation evaluator into four backend-only
 examples:
 
 - measured in vivo data used as the reference;
 - an IVIVC-derived predicted in vivo trajectory;
-- adaptive refinement with completed time points held fixed.
+- adaptive refinement from incomplete in vivo data alone;
+- IVIVC-informed adaptive refinement using completed target in vivo data.
 
 Run a small demonstration from the repository root with:
 
@@ -173,20 +209,38 @@ python examples/study_design_proof_of_concept.py --quick
 
 The default output directory, `study_design_poc_output/`, contains transparent
 CSV and JSON files for each scenario and optional static Plotly HTML summaries.
-The examples use constant absolute future-study error by default (`SD = 0.05`)
-and the unnormalized registered one-phase mass-loss model. Both are configurable:
+
+All built-in scenarios are synthetic validation examples. Their HTML summaries
+and `reference_trajectory.csv` files include the known generating curve as
+**Synthetic ground truth — not used by optimizer**. This curve is supplied only
+for evaluation and visualization; it is not passed to reference fitting, IVIVC
+calibration, trajectory reweighting, optimization, or Monte Carlo refitting.
+Real-data workflows will not have this trace.
+The examples use constant absolute future-study error by default (`SD = 0.05`).
+The selected proof-of-concept model is used both to generate the synthetic
+trajectory and to analyze the simulated sparse studies:
 
 ```bash
 python examples/study_design_proof_of_concept.py \
     --analysis-model mass_loss_one_phase \
     --observation-sd 0.05 \
+    --ivivc-calibration-response-sd 0.05 \
     --fit-initialization data_driven
 ```
 
-Any model registered for Approach 2 in the existing `models` directory can be
-selected. Optional `parameter_bounds` declared by a model (or its existing fit bounds)
-are used by the study-design backend to constrain repeated fits and to reject
-and resample implausible parameter draws before trajectory ensembles are
+The built-in demonstration currently defines explicit example parameter presets
+for `mass_loss_one_phase`, `mass_loss_one_phase_normalized`, `exponential`, and
+`mass_loss_surface_erosion`. A model without a preset is rejected rather than
+silently replaced by a one-phase curve.
+The Approach 1 IVIVC scenario samples the in vitro and in vivo calibration
+profiles at separate fixed time grids, adds configurable absolute response noise to
+both profiles, and passes the noisy measurements through the same default
+response-aligned interpolation path used by the IVIVC app. Synthetic noise is
+redrawn when it would make a calibration response profile nonmonotonic, because
+the response-to-time interpolation assumes a monotonic degradation trajectory.
+Optional `parameter_bounds` declared by a model (or its existing fit
+bounds) are used by the study-design backend to constrain repeated fits and to
+reject and resample implausible parameter draws before trajectory ensembles are
 constructed. This does not change the existing IVIVC fitting path. The runner encodes
 no regulatory minimums; all candidate grids, fixed times, replicates, and
 design-size ranges are ordinary `DesignConstraints` supplied by the example

@@ -56,6 +56,43 @@ class _InformationContext:
         )
 
 
+@dataclass
+class _LocalInformationContext:
+    """Information context evaluated only at the central reference fit."""
+
+    reference_model: ReferenceModelEnsemble
+    observation_model: ObservationModel
+    constraints: DesignConstraints
+    all_times: np.ndarray
+    evaluation_times: np.ndarray
+    integration_weights: np.ndarray
+    information_contributions: np.ndarray
+    evaluation_sensitivities: np.ndarray
+    rank_tolerance: float | None
+
+    def score(self, times) -> DesignInformationScore:
+        times = np.unique(np.asarray(times, dtype=float))
+        indices = []
+        for value in times:
+            matches = np.flatnonzero(
+                np.isclose(self.all_times, value, rtol=0.0, atol=1e-12)
+            )
+            if len(matches) != 1:
+                raise ValueError(
+                    f'Design time {value:g} is not available in this optimization context.'
+                )
+            indices.append(int(matches[0]))
+        matrix = np.sum(self.information_contributions[indices], axis=0)
+        return score_information_matrices(
+            matrix[None, :, :],
+            self.evaluation_sensitivities[None, :, :],
+            self.integration_weights,
+            valid_draws=np.array([True], dtype=bool),
+            draw_weights=np.array([1.0], dtype=float),
+            rank_tolerance=self.rank_tolerance,
+        )
+
+
 def _evaluate_model(model_name: str, times: np.ndarray, parameters: np.ndarray) -> np.ndarray:
     spec = get_model_spec(model_name)
     with np.errstate(all='ignore'):
@@ -159,6 +196,70 @@ def _build_information_context(
     )
 
 
+def _build_local_information_context(
+    reference_model: ReferenceModelEnsemble,
+    observation_model: ObservationModel,
+    constraints: DesignConstraints,
+    *,
+    evaluation_times=None,
+    evaluation_weights=None,
+    relative_step: float = 1e-5,
+    absolute_step: float = 1e-8,
+    rank_tolerance: float | None = None,
+) -> _LocalInformationContext:
+    """Build a local information context at the central reference parameters."""
+    all_times = constraints.all_available_times
+    lower, upper = reference_model.supported_time_range
+    tolerance = 1e-12 * max(1.0, abs(lower), abs(upper))
+    if all_times[0] < lower - tolerance or all_times[-1] > upper + tolerance:
+        raise ValueError('Candidate or fixed times extend beyond the supported reference domain.')
+
+    evaluation_times, integration_weights = _prepare_evaluation_grid(
+        reference_model,
+        evaluation_times,
+        evaluation_weights,
+    )
+    theta = reference_model.central_parameters
+    expected = _evaluate_model(reference_model.model_name, all_times, theta)
+    replicates = float(constraints.replicates_per_time)
+    variance = observation_model.standard_deviation(expected) ** 2 / replicates
+    if np.any(~np.isfinite(variance)) or np.any(variance <= 0):
+        raise ValueError(
+            'Information optimization requires strictly positive observation variance '
+            'at every available time.'
+        )
+    sensitivities = finite_difference_sensitivities(
+        reference_model.model_name,
+        all_times,
+        theta,
+        relative_step=relative_step,
+        absolute_step=absolute_step,
+    )
+    contributions = np.asarray(
+        [np.outer(gradient, gradient) / var for gradient, var in zip(sensitivities, variance)],
+        dtype=float,
+    )
+    evaluation_sensitivities = finite_difference_sensitivities(
+        reference_model.model_name,
+        evaluation_times,
+        theta,
+        relative_step=relative_step,
+        absolute_step=absolute_step,
+    )
+
+    return _LocalInformationContext(
+        reference_model=reference_model,
+        observation_model=observation_model,
+        constraints=constraints,
+        all_times=all_times,
+        evaluation_times=evaluation_times,
+        integration_weights=integration_weights,
+        information_contributions=contributions,
+        evaluation_sensitivities=evaluation_sensitivities,
+        rank_tolerance=rank_tolerance,
+    )
+
+
 def _score_is_better(
     candidate: DesignInformationScore,
     incumbent: DesignInformationScore | None,
@@ -194,6 +295,12 @@ def _score_is_better(
     return False
 
 
+def _selection_rule(score: DesignInformationScore) -> str:
+    if score.is_full_rank:
+        return 'i_optimality'
+    return 'rank_pseudodeterminant_fallback'
+
+
 def evaluate_i_optimal_design(
     design_times,
     reference_model: ReferenceModelEnsemble,
@@ -221,18 +328,49 @@ def evaluate_i_optimal_design(
     return context.score(design)
 
 
-def _greedy_designs_from_context(context: _InformationContext) -> tuple[DesignStep, ...]:
+def evaluate_local_i_optimal_design(
+    design_times,
+    reference_model: ReferenceModelEnsemble,
+    observation_model: ObservationModel,
+    constraints: DesignConstraints,
+    *,
+    evaluation_times=None,
+    evaluation_weights=None,
+    relative_step: float = 1e-5,
+    absolute_step: float = 1e-8,
+    rank_tolerance: float | None = None,
+) -> DesignInformationScore:
+    """Evaluate one design at the fitted central reference parameters only."""
+    design = constraints.validate_design(design_times)
+    context = _build_local_information_context(
+        reference_model,
+        observation_model,
+        constraints,
+        evaluation_times=evaluation_times,
+        evaluation_weights=evaluation_weights,
+        relative_step=relative_step,
+        absolute_step=absolute_step,
+        rank_tolerance=rank_tolerance,
+    )
+    return context.score(design)
+
+
+def _greedy_designs_from_context(context) -> tuple[DesignStep, ...]:
     constraints = context.constraints
     selected = constraints.fixed_times.copy()
     steps: list[DesignStep] = []
 
     if len(selected) >= constraints.min_number_of_times:
+        selected_score = context.score(selected)
         steps.append(
             DesignStep(
                 times=selected,
-                score=context.score(selected),
+                score=selected_score,
                 method='greedy_nested',
                 added_time=None,
+                metadata={
+                    'selection_rule': _selection_rule(selected_score),
+                },
             )
         )
 
@@ -263,6 +401,9 @@ def _greedy_designs_from_context(context: _InformationContext) -> tuple[DesignSt
                     score=best_score,
                     method='greedy_nested',
                     added_time=best_time,
+                    metadata={
+                        'selection_rule': _selection_rule(best_score),
+                    },
                 )
             )
 
@@ -300,9 +441,39 @@ def greedy_i_optimal_designs(
     return _greedy_designs_from_context(context)
 
 
+def greedy_local_i_optimal_designs(
+    reference_model: ReferenceModelEnsemble,
+    observation_model: ObservationModel,
+    constraints: DesignConstraints,
+    *,
+    evaluation_times=None,
+    evaluation_weights=None,
+    relative_step: float = 1e-5,
+    absolute_step: float = 1e-8,
+    rank_tolerance: float | None = None,
+) -> tuple[DesignStep, ...]:
+    """Construct nested local I-optimal designs at the central reference fit.
+
+    Before the central information matrix is full rank, candidates are chosen
+    by information rank and then log pseudo-determinant. Once full rank is
+    attained, candidate selection minimizes the local I-optimality criterion.
+    """
+    context = _build_local_information_context(
+        reference_model,
+        observation_model,
+        constraints,
+        evaluation_times=evaluation_times,
+        evaluation_weights=evaluation_weights,
+        relative_step=relative_step,
+        absolute_step=absolute_step,
+        rank_tolerance=rank_tolerance,
+    )
+    return _greedy_designs_from_context(context)
+
+
 def _coordinate_exchange_from_context(
     initial_times,
-    context: _InformationContext,
+    context,
     *,
     max_iterations: int,
 ) -> CoordinateExchangeResult:
@@ -389,6 +560,40 @@ def coordinate_exchange_i_optimal_design(
     )
 
 
+def coordinate_exchange_local_i_optimal_design(
+    initial_times,
+    reference_model: ReferenceModelEnsemble,
+    observation_model: ObservationModel,
+    constraints: DesignConstraints,
+    *,
+    evaluation_times=None,
+    evaluation_weights=None,
+    relative_step: float = 1e-5,
+    absolute_step: float = 1e-8,
+    rank_tolerance: float | None = None,
+    max_iterations: int = 25,
+) -> CoordinateExchangeResult:
+    """Refine one fixed-size design using local central-reference information."""
+    max_iterations = int(max_iterations)
+    if max_iterations < 1:
+        raise ValueError('max_iterations must be at least one.')
+    context = _build_local_information_context(
+        reference_model,
+        observation_model,
+        constraints,
+        evaluation_times=evaluation_times,
+        evaluation_weights=evaluation_weights,
+        relative_step=relative_step,
+        absolute_step=absolute_step,
+        rank_tolerance=rank_tolerance,
+    )
+    return _coordinate_exchange_from_context(
+        initial_times,
+        context,
+        max_iterations=max_iterations,
+    )
+
+
 def optimize_i_optimal_designs(
     reference_model: ReferenceModelEnsemble,
     observation_model: ObservationModel,
@@ -436,6 +641,7 @@ def optimize_i_optimal_designs(
                         'initial_nested_times': step.times.copy(),
                         'exchanges': result.exchanges,
                         'converged': result.converged,
+                        'selection_rule': _selection_rule(result.score),
                     },
                 )
             )
@@ -450,6 +656,90 @@ def optimize_i_optimal_designs(
         'fixed_times': constraints.fixed_times.copy(),
         'candidate_time_count': len(constraints.candidate_times),
         'reference_parameter_draw_count': reference_model.n_valid_draws,
+    }
+    return DesignOptimizationResult(
+        model_name=reference_model.model_name,
+        nested_steps=nested,
+        refined_steps=refined_steps,
+        evaluation_times=context.evaluation_times,
+        evaluation_weights=context.integration_weights,
+        metadata=metadata,
+    )
+
+
+def optimize_local_i_optimal_designs(
+    reference_model: ReferenceModelEnsemble,
+    observation_model: ObservationModel,
+    constraints: DesignConstraints,
+    *,
+    evaluation_times=None,
+    evaluation_weights=None,
+    relative_step: float = 1e-5,
+    absolute_step: float = 1e-8,
+    rank_tolerance: float | None = None,
+    refine: bool = True,
+    max_exchange_iterations: int = 25,
+) -> DesignOptimizationResult:
+    """Optimize schedules using only the fitted central reference parameters.
+
+    This is the simpler local-design path used by the proof-of-concept runner.
+    Reference-trajectory uncertainty is intentionally left to the downstream
+    Monte Carlo evaluation rather than averaged into the analytical criterion.
+    """
+    context = _build_local_information_context(
+        reference_model,
+        observation_model,
+        constraints,
+        evaluation_times=evaluation_times,
+        evaluation_weights=evaluation_weights,
+        relative_step=relative_step,
+        absolute_step=absolute_step,
+        rank_tolerance=rank_tolerance,
+    )
+    nested = _greedy_designs_from_context(context)
+    refined_steps: list[DesignStep] = []
+    if refine:
+        max_exchange_iterations = int(max_exchange_iterations)
+        if max_exchange_iterations < 1:
+            raise ValueError('max_exchange_iterations must be at least one.')
+        for step in nested:
+            result = _coordinate_exchange_from_context(
+                step.times,
+                context,
+                max_iterations=max_exchange_iterations,
+            )
+            refined_steps.append(
+                DesignStep(
+                    times=result.times,
+                    score=result.score,
+                    method='coordinate_exchange',
+                    added_time=None,
+                    n_exchanges=len(result.exchanges),
+                    metadata={
+                        'initial_nested_times': step.times.copy(),
+                        'exchanges': result.exchanges,
+                        'converged': result.converged,
+                        'selection_rule': _selection_rule(result.score),
+                    },
+                )
+            )
+
+    metadata: dict[str, object] = {
+        'criterion': 'local_i_optimality',
+        'parameter_source': 'central_reference_fit',
+        'rank_aware_initialization': True,
+        'rank_deficient_fallback': 'rank_then_log_pseudodeterminant',
+        'reference_uncertainty_used_in_optimization': False,
+        'reference_uncertainty_evaluated_by_monte_carlo': True,
+        'central_parameters': reference_model.central_parameters.copy(),
+        'parameter_names': tuple(reference_model.parameter_names),
+        'parameter_count': reference_model.n_parameters,
+        'replicates_per_time': constraints.replicates_per_time,
+        'observation_model_kind': observation_model.kind,
+        'observation_model_value': observation_model.value,
+        'minimum_spacing': constraints.minimum_spacing,
+        'fixed_times': constraints.fixed_times.copy(),
+        'candidate_time_count': len(constraints.candidate_times),
     }
     return DesignOptimizationResult(
         model_name=reference_model.model_name,
