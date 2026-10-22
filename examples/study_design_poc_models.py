@@ -81,6 +81,8 @@ class SyntheticModelPreset:
             parameters['s'] *= scale
         elif self.model_name == 'exponential':
             parameters['b'] /= scale
+        elif self.model_name == 'stretched_exponential':
+            parameters['b'] /= scale ** parameters['c']
         elif self.model_name == 'mass_loss_surface_erosion':
             parameters['k'] /= scale
         else:  # pragma: no cover - guarded by the supported preset list
@@ -95,6 +97,7 @@ SUPPORTED_SYNTHETIC_MODELS = (
     'mass_loss_one_phase_normalized',
     'exponential',
     'mass_loss_surface_erosion',
+    'stretched_exponential',
 )
 
 
@@ -142,7 +145,7 @@ def get_synthetic_model_preset(
     if model_name == 'mass_loss_one_phase':
         parameters = (
             1.0,
-            1.0,
+            0.8,
             time_min + transition_fraction * span,
             width_fraction * span,
         )
@@ -155,8 +158,19 @@ def get_synthetic_model_preset(
         rate = np.log(terminal_fraction) / span
         amplitude = np.exp(-rate * time_min)
         parameters = (float(amplitude), float(rate))
+    elif model_name == 'stretched_exponential':
+        shape = 2.0  # c < 1 gives a stretched exponential
+        rate = np.log(terminal_fraction) / (
+            time_max**shape - time_min**shape
+        )
+        amplitude = np.exp(-rate * time_min**shape)
+        parameters = (
+            float(amplitude),
+            float(rate),
+            float(shape),
+        )
     else:  # mass_loss_surface_erosion
-        exponent = 2.0
+        exponent = 1.5
         erosion_rate = 1.0 / time_max
         initial_fraction = max(1.0 - erosion_rate * time_min, np.finfo(float).eps)
         initial_level = 1.0 / initial_fraction**exponent

@@ -72,6 +72,7 @@ from study_design_core import (  # noqa: E402
     reference_from_profile_fit,
     reference_from_trajectory_ensemble,
     reweight_reference_ensemble,
+    threshold_crossing_time,
 )
 
 
@@ -114,8 +115,10 @@ POC_DEFAULT_MAXIMUM_N = 7
 
 # Common synthetic in vivo truth used by every proof-of-concept scenario.
 POC_IN_VIVO_TIME_RANGE = (0.0, 52.0)
-POC_IN_VIVO_TRANSITION_TIME = 30.0
-POC_IN_VIVO_TRANSITION_WIDTH = 5.0
+#POC_IN_VIVO_TRANSITION_TIME = 30.0
+#POC_IN_VIVO_TRANSITION_WIDTH = 5.0
+POC_IN_VIVO_TRANSITION_TIME = 25.0
+POC_IN_VIVO_TRANSITION_WIDTH = 2.5
 
 MEASURED_TIME_RANGE = POC_IN_VIVO_TIME_RANGE
 MEASURED_REFERENCE_GRID_STEP = 0.5
@@ -138,8 +141,17 @@ ADAPTIVE_REFERENCE_GRID_STEP = 0.5
 ADAPTIVE_IN_VIVO_CANDIDATE_STEP = 1.0
 ADAPTIVE_IVIVC_CANDIDATE_STEP = 1.0
 #ADAPTIVE_COMPLETED_TIMES = (0, 8, 16, 24)
-#ADAPTIVE_COMPLETED_TIMES = (0,8,16,24,28)
-ADAPTIVE_COMPLETED_TIMES = (0.0, 10.0, 20.0)
+#ADAPTIVE_COMPLETED_TIMES = (0,8,16,24,28) # works with original ground truth (mass_loss_one_phase)
+ADAPTIVE_COMPLETED_TIMES = (0.0, 10.0, 20.0) # works fine for mass_loss_one_phase_normalized
+#ADAPTIVE_COMPLETED_TIMES = (0.0, 10.0, 15, 20.0, 25) # XXX  does not work with narrower ground truth (mass_loss_one_phase)
+
+# Reported curve-derived degradation endpoints. T50 means 50% degraded
+# (50% of the initial response remaining); T90 means 90% degraded
+# (10% of the initial response remaining). These do not affect optimization.
+REPORTED_DEGRADATION_ENDPOINTS = (
+    ('t50', 'T50 (50% degraded / 50% remaining)', 0.5),
+    ('t90', 'T90 (90% degraded / 10% remaining)', 0.1),
+)
 
 
 @contextmanager
@@ -1055,16 +1067,16 @@ def _baseline_designs(
         'equal_time': equally_spaced_design(definition.constraints, number_of_times),
         #'log_time': log_spaced_design(definition.constraints, number_of_times),
     }
-    try:
-        designs['equal_response'] = equal_response_spaced_design(
-            definition.reference,
-            definition.constraints,
-            number_of_times,
-        )
-    except ValueError:
-        # Equal-response spacing is intentionally unavailable for nonmonotonic
-        # or effectively constant central reference curves.
-        pass
+#    try:
+#        designs['equal_response'] = equal_response_spaced_design(
+#            definition.reference,
+#            definition.constraints,
+#            number_of_times,
+#        )
+#    except ValueError:
+#        # Equal-response spacing is intentionally unavailable for nonmonotonic
+#        # or effectively constant central reference curves.
+#        pass
     return designs
 
 
@@ -1125,6 +1137,71 @@ def _format_times(values: Sequence[float]) -> str:
     return '; '.join(f'{float(value):g}' for value in values)
 
 
+def _fractional_remaining_times(
+    times: Sequence[float],
+    curves: np.ndarray,
+    remaining_fraction: float,
+) -> np.ndarray:
+    """Return first times at a fraction of each curve's own initial response."""
+    times = np.asarray(times, dtype=float)
+    curves = np.asarray(curves, dtype=float)
+    if curves.ndim == 1:
+        curves = curves.reshape(1, -1)
+    if curves.ndim != 2 or curves.shape[1] != len(times):
+        raise ValueError('Endpoint curves must contain one response per time point.')
+    remaining_fraction = float(remaining_fraction)
+    if not 0 < remaining_fraction < 1:
+        raise ValueError('remaining_fraction must lie strictly between zero and one.')
+
+    output = np.full(curves.shape[0], np.nan, dtype=float)
+    for index, curve in enumerate(curves):
+        if not np.isfinite(curve[0]):
+            continue
+        threshold = remaining_fraction * float(curve[0])
+        output[index] = threshold_crossing_time(
+            times,
+            curve,
+            threshold,
+            direction='decreasing',
+        )[0]
+    return output
+
+
+def _simulation_endpoint_metrics(simulation_result) -> dict[str, float]:
+    """Summarize Monte Carlo recovery of T50 and T90 without affecting design."""
+    metrics: dict[str, float] = {}
+    for code, _label, remaining_fraction in REPORTED_DEGRADATION_ENDPOINTS:
+        true_times = _fractional_remaining_times(
+            simulation_result.evaluation_times,
+            simulation_result.true_curves,
+            remaining_fraction,
+        )
+        fitted_times = _fractional_remaining_times(
+            simulation_result.evaluation_times,
+            simulation_result.fitted_curves,
+            remaining_fraction,
+        )
+        true_reachable = np.isfinite(true_times)
+        recovered = (
+            true_reachable
+            & simulation_result.fit_success
+            & np.isfinite(fitted_times)
+        )
+        errors = fitted_times[recovered] - true_times[recovered]
+        absolute_errors = np.abs(errors)
+
+        metrics[f'{code}_true_reachable_rate'] = float(np.mean(true_reachable))
+        metrics[f'{code}_recovery_rate'] = (
+            float(np.count_nonzero(recovered) / np.count_nonzero(true_reachable))
+            if np.any(true_reachable)
+            else np.nan
+        )
+        metrics[f'median_absolute_{code}_error'] = (
+            float(np.median(absolute_errors)) if len(absolute_errors) else np.nan
+        )
+    return metrics
+
+
 def _information_lookup(
     optimization: DesignOptimizationResult,
 ) -> dict[tuple[int, str], dict[str, Any]]:
@@ -1159,6 +1236,9 @@ def _performance_tables(
         comparison = comparisons[number_of_times]
         for design_code, summary in comparison.summaries.items():
             info = information.get((number_of_times, design_code))
+            endpoint_metrics = _simulation_endpoint_metrics(
+                comparison.results[design_code]
+            )
             existing_times, new_times = _split_schedule_times(
                 definition,
                 summary.design_times,
@@ -1220,6 +1300,16 @@ def _performance_tables(
                 'median_absolute_target_time_error': (
                     summary.median_absolute_target_time_error
                 ),
+                'median_absolute_t50_error': endpoint_metrics[
+                    'median_absolute_t50_error'
+                ],
+                't50_recovery_rate': endpoint_metrics['t50_recovery_rate'],
+                't50_true_reachable_rate': endpoint_metrics['t50_true_reachable_rate'],
+                'median_absolute_t90_error': endpoint_metrics[
+                    'median_absolute_t90_error'
+                ],
+                't90_recovery_rate': endpoint_metrics['t90_recovery_rate'],
+                't90_true_reachable_rate': endpoint_metrics['t90_true_reachable_rate'],
                 'parameter_bound_hit_rate': summary.parameter_bound_hit_rate,
                 # Local information quantities are supporting schedule-generation diagnostics.
                 'information_criterion': np.nan if info is None else info['criterion'],
@@ -1400,6 +1490,66 @@ def _weighted_quantile(
 
 
 
+def _reference_endpoint_table(definition: ScenarioDefinition) -> pd.DataFrame:
+    """Summarize T50/T90 for ground truth, central reference, and reference draws."""
+    reference = definition.reference
+    valid = reference.valid_draws & (reference.draw_weights > 0)
+    draws = reference.value_draws[valid]
+    weights = reference.draw_weights[valid]
+    weights = weights / np.sum(weights)
+
+    rows: list[dict[str, Any]] = []
+    for code, label, remaining_fraction in REPORTED_DEGRADATION_ENDPOINTS:
+        central_time = _fractional_remaining_times(
+            reference.time_grid,
+            reference.central_curve,
+            remaining_fraction,
+        )[0]
+        draw_times = _fractional_remaining_times(
+            reference.time_grid,
+            draws,
+            remaining_fraction,
+        )
+        finite = np.isfinite(draw_times)
+        reachable_weight = float(np.sum(weights[finite]))
+        if np.any(finite):
+            finite_times = draw_times[finite].reshape(-1, 1)
+            finite_weights = weights[finite]
+            median_time = _weighted_quantile(
+                finite_times, finite_weights, 0.5
+            )[0]
+            lower_time = _weighted_quantile(
+                finite_times, finite_weights, 0.025
+            )[0]
+            upper_time = _weighted_quantile(
+                finite_times, finite_weights, 0.975
+            )[0]
+        else:
+            median_time = lower_time = upper_time = np.nan
+
+        ground_truth_time = np.nan
+        if definition.ground_truth is not None:
+            ground_truth_time = _fractional_remaining_times(
+                definition.ground_truth.time,
+                definition.ground_truth.value,
+                remaining_fraction,
+            )[0]
+
+        rows.append({
+            'endpoint': code.upper(),
+            'definition': label,
+            'degraded_fraction': 1.0 - remaining_fraction,
+            'remaining_fraction': remaining_fraction,
+            'ground_truth_time': ground_truth_time,
+            'central_reference_time': central_time,
+            'reference_median_time': median_time,
+            'reference_lower_95_time': lower_time,
+            'reference_upper_95_time': upper_time,
+            'reference_reachable_weight': reachable_weight,
+        })
+    return pd.DataFrame(rows)
+
+
 def _reference_table(
     reference: ReferenceTrajectoryEnsemble,
     ground_truth: TimeCourse | None = None,
@@ -1516,6 +1666,10 @@ def _scenario_metadata(result: ScenarioResult) -> dict[str, Any]:
             'schedule_generator': 'local_i_optimality_at_central_reference',
             'reference_uncertainty_used_for_monte_carlo': True,
             'reference_uncertainty_used_for_local_schedule_generation': False,
+            'reported_degradation_endpoints': {
+                't50': '50% degraded / 50% of initial response remaining',
+                't90': '90% degraded / 10% of initial response remaining',
+            },
             'design_labels': DESIGN_LABELS,
             'optimized_design_explanations': DESIGN_EXPLANATIONS,
         },
@@ -1536,6 +1690,39 @@ def _plotly_summary_html(result: ScenarioResult) -> str:
         definition.reference,
         definition.ground_truth,
     )
+    endpoint_table = _reference_endpoint_table(definition)
+    endpoint_display = endpoint_table[[
+        'endpoint',
+        'ground_truth_time',
+        'central_reference_time',
+        'reference_median_time',
+        'reference_lower_95_time',
+        'reference_upper_95_time',
+        'reference_reachable_weight',
+    ]].copy()
+    endpoint_display = endpoint_display.rename(columns={
+        'endpoint': 'Endpoint',
+        'ground_truth_time': 'Ground truth',
+        'central_reference_time': 'Central reference',
+        'reference_median_time': 'Reference median',
+        'reference_lower_95_time': 'Reference 2.5%',
+        'reference_upper_95_time': 'Reference 97.5%',
+        'reference_reachable_weight': 'Reference reaching endpoint',
+    })
+    for column in (
+        'Ground truth',
+        'Central reference',
+        'Reference median',
+        'Reference 2.5%',
+        'Reference 97.5%',
+    ):
+        endpoint_display[column] = endpoint_display[column].map(
+            lambda value: '' if not np.isfinite(value) else f'{value:.5g}'
+        )
+    endpoint_display['Reference reaching endpoint'] = endpoint_display[
+        'Reference reaching endpoint'
+    ].map(lambda value: '' if not np.isfinite(value) else f'{value:.1%}')
+
     reference_figure = go.Figure()
     reference_figure.add_trace(go.Scatter(
         x=reference_table['time'],
@@ -1702,6 +1889,10 @@ def _plotly_summary_html(result: ScenarioResult) -> str:
         'median_normalized_irmse',
         'p90_normalized_irmse',
         'penalized_mean_normalized_irmse',
+        'median_absolute_t50_error',
+        't50_recovery_rate',
+        'median_absolute_t90_error',
+        't90_recovery_rate',
     ])
     table = result.performance_table[table_columns].copy()
     table = table.rename(columns={
@@ -1714,7 +1905,15 @@ def _plotly_summary_html(result: ScenarioResult) -> str:
         'median_normalized_irmse': 'Median normalized IRMSE',
         'p90_normalized_irmse': 'P90 normalized IRMSE',
         'penalized_mean_normalized_irmse': 'Penalized mean normalized IRMSE',
+        'median_absolute_t50_error': 'Median absolute T50 error',
+        't50_recovery_rate': 'T50 recovery rate',
+        'median_absolute_t90_error': 'Median absolute T90 error',
+        't90_recovery_rate': 'T90 recovery rate',
     })
+    for column in ('T50 recovery rate', 'T90 recovery rate'):
+        table[column] = table[column].map(
+            lambda value: '' if not np.isfinite(value) else f'{value:.1%}'
+        )
     for column in table.select_dtypes(include=[np.number]).columns:
         table[column] = table[column].map(
             lambda value: '' if not np.isfinite(value) else f'{value:.5g}'
@@ -1838,6 +2037,9 @@ def _plotly_summary_html(result: ScenarioResult) -> str:
   <p><strong>{DESIGN_LABELS['optimized_nested']}:</strong> {DESIGN_EXPLANATIONS['optimized_nested']} <strong>{DESIGN_LABELS['optimized_refined']}:</strong> {DESIGN_EXPLANATIONS['optimized_refined']} Both schedules are information-based; Monte Carlo simulation evaluates their finite-sample curve-recovery performance.</p>
   <p><strong>Synthetic ground truth:</strong> shown only for validation and never used to select the schedules.</p>
   {first_figure}
+  <h2>Degradation endpoints</h2>
+  <p>T50 is the time to 50% degraded (50% of the curve's initial response remaining); T90 is the time to 90% degraded (10% remaining). These endpoints are reported for interpretation and Monte Carlo evaluation, not used by the I-optimal schedule generator.</p>
+  {endpoint_display.to_html(index=False, escape=True)}
   {second_figure}
   {third_figure}
   <h2>Monte Carlo performance summary</h2>
@@ -1879,6 +2081,10 @@ def write_proof_of_concept_outputs(
             result.definition.ground_truth,
         ).to_csv(
             scenario_directory / 'reference_trajectory.csv',
+            index=False,
+        )
+        _reference_endpoint_table(result.definition).to_csv(
+            scenario_directory / 'reference_endpoints.csv',
             index=False,
         )
         result.performance_table.to_csv(
