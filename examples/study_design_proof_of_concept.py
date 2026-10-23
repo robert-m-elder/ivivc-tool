@@ -143,6 +143,7 @@ ADAPTIVE_IVIVC_CANDIDATE_STEP = 1.0
 #ADAPTIVE_COMPLETED_TIMES = (0, 8, 16, 24)
 #ADAPTIVE_COMPLETED_TIMES = (0,8,16,24,28) # works with original ground truth (mass_loss_one_phase)
 ADAPTIVE_COMPLETED_TIMES = (0.0, 10.0, 20.0) # works fine for mass_loss_one_phase_normalized
+#ADAPTIVE_COMPLETED_TIMES = (0.0, 10, 20, 22.0) 
 #ADAPTIVE_COMPLETED_TIMES = (0.0, 10.0, 15, 20.0, 25) # XXX  does not work with narrower ground truth (mass_loss_one_phase)
 
 # Reported curve-derived degradation endpoints. T50 means 50% degraded
