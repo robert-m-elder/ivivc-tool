@@ -11,23 +11,31 @@ import plotly.graph_objects as go
 import plotly.io as pio
 import uncertainties as unc
 
-from metrics import calculate_metric, metrics
+from metrics import metrics
 from models import approaches, models
-from preprocessing import preprocessing_options
+from ivivc_core.fitting import fit_profile
+from ivivc_core.predictions import (
+    inverse_response_prediction_intervals as core_inverse_response_prediction_intervals,
+    inverse_response_times as core_inverse_response_times,
+    predict_direct_time_scaling,
+    predict_direct_value_scaling,
+    predict_inverse_response,
+    predict_tau_ratio,
+    predict_time_mapping,
+    predict_value_ratio,
+    safe_ratio as core_safe_ratio,
+)
+from ivivc_core.preprocessing import prepare_data
+from ivivc_core.types import TimeCourse
 from utilities.evaluation import (
-    auto_grid_search,
-    calculate_tau_with_uncertainty,
-    cross_validation_curve_fit,
     generate_prediction_bands,
     generate_ratio_prediction_bands,
-    make_cross_validator,
 )
 from utilities.misc import hex_to_rgba
 from utilities.parameter_diagnostics import (
     build_parameter_diagnostics_html,
     extract_parameter_diagnostic_badges_html,
 )
-from utilities.prediction_validity import describe_tau_prediction_skip_reason
 
 # Determine environment
 IS_PRODUCTION = 'PYTHONANYWHERE_DOMAIN' in os.environ
@@ -38,13 +46,6 @@ else:
     num_cores_for_grid_search = None
     num_points_for_grid_search = 200
 
-
-def _model_initial_points(model_name, x, y):
-    """Return optional model-specific/data-driven starting points."""
-    initial_guess = models[model_name].get('initial_guess')
-    if initial_guess is None:
-        return None
-    return initial_guess(x, y)
 
 colors = {
     'in_vitro': '#2E5F8A',      # Darker blue
@@ -344,113 +345,164 @@ def _tau_interval_row(tau_value, multiplier, label='Tau'):
 
 def preprocess_data(t1, m1, t2, m2, selected_interpolation=None, selected_scalings=None, selected_normalizations=None,
                     fallback_invalid_log_scaling=False, return_metadata=False):
-    selected_interpolation = selected_interpolation or []
-    selected_scalings = selected_scalings or []
-    selected_normalizations = selected_normalizations or []
-
-    if (t2 is not None) and (m2 is not None):
-        two_datasets = True
-    else:
-        two_datasets = False
-    # Apply basic data cleaning. Preserve true zero times; operations that do
-    # not support zero handle that domain restriction where they are applied.
-    # remove missing values due to unequal number of points in spreadsheet
-    mask = ~pd.isna(m1); t1,m1 = t1[mask], m1[mask]
-    if two_datasets:
-        mask = ~pd.isna(m2); t2,m2 = t2[mask], m2[mask]
-
-    # Retain the actual reference values for reporting, without changing the
-    # transformations or the existing return value when metadata is not asked for.
-    normalization_records = []
-
-    def record_normalization(values, operation, dataset):
-        if not return_metadata:
-            return
-        values = np.asarray(values, dtype=float)
-        record = {
-            'dataset': dataset, 'operation': operation, 'reference': None,
-            'minimum': None, 'maximum': None, 'applied': True, 'note': '',
-        }
-        if operation == 'initial_value':
-            reference = float(values[0]) if values.size else np.nan
-            record['reference'] = reference if np.isfinite(reference) else None
-            if reference == 0:
-                record['applied'] = False
-                record['note'] = 'Initial response was zero; the existing normalization retained the original values.'
-        elif operation == 'min_max' and values.size:
-            minimum, maximum = float(np.nanmin(values)), float(np.nanmax(values))
-            record['minimum'] = minimum if np.isfinite(minimum) else None
-            record['maximum'] = maximum if np.isfinite(maximum) else None
-            if minimum == maximum:
-                record['note'] = 'Observed minimum and maximum were equal; the normalized response is undefined.'
-        normalization_records.append(record)
-
-    # Apply normalizations
-    for norm in selected_normalizations:
-        record_normalization(m1, norm, 'in_vitro' if two_datasets else 'prediction')
-        m1 = preprocessing_options['normalization'][norm](m1)
-        if two_datasets:
-            record_normalization(m2, norm, 'in_vivo')
-            m2 = preprocessing_options['normalization'][norm](m2)
-
-    applied_scalings = []
-    preprocessing_warnings = []
-
-    # Apply scalings. For browser analyses, invalid Log10 scaling can be
-    # skipped so the analysis continues on the unscaled axis. Transform all
-    # applicable datasets first and assign only after the scaling succeeds.
-    for scale in selected_scalings:
-        try:
-            if scale == 'log_x':
-                scaled_t1 = preprocessing_options['scaling'][scale](t1)
-                scaled_t2 = preprocessing_options['scaling'][scale](t2) if two_datasets else None
-                t1 = scaled_t1
-                if two_datasets:
-                    t2 = scaled_t2
-            elif scale == 'log_y':
-                scaled_m1 = preprocessing_options['scaling'][scale](m1)
-                scaled_m2 = preprocessing_options['scaling'][scale](m2) if two_datasets else None
-                m1 = scaled_m1
-                if two_datasets:
-                    m2 = scaled_m2
-            applied_scalings.append(scale)
-        except ValueError:
-            if not fallback_invalid_log_scaling or scale not in {'log_x', 'log_y'}:
-                raise
-            if scale == 'log_x':
-                values_to_check = (t1, t2) if two_datasets else (t1,)
-            else:
-                values_to_check = (m1, m2) if two_datasets else (m1,)
-            if any(np.any(~np.isfinite(np.asarray(values, dtype=float))) for values in values_to_check):
-                raise
-            if scale == 'log_x':
-                preprocessing_warnings.append({
-                    'option': 'Log10 time scaling',
-                    'message': 'Log10 time scaling was selected but was not applied because at least one analyzed time value is zero or negative. The analysis continued using unscaled time values.'
-                })
-            else:
-                preprocessing_warnings.append({
-                    'option': 'Log10 response scaling',
-                    'message': 'Log10 response scaling was selected but was not applied because at least one analyzed response value is zero or negative after normalization. The analysis continued using unscaled response values.'
-                })
-
-    # Apply interpolation/alignment. If no interpolation option is supplied,
-    # use exact raw alignment rather than failing with an unset data variable.
-    if two_datasets:
-        interpolation_choices = selected_interpolation or ['none']
-        for interp in interpolation_choices:
-            data = preprocessing_options['interpolation'][interp](t1, m1, t2, m2)
-    else:
-        data = [t1, m1]
+    """Backward-compatible adapter over structured core preprocessing."""
+    prepared = prepare_data(
+        t1,
+        m1,
+        t2,
+        m2,
+        selected_interpolation=selected_interpolation,
+        selected_scalings=selected_scalings,
+        selected_normalizations=selected_normalizations,
+        fallback_invalid_log_scaling=fallback_invalid_log_scaling,
+    )
+    data = prepared.to_legacy_data()
 
     if return_metadata:
-        return data, {
-            'applied_scalings': applied_scalings,
-            'requested_scalings': list(selected_scalings),
-            'normalization_records': normalization_records,
-            'warnings': preprocessing_warnings,
-        }
+        metadata = prepared.preprocessing.to_legacy_dict()
+        metadata['requested_scalings'] = list(
+            prepared.preprocessing.selected_scalings
+        )
+
+        normalization_records = []
+        for normalization in prepared.preprocessing.normalizations:
+            datasets = [
+                (
+                    'in_vitro' if prepared.has_in_vivo else 'prediction',
+                    normalization.in_vitro_parameters,
+                )
+            ]
+            if normalization.in_vivo_parameters is not None:
+                datasets.append(('in_vivo', normalization.in_vivo_parameters))
+
+            for dataset, parameters in datasets:
+                record = {
+                    'dataset': dataset,
+                    'operation': normalization.name,
+                    'reference': None,
+                    'minimum': None,
+                    'maximum': None,
+                    'applied': bool(parameters.get('applied', True)),
+                    'note': '',
+                }
+
+                if normalization.name == 'initial_value':
+                    reference = parameters.get('initial_value')
+                    if reference is not None and np.isfinite(reference):
+                        record['reference'] = float(reference)
+                    if not record['applied']:
+                        record['note'] = (
+                            'Initial response was zero; the existing normalization '
+                            'retained the original values.'
+                        )
+
+                elif normalization.name == 'min_max':
+                    minimum = parameters.get('minimum')
+                    maximum = parameters.get('maximum')
+                    if minimum is not None and np.isfinite(minimum):
+                        record['minimum'] = float(minimum)
+                    if maximum is not None and np.isfinite(maximum):
+                        record['maximum'] = float(maximum)
+                    if minimum == maximum:
+                        record['note'] = (
+                            'Observed minimum and maximum were equal; the '
+                            'normalized response is undefined.'
+                        )
+
+                normalization_records.append(record)
+
+        metadata['normalization_records'] = normalization_records
+        return data, metadata
+
     return data
+
+def _profile_fit_to_legacy_components(profile_fit, *, include_tau=False):
+    """Convert a numerical ``ProfileFit`` into current app-facing components."""
+    parameter_values = profile_fit.parameter_vector
+    uncertain_parameters = unc.correlated_values(parameter_values, profile_fit.covariance)
+    uncertain_parameters = dict(zip(profile_fit.parameter_names, uncertain_parameters))
+    parameter_ci_multiplier = _ci_multiplier_95(
+        len(profile_fit.response),
+        profile_fit.n_parameters,
+    )
+    parameter_intervals = _interval_rows_from_uparams(
+        uncertain_parameters,
+        parameter_ci_multiplier,
+    )
+
+    stats = pd.concat(
+        [
+            pd.DataFrame(profile_fit.fit_metrics, index=[0]),
+            pd.DataFrame(
+                {
+                    f'CV {metric}': value
+                    for metric, value in profile_fit.cv_means.items()
+                },
+                index=[0],
+            ),
+        ],
+        axis=1,
+    )
+    stats_table = _goodness_cv_comparison_table(
+        profile_fit.fit_metrics,
+        profile_fit.cv_means,
+    )
+
+    components = {
+        'params': profile_fit.parameters,
+        'uparams': uncertain_parameters,
+        'parameter_intervals': parameter_intervals,
+        'pcov': profile_fit.covariance,
+        'residuals': profile_fit.residuals,
+        'residual_x': profile_fit.time,
+        'residual_y': profile_fit.response,
+        'cv_fit_params': profile_fit.cv_parameter_sets,
+        'stats': stats,
+        'predictions': profile_fit.fitted_values,
+        'residual_dof': profile_fit.residual_dof,
+        'evidence_data': {
+            'n': int(len(profile_fit.response)),
+            'rss': float(np.sum(profile_fit.residuals ** 2)),
+            'n_params': int(profile_fit.n_parameters),
+        },
+        'stats_table': stats_table,
+        'parameter_diagnostics_html': build_parameter_diagnostics_html(
+            profile_fit.parameters,
+            profile_fit.covariance,
+        ),
+        'cv_diagnostics': dict(profile_fit.cv_diagnostics),
+        'cv_comparison': {
+            metric: _cv_status(
+                metric,
+                value,
+                profile_fit.cv_means.get(metric, np.nan),
+            )[0]
+            for metric, value in profile_fit.fit_metrics.items()
+            if metric not in CV_COMPARISON_EXCLUDED_METRICS
+        },
+        'fit_cv_ratios': {
+            metric: _fit_cv_ratio(
+                value,
+                profile_fit.cv_means.get(metric, np.nan),
+            )
+            for metric, value in profile_fit.fit_metrics.items()
+            if metric not in CV_COMPARISON_EXCLUDED_METRICS
+        },
+        'fit_metadata': {
+            'n_observations': int(len(profile_fit.response)),
+            'n_parameters': int(profile_fit.n_parameters),
+            'residual_df': int(profile_fit.residual_dof),
+            'ci_multiplier_95': float(parameter_ci_multiplier),
+        },
+    }
+
+    if include_tau:
+        tau = unc.ufloat(profile_fit.tau_estimate, profile_fit.tau_sd)
+        components['tau'] = tau
+        components['tau_interval'] = _tau_interval_row(tau, parameter_ci_multiplier)
+
+    return components
+
 
 def process_data(data, selected_models, selected_approaches, selected_metrics, analysis_config=None):
     analysis_config = analysis_config or {}
@@ -459,250 +511,170 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
     grid_search_param_min = float(analysis_config.get('grid_search_param_min', -1e6))
     grid_search_param_max = float(analysis_config.get('grid_search_param_max', 1e6))
     grid_search_random_state = analysis_config.get('grid_search_random_state', 12345)
-    include_cv_fit_variability = bool(analysis_config.get('include_cv_fit_variability_plot', False))
+    fit_analysis_config = dict(analysis_config)
+    fit_analysis_config.update({
+        'grid_search_num_points': grid_search_num_points,
+        'grid_search_num_cores': grid_search_num_cores,
+        'grid_search_param_min': grid_search_param_min,
+        'grid_search_param_max': grid_search_param_max,
+        'grid_search_random_state': grid_search_random_state,
+    })
+    fit_config_defaults = {
+        'grid_search_num_points': num_points_for_grid_search,
+        'grid_search_num_cores': num_cores_for_grid_search,
+        'grid_search_param_min': -1e6,
+        'grid_search_param_max': 1e6,
+        'grid_search_random_state': 12345,
+    }
     t1,m1,t2,m2,mm,tt,ti1,ti2,mi1,mi2 = data
-    
+
     results = {}
-    
+
     for model_key in selected_models:
         if len(model_key.split(':'))>1:
             approach_id, model_name = model_key.split(':')
         else:
             approach_id = model_key
-        
+
         try:
             if approach_id == 'approach1':
-                cv = make_cross_validator(analysis_config, approach_id)
-                # process data for this approach
-                m = ~np.isnan(ti1) & ~np.isnan(ti2)
-                x,y = ti1[m], ti2[m]
-                # get rough initial estimate of parameters
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore", category=RuntimeWarning)
-                    p0 = auto_grid_search(models[model_name]['model_function'], x, y, param_min=grid_search_param_min, param_max=grid_search_param_max, 
-                                          num_points=grid_search_num_points, num_cores=grid_search_num_cores, random_state=grid_search_random_state,
-                                          initial_points=_model_initial_points(model_name, x, y))
-                # cross-validation
-                cv_output = cross_validation_curve_fit(
-                    x, y, models[model_name]['model_function'], cv, selected_metrics,
-                    p0=p0, kwargs=models[model_name]['fit_kwargs'],
-                    return_fit_params=include_cv_fit_variability,
-                    return_diagnostics=True,
+                profile_fit = fit_profile(
+                    ti1,
+                    ti2,
+                    model_name=model_name,
+                    selected_metrics=selected_metrics,
+                    analysis_config=fit_analysis_config,
+                    approach_id=approach_id,
+                    calculate_tau=False,
+                    config_defaults=fit_config_defaults,
                 )
-                cv_output, cv_diagnostics = cv_output
-                if include_cv_fit_variability:
-                    cvs, cv_fit_params = cv_output
-                else:
-                    cvs, cv_fit_params = cv_output, []
-                cvs_mean = {f'{metric}':np.nanmean(values[np.isfinite(values)]) for metric,values in cvs.items()}
-                # fit final model
-                model_result = models[model_name]['fit_model'](x, y, p0=p0)
-                y_pred = model_result['predict'](x)
-                # Evaluate goodness of fit
-                gof = {metric: calculate_metric(metric, y, y_pred, len(p0)) for metric in selected_metrics}
-                stats = pd.concat([pd.DataFrame(gof, index=[0]), pd.DataFrame({'CV '+metric:v for metric,v in cvs_mean.items()}, index=[0])], axis=1)
-                stats_table = _goodness_cv_comparison_table(gof, cvs_mean)
-                popt, pcov = list(model_result['params'].values()), model_result['pcov']
-                upopt = unc.correlated_values(popt, pcov)
-                upopt = dict(zip(model_result['params'].keys(),upopt))
-                parameter_ci_multiplier = _ci_multiplier_95(len(y), len(popt))
-                parameter_intervals = _interval_rows_from_uparams(upopt, parameter_ci_multiplier)
-                # outputs
-                plot_image = create_plotly_a1(x, y, {
-                    'model_name': models[model_name]['display_name'],
-                    'model_function': models[model_name]['model_function'],
-                    'params': model_result['params'],
-                    'pcov': model_result['pcov'],
-                    'residuals': y-y_pred,
-                    'approach': approaches[approach_id]['display_name']
-                })
-                residuals = y - y_pred
-                results[model_key] = {
-                    'params': model_result['params'],
-                    'uparams': upopt,
-                    'parameter_intervals': parameter_intervals,
-                    'pcov': model_result['pcov'],
-                    'residuals': residuals,
-                    'residual_x': x,
-                    'residual_y': y,
-                    'cv_fit_params': cv_fit_params,
-                    'cv_diagnostics': cv_diagnostics,
-                    'cv_comparison': {metric: _cv_status(metric, value, cvs_mean.get(metric, np.nan))[0]
-                                      for metric, value in gof.items() if metric not in CV_COMPARISON_EXCLUDED_METRICS},
-                    'fit_cv_ratios': {metric: _fit_cv_ratio(value, cvs_mean.get(metric, np.nan))
-                                      for metric, value in gof.items() if metric not in CV_COMPARISON_EXCLUDED_METRICS},
-                    'fit_metadata': {'n_observations': int(len(y)), 'n_parameters': int(len(popt)),
-                                     'residual_df': int(len(y) - len(popt)),
-                                     'ci_multiplier_95': float(parameter_ci_multiplier)},
-                    'stats': stats,
-                    'predictions': y_pred,
-                    'evidence_data': {
-                        'fit': {
-                            'n': int(len(y)),
-                            'rss': float(np.sum(residuals ** 2)),
-                            'n_params': int(len(model_result['params']))
-                        }
+                legacy = _profile_fit_to_legacy_components(profile_fit)
+                plot_image = create_plotly_a1(
+                    profile_fit.time,
+                    profile_fit.response,
+                    {
+                        'model_name': models[model_name]['display_name'],
+                        'model_function': models[model_name]['model_function'],
+                        'params': profile_fit.parameters,
+                        'pcov': profile_fit.covariance,
+                        'residuals': profile_fit.residuals,
+                        'approach': approaches[approach_id]['display_name'],
                     },
-                    'stats_table': stats_table,
-                    'parameter_diagnostics_html': build_parameter_diagnostics_html(model_result['params'], model_result['pcov']),
-                    'plot': plot_image
+                )
+                results[model_key] = {
+                    'params': legacy['params'],
+                    'uparams': legacy['uparams'],
+                    'parameter_intervals': legacy['parameter_intervals'],
+                    'pcov': legacy['pcov'],
+                    'residuals': legacy['residuals'],
+                    'residual_x': legacy['residual_x'],
+                    'residual_y': legacy['residual_y'],
+                    'cv_fit_params': legacy['cv_fit_params'],
+                    'stats': legacy['stats'],
+                    'predictions': legacy['predictions'],
+                    'evidence_data': {'fit': legacy['evidence_data']},
+                    'stats_table': legacy['stats_table'],
+                    'parameter_diagnostics_html': legacy['parameter_diagnostics_html'],
+                    'plot': plot_image,
+                    'cv_diagnostics': legacy['cv_diagnostics'],
+                    'cv_comparison': legacy['cv_comparison'],
+                    'fit_cv_ratios': legacy['fit_cv_ratios'],
+                    'fit_metadata': legacy['fit_metadata'],
                 }
             elif approach_id == 'approach2':
-                cv = make_cross_validator(analysis_config, approach_id)
-                # Approach 2 fits the two preprocessed datasets independently.
-                # No interpolation/alignment is needed because the datasets do
-                # not need matched times or matched response values for separate
-                # curve fitting. Using only observed/preprocessed points also
-                # avoids treating deterministic interpolation estimates as
-                # additional fitting observations.
-                m = ~np.isnan(t1) & ~np.isnan(m1)
-                x1,y1 = t1[m], m1[m]
-                m = ~np.isnan(t2) & ~np.isnan(m2)
-                x2,y2 = t2[m], m2[m]
-                # Dataset 1
-                # get rough initial estimate of parameters
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore", category=RuntimeWarning)
-                    p0 = auto_grid_search(models[model_name]['model_function'], x1, y1, param_min=grid_search_param_min, param_max=grid_search_param_max, 
-                                          num_points=grid_search_num_points, num_cores=grid_search_num_cores, random_state=grid_search_random_state,
-                                          initial_points=_model_initial_points(model_name, x1, y1))
-                # cross-validation
-                cv_output1 = cross_validation_curve_fit(
-                    x1, y1, models[model_name]['model_function'], cv, selected_metrics,
-                    p0=p0, kwargs=models[model_name]['fit_kwargs'],
-                    return_fit_params=include_cv_fit_variability,
-                    return_diagnostics=True,
+                profile_fit1 = fit_profile(
+                    t1,
+                    m1,
+                    model_name=model_name,
+                    selected_metrics=selected_metrics,
+                    analysis_config=fit_analysis_config,
+                    approach_id=approach_id,
+                    calculate_tau=True,
+                    config_defaults=fit_config_defaults,
                 )
-                cv_output1, cv_diagnostics1 = cv_output1
-                if include_cv_fit_variability:
-                    cvs1, cv_fit_params1 = cv_output1
-                else:
-                    cvs1, cv_fit_params1 = cv_output1, []
-                cvs1_mean = {f'{metric}':np.nanmean(v[np.isfinite(v)]) for metric,v in cvs1.items()}
-                # fit final model
-                model_result1 = models[model_name]['fit_model'](x1, y1, p0=p0)
-                y_pred1 = model_result1['predict'](x1)
-                # Evaluate goodness of fit
-                gof1 = {metric: calculate_metric(metric, y1, y_pred1, len(p0)) for metric in selected_metrics}
-                stats1 = pd.concat([pd.DataFrame(gof1, index=[0]), pd.DataFrame({'CV '+metric:v for metric,v in cvs1_mean.items()}, index=[0])], axis=1)
-                stats_table1 = _goodness_cv_comparison_table(gof1, cvs1_mean)
-                popt1, pcov1 = list(model_result1['params'].values()), model_result1['pcov']
-                upopt1 = unc.correlated_values(popt1, pcov1)
-                upopt1 = dict(zip(model_result1['params'].keys(),upopt1))
-                parameter_ci_multiplier1 = _ci_multiplier_95(len(y1), len(popt1))
-                parameter_intervals1 = _interval_rows_from_uparams(upopt1, parameter_ci_multiplier1)
-                tau1 = calculate_tau_with_uncertainty(models[model_name]['model_function'], popt1, pcov1)
-                # deal with integration failure
-                if tau1[0]>0 and np.isfinite(tau1[0]):
-                    tau1 = unc.ufloat(*tau1)
-                else:
-                    tau1 = unc.ufloat(0,1)
-                tau_interval1 = _tau_interval_row(tau1, parameter_ci_multiplier1)
-                # Dataset 2
-                # get rough initial estimate of parameters
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore", category=RuntimeWarning)
-                    p0 = auto_grid_search(models[model_name]['model_function'], x2, y2, param_min=grid_search_param_min, param_max=grid_search_param_max, 
-                                          num_points=grid_search_num_points, num_cores=grid_search_num_cores, random_state=grid_search_random_state,
-                                          initial_points=_model_initial_points(model_name, x2, y2))
-                # cross-validation
-                cv_output2 = cross_validation_curve_fit(
-                    x2, y2, models[model_name]['model_function'], cv, selected_metrics,
-                    p0=p0, kwargs=models[model_name]['fit_kwargs'],
-                    return_fit_params=include_cv_fit_variability,
-                    return_diagnostics=True,
+                legacy1 = _profile_fit_to_legacy_components(profile_fit1, include_tau=True)
+
+                profile_fit2 = fit_profile(
+                    t2,
+                    m2,
+                    model_name=model_name,
+                    selected_metrics=selected_metrics,
+                    analysis_config=fit_analysis_config,
+                    approach_id=approach_id,
+                    calculate_tau=True,
+                    config_defaults=fit_config_defaults,
                 )
-                cv_output2, cv_diagnostics2 = cv_output2
-                if include_cv_fit_variability:
-                    cvs2, cv_fit_params2 = cv_output2
-                else:
-                    cvs2, cv_fit_params2 = cv_output2, []
-                cvs2_mean = {f'{metric}':np.nanmean(v[np.isfinite(v)]) for metric,v in cvs2.items()}
-                # fit final model
-                model_result2 = models[model_name]['fit_model'](x2, y2, p0=p0)
-                y_pred2 = model_result2['predict'](x2)
-                # Evaluate goodness of fit
-                gof2 = {metric: calculate_metric(metric, y2, y_pred2, len(p0)) for metric in selected_metrics}
-                stats2 = pd.concat([pd.DataFrame(gof2, index=[0]), pd.DataFrame({'CV '+metric:v for metric,v in cvs2_mean.items()}, index=[0])], axis=1)
-                stats_table2 = _goodness_cv_comparison_table(gof2, cvs2_mean)
-                popt2, pcov2 = list(model_result2['params'].values()), model_result2['pcov']
-                upopt2 = unc.correlated_values(popt2, pcov2)
-                upopt2 = dict(zip(model_result2['params'].keys(),upopt2))
-                parameter_ci_multiplier2 = _ci_multiplier_95(len(y2), len(popt2))
-                parameter_intervals2 = _interval_rows_from_uparams(upopt2, parameter_ci_multiplier2)
-                tau2 = calculate_tau_with_uncertainty(models[model_name]['model_function'], popt2, pcov2)
-                # deal with integration failure
-                if tau2[0]>0 and np.isfinite(tau2[0]):
-                    tau2 = unc.ufloat(*tau2)
-                else:
-                    tau2 = unc.ufloat(0,1)
-                tau_interval2 = _tau_interval_row(tau2, parameter_ci_multiplier2)
-                # outputs
-                plot_image = create_plotly_a2(x1, y1, x2, y2, {
-                    'model_name': models[model_name]['display_name'],
-                    'model_function': models[model_name]['model_function'],
-                    'params1': model_result1['params'],
-                    'params2': model_result2['params'],
-                    'pcov1': model_result1['pcov'],  # Add this line
-                    'pcov2': model_result2['pcov'],  # Add this line
-                    'residuals1': y1-y_pred1,
-                    'residuals2': y2-y_pred2,
-                    'approach': approaches[approach_id]['display_name']
-                })
-                residuals1 = y1 - y_pred1
-                residuals2 = y2 - y_pred2
+                legacy2 = _profile_fit_to_legacy_components(profile_fit2, include_tau=True)
+
+                plot_image = create_plotly_a2(
+                    profile_fit1.time,
+                    profile_fit1.response,
+                    profile_fit2.time,
+                    profile_fit2.response,
+                    {
+                        'model_name': models[model_name]['display_name'],
+                        'model_function': models[model_name]['model_function'],
+                        'params1': profile_fit1.parameters,
+                        'params2': profile_fit2.parameters,
+                        'pcov1': profile_fit1.covariance,
+                        'pcov2': profile_fit2.covariance,
+                        'residuals1': profile_fit1.residuals,
+                        'residuals2': profile_fit2.residuals,
+                        'approach': approaches[approach_id]['display_name'],
+                    },
+                )
                 results[model_key] = {
-                    'params': [model_result1['params'],model_result2['params']],
-                    'uparams': [upopt1,upopt2],
-                    'parameter_intervals': [parameter_intervals1, parameter_intervals2],
-                    'tau': [tau1,tau2],
-                    'tau_intervals': [tau_interval1, tau_interval2],
-                    'stats': [stats1,stats2],
-                    'predictions': [y_pred1,y_pred2],
-                    'pcov': [pcov1,pcov2],
-                    'residuals': [residuals1,residuals2],
-                    'residual_x': [x1, x2],
-                    'residual_y': [y1, y2],
-                    'cv_fit_params': [cv_fit_params1, cv_fit_params2],
-                    'cv_diagnostics': [cv_diagnostics1, cv_diagnostics2],
-                    'cv_comparison': [
-                        {metric: _cv_status(metric, value, cv_scores.get(metric, np.nan))[0]
-                         for metric, value in fit_scores.items() if metric not in CV_COMPARISON_EXCLUDED_METRICS}
-                        for fit_scores, cv_scores in ((gof1, cvs1_mean), (gof2, cvs2_mean))
+                    'params': [legacy1['params'], legacy2['params']],
+                    'uparams': [legacy1['uparams'], legacy2['uparams']],
+                    'parameter_intervals': [
+                        legacy1['parameter_intervals'],
+                        legacy2['parameter_intervals'],
                     ],
-                    'fit_cv_ratios': [
-                        {metric: _fit_cv_ratio(value, cv_scores.get(metric, np.nan))
-                         for metric, value in fit_scores.items() if metric not in CV_COMPARISON_EXCLUDED_METRICS}
-                        for fit_scores, cv_scores in ((gof1, cvs1_mean), (gof2, cvs2_mean))
+                    'tau': [legacy1['tau'], legacy2['tau']],
+                    'tau_intervals': [
+                        legacy1['tau_interval'],
+                        legacy2['tau_interval'],
                     ],
-                    'fit_metadata': [
-                        {'n_observations': int(len(y1)), 'n_parameters': int(len(popt1)),
-                         'residual_df': int(len(y1) - len(popt1)), 'ci_multiplier_95': float(parameter_ci_multiplier1)},
-                        {'n_observations': int(len(y2)), 'n_parameters': int(len(popt2)),
-                         'residual_df': int(len(y2) - len(popt2)), 'ci_multiplier_95': float(parameter_ci_multiplier2)},
+                    'stats': [legacy1['stats'], legacy2['stats']],
+                    'predictions': [legacy1['predictions'], legacy2['predictions']],
+                    'pcov': [legacy1['pcov'], legacy2['pcov']],
+                    'residuals': [legacy1['residuals'], legacy2['residuals']],
+                    'residual_x': [legacy1['residual_x'], legacy2['residual_x']],
+                    'residual_y': [legacy1['residual_y'], legacy2['residual_y']],
+                    'cv_fit_params': [
+                        legacy1['cv_fit_params'],
+                        legacy2['cv_fit_params'],
                     ],
                     'residual_dof': [
-                        int(len(y1) - len(model_result1['params'])),
-                        int(len(y2) - len(model_result2['params']))
+                        legacy1['residual_dof'],
+                        legacy2['residual_dof'],
                     ],
                     'evidence_data': {
-                        'in_vitro': {
-                            'n': int(len(y1)),
-                            'rss': float(np.sum(residuals1 ** 2)),
-                            'n_params': int(len(model_result1['params']))
-                        },
-                        'in_vivo': {
-                            'n': int(len(y2)),
-                            'rss': float(np.sum(residuals2 ** 2)),
-                            'n_params': int(len(model_result2['params']))
-                        }
+                        'in_vitro': legacy1['evidence_data'],
+                        'in_vivo': legacy2['evidence_data'],
                     },
-                    'stats_table': [stats_table1, stats_table2],
+                    'stats_table': [legacy1['stats_table'], legacy2['stats_table']],
                     'parameter_diagnostics_html': [
-                        build_parameter_diagnostics_html(model_result1['params'], pcov1),
-                        build_parameter_diagnostics_html(model_result2['params'], pcov2)
+                        legacy1['parameter_diagnostics_html'],
+                        legacy2['parameter_diagnostics_html'],
                     ],
-                    'plot': plot_image
+                    'plot': plot_image,
+                    'cv_diagnostics': [
+                        legacy1['cv_diagnostics'],
+                        legacy2['cv_diagnostics'],
+                    ],
+                    'cv_comparison': [
+                        legacy1['cv_comparison'],
+                        legacy2['cv_comparison'],
+                    ],
+                    'fit_cv_ratios': [
+                        legacy1['fit_cv_ratios'],
+                        legacy2['fit_cv_ratios'],
+                    ],
+                    'fit_metadata': [
+                        legacy1['fit_metadata'],
+                        legacy2['fit_metadata'],
+                    ],
                 }
             elif approach_id == 'approach3':
                 plot_image_v = create_plotly_a3(tt,mi1,mi2,ptype='v')
@@ -712,647 +684,392 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
             # If an error occurs, store the error message
             results[model_key] = {'error': str(e)}
             traceback.print_exc()
-    
+
     _attach_cv_fit_variability_plots(results, analysis_config=analysis_config)
     _attach_residual_plots(results, analysis_config=analysis_config)
     return results
 
-def _inverse_response_times(model_function, params, target_responses, time_range, observed_responses=None, grid_points=1001):
-    """Map response values to unique fitted times over a bounded calibration range.
 
-    The inverse is only used when the fitted curve is monotonic over the supplied
-    time range. Targets outside the observed calibration response range are returned
-    as NaN. Targets supported by the observed response range but lying just beyond
-    the fitted curve at an endpoint are mapped to that calibration-time endpoint.
-    """
-    target_responses = np.asarray(target_responses, dtype=float)
-    result = np.full(target_responses.shape, np.nan, dtype=float)
-    status = np.full(target_responses.shape, 'unavailable', dtype=object)
-
-    t_min, t_max = [float(value) for value in time_range]
-    if not np.isfinite(t_min) or not np.isfinite(t_max) or t_max <= t_min:
-        return result, status, 'Observed-response inverse prediction requires at least two distinct in vivo calibration times.'
-
-    t_grid = np.linspace(t_min, t_max, max(int(grid_points), 101))
-    try:
-        y_grid = np.asarray(model_function(t_grid, **params), dtype=float)
-    except Exception as exc:
-        return result, status, f'Observed-response inverse prediction was not performed because the fitted in vivo curve could not be evaluated: {exc}'
-
-    finite = np.isfinite(t_grid) & np.isfinite(y_grid)
-    if np.count_nonzero(finite) < 2:
-        return result, status, 'Observed-response inverse prediction was not performed because the fitted in vivo curve is not finite over the calibration range.'
-    t_grid = t_grid[finite]
-    y_grid = y_grid[finite]
-
-    y_span = float(np.max(y_grid) - np.min(y_grid))
-    monotonic_tol = max(1e-10, y_span * 1e-8)
-    dy = np.diff(y_grid)
-    nondecreasing = bool(np.all(dy >= -monotonic_tol))
-    nonincreasing = bool(np.all(dy <= monotonic_tol))
-    if not (nondecreasing or nonincreasing) or y_span <= monotonic_tol:
-        return result, status, 'Observed-response inverse prediction was not performed because the fitted in vivo curve is not one-to-one over the observed in vivo time range.'
-
-    y_min = float(np.min(y_grid))
-    y_max = float(np.max(y_grid))
-    response_tol = max(1e-10, y_span * 1e-8)
-
-    observed = np.asarray(observed_responses, dtype=float) if observed_responses is not None else y_grid
-    observed = observed[np.isfinite(observed)]
-    if observed.size == 0:
-        observed = y_grid
-    observed_min = float(np.min(observed))
-    observed_max = float(np.max(observed))
-    observed_span = float(observed_max - observed_min)
-    observed_tol = max(1e-10, observed_span * 1e-8)
-
-    high_response_time = t_grid[0] if y_grid[0] >= y_grid[-1] else t_grid[-1]
-    low_response_time = t_grid[-1] if y_grid[0] >= y_grid[-1] else t_grid[0]
-
-    def root_function(time_value, target):
-        value = np.asarray(model_function(np.asarray([time_value], dtype=float), **params), dtype=float).reshape(-1)[0]
-        return float(value - target)
-
-    for index, target in np.ndenumerate(target_responses):
-        if not np.isfinite(target):
-            status[index] = 'nonfinite input response'
-            continue
-        if target < observed_min - observed_tol or target > observed_max + observed_tol:
-            status[index] = 'outside observed in vivo response range'
-            continue
-        if target > y_max + response_tol:
-            result[index] = high_response_time
-            status[index] = 'mapped to calibration endpoint'
-            continue
-        if target < y_min - response_tol:
-            result[index] = low_response_time
-            status[index] = 'mapped to calibration endpoint'
-            continue
-        if np.isclose(target, y_grid[0], atol=response_tol, rtol=0):
-            result[index] = t_grid[0]
-            status[index] = 'mapped'
-            continue
-        if np.isclose(target, y_grid[-1], atol=response_tol, rtol=0):
-            result[index] = t_grid[-1]
-            status[index] = 'mapped'
-            continue
-        try:
-            result[index] = sp.optimize.brentq(
-                root_function,
-                t_grid[0],
-                t_grid[-1],
-                args=(float(target),),
-                xtol=1e-10,
-                rtol=1e-10,
-                maxiter=200,
-            )
-            status[index] = 'mapped'
-        except Exception:
-            status[index] = 'no unique root in calibration range'
-
-    return result, status, None
+def _inverse_response_times(*args, **kwargs):
+    """Compatibility wrapper for the reusable inverse-response mapper."""
+    return core_inverse_response_times(*args, **kwargs)
 
 
-def _inverse_response_prediction_intervals(
-    model_function,
-    params,
-    pcov,
-    residuals,
-    target_responses,
-    time_range,
-    observed_responses=None,
-    confidence_level=0.95,
-    n_samples=1000,
-    grid_points=501,
-):
-    """Approximate inverse-prediction intervals by Monte Carlo propagation.
-
-    Each draw samples the fitted in vivo parameter covariance and an independent
-    response perturbation whose standard deviation is the residual standard error
-    of the in vivo calibration fit. The perturbed response is then inverse-mapped
-    through the sampled fitted curve over the observed calibration time range.
-
-    This deliberately treats the in vivo residual standard error as a surrogate for
-    uncertainty in the new in vitro response; the app does not have a separately
-    measured error model for the prediction dataset.
-    """
-    targets = np.asarray(target_responses, dtype=float)
-    lower = np.full(targets.shape, np.nan, dtype=float)
-    upper = np.full(targets.shape, np.nan, dtype=float)
-    valid_counts = np.zeros(targets.shape, dtype=int)
-
-    if pcov is None:
-        return {
-            'lower': lower,
-            'upper': upper,
-            'valid_counts': valid_counts,
-            'n_samples': int(n_samples),
-            'residual_std': np.nan,
-        }, 'Approximate inverse-prediction intervals were unavailable because the fitted in vivo parameter covariance matrix was unavailable.'
-
-    param_names = list(params.keys())
-    param_values = np.asarray([params[name] for name in param_names], dtype=float)
-    covariance = np.asarray(pcov, dtype=float)
-    if covariance.shape != (len(param_values), len(param_values)) or not np.all(np.isfinite(covariance)):
-        return {
-            'lower': lower,
-            'upper': upper,
-            'valid_counts': valid_counts,
-            'n_samples': int(n_samples),
-            'residual_std': np.nan,
-        }, 'Approximate inverse-prediction intervals were unavailable because the fitted in vivo parameter covariance matrix was invalid.'
-
-    residuals = np.asarray(residuals, dtype=float)
-    residuals = residuals[np.isfinite(residuals)]
-    dof = int(len(residuals) - len(param_values))
-    if dof <= 0:
-        return {
-            'lower': lower,
-            'upper': upper,
-            'valid_counts': valid_counts,
-            'n_samples': int(n_samples),
-            'residual_std': np.nan,
-        }, 'Approximate inverse-prediction intervals were unavailable because the fitted in vivo model had no positive residual degrees of freedom.'
-
-    residual_std = float(np.sqrt(np.sum(residuals ** 2) / dof))
-    if not np.isfinite(residual_std):
-        return {
-            'lower': lower,
-            'upper': upper,
-            'valid_counts': valid_counts,
-            'n_samples': int(n_samples),
-            'residual_std': residual_std,
-        }, 'Approximate inverse-prediction intervals were unavailable because the in vivo residual standard error could not be calculated.'
-
-    t_min, t_max = [float(value) for value in time_range]
-    if not np.isfinite(t_min) or not np.isfinite(t_max) or t_max <= t_min:
-        return {
-            'lower': lower,
-            'upper': upper,
-            'valid_counts': valid_counts,
-            'n_samples': int(n_samples),
-            'residual_std': residual_std,
-        }, 'Approximate inverse-prediction intervals require at least two distinct in vivo calibration times.'
-
-    observed = np.asarray(observed_responses, dtype=float) if observed_responses is not None else np.asarray([], dtype=float)
-    observed = observed[np.isfinite(observed)]
-    observed_min = float(np.min(observed)) if observed.size else -np.inf
-    observed_max = float(np.max(observed)) if observed.size else np.inf
-    observed_span = float(observed_max - observed_min) if observed.size else 0.0
-    observed_tol = max(1e-10, observed_span * 1e-8) if observed.size else 0.0
-
-    rng = np.random.default_rng()
-    try:
-        parameter_distribution = sp.stats.multivariate_normal(
-            mean=param_values,
-            cov=covariance,
-            allow_singular=True,
-        )
-        parameter_samples = parameter_distribution.rvs(size=int(n_samples), random_state=rng)
-    except Exception as exc:
-        return {
-            'lower': lower,
-            'upper': upper,
-            'valid_counts': valid_counts,
-            'n_samples': int(n_samples),
-            'residual_std': residual_std,
-        }, f'Approximate inverse-prediction intervals were unavailable because parameter sampling failed: {exc}'
-
-    parameter_samples = np.asarray(parameter_samples, dtype=float)
-    if parameter_samples.ndim == 1:
-        parameter_samples = parameter_samples.reshape(1, -1)
-
-    t_grid = np.linspace(t_min, t_max, max(int(grid_points), 101))
-    try:
-        reference_y_grid = np.asarray(model_function(t_grid, **params), dtype=float)
-    except Exception:
-        reference_y_grid = np.full(t_grid.shape, np.nan, dtype=float)
-    if reference_y_grid.shape != t_grid.shape or not np.all(np.isfinite(reference_y_grid)):
-        return {
-            'lower': lower,
-            'upper': upper,
-            'valid_counts': valid_counts,
-            'n_samples': int(n_samples),
-            'residual_std': residual_std,
-        }, 'Approximate inverse-prediction intervals were unavailable because the fitted in vivo curve could not be evaluated over the calibration range.'
-    reference_span = float(np.max(reference_y_grid) - np.min(reference_y_grid))
-    reference_tol = max(1e-10, reference_span * 1e-8)
-    reference_dy = np.diff(reference_y_grid)
-    reference_nondecreasing = bool(np.all(reference_dy >= -reference_tol))
-    reference_nonincreasing = bool(np.all(reference_dy <= reference_tol))
-    if not (reference_nondecreasing or reference_nonincreasing) or reference_span <= reference_tol:
-        return {
-            'lower': lower,
-            'upper': upper,
-            'valid_counts': valid_counts,
-            'n_samples': int(n_samples),
-            'residual_std': residual_std,
-        }, 'Approximate inverse-prediction intervals were unavailable because the fitted in vivo curve is not one-to-one over the calibration range.'
-
-    time_samples = np.full((len(parameter_samples), targets.size), np.nan, dtype=float)
-    response_samples = targets.reshape(1, -1) + rng.normal(
-        loc=0.0,
-        scale=residual_std,
-        size=(len(parameter_samples), targets.size),
-    )
-
-    for sample_index, sample in enumerate(parameter_samples):
-        sample_params = dict(zip(param_names, sample))
-        try:
-            y_grid = np.asarray(model_function(t_grid, **sample_params), dtype=float)
-        except Exception:
-            continue
-        if y_grid.shape != t_grid.shape or not np.all(np.isfinite(y_grid)):
-            continue
-
-        y_span = float(np.max(y_grid) - np.min(y_grid))
-        monotonic_tol = max(1e-10, y_span * 1e-8)
-        dy = np.diff(y_grid)
-        nondecreasing = bool(np.all(dy >= -monotonic_tol))
-        nonincreasing = bool(np.all(dy <= monotonic_tol))
-        if not (nondecreasing or nonincreasing) or y_span <= monotonic_tol:
-            continue
-        if reference_nondecreasing and not nondecreasing:
-            continue
-        if reference_nonincreasing and not nonincreasing:
-            continue
-
-        if nondecreasing:
-            response_grid = y_grid
-            time_for_response = t_grid
-        else:
-            response_grid = y_grid[::-1]
-            time_for_response = t_grid[::-1]
-
-        sampled_targets = response_samples[sample_index]
-        observed_supported = (
-            np.isfinite(sampled_targets)
-            & (sampled_targets >= observed_min - observed_tol)
-            & (sampled_targets <= observed_max + observed_tol)
-        )
-        if not np.any(observed_supported):
-            continue
-        clipped_targets = np.clip(
-            sampled_targets[observed_supported],
-            response_grid[0],
-            response_grid[-1],
-        )
-        time_samples[sample_index, observed_supported] = np.interp(
-            clipped_targets,
-            response_grid,
-            time_for_response,
-        )
-
-    alpha = 1.0 - float(confidence_level)
-    lower_percentile = 100.0 * alpha / 2.0
-    upper_percentile = 100.0 * (1.0 - alpha / 2.0)
-    min_valid_samples = max(50, int(0.10 * int(n_samples)))
-
-    for flat_index in range(targets.size):
-        samples = time_samples[:, flat_index]
-        samples = samples[np.isfinite(samples)]
-        valid_counts.flat[flat_index] = len(samples)
-        if len(samples) < min_valid_samples:
-            continue
-        lower.flat[flat_index], upper.flat[flat_index] = np.percentile(
-            samples,
-            [lower_percentile, upper_percentile],
-        )
-
-    result = {
-        'lower': lower,
-        'upper': upper,
-        'valid_counts': valid_counts,
-        'n_samples': int(n_samples),
-        'residual_std': residual_std,
-    }
-
-    mapped_target_count = int(np.count_nonzero(np.isfinite(targets)))
-    interval_count = int(np.count_nonzero(np.isfinite(lower) & np.isfinite(upper)))
-    if interval_count == 0:
-        return result, (
-            'Approximate inverse-prediction intervals could not be estimated reliably for any mapped response. '
-            'Many Monte Carlo draws may have fallen outside the invertible calibration range or produced non-invertible sampled curves.'
-        )
-    if interval_count < mapped_target_count:
-        return result, (
-            f'Approximate 95% inverse-prediction intervals were available for {interval_count} of {mapped_target_count} mapped responses; '
-            'other intervals had too few valid Monte Carlo inverse solutions.'
-        )
-    return result, None
+def _inverse_response_prediction_intervals(*args, **kwargs):
+    """Compatibility wrapper for reusable inverse-prediction intervals."""
+    return core_inverse_response_prediction_intervals(*args, **kwargs)
 
 
 def _safe_ratio(numerator, denominator):
-    """Elementwise ratio with undefined zero-denominator values returned as NaN."""
-    numerator = np.asarray(numerator, dtype=float)
-    denominator = np.asarray(denominator, dtype=float)
-    numerator, denominator = np.broadcast_arrays(numerator, denominator)
-    result = np.full(numerator.shape, np.nan, dtype=float)
-    valid = np.isfinite(numerator) & np.isfinite(denominator) & (denominator != 0)
-    np.divide(numerator, denominator, out=result, where=valid)
-    return result
+    """Compatibility wrapper for elementwise ratios used by Approach 3."""
+    return core_safe_ratio(numerator, denominator)
 
 
 def process_predictions(data, prediction_data, results, selected_approaches, interpolated_data=None):
-    """Process predictions using fitted models on new dataset"""
-    t1,m1,t2,m2,mm,tt,ti1,ti2,mi1,mi2 = data
+    """Process predictions using fitted models on a new dataset."""
+    t1, m1, t2, m2, mm, tt, ti1, ti2, mi1, mi2 = data
     t_pred, m_pred = prediction_data
+    prediction_course = TimeCourse(t_pred, m_pred, label='prediction_input')
     prediction_results = {}
-    
+
     for approach in selected_approaches:
         approach_predictions = {}
-        
+
         for model_key, model_results in results.items():
             if len(model_key.split(':')) > 1:
                 approach_id, model_name = model_key.split(':')
             else:
                 approach_id = model_key
-                
+                model_name = None
+
             if approach_id == approach and 'error' not in model_results:
                 try:
                     if approach == 'approach1':
-                        # Approach 1: Model predicts in vivo time as function of in vitro time
-                        # Apply model to scale prediction (in vitro) time to find corresponding in vivo time
-                        params = model_results['params']
-                        t_pred_vivo = models[model_name]['model_function'](t_pred, **params)
-                        
-                        # Create prediction plot
-                        plot_image = create_prediction_plot_a1(data, t_pred, m_pred, t_pred_vivo, {
-                            'model_name': models[model_name]['display_name'],
-                            'approach': approaches[approach_id]['display_name'],
-                            'model_function': models[model_name]['model_function'],
-                            'params': model_results['params'],
-                            'pcov': model_results['pcov'],
-                            'residuals': model_results['residuals']
+                        trajectory = predict_time_mapping(
+                            prediction_course,
+                            model_name=model_name,
+                            parameters=model_results['params'],
+                        )
 
-                        })
-                        
-                        approach_predictions[model_name] = {
-                            'predictions': {'in_vitro_time': t_pred, 'in_vitro_value': m_pred, 'predicted_in_vivo_time': t_pred_vivo},
-                            'prediction_tables': {'direct_time_correlation': plot_image['prediction_records']},
-                            'plot': plot_image
-                        }
-                        
-                    elif approach == 'approach2':
-                        # Approach 2: Independent models fitted to dataset 1 (in vitro) and dataset 2 (in vivo)
-                        # Predicted in vivo value = prediction in vitro value * (dataset2_model / dataset1_model)
-                        params1, params2 = model_results['params']  # params1: in vitro, params2: in vivo
-                        
-                        if 1:
-                            ## Rescale value by value ratio -- can produce some odd results, such as when both values are near zero
-                            # Calculate model predictions at prediction times
-                            model1_pred = models[model_name]['model_function'](t_pred, **params1)  # in vitro model
-                            model2_pred = models[model_name]['model_function'](t_pred, **params2)  # in vivo model
-
-                            # Calculate model predictions for plotting
-                            t_pred_plot = np.linspace(min(t_pred), max(t_pred), max(len(t_pred),50))
-                            model1_pred_plot = models[model_name]['model_function'](t_pred_plot, **params1)  # in vitro model
-                            model2_pred_plot = models[model_name]['model_function'](t_pred_plot, **params2)  # in vitro model
-                            
-                            # Calculate ratio and apply to prediction values
-                            ratio = model2_pred / model1_pred
-                            m_pred_vivo = m_pred * ratio
-                            
-                            # Create prediction plot
-                            plot_image = create_prediction_plot_a2(data, t_pred, m_pred, m_pred_vivo, t_pred_plot, model1_pred_plot, model2_pred_plot, {
+                        plot_image = create_prediction_plot_a1(
+                            data,
+                            trajectory.in_vitro_time,
+                            trajectory.in_vitro_value,
+                            trajectory.in_vivo_time,
+                            {
                                 'model_name': models[model_name]['display_name'],
                                 'approach': approaches[approach_id]['display_name'],
                                 'model_function': models[model_name]['model_function'],
                                 'params': model_results['params'],
                                 'pcov': model_results['pcov'],
-                                'residuals': model_results['residuals']
-                            }, prediction_mode='value_ratio')
+                                'residuals': model_results['residuals'],
+                            },
+                        )
 
-                            ## Rescale by tau ratio, if both tau values are valid
-                            tau_skip_reason = describe_tau_prediction_skip_reason(model_results.get('tau'))
-                            model_results.setdefault('prediction_skip_reasons', {})['tau_ratio'] = tau_skip_reason
-                            if tau_skip_reason is None:
-                                try:
-                                    tau1,tau2 = model_results['tau']
-                                    time_ratio = tau2/tau1 # uncertainties handles error propagation
-                                    t_pred_vivo_tau_unc = t_pred * time_ratio
-                                    t_pred_vivo_tau = np.array([t.n for t in t_pred_vivo_tau_unc])
-                                    t_pred_vivo_err_tau = np.array([t.s for t in t_pred_vivo_tau_unc])
-                                    ### Convert to error bar
-                                    residual_dof = model_results.get('residual_dof', [])
-                                    valid_dof = [int(value) for value in residual_dof if value is not None and int(value) > 0]
-                                    dof = min(valid_dof) if valid_dof else 0
-                                    t_value = sp.stats.t.ppf(1-0.05/2, dof) if dof > 0 else 1.96
-                                    t_pred_vivo_err_tau = t_value * t_pred_vivo_err_tau
-                                    # Create prediction plot
-                                    plot_image_tau = create_prediction_plot_a2(data, t_pred, m_pred, t_pred_vivo_tau, t_pred_plot, model1_pred_plot, model2_pred_plot, {
-                                        'model_name': models[model_name]['display_name'],
-                                        'approach': approaches[approach_id]['display_name'],
-                                        'model_function': models[model_name]['model_function'],
-                                    }, t_pred_vivo_err_tau, prediction_mode='tau_ratio')
-                                except Exception as e:
-                                    tau_skip_reason = f'Time-constant-ratio rescaling was not performed because plot generation failed: {e}'
-                                    model_results['prediction_skip_reasons']['tau_ratio'] = tau_skip_reason
-                                    print(e)
-                                    t_pred_vivo_tau = None
-                                    plot_image_tau = None
-                            else:
-                                t_pred_vivo_tau = None
-                                plot_image_tau = None
+                        approach_predictions[model_name] = {
+                            'predictions': {
+                                'in_vitro_time': trajectory.in_vitro_time,
+                                'in_vitro_value': trajectory.in_vitro_value,
+                                'predicted_in_vivo_time': trajectory.in_vivo_time,
+                            },
+                            'prediction_tables': {
+                                    'direct_time_correlation': _prediction_records_from_plot_or_values(
+                                        plot_image,
+                                        t_pred,
+                                        m_pred,
+                                        'time',
+                                        trajectory.in_vivo_time,
+                                    )
+                            },
+                            'plot': plot_image,
+                        }
 
-                            ## Map each observed prediction response to the corresponding fitted in vivo time.
-                            t_pred_vivo_inverse, inverse_status, inverse_skip_reason = _inverse_response_times(
-                                models[model_name]['model_function'],
-                                params2,
-                                m_pred,
-                                (np.min(t2), np.max(t2)),
-                                observed_responses=m2,
+                    elif approach == 'approach2':
+                        params1, params2 = model_results['params']
+
+                        value_prediction = predict_value_ratio(
+                            prediction_course,
+                            model_name=model_name,
+                            in_vitro_parameters=params1,
+                            in_vivo_parameters=params2,
+                        )
+                        plot_time = value_prediction.auxiliary['plot_time']
+                        model1_plot = value_prediction.auxiliary['in_vitro_model_plot']
+                        model2_plot = value_prediction.auxiliary['in_vivo_model_plot']
+
+                        plot_image = create_prediction_plot_a2(
+                            data,
+                            value_prediction.in_vitro_time,
+                            value_prediction.in_vitro_value,
+                            value_prediction.in_vivo_value,
+                            plot_time,
+                            model1_plot,
+                            model2_plot,
+                            {
+                                'model_name': models[model_name]['display_name'],
+                                'approach': approaches[approach_id]['display_name'],
+                                'model_function': models[model_name]['model_function'],
+                                'params': model_results['params'],
+                                'pcov': model_results['pcov'],
+                                'residuals': model_results['residuals'],
+                            },
+                            prediction_mode='value_ratio',
+                        )
+
+                        # The legacy fit result retains this mutation because the
+                        # report reads the reason from the fitted-model dictionary.
+                        try:
+                            tau_prediction = predict_tau_ratio(
+                                prediction_course,
+                                model_name=model_name,
+                                tau_values=model_results.get('tau'),
+                                residual_dof=model_results.get('residual_dof', []),
+                                confidence_level=0.95,
                             )
-                            valid_inverse = np.isfinite(t_pred_vivo_inverse)
-                            plot_image_inverse = None
-                            inverse_notes = []
-                            inverse_interval_result = {
-                                'lower': np.full(np.asarray(m_pred).shape, np.nan, dtype=float),
-                                'upper': np.full(np.asarray(m_pred).shape, np.nan, dtype=float),
-                                'valid_counts': np.zeros(np.asarray(m_pred).shape, dtype=int),
-                                'n_samples': 1000,
-                                'residual_std': np.nan,
-                            }
-                            inverse_interval_note = None
-                            if inverse_skip_reason is None and np.any(valid_inverse):
-                                inverse_interval_result, inverse_interval_note = _inverse_response_prediction_intervals(
-                                    models[model_name]['model_function'],
-                                    params2,
-                                    model_results['pcov'][1],
-                                    model_results['residuals'][1],
-                                    np.where(valid_inverse, m_pred, np.nan),
-                                    (np.min(t2), np.max(t2)),
-                                    observed_responses=m2,
-                                    confidence_level=0.95,
-                                    n_samples=1000,
-                                )
-
-                                inverse_lower = np.asarray(inverse_interval_result['lower'], dtype=float)
-                                inverse_upper = np.asarray(inverse_interval_result['upper'], dtype=float)
-                                interval_displayable = (
-                                    valid_inverse
-                                    & np.isfinite(inverse_lower)
-                                    & np.isfinite(inverse_upper)
-                                    & (inverse_lower <= t_pred_vivo_inverse)
-                                    & (inverse_upper >= t_pred_vivo_inverse)
-                                )
-                                inverse_error = None
-                                if np.any(interval_displayable):
-                                    error_lower = np.full(t_pred_vivo_inverse.shape, np.nan, dtype=float)
-                                    error_upper = np.full(t_pred_vivo_inverse.shape, np.nan, dtype=float)
-                                    error_lower[interval_displayable] = (
-                                        t_pred_vivo_inverse[interval_displayable] - inverse_lower[interval_displayable]
-                                    )
-                                    error_upper[interval_displayable] = (
-                                        inverse_upper[interval_displayable] - t_pred_vivo_inverse[interval_displayable]
-                                    )
-                                    inverse_error = {'lower': error_lower, 'upper': error_upper}
-
-                                plot_image_inverse = create_prediction_plot_a2(
+                            model_results.setdefault('prediction_skip_reasons', {})[
+                                'tau_ratio'
+                            ] = tau_prediction.skip_reason
+                            if tau_prediction.available:
+                                plot_image_tau = create_prediction_plot_a2(
                                     data,
-                                    t_pred,
-                                    m_pred,
-                                    t_pred_vivo_inverse,
-                                    t_pred_plot,
-                                    model1_pred_plot,
-                                    model2_pred_plot,
+                                    tau_prediction.in_vitro_time,
+                                    tau_prediction.in_vitro_value,
+                                    tau_prediction.in_vivo_time,
+                                    plot_time,
+                                    model1_plot,
+                                    model2_plot,
                                     {
                                         'model_name': models[model_name]['display_name'],
                                         'approach': approaches[approach_id]['display_name'],
                                         'model_function': models[model_name]['model_function'],
                                     },
-                                    t_pred_vivo_err=inverse_error,
-                                    prediction_mode='observed_response_inverse',
+                                    tau_prediction.time_error_upper,
+                                    prediction_mode='tau_ratio',
                                 )
-                                unavailable_count = int(np.size(valid_inverse) - np.count_nonzero(valid_inverse))
-                                if unavailable_count:
-                                    inverse_notes.append(
-                                        f'{unavailable_count} of {np.size(valid_inverse)} prediction response values could not be mapped '
-                                        'because they were outside the observed in vivo calibration response range.'
-                                    )
-                                if inverse_interval_note:
-                                    inverse_notes.append(inverse_interval_note)
-                                elif np.count_nonzero(interval_displayable) < np.count_nonzero(valid_inverse):
-                                    inverse_notes.append(
-                                        'Some approximate 95% inverse-prediction intervals were not displayed because the percentile interval '
-                                        'did not contain the point estimate or too few valid Monte Carlo inverse solutions were available.'
-                                    )
-                            elif inverse_skip_reason is None:
-                                inverse_skip_reason = (
-                                    'Observed-response inverse prediction was not performed because none of the prediction response values '
-                                    'fall within the observed in vivo calibration response range.'
-                                )
-                            inverse_note = ' '.join(inverse_notes) if inverse_notes else None
+                            else:
+                                plot_image_tau = None
+                        except Exception as e:
+                            tau_skip_reason = (
+                                'Time-constant-ratio rescaling was not performed because '
+                                f'plot generation failed: {e}'
+                            )
+                            model_results.setdefault('prediction_skip_reasons', {})[
+                                'tau_ratio'
+                            ] = tau_skip_reason
+                            print(e)
+                            plot_image_tau = None
+
+                        inverse_prediction = predict_inverse_response(
+                            prediction_course,
+                            model_name=model_name,
+                            parameters=params2,
+                            covariance=model_results['pcov'][1],
+                            residuals=model_results['residuals'][1],
+                            calibration_time_range=(np.min(t2), np.max(t2)),
+                            observed_responses=m2,
+                            confidence_level=0.95,
+                            n_samples=1000,
+                            inverse_mapper=_inverse_response_times,
+                            interval_estimator=_inverse_response_prediction_intervals,
+                        )
+
+                        plot_image_inverse = None
+                        if inverse_prediction.available:
+                            inverse_error = None
+                            interval_displayable = np.asarray(
+                                inverse_prediction.auxiliary['interval_displayable'],
+                                dtype=bool,
+                            )
+                            if np.any(interval_displayable):
+                                inverse_error = {
+                                    'lower': inverse_prediction.time_error_lower,
+                                    'upper': inverse_prediction.time_error_upper,
+                                }
+                            plot_image_inverse = create_prediction_plot_a2(
+                                data,
+                                inverse_prediction.in_vitro_time,
+                                inverse_prediction.in_vitro_value,
+                                inverse_prediction.in_vivo_time,
+                                plot_time,
+                                model1_plot,
+                                model2_plot,
+                                {
+                                    'model_name': models[model_name]['display_name'],
+                                    'approach': approaches[approach_id]['display_name'],
+                                    'model_function': models[model_name]['model_function'],
+                                },
+                                t_pred_vivo_err=inverse_error,
+                                prediction_mode='observed_response_inverse',
+                            )
 
                         # Preserve the exact plotted quantities and all inverse
                         # statuses, including calculated intervals suppressed
                         # from display. No new fit or Monte Carlo draw is made.
-                        inverse_records = (plot_image_inverse['prediction_records'] if plot_image_inverse is not None
-                                           else _prediction_records_for_report(None, t_pred, m_pred, 'time',
-                                                                               predictions=t_pred_vivo_inverse))
+                        inverse_records = _prediction_records_from_plot_or_values(
+                            plot_image_inverse,
+                            inverse_prediction.in_vitro_time,
+                            inverse_prediction.in_vitro_value,
+                            'time',
+                            inverse_prediction.in_vivo_time,
+                        )
+
+                        inverse_status = np.asarray(inverse_prediction.status).reshape(-1)
+                        inverse_lower = np.asarray(inverse_prediction.time_lower, dtype=float).reshape(-1)
+                        inverse_upper = np.asarray(inverse_prediction.time_upper, dtype=float).reshape(-1)
+                        inverse_valid_counts = np.asarray(
+                            inverse_prediction.auxiliary['interval_valid_samples']
+                        ).reshape(-1)
+                        inverse_total_samples = int(
+                            inverse_prediction.auxiliary['interval_total_samples']
+                        )
+
                         for index, row in enumerate(inverse_records):
-                            row['status'] = str(np.asarray(inverse_status).reshape(-1)[index])
-                            raw_lower = float(np.asarray(inverse_interval_result['lower']).reshape(-1)[index])
-                            raw_upper = float(np.asarray(inverse_interval_result['upper']).reshape(-1)[index])
-                            row['calculated_lower_95'] = raw_lower if np.isfinite(raw_lower) else None
-                            row['calculated_upper_95'] = raw_upper if np.isfinite(raw_upper) else None
-                            row['interval_valid_samples'] = int(np.asarray(inverse_interval_result['valid_counts']).reshape(-1)[index])
-                            row['interval_total_samples'] = int(inverse_interval_result['n_samples'])
+                            row['status'] = str(inverse_status[index])
+                            raw_lower = float(inverse_lower[index])
+                            raw_upper = float(inverse_upper[index])
+                            row['calculated_lower_95'] = (
+                                raw_lower if np.isfinite(raw_lower) else None
+                            )
+                            row['calculated_upper_95'] = (
+                                raw_upper if np.isfinite(raw_upper) else None
+                            )
+                            row['interval_valid_samples'] = int(inverse_valid_counts[index])
+                            row['interval_total_samples'] = inverse_total_samples
+
                             if row['predicted_in_vivo_time'] is None:
                                 row['interval_status'] = 'unavailable (response not mapped)'
                             elif row['lower_95'] is None:
-                                row['interval_status'] = ('calculated interval not displayed (does not contain point estimate)'
-                                                          if np.isfinite([raw_lower, raw_upper]).all()
-                                                          else 'unavailable (too few valid inverse solutions or calculation failed)')
-                        tau_records = (plot_image_tau['prediction_records'] if plot_image_tau is not None
-                                       else _prediction_records_for_report(None, t_pred, m_pred, 'time'))
+                                row['interval_status'] = (
+                                    'calculated interval not displayed (does not contain point estimate)'
+                                    if np.isfinite([raw_lower, raw_upper]).all()
+                                    else 'unavailable (too few valid inverse solutions or calculation failed)'
+                                )
+
+                        tau_records = _prediction_records_from_plot_or_values(
+                            plot_image_tau,
+                            t_pred,
+                            m_pred,
+                            'time',
+                            tau_prediction.in_vivo_time,
+                        )
                         if plot_image_tau is None:
                             for row in tau_records:
-                                row['status'] = model_results.get('prediction_skip_reasons', {}).get('tau_ratio') or 'not performed'
+                                row['status'] = (
+                                    model_results.get('prediction_skip_reasons', {}).get('tau_ratio')
+                                    or 'not performed'
+                                )
                                 row['interval_status'] = 'not calculated'
 
                         approach_predictions[model_name] = {
                             'plot': plot_image,
                             'plot_tau': plot_image_tau,
-                            'plot_tau_skip_reason': model_results.get('prediction_skip_reasons', {}).get('tau_ratio'),
+                            'plot_tau_skip_reason': model_results.get(
+                                'prediction_skip_reasons', {}
+                            ).get('tau_ratio'),
                             'plot_inverse_response': plot_image_inverse,
-                            'plot_inverse_response_skip_reason': inverse_skip_reason,
-                            'plot_inverse_response_note': inverse_note,
+                            'plot_inverse_response_skip_reason': inverse_prediction.skip_reason,
+                            'plot_inverse_response_note': inverse_prediction.note,
                             'prediction_tables': {
-                                'value_ratio': plot_image['prediction_records'],
+                                'value_ratio': _prediction_records_from_plot_or_values(
+                                    plot_image,
+                                    t_pred,
+                                    m_pred,
+                                    'value',
+                                    value_prediction.in_vivo_value,
+                                ),
                                 'tau_ratio': tau_records,
                                 'observed_response_inverse': inverse_records,
                             },
                             'inverse_response_predictions': {
-                                'in_vitro_time': t_pred,
-                                'in_vitro_value': m_pred,
-                                'predicted_in_vivo_time': t_pred_vivo_inverse,
-                                'lower_95': inverse_interval_result['lower'],
-                                'upper_95': inverse_interval_result['upper'],
-                                'interval_valid_samples': inverse_interval_result['valid_counts'],
-                                'interval_total_samples': inverse_interval_result['n_samples'],
-                                'assumed_response_sd': inverse_interval_result['residual_std'],
-                                'status': inverse_status,
+                                'in_vitro_time': inverse_prediction.in_vitro_time,
+                                'in_vitro_value': inverse_prediction.in_vitro_value,
+                                'predicted_in_vivo_time': inverse_prediction.in_vivo_time,
+                                'lower_95': inverse_prediction.time_lower,
+                                'upper_95': inverse_prediction.time_upper,
+                                'interval_valid_samples': inverse_prediction.auxiliary[
+                                    'interval_valid_samples'
+                                ],
+                                'interval_total_samples': inverse_prediction.auxiliary[
+                                    'interval_total_samples'
+                                ],
+                                'assumed_response_sd': inverse_prediction.auxiliary[
+                                    'assumed_response_sd'
+                                ],
+                                'status': inverse_prediction.status,
                             },
                         }
-                        
+
                     elif approach == 'approach3' and interpolated_data is not None:
-                        # Extract interpolated data
-                        t1_scale, m1_scale, t2_scale, m2_scale, mm, tt, ti1, ti2, mi1, mi2 = interpolated_data
-                        
-                        # Method 1: Scale prediction values by (dataset2_value / dataset1_value)
-                        # Interpolate scaling factors at prediction times
-                        value_mapping_ratio = _safe_ratio(mi2, mi1)
-                        value_ratio = np.interp(t_pred, tt, value_mapping_ratio, left=np.nan, right=np.nan)  # dataset2_value / dataset1_value
-                        m_pred_scaled = m_pred * value_ratio
-                        
-                        # Method 2: Scale prediction times by (dataset2_time / dataset1_time)
-                        mask = np.argsort(mm)
-                        time_mapping_ratio = _safe_ratio(ti2, ti1)
-                        time_ratio = np.interp(m_pred, mm[mask], time_mapping_ratio[mask], left=np.nan, right=np.nan)  # dataset2_time / dataset1_time
-                        t_pred_scaled = t_pred * time_ratio
-                        # A time-ratio scaling factor is undefined when the paired
-                        # in vitro time is zero, but a prediction observed at true
-                        # time zero still maps naturally to in vivo time zero.
-                        t_pred_scaled[np.isfinite(t_pred) & (t_pred == 0)] = 0.0
-                        
-                        # Create plots for both methods
-                        plot_method1 = create_prediction_plot_a3(data, t_pred, m_pred, m_pred_scaled, ptype='v')
-                        plot_method2 = create_prediction_plot_a3(data, t_pred, m_pred, t_pred_scaled, ptype='t')
-                        
+                        (
+                            t1_scale,
+                            m1_scale,
+                            t2_scale,
+                            m2_scale,
+                            response_grid,
+                            time_grid,
+                            in_vitro_time_at_response,
+                            in_vivo_time_at_response,
+                            in_vitro_response_on_time_grid,
+                            in_vivo_response_on_time_grid,
+                        ) = interpolated_data
+
+                        value_prediction = predict_direct_value_scaling(
+                            prediction_course,
+                            time_grid=time_grid,
+                            in_vitro_response_on_time_grid=in_vitro_response_on_time_grid,
+                            in_vivo_response_on_time_grid=in_vivo_response_on_time_grid,
+                        )
+                        time_prediction = predict_direct_time_scaling(
+                            prediction_course,
+                            response_grid=response_grid,
+                            in_vitro_time_at_response=in_vitro_time_at_response,
+                            in_vivo_time_at_response=in_vivo_time_at_response,
+                        )
+
+                        plot_method1 = create_prediction_plot_a3(
+                            data,
+                            value_prediction.in_vitro_time,
+                            value_prediction.in_vitro_value,
+                            value_prediction.in_vivo_value,
+                            ptype='v',
+                        )
+                        plot_method2 = create_prediction_plot_a3(
+                            data,
+                            time_prediction.in_vitro_time,
+                            time_prediction.in_vitro_value,
+                            time_prediction.in_vivo_time,
+                            ptype='t',
+                        )
+
                         approach_predictions['method1_value_scaling'] = {
-                            'prediction_tables': {'value_scaling': plot_method1['prediction_records']},
+                            'prediction_tables': {
+                                'value_scaling': _prediction_records_from_plot_or_values(
+                                    plot_method1,
+                                    value_prediction.in_vitro_time,
+                                    value_prediction.in_vitro_value,
+                                    'value',
+                                    value_prediction.in_vivo_value,
+                                    interval_applicable=False,
+                                )
+                            },
                             'predictions': {
-                                'in_vitro_time': t_pred, 
-                                'in_vitro_value': m_pred, 
-                                'predicted_in_vivo_value': m_pred_scaled,
-                                'scaling_factor': value_ratio
+                                'in_vitro_time': value_prediction.in_vitro_time,
+                                'in_vitro_value': value_prediction.in_vitro_value,
+                                'predicted_in_vivo_value': value_prediction.in_vivo_value,
+                                'scaling_factor': value_prediction.scaling_factor,
                             },
                             'plot': plot_method1,
-                            'description': 'Scale prediction values by (dataset2_value / dataset1_value)'
+                            'description': 'Scale prediction values by (dataset2_value / dataset1_value)',
                         }
-                        
+
                         approach_predictions['method2_time_scaling'] = {
-                            'prediction_tables': {'time_scaling': plot_method2['prediction_records']},
+                            'prediction_tables': {
+                                'time_scaling': _prediction_records_from_plot_or_values(
+                                    plot_method2,
+                                    time_prediction.in_vitro_time,
+                                    time_prediction.in_vitro_value,
+                                    'time',
+                                    time_prediction.in_vivo_time,
+                                    interval_applicable=False,
+                                )
+                            },
                             'predictions': {
-                                'in_vitro_time': t_pred, 
-                                'in_vitro_value': m_pred, 
-                                'predicted_in_vivo_time': t_pred_scaled,
-                                'scaling_factor': time_ratio
+                                'in_vitro_time': time_prediction.in_vitro_time,
+                                'in_vitro_value': time_prediction.in_vitro_value,
+                                'predicted_in_vivo_time': time_prediction.in_vivo_time,
+                                'scaling_factor': time_prediction.scaling_factor,
                             },
                             'plot': plot_method2,
-                            'description': 'Scale prediction times by (dataset2_time / dataset1_time)'
+                            'description': 'Scale prediction times by (dataset2_time / dataset1_time)',
                         }
-                    
-                    prediction_results[approach] = approach_predictions 
+
                 except Exception as e:
                     print('ERROR:', str(e))
-                    approach_predictions[model_name] = {'error': str(e)}
-                    
-        prediction_results[approach] = approach_predictions
-    
-    return prediction_results
+                    approach_predictions[model_name or approach_id] = {'error': str(e)}
 
+        prediction_results[approach] = approach_predictions
+
+    return prediction_results
 
 def _finite_float(value):
     try:
@@ -2183,40 +1900,46 @@ def create_comparison(results, approach):
     comparison_data = []
     model_keys, model_display_names = [],[]
     for model_key, model_results in results.items():
-            if len(model_key.split(':'))>1:
-                approach_id, model_name = model_key.split(':')
-            else:
-                approach_id = model_key
-            if approach_id == approach:
-                model_keys.append(model_key)
-                model_display_names.append(models[model_name]['display_name'])
-                if 'error' in model_results and model_results['error'] is not None:
-                    comparison_data.append({
-                        'Model': models[model_name]['display_name'],
-                        'error': model_results['error']
-                    })
-                else:
-                    if approach == 'approach1':
-                        tmp_comparison_data = {'Model': models[model_name]['display_name']}
-                        for k,v in model_results['stats'].iloc[0].items():
-                            if k.startswith('CV '):
-                                continue
-                                #metric = k[3:]
-                            else:
-                                metric = k
-                            tmp_comparison_data.update({f'{metrics[metric]["display_name"]}':v})
-                        comparison_data.append(tmp_comparison_data)
-                    if approach == 'approach2':
-                        for i in [1,2]:
-                            tmp_comparison_data = {'Model': models[model_name]['display_name'], 'Dataset':('In Vitro' if i == 1 else 'In Vivo')}
-                            for k,v in model_results['stats'][i-1].iloc[0].items():
-                                if k.startswith('CV '):
-                                    continue
-                                    #metric = k[3:]
-                                else:
-                                    metric = k
-                                tmp_comparison_data.update({f'{metrics[metric]["display_name"]}':v})
-                            comparison_data.append(tmp_comparison_data)
+        parts = model_key.split(':', 1)
+        approach_id = parts[0]
+        model_name = parts[1] if len(parts) > 1 else None
+
+        if approach_id != approach:
+            continue
+
+        # Approach 3 has no fitted model and therefore no model-comparison row.
+        if model_name is None:
+            continue
+
+        model_keys.append(model_key)
+        model_display_names.append(models[model_name]['display_name'])
+        if 'error' in model_results and model_results['error'] is not None:
+            comparison_data.append({
+                'Model': models[model_name]['display_name'],
+                'error': model_results['error']
+            })
+        else:
+            if approach == 'approach1':
+                tmp_comparison_data = {'Model': models[model_name]['display_name']}
+                for k,v in model_results['stats'].iloc[0].items():
+                    if k.startswith('CV '):
+                        continue
+                        #metric = k[3:]
+                    else:
+                        metric = k
+                    tmp_comparison_data.update({f'{metrics[metric]["display_name"]}':v})
+                comparison_data.append(tmp_comparison_data)
+            if approach == 'approach2':
+                for i in [1,2]:
+                    tmp_comparison_data = {'Model': models[model_name]['display_name'], 'Dataset':('In Vitro' if i == 1 else 'In Vivo')}
+                    for k,v in model_results['stats'][i-1].iloc[0].items():
+                        if k.startswith('CV '):
+                            continue
+                            #metric = k[3:]
+                        else:
+                            metric = k
+                        tmp_comparison_data.update({f'{metrics[metric]["display_name"]}':v})
+                    comparison_data.append(tmp_comparison_data)
 
     df = pd.DataFrame(comparison_data)
     metrics_table = df.to_html(classes='table table-striped', index=False, float_format=lambda x: f'{x:.4f}')
@@ -3113,6 +2836,27 @@ def create_plotly_a3(x, y1, y2, ptype='v'):
     # Convert the figure to HTML
     plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
     return {'plot':plot_html, 'table_html': table_html}
+
+def _prediction_records_from_plot_or_values(
+    plot_result,
+    t_pred,
+    m_pred,
+    output_kind,
+    predictions,
+    *,
+    interval_applicable=True,
+):
+    records = plot_result.get('prediction_records') if plot_result is not None else None
+    if records is not None:
+        return records
+    return _prediction_records_for_report(
+        None,
+        t_pred,
+        m_pred,
+        output_kind,
+        predictions=predictions,
+        interval_applicable=interval_applicable,
+    )
 
 def _prediction_records_for_report(fig, t_pred, m_pred, output_kind,
                                    predictions=None, interval_applicable=True):

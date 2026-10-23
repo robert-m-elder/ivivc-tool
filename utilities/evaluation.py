@@ -299,13 +299,22 @@ def calculate_tau(model_function, params):
     tau = integral / f_0
     return tau
 
-def calculate_tau_with_uncertainty(model_function, params, pcov, num_samples=50):
+def calculate_tau_with_uncertainty(model_function, params, pcov, num_samples=50, random_state=None):
     if getattr(model_function, 'supports_tau', True) is False:
         return np.nan, np.nan
-    # Generate samples from the multivariate normal distribution
-    param_samples = np.random.multivariate_normal(params, pcov, num_samples)
+    # Import locally to avoid a module-import cycle: the reusable fitting core
+    # depends on this compatibility module.
+    from ivivc_core.uncertainty import sample_parameter_sets
+
+    sampled_parameters = sample_parameter_sets(
+        params,
+        pcov,
+        parameter_names=[f'p{index}' for index in range(len(params))],
+        n_samples=num_samples,
+        random_state=random_state,
+    )
     tau_samples = []
-    for sample in param_samples:
+    for sample in sampled_parameters.values:
         # Get the initial value
         f_0 = model_function(0, *sample)
         # Integrate from 0 to infinity
@@ -342,7 +351,15 @@ def get_tau(modelname,popt):
         tau = np.nan
     return tau
 
-def generate_confidence_bands(model_function, x_values, params, pcov, confidence_level=0.95, n_samples=1000):
+def generate_confidence_bands(
+    model_function,
+    x_values,
+    params,
+    pcov,
+    confidence_level=0.95,
+    n_samples=1000,
+    random_state=None,
+):
     """
     Generate prediction bands using Monte Carlo sampling of parameter uncertainty
 
@@ -365,45 +382,46 @@ def generate_confidence_bands(model_function, x_values, params, pcov, confidence
     --------
     dict with 'lower', 'upper', 'mean' prediction bands
     """
-    #import numpy as np
-    #from scipy.stats import multivariate_normal
+    # Import locally to avoid a module-import cycle: the reusable fitting core
+    # depends on this compatibility module.
+    from ivivc_core.uncertainty import (
+        evaluate_curve_draws,
+        sample_parameter_sets,
+        summarize_draws,
+    )
 
-    # Convert params to array in consistent order
-    param_names = list(params.keys())
-    param_values = np.array([params[name] for name in param_names])
-
-    # Generate parameter samples from multivariate normal distribution
-    param_samples = sp.stats.multivariate_normal.rvs(mean=param_values, cov=pcov, size=n_samples)
-
-    # Ensure param_samples is 2D even for single parameter
-    if param_samples.ndim == 1:
-        param_samples = param_samples.reshape(-1, 1)
-
-    # Generate predictions for each parameter sample
-    predictions = []
-    for sample in param_samples:
-        sample_params = dict(zip(param_names, sample))
-        try:
-            y_pred = model_function(x_values, **sample_params)
-            predictions.append(y_pred)
-        except Exception:
-            # Skip invalid parameter combinations
-            continue
-
-    predictions = np.array(predictions)
-
-    # Calculate confidence intervals
-    alpha = 1 - confidence_level
-    lower_percentile = (alpha/2) * 100
-    upper_percentile = (1 - alpha/2) * 100
+    parameter_samples = sample_parameter_sets(
+        params,
+        pcov,
+        n_samples=n_samples,
+        random_state=random_state,
+    )
+    curve_draws = evaluate_curve_draws(
+        model_function,
+        x_values,
+        parameter_samples,
+    )
+    summary = summarize_draws(
+        curve_draws,
+        confidence_level=confidence_level,
+    )
 
     return {
-        'lower': np.percentile(predictions, lower_percentile, axis=0),
-        'upper': np.percentile(predictions, upper_percentile, axis=0),
-        'mean': np.mean(predictions, axis=0)
+        'lower': summary.lower,
+        'upper': summary.upper,
+        'mean': summary.mean,
     }
 
-def generate_prediction_bands(model_function, x_values, params, pcov, residuals=None, confidence_level=0.95, n_samples=1000):
+def generate_prediction_bands(
+    model_function,
+    x_values,
+    params,
+    pcov,
+    residuals=None,
+    confidence_level=0.95,
+    n_samples=1000,
+    random_state=None,
+):
     """
     Generate prediction bands that include both parameter uncertainty and residual variance
 
@@ -428,33 +446,26 @@ def generate_prediction_bands(model_function, x_values, params, pcov, residuals=
     --------
     dict with 'lower', 'upper', 'mean' prediction bands
     """
-    #import numpy as np
-    #from scipy.stats import multivariate_normal, t
+    from ivivc_core.uncertainty import (
+        evaluate_curve_draws,
+        sample_parameter_sets,
+        summarize_draws,
+    )
 
-    # Convert params to array in consistent order
-    param_names = list(params.keys())
-    param_values = np.array([params[name] for name in param_names])
-
-    # Generate parameter samples from multivariate normal distribution
-    param_samples = sp.stats.multivariate_normal.rvs(mean=param_values, cov=pcov, size=n_samples)
-
-    # Ensure param_samples is 2D even for single parameter
-    if param_samples.ndim == 1:
-        param_samples = param_samples.reshape(-1, 1)
-
-    # Generate predictions for each parameter sample
-    predictions = []
-    for sample in param_samples:
-        sample_params = dict(zip(param_names, sample))
-        try:
-            y_pred = model_function(x_values, **sample_params)
-            predictions.append(y_pred)
-        except Exception:
-            # Skip invalid parameter combinations
-            continue
-
-    predictions = np.array(predictions)
-    mean_prediction = np.mean(predictions, axis=0)
+    parameter_samples = sample_parameter_sets(
+        params,
+        pcov,
+        n_samples=n_samples,
+        random_state=random_state,
+    )
+    curve_draws = evaluate_curve_draws(
+        model_function,
+        x_values,
+        parameter_samples,
+    )
+    summary = summarize_draws(curve_draws, confidence_level=confidence_level)
+    mean_prediction = summary.mean
+    param_values = np.asarray([params[name] for name in params], dtype=float)
 
     # Estimate residual standard error
     if residuals is not None:
@@ -462,7 +473,7 @@ def generate_prediction_bands(model_function, x_values, params, pcov, residuals=
         residual_std = np.std(residuals, ddof=len(param_values))
     else:
         # Estimate from parameter uncertainty (this is less accurate)
-        residual_std = np.std(predictions, axis=0).mean()
+        residual_std = np.nanmean(summary.std)
         print("Warning: No residuals provided. Using parameter uncertainty to estimate residual variance.")
 
     # For prediction intervals, we need to account for:
@@ -470,7 +481,7 @@ def generate_prediction_bands(model_function, x_values, params, pcov, residuals=
     # 2. Residual variance (the inherent scatter in the data)
 
     # Calculate prediction variance = model uncertainty + residual variance
-    model_variance = np.var(predictions, axis=0)
+    model_variance = summary.std ** 2
     total_variance = model_variance + residual_std**2
     prediction_std = np.sqrt(total_variance)
 
@@ -497,7 +508,8 @@ def generate_prediction_bands(model_function, x_values, params, pcov, residuals=
 def generate_ratio_prediction_bands(model1_function, model2_function, x_values,
                                   params1, pcov1, params2, pcov2,
                                   residuals1=None, residuals2=None,
-                                  confidence_level=0.95, n_samples=1000):
+                                  confidence_level=0.95, n_samples=1000,
+                                  random_state=None):
     """
     Generate prediction bands for the ratio of two models (model2 / model1)
 
@@ -530,104 +542,95 @@ def generate_ratio_prediction_bands(model1_function, model2_function, x_values,
     --------
     dict with 'lower', 'upper', 'mean' prediction bands for the ratio
     """
+    from ivivc_core.uncertainty import (
+        evaluate_curve_draws,
+        sample_parameter_sets,
+        summarize_draws,
+    )
 
-    # Convert params to arrays in consistent order
-    param_names1 = list(params1.keys())
-    param_values1 = np.array([params1[name] for name in param_names1])
+    param_values1 = np.asarray([params1[name] for name in params1], dtype=float)
+    param_values2 = np.asarray([params2[name] for name in params2], dtype=float)
 
-    param_names2 = list(params2.keys())
-    param_values2 = np.array([params2[name] for name in param_names2])
+    if isinstance(random_state, (int, np.integer)):
+        shared_random_state = np.random.default_rng(int(random_state))
+    else:
+        shared_random_state = random_state
 
-    # Generate parameter samples from multivariate normal distributions
-    param_samples1 = sp.stats.multivariate_normal.rvs(mean=param_values1, cov=pcov1, size=n_samples)
-    param_samples2 = sp.stats.multivariate_normal.rvs(mean=param_values2, cov=pcov2, size=n_samples)
+    parameter_samples1 = sample_parameter_sets(
+        params1,
+        pcov1,
+        n_samples=n_samples,
+        random_state=shared_random_state,
+    )
+    parameter_samples2 = sample_parameter_sets(
+        params2,
+        pcov2,
+        n_samples=n_samples,
+        random_state=shared_random_state,
+    )
+    curve_draws1 = evaluate_curve_draws(
+        model1_function,
+        x_values,
+        parameter_samples1,
+    )
+    curve_draws2 = evaluate_curve_draws(
+        model2_function,
+        x_values,
+        parameter_samples2,
+    )
 
-    # Ensure param_samples are 2D even for single parameter
-    if param_samples1.ndim == 1:
-        param_samples1 = param_samples1.reshape(-1, 1)
-    if param_samples2.ndim == 1:
-        param_samples2 = param_samples2.reshape(-1, 1)
-
-    # Generate predictions for each parameter sample
     ratios = []
-    valid_samples = 0
-
-    for i in range(n_samples):
-        sample_params1 = dict(zip(param_names1, param_samples1[i]))
-        sample_params2 = dict(zip(param_names2, param_samples2[i]))
-
-        try:
-            y_pred1 = model1_function(x_values, **sample_params1)
-            y_pred2 = model2_function(x_values, **sample_params2)
-
-            # Calculate ratio, avoiding division by zero
-            # Add small epsilon to denominator to avoid numerical issues
-            epsilon = 1e-4
-            y_pred1[y_pred1<epsilon] = epsilon
-            ratio = y_pred2 / (y_pred1 + epsilon)
-
-            # Filter out unreasonable ratios (optional - adjust thresholds as needed)
-            if np.all(np.isfinite(ratio)) and np.all(y_pred1 >= epsilon):
-                ratios.append(ratio)
-                valid_samples += 1
-
-        except Exception as e:
-            # Skip invalid parameter combinations
-            print(e)
+    epsilon = 1e-4
+    for draw_index in range(int(n_samples)):
+        if not (curve_draws1.valid_draws[draw_index] and curve_draws2.valid_draws[draw_index]):
             continue
+        y_pred1 = curve_draws1.values[draw_index].copy()
+        y_pred2 = curve_draws2.values[draw_index]
+        y_pred1[y_pred1 < epsilon] = epsilon
+        ratio = y_pred2 / (y_pred1 + epsilon)
+        if np.all(np.isfinite(ratio)) and np.all(y_pred1 >= epsilon):
+            ratios.append(ratio)
 
+    valid_samples = len(ratios)
     if valid_samples == 0:
         raise ValueError("No valid parameter combinations found. Check your models and parameter ranges.")
 
     print(f"Used {valid_samples} out of {n_samples} samples ({100*valid_samples/n_samples:.1f}%)")
 
-    ratios = np.array(ratios)
-    mean_ratio = np.mean(ratios, axis=0)
+    ratios = np.asarray(ratios, dtype=float)
+    ratio_summary = summarize_draws(ratios, confidence_level=confidence_level)
+    mean_ratio = ratio_summary.mean
 
-    # Estimate residual standard error for the ratio
-    # This is more complex for ratios - we need to propagate uncertainty
+    # Preserve the current response-ratio residual uncertainty calculation.
+    # Its statistical formulation will be reviewed separately after refactoring.
     if residuals1 is not None and residuals2 is not None:
-        # Calculate residual standard errors for individual models
         residual_std1 = np.std(residuals1, ddof=len(param_values1))
         residual_std2 = np.std(residuals2, ddof=len(param_values2))
 
-        # For ratio uncertainty propagation: if R = Y2/Y1, then
-        # Var(R) ≈ R² * [(σ₁/Y1)² + (σ₂/Y2)²] for uncorrelated errors
-        # We'll use the mean predictions to estimate this
         y_mean1 = np.mean([model1_function(x_values, **params1)])
         y_mean2 = np.mean([model2_function(x_values, **params2)])
 
-        # Relative errors
         rel_error1 = residual_std1 / np.abs(y_mean1)
         rel_error2 = residual_std2 / np.abs(y_mean2)
-
-        # Propagated relative error for ratio
         rel_error_ratio = np.sqrt(rel_error1**2 + rel_error2**2)
         residual_std_ratio = rel_error_ratio * np.abs(mean_ratio)
-
     else:
-        # Estimate from Monte Carlo samples (less accurate)
-        residual_std_ratio = np.std(ratios, axis=0).mean()
+        residual_std_ratio = np.nanmean(ratio_summary.std)
         print("Warning: No residuals provided. Using Monte Carlo uncertainty to estimate residual variance.")
 
-    # Calculate prediction variance = model uncertainty + residual variance
-    model_variance = np.var(ratios, axis=0)
+    model_variance = ratio_summary.std ** 2
     total_variance = model_variance + residual_std_ratio**2
     prediction_std = np.sqrt(total_variance)
 
-    # Degrees of freedom calculation
     if residuals1 is not None and residuals2 is not None:
-        # Use minimum of the two models' degrees of freedom (conservative)
         dof1 = len(residuals1) - len(param_values1)
         dof2 = len(residuals2) - len(param_values2)
         dof = min(dof1, dof2)
     else:
-        dof = valid_samples - len(param_values1) - len(param_values2)  # Conservative estimate
+        dof = valid_samples - len(param_values1) - len(param_values2)
 
-    # Calculate prediction intervals
     alpha = 1 - confidence_level
     t_value = sp.stats.t.ppf(1 - alpha/2, dof) if dof > 0 else 1.96
-
     margin_of_error = t_value * prediction_std
 
     return {
@@ -635,7 +638,5 @@ def generate_ratio_prediction_bands(model1_function, model2_function, x_values,
         'upper': mean_ratio + margin_of_error,
         'mean': mean_ratio,
         'std': prediction_std,
-        #'valid_samples': valid_samples,
-        #'total_samples': n_samples
     }
 
