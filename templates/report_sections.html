@@ -1,0 +1,35 @@
+{# The preview and Word payload use the same complete structured sections. #}
+{% for item in final_report_sections[option.id] %}
+    {% if item.type == 'heading' %}
+        {% set heading_level = [item.get('level', 1) + 2, 6]|min %}
+        <h{{ heading_level }}>{{ item.text }}</h{{ heading_level }}>
+    {% elif item.type == 'paragraph' %}
+        <p{% if item.detail_key is defined %} data-report-detail="{{ item.detail_key }}" data-report-detail-label="{{ item.detail_label }}"{% endif %}>{{ item.text }}</p>
+    {% elif item.type == 'bullet' %}
+        <ul><li>{{ item.text }}</li></ul>
+    {% elif item.type == 'equation' %}
+        <p class="report-equation">{% if item.latex %}\[{{ item.latex }}\]{% else %}{{ item.text }}{% endif %}</p>
+    {% elif item.type == 'table' %}
+        <div class="report-table-scroll" role="region" aria-label="{{ item.title }}" tabindex="0">
+            <table class="settings-table report-data-table">
+                <caption>{{ item.title }}</caption>
+                {% set header_rows = item.get('header_rows', 1) %}
+                {% if header_rows %}<thead>{% endif %}
+                {% for row in item.rows %}
+                    {% if loop.index0 == header_rows %}{% if header_rows %}</thead>{% endif %}<tbody>{% endif %}
+                    {% set is_header = loop.index0 < header_rows %}
+                    <tr>{% for cell in row %}{% if is_header %}<th scope="col">{{ cell }}</th>{% else %}<td>{{ cell }}</td>{% endif %}{% endfor %}</tr>
+                {% endfor %}
+                {% if item.rows|length > header_rows %}</tbody>{% elif header_rows %}</thead>{% endif %}
+            </table>
+        </div>
+    {% elif item.type == 'image' %}
+        <figure class="report-figure">
+            <h5>{{ item.title }}</h5>
+            <div class="report-plot-placeholder" data-plot-source="{{ item.source_id }}" data-report-title="{{ item.title }}">
+                <p class="plot-unavailable">{{ item.title }} is not available.</p>
+            </div>
+            <figcaption>{{ item.description }}</figcaption>
+        </figure>
+    {% endif %}
+{% endfor %}

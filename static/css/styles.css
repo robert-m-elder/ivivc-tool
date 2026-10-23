@@ -1488,6 +1488,71 @@ body.modal-open {
     min-height: 360px;
 }
 
+.report-details {
+    margin: 1rem 0;
+}
+
+.report-details summary {
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.report-details-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 0.8rem 1.2rem;
+}
+
+.report-details label {
+    display: block;
+    margin-bottom: 0.8rem;
+}
+
+.report-details input,
+.report-details textarea {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    margin-top: 0.3rem;
+}
+
+.report-table-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+    margin: 0.8rem 0 1.2rem;
+}
+
+.report-data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.report-data-table caption {
+    text-align: left;
+    font-weight: bold;
+    padding-bottom: 0.4rem;
+}
+
+.report-data-table th,
+.report-data-table td {
+    border: 1px solid #d9d9d9;
+    padding: 0.45rem 0.6rem;
+    vertical-align: top;
+}
+
+.report-data-table th {
+    background: #f2f2f2;
+}
+
+.report-figure {
+    margin: 1rem 0 1.4rem;
+}
+
+.report-figure figcaption {
+    margin-top: 0.5rem;
+    font-size: 0.95em;
+}
+
 @media print {
     body.printing-final-report .report-plotly-div {
         width: 100% !important;

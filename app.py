@@ -1,6 +1,7 @@
 import os
 import traceback
 import warnings
+from datetime import datetime, timezone
 
 import pandas as pd
 from flask import Flask, jsonify, render_template, request, send_file, send_from_directory
@@ -30,6 +31,7 @@ from utilities.descriptions import (
     format_selected_preprocessing_summary,
 )
 from utilities.reporting import build_final_model_options
+from utilities.report_content import build_report_sections
 from utilities.model_evidence import build_relative_evidence_tables
 from utilities.word_report import build_word_report, safe_report_filename, WORD_MIME_TYPE
 from utilities.excel_export import build_accessible_excel, EXCEL_MIME_TYPE
@@ -267,6 +269,9 @@ def index():
 
         # Process predictions if prediction file is provided
         prediction_results, prediction_interpolation_info = {}, {}
+        pred_df = None
+        prediction_data = None
+        prediction_preprocessing_metadata = None
         has_prediction_dataset = bool(prediction_file and prediction_file.filename)
         if has_prediction_dataset:
             try:
@@ -283,7 +288,13 @@ def index():
                 # Assuming prediction file has 2 columns: time, value
                 t_pred, m_pred = pred_df.values.T[:2]
                 
-                prediction_data = preprocess_data(t_pred, m_pred, None, None, selected_interpolation=selected_interpolation, selected_scalings=selected_scalings, selected_normalizations=selected_normalizations)
+                prediction_data, prediction_preprocessing_metadata = preprocess_data(
+                    t_pred, m_pred, None, None,
+                    selected_interpolation=selected_interpolation,
+                    selected_scalings=selected_scalings,
+                    selected_normalizations=selected_normalizations,
+                    return_metadata=True,
+                )
 
                 prediction_interpolation_info = create_prediction_interpolation_plotly(*prediction_data)
 
@@ -301,6 +312,50 @@ def index():
             include_prediction_methods=include_prediction_methods,
             prediction_results=prediction_results,
         )
+
+        analysis_timestamp = datetime.now(timezone.utc).isoformat(timespec='seconds')
+
+        def source_record(upload_name, worksheet, frame):
+            return {
+                'filename': upload_name.replace('\\', '/').rsplit('/', 1)[-1],
+                'worksheet': worksheet or 'Not applicable (CSV)',
+                'columns': [str(column) for column in frame.columns] if frame is not None else [],
+            }
+
+        # These records describe this calculation. Report export never refits a
+        # model, repeats CV, or resamples the uncertainty calculations.
+        report_context = {
+            'app_info': get_app_info(),
+            'analysis_timestamp': analysis_timestamp,
+            'fitting_source': source_record(filename, request.form.get('sheet') if file_extension in {'xls', 'xlsx'} else None, df),
+            'prediction_source': source_record(prediction_filename, request.form.get('prediction_sheet') if prediction_extension in {'xls', 'xlsx'} else None, pred_df)
+                if has_prediction_dataset else None,
+            'raw_fitting_data': {
+                'in_vitro': {'time': t1, 'response': m1},
+                'in_vivo': {'time': t2, 'response': m2},
+            },
+            'raw_prediction_data': {'time': pred_df.iloc[:, 0].to_numpy(), 'response': pred_df.iloc[:, 1].to_numpy()}
+                if pred_df is not None and len(pred_df.columns) >= 2 else None,
+            'processed_data': data,
+            'processed_prediction_data': prediction_data,
+            'preprocessing_metadata': preprocessing_metadata,
+            'prediction_preprocessing_metadata': prediction_preprocessing_metadata,
+            'selected_normalizations': selected_normalizations,
+            'selected_scalings': selected_scalings,
+            'selected_interpolation': selected_interpolation,
+            'selected_models': selected_models,
+            'selected_approaches': selected_approaches,
+            'selected_metrics': selected_metrics,
+            'analysis_config': analysis_config,
+            'results': results,
+            'prediction_results': prediction_results,
+            'evidence_tables': evidence_tables,
+            'models_registry': models,
+        }
+        final_report_sections = {
+            option['id']: build_report_sections(report_context, option)
+            for option in final_model_options
+        }
 
         return render_template('results.html', results=results, models=models, raw_data_info=raw_data_info, time_interpolation_info=time_interpolation_info, value_interpolation_info=value_interpolation_info, prediction_interpolation_info=prediction_interpolation_info,
                                comparisons=comparisons, ks_tables=ks_tables, cv_summary_tables=cv_summary_tables,
@@ -323,6 +378,9 @@ def index():
                                parameter_diagnostic_tables=parameter_diagnostic_tables,
                                modal_help=MODAL_HELP,
                                final_model_options=final_model_options,
+                               final_report_sections=final_report_sections,
+                               report_analysis_timestamp=analysis_timestamp,
+                               has_prediction_dataset=has_prediction_dataset,
                                evidence_tables=evidence_tables, evidence_lookup=evidence_lookup,
                                include_prediction_methods=include_prediction_methods,
                                approach_descriptions=APPROACH_DESCRIPTIONS)

@@ -74,79 +74,56 @@ def build_final_model_options(results, models, approaches, include_prediction_me
     for model_key, model_results in results.items():
         if 'error' in model_results:
             continue
-
         if ':' in model_key:
             approach_id, model_name = model_key.split(':', 1)
         else:
             approach_id, model_name = model_key, None
-
         model_dom_id = _dom_id(model_key)
-
+        first_option = len(options)
         if approach_id == 'approach1':
-            fit_sources = [_plot_source(f"plot-fit-{model_dom_id}", 'Model fitting plot')]
-            prediction_sources = []
-            if include_prediction_methods:
-                prediction_sources = [_plot_source(f"plot-prediction-{model_dom_id}", 'Prediction plot')]
-            add_option(
-                model_key, approach_id, model_name,
-                method_id='direct_time_correlation' if include_prediction_methods else None,
-                method_display='Direct time correlation',
-                fit_plot_sources=fit_sources,
-                prediction_plot_sources=prediction_sources,
-            )
+            fit_sources = [_plot_source(f"plot-fit-{model_dom_id}", 'Time-correlation fitting plot')]
+            prediction = prediction_results.get(approach_id, {}).get(model_name, {})
+            if include_prediction_methods and prediction.get('plot') is not None and 'error' not in prediction:
+                add_option(model_key, approach_id, model_name,
+                           method_id='direct_time_correlation', method_display='Direct time correlation',
+                           fit_plot_sources=fit_sources,
+                           prediction_plot_sources=[_plot_source(f"plot-prediction-{model_dom_id}", 'Prediction plot')])
         elif approach_id == 'approach2':
-            fit_sources = [_plot_source(f"plot-fit-{model_dom_id}", 'Model fitting plot')]
-            if include_prediction_methods:
-                add_option(
-                    model_key, approach_id, model_name,
-                    method_id='value_ratio',
-                    method_display='Value-ratio rescaling',
-                    fit_plot_sources=fit_sources,
-                    prediction_plot_sources=[_plot_source(f"plot-prediction-{model_dom_id}-value", 'Value-ratio prediction plot')],
+            fit_sources = [_plot_source(f"plot-fit-{model_dom_id}", 'In vitro and in vivo fitting plot')]
+            prediction = prediction_results.get(approach_id, {}).get(model_name, {})
+            if include_prediction_methods and 'error' not in prediction:
+                methods = (
+                    ('value_ratio', 'Value-ratio rescaling', 'plot', 'value', 'Response-value ratio prediction plot'),
+                    ('tau_ratio', 'Time-constant-ratio rescaling', 'plot_tau', 'tau', 'Time-constant ratio prediction plot'),
+                    ('observed_response_inverse', 'Observed-response inverse mapping', 'plot_inverse_response', 'inverse', 'Observed-response inverse prediction plot'),
                 )
-                tau_values = model_results.get('tau', [])
-                if describe_tau_prediction_skip_reason(tau_values) is None:
-                    add_option(
-                        model_key, approach_id, model_name,
-                        method_id='tau_ratio',
-                        method_display='Time-constant-ratio rescaling',
-                        fit_plot_sources=fit_sources,
-                        prediction_plot_sources=[_plot_source(f"plot-prediction-{model_dom_id}-tau", 'Time-constant-ratio prediction plot')],
-                    )
-                inverse_result = prediction_results.get('approach2', {}).get(model_name, {})
-                if inverse_result.get('plot_inverse_response') is not None:
-                    add_option(
-                        model_key, approach_id, model_name,
-                        method_id='observed_response_inverse',
-                        method_display='Observed-response inverse mapping',
-                        fit_plot_sources=fit_sources,
-                        prediction_plot_sources=[_plot_source(f"plot-prediction-{model_dom_id}-inverse", 'Observed-response inverse prediction plot')],
-                    )
-            else:
-                add_option(model_key, approach_id, model_name, fit_plot_sources=fit_sources)
+                for method_id, label, plot_key, suffix, plot_title in methods:
+                    if prediction.get(plot_key) is None:
+                        continue
+                    if method_id == 'tau_ratio' and describe_tau_prediction_skip_reason(model_results.get('tau', [])) is not None:
+                        continue
+                    add_option(model_key, approach_id, model_name, method_id=method_id, method_display=label,
+                               fit_plot_sources=fit_sources,
+                               prediction_plot_sources=[_plot_source(f"plot-prediction-{model_dom_id}-{suffix}", plot_title)])
         elif approach_id == 'approach3':
+            fit_sources = [_plot_source(f"plot-fit-{model_dom_id}-value", 'Value-ratio mapping plot'),
+                           _plot_source(f"plot-fit-{model_dom_id}-time", 'Time-ratio mapping plot')]
             if include_prediction_methods:
-                add_option(
-                    model_key, approach_id, model_name,
-                    method_id='value_scaling',
-                    method_display='Direct value-ratio mapping',
-                    fit_plot_sources=[_plot_source(f"plot-fit-{model_dom_id}-value", 'Value-ratio mapping plot')],
-                    prediction_plot_sources=[_plot_source('plot-prediction-approach3-method1-value-scaling', 'Direct value-ratio prediction plot')],
-                )
-                add_option(
-                    model_key, approach_id, model_name,
-                    method_id='time_scaling',
-                    method_display='Direct time-ratio mapping',
-                    fit_plot_sources=[_plot_source(f"plot-fit-{model_dom_id}-time", 'Time-ratio mapping plot')],
-                    prediction_plot_sources=[_plot_source('plot-prediction-approach3-method2-time-scaling', 'Direct time-ratio prediction plot')],
-                )
-            else:
-                add_option(
-                    model_key, approach_id, model_name,
-                    fit_plot_sources=[
-                        _plot_source(f"plot-fit-{model_dom_id}-value", 'Value-ratio mapping plot'),
-                        _plot_source(f"plot-fit-{model_dom_id}-time", 'Time-ratio mapping plot'),
-                    ],
-                )
+                for method_id, label, prediction_key, suffix in (
+                    ('value_scaling', 'Direct value-ratio mapping', 'method1_value_scaling', 'value'),
+                    ('time_scaling', 'Direct time-ratio mapping', 'method2_time_scaling', 'time'),
+                ):
+                    prediction = prediction_results.get(approach_id, {}).get(prediction_key, {})
+                    if prediction.get('plot') is None or 'error' in prediction:
+                        continue
+                    add_option(model_key, approach_id, model_name, method_id=method_id, method_display=label,
+                               fit_plot_sources=[_plot_source(f"plot-fit-{model_dom_id}-{suffix}", label + ' plot')],
+                               prediction_plot_sources=[_plot_source('plot-prediction-approach3-' + prediction_key.replace('_', '-'), label + ' prediction plot')])
+        else:
+            continue
+        # A failed prediction must not hide a successful calibration result or
+        # offer a method whose output was never produced.
+        if len(options) == first_option:
+            add_option(model_key, approach_id, model_name, fit_plot_sources=fit_sources)
 
     return options
