@@ -20,3 +20,16 @@ node tests/test_report_export.cjs
 The browser check verifies that all rows are retained, author text is preserved,
 selection rationales stay with the correct report, and missing images remain
 explicit. It does not require installing JavaScript packages.
+
+## Response-value ratio uncertainty
+
+Run the full suite with `python -m pytest`. The targeted checks are:
+
+```bash
+python -m pytest tests/test_value_ratio_uncertainty.py tests/test_value_ratio_outputs.py tests/test_report_metadata.py tests/test_report_content.py
+```
+
+These cover parameter-only percentile propagation, non-unit ratio scaling,
+pointwise validity, denominator safeguards, reproducibility, response-unit
+invariance, and fidelity of plots/downloads/reports. They do not establish
+frequentist coverage of the local parameter approximation on real datasets.

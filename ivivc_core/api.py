@@ -23,7 +23,7 @@ from .predictions import (
     predict_inverse_response,
     predict_tau_ratio,
     predict_time_mapping,
-    predict_value_ratio,
+    predict_value_ratio_with_uncertainty,
 )
 from .registry import get_approach_spec, get_model_spec
 from .types import (
@@ -308,6 +308,9 @@ def predict_in_vivo(
     The prediction time course must already be on the same preprocessed scale as
     ``analysis.prepared_data``.  Use ``methods`` to restrict the default method
     set; for example ``{'approach2': ('value_ratio', 'tau_ratio')}``.
+    Response-ratio bounds propagate fitted-parameter uncertainty only, holding
+    the prediction inputs fixed; uncertainty definitions for other methods are
+    unchanged. Use ``predict_value_ratio_with_uncertainty`` for a seeded call.
     """
     selected_methods = _resolved_prediction_methods(methods)
     trajectories: dict[str, PredictedTrajectory] = {}
@@ -335,11 +338,15 @@ def predict_in_vivo(
                     in_vitro_fit = model_fit.in_vitro_fit
                     in_vivo_fit = model_fit.in_vivo_fit
                     if method == 'value_ratio':
-                        trajectory = predict_value_ratio(
+                        trajectory = predict_value_ratio_with_uncertainty(
                             prediction,
                             model_name=model_fit.model_name,
                             in_vitro_parameters=in_vitro_fit.parameters,
+                            in_vitro_covariance=in_vitro_fit.covariance,
                             in_vivo_parameters=in_vivo_fit.parameters,
+                            in_vivo_covariance=in_vivo_fit.covariance,
+                            confidence_level=confidence_level,
+                            n_samples=n_samples,
                         )
                     elif method == 'tau_ratio':
                         trajectory = predict_tau_ratio(

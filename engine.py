@@ -22,14 +22,13 @@ from ivivc_core.predictions import (
     predict_inverse_response,
     predict_tau_ratio,
     predict_time_mapping,
-    predict_value_ratio,
+    predict_value_ratio_with_uncertainty,
     safe_ratio as core_safe_ratio,
 )
 from ivivc_core.preprocessing import prepare_data
 from ivivc_core.types import TimeCourse
 from utilities.evaluation import (
     generate_prediction_bands,
-    generate_ratio_prediction_bands,
 )
 from utilities.misc import hex_to_rgba
 from utilities.parameter_diagnostics import (
@@ -767,11 +766,16 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                     elif approach == 'approach2':
                         params1, params2 = model_results['params']
 
-                        value_prediction = predict_value_ratio(
+                        value_prediction = predict_value_ratio_with_uncertainty(
                             prediction_course,
                             model_name=model_name,
                             in_vitro_parameters=params1,
+                            in_vitro_covariance=model_results['pcov'][0],
                             in_vivo_parameters=params2,
+                            in_vivo_covariance=model_results['pcov'][1],
+                            confidence_level=0.95,
+                            n_samples=1000,
+                            random_state=12345,
                         )
                         plot_time = value_prediction.auxiliary['plot_time']
                         model1_plot = value_prediction.auxiliary['in_vitro_model_plot']
@@ -794,6 +798,7 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                                 'residuals': model_results['residuals'],
                             },
                             prediction_mode='value_ratio',
+                            value_prediction=value_prediction,
                         )
 
                         # The legacy fit result retains this mutation because the
@@ -943,6 +948,7 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                         approach_predictions[model_name] = {
                             'plot': plot_image,
                             'plot_tau': plot_image_tau,
+                            'plot_value_ratio_note': value_prediction.note,
                             'plot_tau_skip_reason': model_results.get(
                                 'prediction_skip_reasons', {}
                             ).get('tau_ratio'),
@@ -950,13 +956,7 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                             'plot_inverse_response_skip_reason': inverse_prediction.skip_reason,
                             'plot_inverse_response_note': inverse_prediction.note,
                             'prediction_tables': {
-                                'value_ratio': _prediction_records_from_plot_or_values(
-                                    plot_image,
-                                    t_pred,
-                                    m_pred,
-                                    'value',
-                                    value_prediction.in_vivo_value,
-                                ),
+                                'value_ratio': _value_ratio_prediction_records(value_prediction),
                                 'tau_ratio': tau_records,
                                 'observed_response_inverse': inverse_records,
                             },
@@ -2297,8 +2297,12 @@ def extract_plotly_data_for_table(fig):
     max_length = 0
     trace_data = []
     name_counts = {}
+    has_numerical_prediction_records = False
 
     for trace in fig.data:
+        trace_metadata = getattr(trace, 'meta', None)
+        if isinstance(trace_metadata, dict) and trace_metadata.get('exclude_from_data_table'):
+            continue
         if not (hasattr(trace, 'x') and hasattr(trace, 'y')):
             continue
         if trace.x is None or trace.y is None:
@@ -2348,6 +2352,23 @@ def extract_plotly_data_for_table(fig):
             except (TypeError, ValueError):
                 continue
 
+        if isinstance(trace_metadata, dict) and 'prediction_records' in trace_metadata:
+            has_numerical_prediction_records = True
+            records = trace_metadata['prediction_records']
+            # Percentile intervals need not contain the fitted-parameter point.
+            # Export their actual endpoints, not re-centered bar lengths.
+            for bound in ('lower', 'upper'):
+                columns[_plot_table_column_label(y_title, trace_name, bound)] = [
+                    row.get(f'{bound}_95') for row in records
+                ]
+            for key, label in (
+                ('status', 'Prediction status'),
+                ('interval_status', 'Interval status'),
+                ('interval_valid_samples', 'Usable draws'),
+                ('interval_requested_samples', 'Requested draws'),
+            ):
+                columns[f'{label} ({trace_name})'] = [row.get(key) for row in records]
+
         trace_data.append(columns)
 
     if not trace_data:
@@ -2365,7 +2386,7 @@ def extract_plotly_data_for_table(fig):
         classes='table table-striped',
         table_id=f'plot-data-{uuid4().hex}',
         index=False,
-        float_format=lambda x: f'{x:.4f}' if pd.notnull(x) else '',
+        float_format=lambda x: (repr(float(x)) if has_numerical_prediction_records else f'{x:.4f}') if pd.notnull(x) else '',
         escape=False,
         na_rep='',
     )
@@ -2901,6 +2922,36 @@ def _prediction_records_for_report(fig, t_pred, m_pred, output_kind,
     return records
 
 
+def _value_ratio_prediction_records(trajectory):
+    """Copy numerical response-ratio results; never infer bounds from a plot."""
+    rows = _prediction_records_for_report(
+        None, trajectory.in_vitro_time, trajectory.in_vitro_value, 'value',
+        predictions=trajectory.in_vivo_value,
+    )
+    metadata = trajectory.auxiliary
+
+    def finite_value(values, index):
+        if values is None or not np.isfinite(values[index]):
+            return None
+        return float(values[index])
+
+    for index, row in enumerate(rows):
+        row['lower_95'] = finite_value(trajectory.value_lower, index)
+        row['upper_95'] = finite_value(trajectory.value_upper, index)
+        if trajectory.status is not None:
+            row['status'] = str(trajectory.status[index])
+        row['interval_status'] = str(metadata['interval_status'][index])
+        row['interval_kind'] = metadata['interval_kind']
+        row['interval_confidence_level'] = float(metadata['interval_confidence_level'])
+        row['interval_valid_samples'] = int(metadata['interval_valid_samples'][index])
+        row['interval_total_samples'] = int(metadata['interval_total_samples'])
+        row['interval_requested_samples'] = int(metadata['interval_requested_samples'])
+        row['interval_random_seed'] = metadata['interval_random_seed']
+        row['denominator_lower_95'] = finite_value(metadata['denominator_lower'], index)
+        row['denominator_upper_95'] = finite_value(metadata['denominator_upper'], index)
+    return rows
+
+
 def create_prediction_plot_a1(data, t_pred, m_pred, t_pred_vivo, model_info, include_bands=True):
     """Create prediction plot for approach 1 - time scaling"""
     t1,m1,t2,m2,mm,tt,ti1,ti2,mi1,mi2 = data
@@ -3004,9 +3055,13 @@ def create_prediction_plot_a1(data, t_pred, m_pred, t_pred_vivo, model_info, inc
     return {'plot': plot_html, 'table_html': table_html,
             'prediction_records': _prediction_records_for_report(fig, t_pred, m_pred, 'time')}
 
-def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, model1_pred_plot, model2_pred_plot, model_info, t_pred_vivo_err=None, include_bands=True, prediction_mode='value_ratio'):
-    """Create an Approach 2 prediction plot for value or time mapping methods."""
+def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, model1_pred_plot, model2_pred_plot, model_info, t_pred_vivo_err=None, include_bands=True, prediction_mode='value_ratio', *, value_prediction=None):
+    """Render existing Approach 2 predictions without recalculating uncertainty."""
     t1,m1,t2,m2,mm,tt,ti1,ti2,mi1,mi2 = data
+    if prediction_mode == 'value_ratio' and value_prediction is not None:
+        t_pred = value_prediction.in_vitro_time
+        m_pred = value_prediction.in_vitro_value
+        mt_pred_vivo = value_prediction.in_vivo_value
     fig = go.Figure()
 
     # Fitting in vitro data
@@ -3033,54 +3088,52 @@ def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, m
         marker=dict(color=colors['prediction_input'], size=15, line=dict(color='white', width=2))
     ))
 
-    # Calculate prediction bands/error bars for the predicted in vivo values or times if available
-    error_x_lower = None
-    error_x_upper = None
-    error_y_lower = None
-    error_y_upper = None
-    
+    # Numerical response-ratio intervals are supplied by the core, in response
+    # units. There is no residual addition, ratio scaling, or sampling here.
+    ratio_records = None
     if prediction_mode == 'value_ratio':
-        ## MASS SCALING WITH ERROR BARS
         title = f"In Vitro to In Vivo Value Prediction using value ratio rescaling with {model_info['model_name']}"
-        if include_bands and 'pcov' in model_info and model_info['pcov'][0] is not None:
-            try:
-                bands = generate_ratio_prediction_bands(model_info['model_function'], model_info['model_function'], t_pred, model_info['params'][0], model_info['pcov'][0], model_info['params'][1], model_info['pcov'][1], residuals1=model_info['residuals'][0], residuals2=model_info['residuals'][1], confidence_level=0.95, n_samples=1000)
-                
-                # Calculate error bar lengths (distance from mean to upper/lower bounds)
-                error_y_lower = bands['mean'] - bands['lower']  # Distance to lower bound
-                error_y_upper = bands['upper'] - bands['mean']  # Distance to upper bound
-
-                error_y_lower = mt_pred_vivo * error_y_lower
-                error_y_upper = mt_pred_vivo * error_y_upper
-                
-            except Exception as e:
-                print(f"Warning: Could not generate prediction bands for error bars: {e}")
-
-        # Predicted in vivo timeline with error bars
-        if error_y_lower is not None and error_y_upper is not None:
+        ratio_records = (
+            _value_ratio_prediction_records(value_prediction)
+            if value_prediction is not None
+            else _prediction_records_for_report(
+                None, t_pred, m_pred, 'value', predictions=mt_pred_vivo,
+            )
+        )
+        if not include_bands:
+            for row in ratio_records:
+                row.update(lower_95=None, upper_95=None, interval_status='not displayed (disabled)')
+        lower = np.asarray([row['lower_95'] for row in ratio_records], dtype=float)
+        upper = np.asarray([row['upper_95'] for row in ratio_records], dtype=float)
+        center = np.asarray(mt_pred_vivo, dtype=float)
+        bounded = np.isfinite(lower) & np.isfinite(upper) & np.isfinite(center)
+        contains_center = bounded & (lower <= center) & (center <= upper)
+        fig.add_trace(go.Scatter(
+            x=t_pred, y=center,
+            mode='markers',
+            name='In Vivo (Predicted)',
+            meta={'prediction_records': ratio_records},
+            marker=dict(color=colors['prediction_output'], size=15, line=dict(color='white', width=2)),
+            error_y=dict(
+                type='data', symmetric=False,
+                array=np.where(contains_center, upper - center, np.nan),
+                arrayminus=np.where(contains_center, center - lower, np.nan),
+                visible=bool(np.any(contains_center)),
+                color=colors['prediction_output'], thickness=2, width=8,
+            ),
+        ))
+        # A percentile interval can exclude the fitted-parameter point. Draw
+        # such intervals at their actual endpoints, without negative error bars
+        # or a shifted/clipped interval. The point estimate remains visible.
+        outside = np.flatnonzero(bounded & ~contains_center)
+        if len(outside):
             fig.add_trace(go.Scatter(
-                x=t_pred, y=mt_pred_vivo,
-                mode='markers',
-                name='In Vivo (Predicted)',
-                marker=dict(color=colors['prediction_output'], size=15, line=dict(color='white', width=2)),
-                error_y=dict(
-                    type='data',
-                    symmetric=False,
-                    array=error_y_upper,      # Upper error
-                    arrayminus=error_y_lower, # Lower error
-                    visible=True,
-                    color=colors['prediction_output'],
-                    thickness=2,
-                    width=8
-                )
-            ))
-        else:
-            # Fallback: predicted points without error bars
-            fig.add_trace(go.Scatter(
-                x=t_pred, y=mt_pred_vivo,
-                mode='markers',
-                name='In Vivo (Predicted)',
-                marker=dict(color=colors['prediction_output'], size=15, line=dict(color='white', width=2))
+                x=[x for i in outside for x in (t_pred[i], t_pred[i], None)],
+                y=[y for i in outside for y in (lower[i], upper[i], None)],
+                mode='lines', name='95% parameter-uncertainty interval',
+                meta={'exclude_from_data_table': True},
+                line=dict(color=colors['prediction_output'], width=2),
+                connectgaps=False,
             ))
 
     else:
@@ -3180,8 +3233,8 @@ def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, m
     plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
 
     return {'plot': plot_html, 'table_html': table_html,
-            'prediction_records': _prediction_records_for_report(
-                fig, t_pred, m_pred, 'value' if prediction_mode == 'value_ratio' else 'time')}
+            'prediction_records': (ratio_records if prediction_mode == 'value_ratio'
+                                   else _prediction_records_for_report(fig, t_pred, m_pred, 'time'))}
 
 def create_prediction_plot_a3(data, t_pred, m_pred, var_pred_scaled, ptype='v'):
     """Create prediction plot for approach 3 - direct mapping"""

@@ -114,6 +114,10 @@ def test_predict_in_vivo_uses_one_common_public_result_contract(fast_analysis_co
     )
 
     assert batch.errors == {}
+    ratio = batch['approach2:exponential:value_ratio']
+    assert ratio.value_lower is not None and ratio.value_upper is not None
+    assert ratio.auxiliary['interval_kind'] == 'parameter_uncertainty'
+    assert ratio.auxiliary['interval_requested_samples'] == 60
     assert set(batch.results) == {
         'approach1:linear:time_mapping',
         'approach2:exponential:value_ratio',

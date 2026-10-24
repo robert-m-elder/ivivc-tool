@@ -615,6 +615,10 @@
                                         <h3 id="prediction-{{ approach_id }}-result-{{ model_name|replace('_', '-') }}" class="model-jump-target" tabindex="-1">Model: {{ models[model_name].display_name }}</h3>
                                         {% if 'plot' in pred_result %}
                                             <h4>Response-value ratio rescaling</h4>
+                                            <p class="evidence-note">Vertical intervals show approximate 95% parameter uncertainty from both fitted calibration curves, treating the supplied prediction times and responses as fixed. No additional measurement variability or model inadequacy is included.</p>
+                                            {% if pred_result.plot_value_ratio_note %}
+                                                <p class="prediction-skip-reason"><span class="evidence-badge uncertainty-plot-badge">Some intervals unavailable</span> {{ pred_result.plot_value_ratio_note }}</p>
+                                            {% endif %}
 <div id="plot-prediction-{{ approach_id }}-{{ model_name }}-value" class="plot-container report-source-plot">
                                                 {{ pred_result.plot.plot | safe }}
                                             </div>

@@ -386,8 +386,15 @@ def predict_value_ratio(
     in_vivo_model_value = np.asarray(
         model_function(prediction.time, **in_vivo_parameters)
     )
-    ratio = in_vivo_model_value / in_vitro_model_value
-    in_vivo_value = prediction.value * ratio
+    with np.errstate(over='ignore', divide='ignore', invalid='ignore'):
+        ratio = safe_ratio(in_vivo_model_value, in_vitro_model_value)
+        in_vivo_value = prediction.value * ratio
+    finite_prediction = np.isfinite(in_vivo_value) & np.isfinite(prediction.time)
+    in_vivo_value = np.where(finite_prediction, in_vivo_value, np.nan)
+    status = np.full(len(prediction.time), 'predicted', dtype=object)
+    status[~finite_prediction] = 'unavailable (nonfinite prediction)'
+    bad_denominator = ~np.isfinite(in_vitro_model_value) | (in_vitro_model_value == 0)
+    status[bad_denominator] = 'unavailable (zero or nonfinite fitted in vitro response)'
 
     plot_time = np.linspace(
         min(prediction.time),
@@ -409,6 +416,8 @@ def predict_value_ratio(
         in_vitro_value=prediction.value,
         in_vivo_time=prediction.time,
         in_vivo_value=in_vivo_value,
+        available=bool(np.any(finite_prediction)),
+        status=status,
         scaling_factor=ratio,
         auxiliary={
             'in_vitro_model_value': in_vitro_model_value,
@@ -418,6 +427,118 @@ def predict_value_ratio(
             'in_vivo_model_plot': in_vivo_model_plot,
         },
     )
+
+
+def predict_value_ratio_with_uncertainty(
+    prediction: TimeCourse,
+    *,
+    model_name: str,
+    in_vitro_parameters: Mapping[str, float],
+    in_vitro_covariance,
+    in_vivo_parameters: Mapping[str, float],
+    in_vivo_covariance,
+    confidence_level: float = 0.95,
+    n_samples: int = 1000,
+    random_state=None,
+) -> PredictedTrajectory:
+    """Add pointwise parameter-uncertainty intervals to response-ratio predictions.
+
+    Both calibration parameter vectors are sampled independently, preserving
+    covariance within each vector. Supplied prediction times/responses are
+    fixed. No residual noise, observation error, or model discrepancy is added.
+    The fitted-parameter prediction, not the sampled mean, remains the center.
+
+    A bounded interval is withheld at a point if any requested draw is unusable
+    there or the denominator's equal-tailed interval includes zero. The latter
+    is a conservative display safeguard, not a formal ratio-confidence method.
+    Nothing is clipped or silently conditioned on successful evaluations.
+    """
+    from .uncertainty import sample_value_ratio_trajectories, summarize_draws
+
+    confidence_level = float(confidence_level)
+    if not 0.0 < confidence_level < 1.0:
+        raise ValueError('confidence_level must be between zero and one.')
+    if int(n_samples) != n_samples or n_samples < 2:
+        raise ValueError('n_samples must be an integer of at least two.')
+    n_samples = int(n_samples)
+    count = len(prediction.time)
+    lower = np.full(count, np.nan)
+    upper = np.full(count, np.nan)
+    denominator_lower = np.full(count, np.nan)
+    denominator_upper = np.full(count, np.nan)
+    valid_counts = np.zeros(count, dtype=int)
+    total_samples = 0
+    sampling_error = None
+    interval_status = np.full(count, 'unavailable (parameter sampling failed)', dtype=object)
+
+    try:
+        ensemble = sample_value_ratio_trajectories(
+            prediction,
+            model_name=model_name,
+            in_vitro_parameters=in_vitro_parameters,
+            in_vitro_covariance=in_vitro_covariance,
+            in_vivo_parameters=in_vivo_parameters,
+            in_vivo_covariance=in_vivo_covariance,
+            n_samples=n_samples,
+            random_state=random_state,
+        )
+    except (ValueError, TypeError, RuntimeError, np.linalg.LinAlgError) as exc:
+        # Invalid covariance must not discard a usable central prediction or
+        # prevent the other Approach 2 prediction methods from being evaluated.
+        trajectory = predict_value_ratio(
+            prediction,
+            model_name=model_name,
+            in_vitro_parameters=in_vitro_parameters,
+            in_vivo_parameters=in_vivo_parameters,
+        )
+        sampling_error = str(exc)
+    else:
+        trajectory = ensemble.central
+        total_samples = ensemble.n_draws
+        # Pass the full matrix, NOT only rows flagged valid across all times.
+        with np.errstate(over='ignore', divide='ignore', invalid='ignore'):
+            summary = summarize_draws(ensemble.value_draws, confidence_level=confidence_level)
+            denominator_summary = summarize_draws(
+                ensemble.metadata['in_vitro_model_draws'], confidence_level=confidence_level,
+            )
+        valid_counts = summary.valid_counts
+        denominator_lower = denominator_summary.lower
+        denominator_upper = denominator_summary.upper
+        complete = (valid_counts == n_samples) & (total_samples == n_samples)
+        complete &= denominator_summary.valid_counts == n_samples
+        crosses_zero = (denominator_lower <= 0) & (denominator_upper >= 0)
+        finite_bounds = np.isfinite(summary.lower) & np.isfinite(summary.upper)
+        supported = complete & finite_bounds & ~crosses_zero & np.isfinite(trajectory.in_vivo_value)
+        lower[supported], upper[supported] = summary.lower[supported], summary.upper[supported]
+        interval_status[:] = 'unavailable (nonfinite or missing Monte Carlo draws)'
+        interval_status[complete & ~finite_bounds] = 'unavailable (nonfinite percentile bounds)'
+        interval_status[complete & crosses_zero] = 'unavailable (denominator interval includes zero)'
+        interval_status[supported] = 'available'
+
+    interval_status[~np.isfinite(trajectory.in_vivo_value)] = 'unavailable (point prediction unavailable)'
+    trajectory.value_lower = lower
+    trajectory.value_upper = upper
+    trajectory.auxiliary.update({
+        'interval_kind': 'parameter_uncertainty',
+        'interval_confidence_level': confidence_level,
+        'interval_status': interval_status,
+        'interval_valid_samples': valid_counts,
+        'interval_total_samples': total_samples,
+        'interval_requested_samples': n_samples,
+        'interval_random_seed': int(random_state) if isinstance(random_state, (int, np.integer)) else None,
+        'interval_sampling_error': sampling_error,
+        'denominator_lower': denominator_lower,
+        'denominator_upper': denominator_upper,
+    })
+    unavailable = int(np.count_nonzero(interval_status != 'available'))
+    if unavailable:
+        trajectory.note = (
+            f'{unavailable} of {count} response-ratio parameter-uncertainty intervals '
+            'are unavailable. See the prediction data table for pointwise reasons.'
+        )
+        if sampling_error is not None:
+            trajectory.note += f' Parameter sampling failed: {sampling_error}'
+    return trajectory
 
 
 def predict_tau_ratio(
