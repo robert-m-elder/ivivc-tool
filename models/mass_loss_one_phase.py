@@ -46,7 +46,7 @@ def initial_guess(x, y):
     y = np.asarray(y, dtype=float)
     mask = np.isfinite(x) & np.isfinite(y)
     if not np.any(mask):
-        return np.array([100.0, 0.0, 1.0, 1.0, 1.0, 1.0])
+        return np.array([1.0, 1.0, 1.0, 1.0], dtype=float)
 
     x = x[mask]
     y = y[mask]
