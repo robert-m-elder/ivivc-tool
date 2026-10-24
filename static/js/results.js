@@ -739,6 +739,7 @@ function setActiveFinalReport(selectedId) {
     }
 
     $(report).show().addClass('active-report').attr('aria-hidden', 'false');
+    updateReportDetails(selectedId);
     initializeSummaryDataTables(report);
 
     return populateReportPlots(report).then(function() {
@@ -785,48 +786,6 @@ function cleanReportText(value) {
     return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
-function extractTableData(table) {
-    var rows = [];
-    Array.from(table.querySelectorAll('tr')).forEach(function(row) {
-        var cells = Array.from(row.querySelectorAll('th, td')).map(function(cell) {
-            return cleanReportText(cell.textContent);
-        });
-        if (cells.some(function(cell) { return cell.length > 0; })) {
-            rows.push(cells);
-        }
-    });
-
-    var headerRows = table.tHead ? table.tHead.rows.length : 0;
-    if (headerRows === 0 && rows.length > 0) {
-        var bodyRows = Array.from(table.querySelectorAll('tbody tr'));
-        var rowHeaderLayout = bodyRows.length > 0 && bodyRows.every(function(row) {
-            var cells = Array.from(row.children).filter(function(cell) {
-                return cell.matches('th, td');
-            });
-            var isSectionRow = cells.length === 1 && cells[0].tagName.toLowerCase() === 'th';
-            var isSettingRow = cells.length === 2 && cells[0].tagName.toLowerCase() === 'th';
-            return isSectionRow || isSettingRow;
-        });
-        if (rowHeaderLayout) {
-            rows.unshift(['Setting', 'Selected value']);
-            headerRows = 1;
-        }
-    }
-
-    var caption = table.querySelector('caption');
-    var title = caption ? cleanReportText(caption.textContent) : '';
-    if (!title) {
-        title = getPreviousHeadingText(table) || 'Report data table';
-    }
-
-    return {
-        rows: rows,
-        header_rows: headerRows,
-        title: title,
-        description: title + '. Column headings are identified in the first row.'
-    };
-}
-
 function referencedDescription(element) {
     if (!element) {
         return '';
@@ -840,7 +799,7 @@ function referencedDescription(element) {
 
 function reportPlotMetadata(placeholder) {
     var plot = getPlotForWordExport(placeholder);
-    var title = getPreviousHeadingText(placeholder);
+    var title = placeholder.getAttribute('data-report-title') || getPreviousHeadingText(placeholder);
     if (!title && plot) {
         title = cleanReportText(plot.getAttribute('aria-label'));
     }
@@ -860,110 +819,63 @@ function reportPlotMetadata(placeholder) {
     };
 }
 
-function appendReportElementToPayload(element, sections) {
-    if (!element || element.nodeType !== 1) {
-        return;
+// Export the complete calculation record, independent of table pagination,
+// sorting, MathJax markup, and which diagnostic tab the user visited.
+var reportSectionsById = null;
+var reportSelectionRationales = {};
+
+function structuredReportSections() {
+    if (reportSectionsById === null) {
+        var source = document.getElementById('structured-report-sections');
+        reportSectionsById = source ? JSON.parse(source.textContent) : {};
     }
+    return reportSectionsById;
+}
 
-    if (element.hidden || element.getAttribute('aria-hidden') === 'true' ||
-            element.classList.contains('sr-only') ||
-            element.classList.contains('plot-data-downloads') ||
-            element.classList.contains('summary-table-downloads')) {
-        return;
+function reportDetailValue(key, selectedId) {
+    if (key === 'selection_rationale') {
+        return reportSelectionRationales[selectedId] || '';
     }
+    var field = document.querySelector('[data-report-detail-field="' + key + '"]');
+    return field ? field.value.trim() : '';
+}
 
-    if (element.classList.contains('report-plot-placeholder')) {
-        var imageId = element.getAttribute('data-report-image-id');
-        var plotMetadata = reportPlotMetadata(element);
-        if (imageId) {
-            sections.push({
-                type: 'image',
-                title: plotMetadata.title,
-                description: plotMetadata.description,
-                data_url: reportImageDataById[imageId] || ''
-            });
-        } else if (element.getAttribute('data-report-export-attempted') === 'true') {
-            var exportError = element.getAttribute('data-report-export-error') || 'Image export was unavailable.';
-            sections.push({
-                type: 'paragraph',
-                text: plotMetadata.title + ': plot image could not be exported to Word. ' + exportError
-            });
-        }
-        return;
+function updateReportDetails(selectedId) {
+    var rationale = document.querySelector('[data-report-detail-field="selection_rationale"]');
+    if (rationale && rationale.value !== (reportSelectionRationales[selectedId] || '')) {
+        rationale.value = reportSelectionRationales[selectedId] || '';
     }
-
-    var tagName = element.tagName.toLowerCase();
-    if (/^h[1-6]$/.test(tagName)) {
-        var headingText = cleanReportText(element.textContent);
-        if (headingText) {
-            var htmlLevel = parseInt(tagName.substring(1), 10);
-            sections.push({
-                type: 'heading',
-                level: Math.max(1, Math.min(htmlLevel - 2, 3)),
-                text: headingText
-            });
-        }
-        return;
-    }
-
-    if (tagName === 'p') {
-        if (element.classList.contains('report-equation')) {
-            var equationLatex = element.getAttribute('data-report-equation') || '';
-            var fallbackText = cleanReportText(element.textContent);
-            if (equationLatex || fallbackText) {
-                sections.push({
-                    type: 'equation',
-                    latex: equationLatex,
-                    text: fallbackText
-                });
-            }
-            return;
-        }
-
-        var paragraphText = cleanReportText(element.textContent);
-        if (paragraphText) {
-            sections.push({type: 'paragraph', text: paragraphText});
-        }
-        return;
-    }
-
-    if (tagName === 'ul' || tagName === 'ol') {
-        Array.from(element.children).forEach(function(child) {
-            if (child.tagName && child.tagName.toLowerCase() === 'li') {
-                var itemText = cleanReportText(child.textContent);
-                if (itemText) {
-                    sections.push({type: 'bullet', text: itemText});
-                }
-            }
+    document.querySelectorAll('.final-report-content').forEach(function(report) {
+        var reportId = report.getAttribute('data-report-id');
+        report.querySelectorAll('[data-report-detail]').forEach(function(paragraph) {
+            var key = paragraph.getAttribute('data-report-detail');
+            var label = paragraph.getAttribute('data-report-detail-label') || key;
+            paragraph.textContent = label + ': ' + (reportDetailValue(key, reportId) || 'Not provided');
         });
-        return;
-    }
-
-    if (tagName === 'table') {
-        var tableData = extractTableData(element);
-        if (tableData.rows.length > 0) {
-            sections.push({
-                type: 'table',
-                rows: tableData.rows,
-                header_rows: tableData.header_rows,
-                title: tableData.title,
-                description: tableData.description
-            });
-        }
-        return;
-    }
-
-    Array.from(element.children).forEach(function(child) {
-        appendReportElementToPayload(child, sections);
     });
 }
 
 function collectReportSections(report) {
-    var sections = [];
-    Array.from(report.children).forEach(function(child) {
-        appendReportElementToPayload(child, sections);
+    var selectedId = report.getAttribute('data-report-id');
+    var sections = structuredReportSections()[selectedId];
+    if (!Array.isArray(sections)) {
+        throw new Error('The structured report content is unavailable. Run the analysis again before exporting.');
+    }
+    return sections.map(function(original) {
+        var item = JSON.parse(JSON.stringify(original));
+        if (item.detail_key) {
+            item.text = item.detail_label + ': ' + (reportDetailValue(item.detail_key, selectedId) || 'Not provided');
+        }
+        if (item.type === 'image') {
+            var placeholder = Array.from(report.querySelectorAll('.report-plot-placeholder')).find(function(element) {
+                return element.getAttribute('data-plot-source') === item.source_id;
+            });
+            var imageId = placeholder && placeholder.getAttribute('data-report-image-id');
+            item.data_url = imageId ? (reportImageDataById[imageId] || '') : '';
+            item.caption = item.caption || item.description || '';
+        }
+        return item;
     });
-    return sections;
 }
 
 function getPlotForWordExport(placeholder) {
@@ -1130,10 +1042,12 @@ function downloadSelectedWordReport(selectedId, button) {
                 showResultsAlert('No report plot images could be exported. The Word report will still download and will include notes where images were unavailable.');
             } else if (imageExportSummary && imageExportSummary.exported < imageExportSummary.total) {
                 console.warn('Some report plot images were not exported for the Word report.', imageExportSummary);
+                showResultsAlert('Some report plots could not be exported. The Word report will identify the missing images.');
             }
 
             var payload = {
                 report_label: report.getAttribute('data-report-label') || 'IVIVC Report',
+                analysis_timestamp: report.getAttribute('data-analysis-timestamp') || '',
                 sections: collectReportSections(report),
                 image_export_summary: imageExportSummary || {total: 0, exported: 0}
             };
@@ -1173,6 +1087,14 @@ $(document).ready(function() {
     if (initialSelection) {
         setActiveFinalReport(initialSelection);
     }
+
+    $('[data-report-detail-field]').on('input', function() {
+        var selectedId = $('input[name="final_model_option"]:checked').val();
+        if (this.getAttribute('data-report-detail-field') === 'selection_rationale') {
+            reportSelectionRationales[selectedId] = this.value;
+        }
+        updateReportDetails(selectedId);
+    });
 
     $('input[name="final_model_option"]').on('change', function() {
         var selectedLabel = $(this).closest('label').text().replace(/\s+/g, ' ').trim();

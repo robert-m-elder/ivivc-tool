@@ -150,6 +150,7 @@ def test_output_writer_creates_transparent_machine_readable_bundle(tmp_path):
         'observed_or_calibration_data.csv',
         'ivivc_preprocessed_pairs.csv',
         'reference_trajectory.csv',
+        'reference_endpoints.csv',
         'design_performance.csv',
         'selected_times.csv',
         'metadata.json',

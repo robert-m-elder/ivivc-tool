@@ -225,23 +225,45 @@ def cross_validation_curve_fit(
     p0=None,
     kwargs={},
     return_fit_params=False,
+    return_diagnostics=False,
 ):
     """Run cross-validation and optionally retain each split's fitted parameters.
 
     The optional parameter vectors are used only for descriptive CV-fit
     variability plots. A ``None`` entry is retained for a split whose fit or
     test prediction failed so the plot can report how many CV fits contributed.
+    When requested, diagnostics wrap the existing return value as
+    ``(existing_result, diagnostics)`` without changing scores or split behavior.
     """
     num_params = len(inspect.signature(model_function).parameters) - 1  # subtract 1 for 'x'
     scores = {metric: [] for metric in selected_metrics}
     fit_params = []
+    diagnostics = {
+        'enabled': cv is not None,
+        'total_splits': 0,
+        'successful_fits': 0,
+        'fitting_failure_count': 0,
+        'finite_scores': {metric: 0 for metric in selected_metrics},
+        'min_training_observations': None,
+        'max_training_observations': None,
+        'min_test_observations': None,
+        'max_test_observations': None,
+    }
     if cv is None:
         scores = {metric: np.array([np.nan]) for metric in selected_metrics}
-        return (scores, fit_params) if return_fit_params else scores
+        result = (scores, fit_params) if return_fit_params else scores
+        return (result, diagnostics) if return_diagnostics else result
     for train_index, test_index in cv.split(x_data):
+        diagnostics['total_splits'] += 1
+        for label, indices in (('training', train_index), ('test', test_index)):
+            count = int(len(indices))
+            minimum, maximum = f'min_{label}_observations', f'max_{label}_observations'
+            diagnostics[minimum] = count if diagnostics[minimum] is None else min(diagnostics[minimum], count)
+            diagnostics[maximum] = count if diagnostics[maximum] is None else max(diagnostics[maximum], count)
         x_train, x_test = x_data[train_index], x_data[test_index]
         y_train, y_test = y_data[train_index], y_data[test_index]
         popt = None
+        fit_succeeded = False
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore', category=RuntimeWarning)
@@ -249,16 +271,21 @@ def cross_validation_curve_fit(
             y_pred = model_function(x_test, *popt)
             if not np.all(np.isfinite(y_pred)):
                 raise ValueError('Cross-validation prediction contains nonfinite values.')
+            fit_succeeded = True
             tmp_scores = {metric: calculate_metric(metric, y_test, y_pred, num_params) for metric in selected_metrics}
         except Exception:
             popt = None
             tmp_scores = {metric: np.nan for metric in selected_metrics}
+        diagnostics['successful_fits'] += int(fit_succeeded)
+        diagnostics['fitting_failure_count'] += int(not fit_succeeded)
         for k,v in tmp_scores.items():
             scores[k].append(v)
+            diagnostics['finite_scores'][k] += int(np.isfinite(v))
         if return_fit_params:
             fit_params.append(None if popt is None else np.asarray(popt, dtype=float))
     scores = {k:np.array(scores[k]) for k in scores}
-    return (scores, fit_params) if return_fit_params else scores
+    result = (scores, fit_params) if return_fit_params else scores
+    return (result, diagnostics) if return_diagnostics else result
 
 ## time constant, generic function
 def calculate_tau(model_function, params):

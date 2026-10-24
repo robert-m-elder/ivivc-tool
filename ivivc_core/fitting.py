@@ -115,7 +115,7 @@ def fit_profile(
             initial_points=initial_points,
         )
 
-    cv_output = cross_validation_curve_fit(
+    cv_output, cv_diagnostics = cross_validation_curve_fit(
         x,
         y,
         spec.model_function,
@@ -124,6 +124,7 @@ def fit_profile(
         p0=p0,
         kwargs=spec.fit_kwargs,
         return_fit_params=include_cv_fit_variability,
+        return_diagnostics=True,
     )
     if include_cv_fit_variability:
         cv_scores, cv_parameter_sets = cv_output
@@ -172,6 +173,7 @@ def fit_profile(
         fit_metrics=fit_metrics,
         cv_scores=cv_scores,
         cv_means=cv_means,
+        cv_diagnostics=cv_diagnostics,
         cv_parameter_sets=cv_parameter_sets,
         tau_estimate=tau_estimate,
         tau_sd=tau_sd,

@@ -1,9 +1,9 @@
-"""Utilities for generating editable Word reports from browser-exported report content."""
+"""Render structured analysis records as editable, accessible Word reports."""
 
 import base64
 import io
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 from docx import Document
 from docx.oxml import OxmlElement
@@ -11,6 +11,7 @@ from docx.oxml.ns import qn
 from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Inches, Pt
+from docx.shared import RGBColor
 
 WORD_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 REPORT_LANGUAGE = 'en-US'
@@ -73,7 +74,7 @@ def safe_report_filename(value):
 
 def _clean_text(value):
     """Normalize browser-extracted text before writing to Word."""
-    value = str(value or '')
+    value = '' if value is None else str(value)
     value = value.replace('\xa0', ' ')
     value = re.sub(r'\s+', ' ', value).strip()
     return value
@@ -97,16 +98,73 @@ def _add_document_styles(document):
     styles = document.styles
     styles['Normal'].font.name = 'Arial'
     styles['Normal'].font.size = Pt(10)
+    styles['Normal'].paragraph_format.space_after = Pt(6)
 
     for style_name in ('Normal', 'Title', 'Subtitle', 'Caption', 'List Bullet'):
         if style_name in styles:
             _set_style_language(styles[style_name])
+            styles[style_name].font.color.rgb = RGBColor(0, 0, 0)
+
+    styles['Title'].font.name = 'Arial'
+    styles['Title'].font.size = Pt(22)
+    # Some python-docx templates carry a themed rule beneath the title.
+    # Keep the report title plain in Word and in headless rendering.
+    title_properties = styles['Title'].element.find(qn('w:pPr'))
+    if title_properties is not None:
+        for border in list(title_properties.findall(qn('w:pBdr'))):
+            title_properties.remove(border)
+    styles['Subtitle'].font.size = Pt(11)
+    styles['Caption'].font.size = Pt(9)
 
     for style_name, size in [('Heading 1', 16), ('Heading 2', 13), ('Heading 3', 11)]:
         if style_name in styles:
             styles[style_name].font.name = 'Arial'
             styles[style_name].font.size = Pt(size)
             _set_style_language(styles[style_name])
+            styles[style_name].font.color.rgb = RGBColor(0, 0, 0)
+            styles[style_name].paragraph_format.keep_with_next = True
+
+
+def _usable_width(document):
+    section = document.sections[-1]
+    return section.page_width - section.left_margin - section.right_margin
+
+
+def _table_column_widths(rows, total_width):
+    """Allocate width to labels and long values without squeezing short numbers."""
+    max_cols = max(len(row) for row in rows)
+    weights = []
+    for col in range(max_cols):
+        values = [row[col] for row in rows if col < len(row)]
+        lengths = sorted(len(value) for value in values)
+        # A single verbose cell should wrap rather than consume the whole page.
+        typical = lengths[min(len(lengths) - 1, int(.8 * len(lengths)))]
+        header = len(values[0]) if values else 0
+        weights.append(max(9, min(38, max(header, typical))))
+    return [int(total_width * weight / sum(weights)) for weight in weights]
+
+
+def _set_cell_fill(cell, color):
+    properties = cell._tc.get_or_add_tcPr()
+    shading = properties.find(qn('w:shd'))
+    if shading is None:
+        shading = OxmlElement('w:shd')
+        properties.append(shading)
+    shading.set(qn('w:fill'), color)
+
+
+def _set_table_borders(table):
+    borders = OxmlElement('w:tblBorders')
+    for edge in ('top', 'left', 'bottom', 'right', 'insideH', 'insideV'):
+        border = OxmlElement(f'w:{edge}')
+        border.set(qn('w:val'), 'single')
+        border.set(qn('w:sz'), '4')
+        border.set(qn('w:color'), 'D9D9D9')
+        borders.append(border)
+    current = table._tbl.tblPr.find(qn('w:tblBorders'))
+    if current is not None:
+        table._tbl.tblPr.remove(current)
+    table._tbl.tblPr.append(borders)
 
 
 def _add_table(document, rows, title=None, description=None, header_rows=1):
@@ -117,24 +175,47 @@ def _add_table(document, rows, title=None, description=None, header_rows=1):
     if not rows:
         return
 
+    table_title = _clean_text(title) or 'Report data table'
+    caption = document.add_paragraph(table_title, style='Caption')
+    caption.paragraph_format.keep_with_next = True
     max_cols = max(len(row) for row in rows)
     table = document.add_table(rows=len(rows), cols=max_cols)
     table.style = 'Table Grid'
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    table.autofit = False
+    widths = _table_column_widths(rows, _usable_width(document))
+    for column, width in zip(table.columns, widths):
+        column.width = width
+    _set_table_borders(table)
     header_rows = max(0, min(int(header_rows or 0), len(rows)))
 
     for r_idx, row in enumerate(rows):
         for c_idx in range(max_cols):
             text = row[c_idx] if c_idx < len(row) else ''
             cell = table.cell(r_idx, c_idx)
-            cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.TOP
+            cell.width = widths[c_idx]
+            cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+            margin = OxmlElement('w:tcMar')
+            for side, value in (('top', 65), ('bottom', 65), ('left', 85), ('right', 85)):
+                element = OxmlElement(f'w:{side}')
+                element.set(qn('w:w'), str(value))
+                element.set(qn('w:type'), 'dxa')
+                margin.append(element)
+            cell._tc.get_or_add_tcPr().append(margin)
             paragraph = cell.paragraphs[0]
             paragraph.text = text
+            paragraph.paragraph_format.space_after = Pt(0)
+            paragraph.paragraph_format.line_spacing = 1.05
+            paragraph.paragraph_format.keep_with_next = False
+            if r_idx >= header_rows and re.fullmatch(r'[+\-\d.,eE% ±/]+|N/A', text):
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            for run in paragraph.runs:
+                run.font.size = Pt(9)
             if r_idx < header_rows:
+                _set_cell_fill(cell, 'DCE6F1')
                 for run in paragraph.runs:
                     run.bold = True
 
-    table_title = _clean_text(title) or 'Report data table'
     table_description = _clean_text(description) or f'{table_title}. Column headings are identified in the first row.'
     _set_table_metadata(table, table_title, table_description, header_rows=header_rows)
     document.add_paragraph()
@@ -153,8 +234,8 @@ def _decode_image_data_url(data_url):
         return None
 
 
-def _add_image(document, data_url, title=None, description=None):
-    """Add an exported plot and place its substantive description in alt text."""
+def _add_image(document, data_url, title=None, description=None, caption=None):
+    """Add a plot with a visible caption, accessible description and page-safe size."""
     image_stream = _decode_image_data_url(data_url)
     plot_title = _clean_text(title) or 'Report plot'
     plot_description = _clean_plot_alt_text(description) or plot_title
@@ -165,109 +246,211 @@ def _add_image(document, data_url, title=None, description=None):
 
     paragraph = document.add_paragraph()
     paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    paragraph.paragraph_format.keep_with_next = True
     run = paragraph.add_run()
-    inline_shape = run.add_picture(image_stream, width=Inches(6.5))
+    try:
+        inline_shape = run.add_picture(image_stream, width=_usable_width(document))
+    except Exception:
+        paragraph._element.getparent().remove(paragraph._element)
+        document.add_paragraph(f'{plot_title}: image was unavailable for export.')
+        return
+    section = document.sections[-1]
+    max_height = section.page_height - section.top_margin - section.bottom_margin - Inches(1)
+    if inline_shape.height > max_height:
+        scale = max_height / inline_shape.height
+        inline_shape.width = int(inline_shape.width * scale)
+        inline_shape.height = int(max_height)
     _set_image_alt_text(inline_shape, plot_title, plot_description)
+    caption_text = _clean_plot_alt_text(caption) if caption else plot_description
+    if caption_text != plot_title:
+        caption_text = f'{plot_title}. {caption_text}'
+    caption_paragraph = document.add_paragraph(caption_text, style='Caption')
+    caption_paragraph.paragraph_format.keep_with_next = False
 
 
-def _read_braced_group(value, start_index):
-    """Return the contents and end index for a LaTeX braced group."""
-    if start_index >= len(value) or value[start_index] != '{':
-        return '', start_index
-
-    depth = 0
-    group_start = start_index + 1
-    for index in range(start_index, len(value)):
-        char = value[index]
-        if char == '{':
-            depth += 1
-        elif char == '}':
-            depth -= 1
-            if depth == 0:
-                return value[group_start:index], index + 1
-    return value[group_start:], len(value)
+class _UnsupportedEquation(ValueError):
+    """The supported LaTeX subset must not silently discard mathematical syntax."""
 
 
-def _latex_to_word_runs(latex):
-    """Convert the app's simple LaTeX model equations to Word runs.
+class _LatexMathParser:
+    """Parse the small LaTeX subset used by the model registry, without evaluation.
 
-    This intentionally supports only the subset produced by utilities.model_display:
-    multiplication, fractions rendered as text, and superscript exponents. It avoids
-    a heavyweight LaTeX-to-OMML dependency while preserving the common exponential
-    and power-model formatting in editable Word text.
+    The resulting nodes retain grouping, subscripts, nested superscripts and
+    fractions. Escaped braces are visible delimiters; unescaped braces group an
+    argument, as in LaTeX. Unsupported commands are handled by an explicit fallback.
     """
-    text = str(latex or '').strip()
-    text = text.replace('\\left', '').replace('\\right', '')
-    text = text.replace('\\cdot', ' · ')
-    text = text.replace('\\,', ' ')
-    text = re.sub(r'\\mathrm\{([^{}]+)\}', r'\1', text)
 
-    # Render simple \frac{numerator}{denominator} constructs as editable text.
-    while '\\frac{' in text:
-        start = text.find('\\frac{')
-        numerator, after_num = _read_braced_group(text, start + len('\\frac'))
-        denominator, after_den = _read_braced_group(text, after_num)
-        replacement = f'({numerator})/({denominator})'
-        text = text[:start] + replacement + text[after_den:]
+    _plain_commands = {'exp', 'max', 'min', 'log', 'ln', 'sin', 'cos', 'tan', 'sign', 'abs'}
+    _symbols = {'tau': 'τ', 'sigma': 'σ', 'mu': 'μ', 'alpha': 'α', 'beta': 'β',
+                'Delta': 'Δ', 'epsilon': 'ε', 'infty': '∞', 'pm': '±',
+                'cdot': '·', 'times': '×', 'le': '≤', 'ge': '≥'}
 
-    runs = []
-    normal_buffer = []
-    i = 0
+    def __init__(self, text):
+        self.text = str(text or '').strip()
+        self.index = 0
 
-    def flush_normal():
-        if normal_buffer:
-            runs.append((''.join(normal_buffer), False))
-            normal_buffer.clear()
+    def parse(self, closing=None):
+        nodes = []
+        while self.index < len(self.text):
+            char = self.text[self.index]
+            if char == '}':
+                if closing != '}':
+                    raise _UnsupportedEquation('Unmatched closing brace')
+                self.index += 1
+                return nodes
+            node = self.atom()
+            if node is None:
+                continue
+            superscript, subscript = None, None
+            while self.index < len(self.text) and self.text[self.index] in '^_':
+                marker = self.text[self.index]
+                self.index += 1
+                argument = self.argument()
+                if marker == '^':
+                    if superscript is not None:
+                        raise _UnsupportedEquation('Repeated superscript')
+                    superscript = argument
+                else:
+                    if subscript is not None:
+                        raise _UnsupportedEquation('Repeated subscript')
+                    subscript = argument
+            if superscript is not None or subscript is not None:
+                node = ('script', [node], subscript, superscript)
+            nodes.append(node)
+        if closing:
+            raise _UnsupportedEquation('Unclosed brace')
+        return nodes
 
-    while i < len(text):
-        char = text[i]
-        if char == '^':
-            flush_normal()
-            if i + 1 < len(text) and text[i + 1] == '{':
-                exponent, next_index = _read_braced_group(text, i + 1)
-                runs.append((_latex_to_plain_text(exponent), True))
-                i = next_index
-            else:
-                exponent = text[i + 1:i + 2]
-                if exponent:
-                    runs.append((_latex_to_plain_text(exponent), True))
-                i += 2
-            continue
-        normal_buffer.append(char)
-        i += 1
+    def argument(self):
+        while self.index < len(self.text) and self.text[self.index].isspace():
+            self.index += 1
+        if self.index >= len(self.text):
+            raise _UnsupportedEquation('Missing equation argument')
+        if self.text[self.index] == '{':
+            self.index += 1
+            return self.parse('}')
+        node = self.atom()
+        if node is None:
+            raise _UnsupportedEquation('Missing equation argument')
+        return [node]
 
-    flush_normal()
-    cleaned_runs = []
-    for run_text, superscript in runs:
-        run_text = _latex_to_plain_text(run_text)
-        run_text = re.sub(r'\s+', ' ', run_text)
-        if run_text:
-            cleaned_runs.append((run_text, superscript))
-    return cleaned_runs or [(_clean_text(latex), False)]
+    def atom(self):
+        char = self.text[self.index]
+        self.index += 1
+        if char == '{':
+            return ('group', self.parse('}'))
+        if char in '^_':
+            raise _UnsupportedEquation('Script with no base')
+        if char != '\\':
+            return ('text', char, not char.isalpha())
+        if self.index >= len(self.text):
+            raise _UnsupportedEquation('Trailing backslash')
+        escaped = self.text[self.index]
+        if not escaped.isalpha():
+            self.index += 1
+            if escaped in '{}[]()|':
+                return ('text', escaped, True)
+            if escaped in ',;! ':
+                return ('text', ' ', True)
+            raise _UnsupportedEquation('Unsupported escaped character')
+        start = self.index
+        while self.index < len(self.text) and self.text[self.index].isalpha():
+            self.index += 1
+        command = self.text[start:self.index]
+        if command in ('left', 'right'):
+            return None
+        if command == 'frac':
+            return ('fraction', self.argument(), self.argument())
+        if command in ('mathrm', 'operatorname', 'text'):
+            return ('upright', self.argument())
+        if command in self._plain_commands:
+            return ('text', command, True)
+        if command in self._symbols:
+            return ('text', self._symbols[command], True)
+        raise _UnsupportedEquation(f'Unsupported equation command: {command}')
 
 
-def _latex_to_plain_text(value):
-    """Convert remaining simple LaTeX commands to readable editable text."""
-    value = str(value or '')
-    value = value.replace('\\cdot', ' · ')
-    value = value.replace('\\times', ' × ')
-    value = value.replace('\\left', '').replace('\\right', '')
-    value = value.replace('{', '').replace('}', '')
-    value = value.replace('\\', '')
-    return value.strip()
+def _math_run(value, upright=False):
+    element = OxmlElement('m:r')
+    if upright:
+        properties = OxmlElement('m:rPr')
+        style = OxmlElement('m:sty')
+        style.set(qn('m:val'), 'p')
+        properties.append(style)
+        element.append(properties)
+    text = OxmlElement('m:t')
+    text.set(qn('xml:space'), 'preserve')
+    text.text = value
+    element.append(text)
+    return element
+
+
+def _append_math(parent, nodes, upright=False):
+    for node in nodes:
+        kind = node[0]
+        if kind == 'text':
+            parent.append(_math_run(node[1], upright or node[2]))
+        elif kind in ('group', 'upright'):
+            _append_math(parent, node[1], upright or kind == 'upright')
+        elif kind == 'fraction':
+            fraction = OxmlElement('m:f')
+            for tag, contents in (('m:num', node[1]), ('m:den', node[2])):
+                child = OxmlElement(tag)
+                _append_math(child, contents, upright)
+                fraction.append(child)
+            parent.append(fraction)
+        elif kind == 'script':
+            base, subscript, superscript = node[1:]
+            tag = 'm:sSubSup' if subscript is not None and superscript is not None else (
+                'm:sSub' if subscript is not None else 'm:sSup')
+            script = OxmlElement(tag)
+            for child_tag, contents in (('m:e', base), ('m:sub', subscript), ('m:sup', superscript)):
+                if contents is None:
+                    continue
+                child = OxmlElement(child_tag)
+                _append_math(child, contents, upright)
+                script.append(child)
+            parent.append(script)
+
+
+def _latex_to_omml(latex):
+    """Return native editable Word math, or raise for an unsupported expression."""
+    nodes = _LatexMathParser(latex).parse()
+    if not nodes:
+        raise _UnsupportedEquation('Empty equation')
+    equation = OxmlElement('m:oMath')
+    _append_math(equation, nodes)
+    return equation
 
 
 def _add_equation(document, latex, fallback_text=None):
-    """Add a simple editable Word equation paragraph using superscript runs."""
-    runs = _latex_to_word_runs(latex or fallback_text)
+    """Use native Word math; retain explicit source when a command is unsupported."""
     paragraph = document.add_paragraph()
     paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    try:
+        equation = _latex_to_omml(latex or fallback_text)
+    except _UnsupportedEquation:
+        # Never strip grouping or guess the meaning of an unknown command.
+        # A supplied canonical text equation is preferable; otherwise preserve
+        # the original mathematical source in an explicitly identified form.
+        if fallback_text and fallback_text != latex:
+            paragraph.add_run(_clean_text(fallback_text))
+        else:
+            paragraph.add_run('Equation source: ' + _clean_text(latex or fallback_text))
+        return
+    paragraph._p.append(equation)
 
-    for text, superscript in runs:
-        run = paragraph.add_run(text)
-        run.font.name = 'Arial'
-        run.font.size = Pt(11)
-        run.font.superscript = bool(superscript)
+
+def _add_page_numbers(document):
+    paragraph = document.sections[0].footer.paragraphs[0]
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    paragraph.add_run('Page ')
+    page = OxmlElement('w:fldSimple')
+    page.set(qn('w:instr'), 'PAGE')
+    paragraph._p.append(page)
+    for run in paragraph.runs:
+        run.font.size = Pt(8)
+
 
 def build_word_report(payload):
     """Build a DOCX report from structured content posted by the browser.
@@ -295,6 +478,7 @@ def build_word_report(payload):
     section.left_margin = Inches(0.7)
     section.right_margin = Inches(0.7)
     _add_document_styles(document)
+    _add_page_numbers(document)
 
     title = document.add_heading('IVIVC Model Report', level=0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -305,7 +489,24 @@ def build_word_report(payload):
 
     generated = document.add_paragraph()
     generated.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    generated.add_run(f'Generated: {datetime.now().strftime("%Y-%m-%d %H:%M")}')
+    analysis_timestamp = _clean_text(payload.get('analysis_timestamp'))
+    if analysis_timestamp:
+        generated.add_run(f'Analysis recorded: {analysis_timestamp}\n')
+    generated.add_run(f'Exported: {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")}')
+
+    image_summary = payload.get('image_export_summary') or {}
+    try:
+        image_total = max(0, int(image_summary.get('total', 0)))
+        image_exported = max(0, min(image_total, int(image_summary.get('exported', 0))))
+    except (TypeError, ValueError):
+        image_total = image_exported = 0
+    if image_exported < image_total:
+        incomplete = document.add_paragraph()
+        incomplete.add_run('Report export incomplete. ').bold = True
+        incomplete.add_run(
+            f'{image_total-image_exported} of {image_total} plot images could not be included. '
+            'The affected figures are identified below.'
+        )
 
     document.add_paragraph()
 
@@ -341,6 +542,7 @@ def build_word_report(payload):
                 item.get('data_url'),
                 title=item.get('title'),
                 description=item.get('description'),
+                caption=item.get('caption'),
             )
 
     document_io = io.BytesIO()

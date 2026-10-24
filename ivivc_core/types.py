@@ -83,7 +83,6 @@ class PreprocessingMetadata:
             'warnings': [warning.to_legacy_dict() for warning in self.warnings],
         }
 
-
 @dataclass
 class PreparedIVIVCData:
     """Preprocessed data used by the three existing IVIVC approaches."""
@@ -162,6 +161,7 @@ class ProfileFit:
     fit_metrics: Mapping[str, float]
     cv_scores: Mapping[str, np.ndarray]
     cv_means: Mapping[str, float]
+    cv_diagnostics: Mapping[str, Any] = field(default_factory=dict)
     cv_parameter_sets: list[np.ndarray | None] = field(default_factory=list)
     tau_estimate: float | None = None
     tau_sd: float | None = None
@@ -181,6 +181,7 @@ class ProfileFit:
             for metric, values in self.cv_scores.items()
         }
         self.cv_means = dict(self.cv_means)
+        self.cv_diagnostics = dict(self.cv_diagnostics)
         self.cv_parameter_sets = [
             None if values is None else np.asarray(values).copy()
             for values in self.cv_parameter_sets

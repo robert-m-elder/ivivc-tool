@@ -284,7 +284,7 @@
                 {% if include_prediction_methods %}
                 <p>Select the model and prediction method to generate a report-ready summary. The app does not rank or recommend a model; selection is left to the user.</p>
                 {% else %}
-                <p>Select the model to generate a report-ready summary. No prediction dataset was supplied, so prediction-specific methods are not listed. The app does not rank or recommend a model; selection is left to the user.</p>
+                <p>Select the model to generate a report-ready summary. {% if has_prediction_dataset %}Prediction data were supplied, but no prediction methods completed successfully; the report records the processing status.{% else %}No prediction dataset was supplied.{% endif %} The app does not rank or recommend a model; selection is left to the user.</p>
                 {% endif %}
 
                 <fieldset class="final-report-selector">
@@ -297,6 +297,22 @@
                     {% endfor %}
                 </fieldset>
 
+                <details class="report-details">
+                    <summary>Report details</summary>
+                    <p>Add the study context and your selection rationale. Blank fields appear as “Not provided” in the report.</p>
+                    <div class="report-details-grid">
+                        <label for="report-analysis-title">Analysis title<input id="report-analysis-title" data-report-detail-field="analysis_title" type="text" maxlength="300"></label>
+                        <label for="report-material-device">Material or device<input id="report-material-device" data-report-detail-field="material_device" type="text" maxlength="500"></label>
+                        <label for="report-endpoint">Response or endpoint<input id="report-endpoint" data-report-detail-field="endpoint" type="text" maxlength="500"></label>
+                        <label for="report-time-units">Time units (in vitro and in vivo)<input id="report-time-units" data-report-detail-field="time_units" type="text" maxlength="300"></label>
+                        <label for="report-response-units">Response units<input id="report-response-units" data-report-detail-field="response_units" type="text" maxlength="300"></label>
+                        <label for="report-source-study-ids">Study and data-source identifiers<input id="report-source-study-ids" data-report-detail-field="source_study_ids" type="text" maxlength="1000"></label>
+                    </div>
+                    <label for="report-analysis-purpose">Purpose and intended use<textarea id="report-analysis-purpose" data-report-detail-field="analysis_purpose" rows="3" maxlength="5000"></textarea></label>
+                    <label for="report-selection-rationale">Rationale for the selected model and method<textarea id="report-selection-rationale" data-report-detail-field="selection_rationale" rows="3" maxlength="5000" aria-describedby="report-rationale-note"></textarea></label>
+                    <p id="report-rationale-note">The rationale is kept separately for each report selection.</p>
+                </details>
+
                 <div class="custom-button-container">
                     <!--
                     <button type="button" id="print-final-report" class="dt-button2">
@@ -308,287 +324,10 @@
                     </button>
                 </div>
 
+                <script type="application/json" id="structured-report-sections">{{ final_report_sections | tojson }}</script>
                 {% for option in final_model_options %}
-                    {% set model_results = results[option.model_key] %}
-                    <div id="{{ option.id }}-report" class="final-report-content" data-report-label="{{ option.label }}" role="region" aria-label="{{ option.label }} report summary" aria-hidden="{% if option.is_default %}false{% else %}true{% endif %}" style="display: {% if option.is_default %}block{% else %}none{% endif %};">
-                        <h3>Report Summary</h3>
-                        <h4>Purpose of this tool</h4>
-                        {{ tool_purpose_html | safe }}
-                        <p><strong>Model selection:</strong> {{ option.label }}</p>
-                        <p><strong>Approach:</strong> {{ option.approach_display }}</p>
-                        {% if option.method_display %}
-                        <p><strong>Prediction method:</strong> {{ option.method_display }}</p>
-                        {% endif %}
-
-                        <h4>Preprocessing</h4>
-                        {{ preprocessing_overview_summary_html | safe }}
-                        {{ render_preprocessing_warnings(preprocessing_warnings) }}
-                        <table class="settings-table description-table">
-                            <thead>
-                                <tr>
-                                    <th>Category</th>
-                                    <th>Selected option</th>
-                                    <th>Description</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for row in preprocessing_rows %}
-                                <tr>
-                                    <td>{{ row.category }}</td>
-                                    <td>{{ row.name }}</td>
-                                    <td>{{ row.description }}</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-
-                        {% if option.approach_id == 'approach3' %}
-                            <h4>Analysis settings</h4>
-                            <p class="evidence-note">Cross-validation and grid-search initialization are not applicable to Approach 3 because no parametric model is used. Selected performance metrics are not included in this report section for the same reason.</p>
-                        {% else %}
-                            <h4>Analysis settings</h4>
-                            {{ render_analysis_settings_table(analysis_config_rows) }}
-
-                            <h4>Cross-validation</h4>
-                            {{ cross_validation_overview_summary_html | safe }}
-
-                            <h4>Grid-search initialization</h4>
-                            {{ grid_search_description_html | safe }}
-
-                            <h4>Selected performance metrics</h4>
-                            <table class="settings-table description-table">
-                                <thead>
-                                    <tr>
-                                        <th>Metric</th>
-                                        <th>Direction</th>
-                                        <th>Description</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for metric in metric_description_rows %}
-                                    <tr>
-                                        <td>{{ metric.name }}</td>
-                                        <td>{{ metric.direction }}</td>
-                                        <td>{{ metric.description }}</td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        {% endif %}
-
-                        <h4>Method description</h4>
-                        {{ option.method_html | safe }}
-
-                        <h4>Input and preprocessing plots</h4>
-                        <h5>Raw input data</h5>
-                        <div class="report-plot-placeholder" data-plot-source="plot-processing-raw-data">
-                            <p class="plot-unavailable">Raw input data plot is not available.</p>
-                        </div>
-                        <h5>Interpolation by time: response at shared times</h5>
-                        <div class="report-plot-placeholder" data-plot-source="plot-processing-interpolation-time">
-                            <p class="plot-unavailable">Shared-time interpolation plot is not available.</p>
-                        </div>
-                        <h5>Interpolation by response value: time at shared values</h5>
-                        <div class="report-plot-placeholder" data-plot-source="plot-processing-interpolation-value">
-                            <p class="plot-unavailable">Shared-response interpolation plot is not available.</p>
-                        </div>
-                        {% if prediction_results and prediction_results != {} and 'error' not in prediction_results %}
-                            <h5>Preprocessed prediction data</h5>
-                            <div class="report-plot-placeholder" data-plot-source="plot-processing-prediction-interpolation">
-                                <p class="plot-unavailable">Preprocessed prediction data plot is not available.</p>
-                            </div>
-                        {% endif %}
-
-                        <h4>Model fitting plot{% if option.fit_plot_sources|length > 1 %}s{% endif %}</h4>
-                        {% for plot_source in option.fit_plot_sources %}
-                            <h5>{{ plot_source.title }}</h5>
-                            {% if loop.first and option.approach_id in ['approach1', 'approach2'] %}
-                                {{ render_uncertainty_warnings(model_results['plot'].get('uncertainty_warnings', [])) }}
-                            {% endif %}
-                            <div class="report-plot-placeholder" data-plot-source="{{ plot_source.source_id }}">
-                                <p class="plot-unavailable">{{ plot_source.title }} is not available.</p>
-                            </div>
-                        {% endfor %}
-
-                        {% if option.prediction_plot_sources %}
-                            <h4>Prediction plot{% if option.prediction_plot_sources|length > 1 %}s{% endif %}</h4>
-                            {% for plot_source in option.prediction_plot_sources %}
-                                <h5>{{ plot_source.title }}</h5>
-                                <div class="report-plot-placeholder" data-plot-source="{{ plot_source.source_id }}">
-                                    <p class="plot-unavailable">{{ plot_source.title }} is not available for this selection.</p>
-                                </div>
-                            {% endfor %}
-                        {% endif %}
-
-                        {% if option.approach_id == 'approach1' %}
-                            <h4>Model equation</h4>
-                            <p class="report-equation" data-report-equation="{{ model_results.function }}">\[{{ model_results.function }}\]</p>
-                            <h4>Model parameters</h4>
-                            {% for row in model_results.parameter_intervals %}
-                                <p>{{ row.name }}: {{ row.estimate }}{% if row.is_available %} ± {{ row.half_width }}{% else %} ± N/A{% endif %}</p>
-                            {% endfor %}
-                            <h4>Fitted parameter diagnostics</h4>
-                            {{ model_results.parameter_diagnostics_html | safe }}
-                            <h4>Uncertainty and error-bar interpretation</h4>
-                            {{ option.fit_uncertainty_html | safe }}
-                            {% if option.prediction_error_html %}
-                                {{ option.prediction_error_html | safe }}
-                            {% endif %}
-                            <h4>Goodness of fit and cross-validation</h4>
-                            {{ goodness_validation_table_html | safe }}
-                            {{ model_results.stats_table | safe }}
-                            {% if analysis_config.include_cv_fit_variability_plot and model_results.cv_fit_variability_plot is defined %}
-                            <h4>CV fit variability (mean ± SD)</h4>
-                            {{ cv_fit_variability_html | safe }}
-                            {% if model_results.cv_fit_variability_plot.available %}
-                            <div class="report-plot-placeholder" data-plot-source="plot-cv-fit-{{ option.model_dom_id }}">
-                                <p class="plot-unavailable">CV fit variability plot is not available.</p>
-                            </div>
-                            {% else %}
-                            <p class="residual-diagnostic-note">{{ model_results.cv_fit_variability_plot.message }}</p>
-                            {% endif %}
-                            {% endif %}
-                            {% if analysis_config.include_raw_residual_plots or analysis_config.include_residual_qq_plots %}
-                            <h4>Residual diagnostics</h4>
-                            {{ residual_diagnostics_html | safe }}
-                            {% if analysis_config.include_raw_residual_plots %}
-                            <h5>Raw residual plot</h5>
-                            <div class="report-plot-placeholder" data-plot-source="plot-residual-{{ option.model_dom_id }}">
-                                <p class="plot-unavailable">Raw residual plot is not available.</p>
-                            </div>
-                            {% endif %}
-                            {% if analysis_config.include_residual_qq_plots %}
-                            <h5>Normal Q-Q plot of residuals</h5>
-                            <div class="report-plot-placeholder" data-plot-source="plot-residual-qq-{{ option.model_dom_id }}">
-                                <p class="plot-unavailable">Normal Q-Q residual plot is not available.</p>
-                            </div>
-                            {% endif %}
-                            {% endif %}
-                            {% set approach_evidence = evidence_tables.get(option.approach_id, {}) %}
-                            {% if approach_evidence.get('fit') %}
-                                <h4>Relative evidence context</h4>
-                                {{ relative_model_evidence_html | safe }}
-                                {{ approach_evidence.get('fit').html | safe }}
-                            {% endif %}
-                        {% elif option.approach_id == 'approach2' %}
-                            <h4>Model equation</h4>
-                            <p class="report-equation" data-report-equation="{{ model_results.function }}">\[{{ model_results.function }}\]</p>
-                            <h4>In vitro model parameters</h4>
-                            {% for row in model_results.parameter_intervals[0] %}
-                                <p>{{ row.name }}: {{ row.estimate }}{% if row.is_available %} ± {{ row.half_width }}{% else %} ± N/A{% endif %}</p>
-                            {% endfor %}
-                            <h4>In vitro fitted parameter diagnostics</h4>
-                            {{ model_results.parameter_diagnostics_html[0] | safe }}
-                            <h4>In vivo model parameters</h4>
-                            {% for row in model_results.parameter_intervals[1] %}
-                                <p>{{ row.name }}: {{ row.estimate }}{% if row.is_available %} ± {{ row.half_width }}{% else %} ± N/A{% endif %}</p>
-                            {% endfor %}
-                            <h4>In vivo fitted parameter diagnostics</h4>
-                            {{ model_results.parameter_diagnostics_html[1] | safe }}
-                            <h4>Time constants</h4>
-                            {% set tau_row = model_results.tau_intervals[0] %}
-                            {% if tau_row.is_available %}
-                                <p>In vitro tau: {{ tau_row.estimate }} ± {{ tau_row.half_width }}</p>
-                            {% else %}
-                                <p>In vitro tau: N/A</p>
-                            {% endif %}
-                            {% set tau_row = model_results.tau_intervals[1] %}
-                            {% if tau_row.is_available %}
-                                <p>In vivo tau: {{ tau_row.estimate }} ± {{ tau_row.half_width }}</p>
-                            {% else %}
-                                <p>In vivo tau: N/A</p>
-                            {% endif %}
-                            {% if model_results.prediction_skip_reasons and model_results.prediction_skip_reasons.tau_ratio %}
-                                <p class="prediction-skip-reason"><strong>Prediction method not performed:</strong> {{ model_results.prediction_skip_reasons.tau_ratio }}</p>
-                            {% endif %}
-                            <h4>Uncertainty and error-bar interpretation</h4>
-                            {{ option.fit_uncertainty_html | safe }}
-                            {% if option.prediction_error_html %}
-                                {{ option.prediction_error_html | safe }}
-                            {% endif %}
-                            <h4>Goodness of fit and cross-validation</h4>
-                            {{ goodness_validation_table_html | safe }}
-                            <h5>In vitro data</h5>
-                            {{ model_results.stats_table[0] | safe }}
-                            {% if analysis_config.include_cv_fit_variability_plot and model_results.cv_fit_variability_plot is defined %}
-                            <h5>In vitro CV fit variability (mean ± SD)</h5>
-                            {{ cv_fit_variability_html | safe }}
-                            {% if model_results.cv_fit_variability_plot[0].available %}
-                            <div class="report-plot-placeholder" data-plot-source="plot-cv-fit-{{ option.model_dom_id }}-in-vitro">
-                                <p class="plot-unavailable">In vitro CV fit variability plot is not available.</p>
-                            </div>
-                            {% else %}
-                            <p class="residual-diagnostic-note">{{ model_results.cv_fit_variability_plot[0].message }}</p>
-                            {% endif %}
-                            {% endif %}
-                            <h5>In vivo data</h5>
-                            {{ model_results.stats_table[1] | safe }}
-                            {% if analysis_config.include_cv_fit_variability_plot and model_results.cv_fit_variability_plot is defined %}
-                            <h5>In vivo CV fit variability (mean ± SD)</h5>
-                            {% if model_results.cv_fit_variability_plot[1].available %}
-                            <div class="report-plot-placeholder" data-plot-source="plot-cv-fit-{{ option.model_dom_id }}-in-vivo">
-                                <p class="plot-unavailable">In vivo CV fit variability plot is not available.</p>
-                            </div>
-                            {% else %}
-                            <p class="residual-diagnostic-note">{{ model_results.cv_fit_variability_plot[1].message }}</p>
-                            {% endif %}
-                            {% endif %}
-                            {% if analysis_config.include_raw_residual_plots or analysis_config.include_residual_qq_plots %}
-                            <h4>Residual diagnostics</h4>
-                            {{ residual_diagnostics_html | safe }}
-                            {% if analysis_config.include_raw_residual_plots %}
-                            <h5>In vitro raw residual plot</h5>
-                            <div class="report-plot-placeholder" data-plot-source="plot-residual-{{ option.model_dom_id }}-in-vitro">
-                                <p class="plot-unavailable">In vitro raw residual plot is not available.</p>
-                            </div>
-                            {% endif %}
-                            {% if analysis_config.include_residual_qq_plots %}
-                            <h5>In vitro normal Q-Q plot</h5>
-                            <div class="report-plot-placeholder" data-plot-source="plot-residual-qq-{{ option.model_dom_id }}-in-vitro">
-                                <p class="plot-unavailable">In vitro normal Q-Q residual plot is not available.</p>
-                            </div>
-                            {% endif %}
-                            {% if analysis_config.include_raw_residual_plots %}
-                            <h5>In vivo raw residual plot</h5>
-                            <div class="report-plot-placeholder" data-plot-source="plot-residual-{{ option.model_dom_id }}-in-vivo">
-                                <p class="plot-unavailable">In vivo raw residual plot is not available.</p>
-                            </div>
-                            {% endif %}
-                            {% if analysis_config.include_residual_qq_plots %}
-                            <h5>In vivo normal Q-Q plot</h5>
-                            <div class="report-plot-placeholder" data-plot-source="plot-residual-qq-{{ option.model_dom_id }}-in-vivo">
-                                <p class="plot-unavailable">In vivo normal Q-Q residual plot is not available.</p>
-                            </div>
-                            {% endif %}
-                            {% endif %}
-                            {% set approach_evidence = evidence_tables.get(option.approach_id, {}) %}
-                            {% if approach_evidence %}
-                                <h4>Relative evidence context</h4>
-                                {{ relative_model_evidence_html | safe }}
-                                {% if approach_evidence.get('combined') %}
-                                    <h5>Combined in vitro + in vivo evidence</h5>
-                                    {{ approach_evidence.get('combined').html | safe }}
-                                {% endif %}
-                                {% if approach_evidence.get('in_vitro') %}
-                                    <h5>In vitro fit evidence</h5>
-                                    {{ approach_evidence.get('in_vitro').html | safe }}
-                                {% endif %}
-                                {% if approach_evidence.get('in_vivo') %}
-                                    <h5>In vivo fit evidence</h5>
-                                    {{ approach_evidence.get('in_vivo').html | safe }}
-                                {% endif %}
-                            {% endif %}
-                        {% elif option.approach_id == 'approach3' %}
-                            <h4>Model form</h4>
-                            <p>Direct interpolation-based mapping; no parametric model is fitted for this approach.</p>
-                            <h4>Uncertainty and error-bar interpretation</h4>
-                            {{ option.fit_uncertainty_html | safe }}
-                            {% if option.prediction_error_html %}
-                                {{ option.prediction_error_html | safe }}
-                            {% endif %}
-                        {% endif %}
-
-                        <p class="report-disclaimer"><strong>Report note:</strong> This report summarizes the app configuration and fitted model output. It does not replace review of the plots, source data, residual behavior, or any domain-specific criteria relevant to the intended use, and it does not establish model validity or regulatory acceptability.</p>
+                    <div id="{{ option.id }}-report" class="final-report-content" data-report-id="{{ option.id }}" data-report-label="{{ option.label }}" data-analysis-timestamp="{{ report_analysis_timestamp }}" role="region" aria-label="{{ option.label }} report summary" aria-hidden="{% if option.is_default %}false{% else %}true{% endif %}" style="display: {% if option.is_default %}block{% else %}none{% endif %};">
+                        {% include 'report_sections.html' %}
                     </div>
                 {% endfor %}
             {% else %}
@@ -1056,7 +795,9 @@
                 <li><strong>User selection:</strong> the app does not rank or recommend a model in this tab. The first option is only the initial UI default.</li>
                 <li><strong>Fit-only reports:</strong> if no prediction dataset was supplied, the selector lists only approach/model combinations and omits prediction-method choices.</li>
                 <li><strong>Prediction reports:</strong> if prediction data were supplied, the selector also lists available prediction methods such as response-value-ratio rescaling, time-constant-ratio rescaling, or observed-response inverse mapping.</li>
-                <li><strong>Report summary:</strong> includes preprocessing choices, analysis settings, method description, relevant plots, parameter estimates, goodness-of-fit statistics, and uncertainty/error-bar assumptions.</li>
+                <li><strong>Report details:</strong> add the purpose, material or device, response and units, study identifiers, and your selection rationale. Blank fields are identified as not provided; the rationale is kept separately for each report selection.</li>
+                <li><strong>Report summary:</strong> records source files and worksheets, observed and analyzed data coverage, preprocessing actually applied, settings, the selected method, results, and relevant limitations. Predictions include numerical values, available interval bounds, and mapping status.</li>
+                <li><strong>Numerical appendix:</strong> includes source observations and the data actually used for fitting or direct mapping. Complete tables are exported regardless of browser pagination.</li>
                 <li><strong>Word export:</strong> creates an editable .docx from the selected report content. Plotly figures are exported as static images and embedded in the Word file.</li>
                 <li><strong>Manual review:</strong> plots, residuals, parameter uncertainty, cross-validation behavior, and scientific expectations can be considered together when documenting the rationale for the user-selected model.</li>
             </ul>

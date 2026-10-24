@@ -4,6 +4,7 @@ __pycache__
 docs/review/
 docs/tutorial/generate_fitted_curves_presentation.py
 docs/tutorial/generated/fitted_curves_presentation.pdf
+study_design_poc_output/
 .pytest_cache/
 .coverage
 htmlcov/

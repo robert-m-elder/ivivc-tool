@@ -35,6 +35,7 @@ After installing and launching the app:
 4. Review or modify the preprocessing, performance-metric, cross-validation, diagnostic-plot, and other analysis options as applicable.
 5. Select **Analyze** to process the data and open the results page.
 6. Review the processed data, fitted or mapped relationships, model-comparison and diagnostic results, predictions where applicable, downloadable data, and report outputs.
+7. In **Model Selection & Summary**, choose the report configuration and expand **Report details** to add the study context, endpoint and units, source identifiers, and your selection rationale. Download the editable Word report, including its numerical data appendix. Blank details are identified as not provided.
 
 ## Main inputs
 

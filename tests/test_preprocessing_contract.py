@@ -104,7 +104,8 @@ def test_normalization_is_applied_before_log_response_scaling():
 
     np.testing.assert_allclose(result[1], np.log10(np.array([1.0, 0.5, 0.25])))
     np.testing.assert_allclose(result[3], np.log10(np.array([1.0, 0.5, 0.25])))
-    assert metadata == {'applied_scalings': ['log_y'], 'warnings': []}
+    assert metadata['applied_scalings'] == ['log_y']
+    assert metadata['warnings'] == []
 
 
 def test_invalid_log_time_scaling_can_fall_back_without_partial_scaling():

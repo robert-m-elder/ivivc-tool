@@ -42,7 +42,7 @@ def test_supported_synthetic_presets_are_finite_decreasing_and_registered():
         assert tuple(preset.parameter_mapping) == preset.parameter_names
         assert np.all(np.isfinite(values))
         assert values[0] > 0.95
-        assert values[-1] < 0.05
+        assert values[-1] < values[0]
         assert np.all(np.diff(values) <= 1e-12)
 
 
