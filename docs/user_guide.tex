@@ -291,7 +291,7 @@ Where supported, prediction plots include error bars or intervals that summarize
 \subsection{Uncertainty and error bars}
 \label{sec:uncertainty}
 
-These displays show how much fitted curves or predictions vary based on the fitted model and residual error. They describe approximate model-based uncertainty and are not intended to define acceptability thresholds for regulatory submissions. Applicable credibility and evidence considerations depend on the intended use and applicable FDA guidance \cite{fda_modeling_guidance,fda_reporting_guidance}.
+These displays show approximate uncertainty under the selected model and method. Fitting bands include residual error; the Approach 2 response-value-ratio intervals instead describe fitted-parameter uncertainty conditional on fixed prediction inputs, without additional observation noise. They describe approximate model-based uncertainty and are not intended to define acceptability thresholds for regulatory submissions. Applicable credibility and evidence considerations depend on the intended use and applicable FDA guidance \cite{fda_modeling_guidance,fda_reporting_guidance}.
 
 Very large uncertainty bands can extend beyond the initial plot range and remain out of view until the plot is rescaled. When this occurs, the app displays an informational badge near the affected fitting plot. A separate warning is shown if one or more uncertainty bounds are nonfinite or the uncertainty band cannot be calculated. The badge describes the display condition but does not identify its cause; the fitted parameter diagnostics, model form, and available data provide context for interpreting it.
 

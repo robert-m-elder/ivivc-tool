@@ -102,6 +102,37 @@ class ReportContentTests(unittest.TestCase):
         self.assertNotIn('Tau is the integral', text(sections))
         self.assertEqual(table(sections, 'Predictions and displayed uncertainty bounds')['rows'][1][3:6], ['0.25', '0.1', '0.4'])
 
+    def test_ratio_parameter_intervals_and_diagnostics_are_not_recentered(self):
+        context, option = fixture(method='value_ratio')
+        context['prediction_source'] = {'filename': 'prediction.csv'}
+        context['prediction_results'] = {'approach2': {'example': {
+            'plot_value_ratio_note': 'One interval is unavailable.',
+            'prediction_tables': {'value_ratio': [
+                {'in_vitro_time': 1., 'in_vitro_value': .2, 'predicted_in_vivo_value': .8,
+                 'lower_95': .9, 'upper_95': 1.1, 'status': 'predicted', 'interval_status': 'available',
+                 'interval_valid_samples': 1000, 'interval_total_samples': 1000,
+                 'interval_requested_samples': 1000, 'denominator_lower_95': .1,
+                 'denominator_upper_95': .3, 'interval_random_seed': 12345},
+                {'in_vitro_time': 2., 'in_vitro_value': .1, 'predicted_in_vivo_value': .4,
+                 'lower_95': None, 'upper_95': None, 'status': 'predicted',
+                 'interval_status': 'unavailable (denominator interval includes zero)',
+                 'interval_valid_samples': 1000, 'interval_total_samples': 1000,
+                 'interval_requested_samples': 1000, 'denominator_lower_95': -.1,
+                 'denominator_upper_95': .1, 'interval_random_seed': 12345},
+            ]},
+        }}}
+        sections = build_report_sections(context, option)
+        rows = table(sections, 'Predictions and displayed uncertainty bounds')['rows']
+        self.assertEqual(rows[1][3:6], ['0.8', '0.9', '1.1'])
+        self.assertEqual(rows[2][3:6], ['0.4', 'N/A', 'N/A'])
+        self.assertIn('denominator interval includes zero', rows[2][-1])
+        diagnostic = table(sections, 'Response-ratio uncertainty diagnostics')['rows'][1]
+        self.assertEqual(diagnostic, ['1', '1000', '1000', '1000', '0.1', '0.3', '12345'])
+        self.assertIn('not prediction intervals for future measurements', text(sections))
+        self.assertIn('One interval is unavailable.', text(sections))
+        self.assertNotIn('residual-based ratio uncertainty', text(sections))
+        json.dumps(sections, allow_nan=False)
+
     def test_inverse_status_and_suppressed_bounds_are_retained(self):
         context, option = fixture(method='observed_response_inverse')
         context['prediction_source'] = {'filename': 'prediction.csv'}

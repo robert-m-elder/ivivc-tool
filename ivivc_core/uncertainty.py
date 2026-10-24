@@ -257,7 +257,12 @@ def evaluate_curve_draws(
     *,
     require_finite: bool = True,
 ) -> CurveDraws:
-    """Evaluate a model for each complete sampled parameter vector."""
+    """Evaluate a model for each complete sampled parameter vector.
+
+    With ``require_finite=False``, retain finite values at individual points
+    even if another point fails. ``valid_draws`` still identifies complete,
+    finite rows; pass ``values`` to ``summarize_draws`` for pointwise use.
+    """
     x_values = np.asarray(x_values, dtype=float)
     if x_values.ndim != 1:
         raise ValueError('x_values must be one-dimensional.')
@@ -271,19 +276,33 @@ def evaluate_curve_draws(
     for index, sample in enumerate(parameter_samples.values):
         sample_parameters = dict(zip(parameter_samples.parameter_names, sample))
         try:
-            prediction = np.asarray(
-                model_function(x_values, **sample_parameters),
-                dtype=float,
-            )
+            with np.errstate(over='ignore', divide='ignore', invalid='ignore'):
+                prediction = np.asarray(
+                    model_function(x_values, **sample_parameters), dtype=float,
+                ).reshape(-1)
+            if len(prediction) != len(x_values):
+                continue
         except Exception:
-            continue
-        prediction = np.atleast_1d(prediction).reshape(-1)
-        if len(prediction) != len(x_values):
-            continue
-        if require_finite and not np.all(np.isfinite(prediction)):
+            if require_finite:
+                continue
+            # A vector evaluation can raise because of only one requested time.
+            prediction = np.full(len(x_values), np.nan, dtype=float)
+            for point_index, x in enumerate(x_values):
+                try:
+                    with np.errstate(over='ignore', divide='ignore', invalid='ignore'):
+                        point = np.asarray(
+                            model_function(np.asarray([x]), **sample_parameters),
+                            dtype=float,
+                        ).reshape(-1)
+                    if len(point) == 1:
+                        prediction[point_index] = point[0]
+                except Exception:
+                    continue
+        finite = bool(np.all(np.isfinite(prediction)))
+        if require_finite and not finite:
             continue
         values[index] = prediction
-        valid[index] = True
+        valid[index] = finite
 
     return CurveDraws(x=x_values, values=values, valid_draws=valid)
 
@@ -494,31 +513,26 @@ def sample_value_ratio_trajectories(
         spec.model_function,
         prediction.time,
         in_vitro_samples,
+        require_finite=False,
     )
     in_vivo_draws = evaluate_curve_draws(
         spec.model_function,
         prediction.time,
         in_vivo_samples,
+        require_finite=False,
     )
 
-    ratio_draws = np.full(in_vitro_draws.values.shape, np.nan, dtype=float)
-    valid = in_vitro_draws.valid_draws & in_vivo_draws.valid_draws
-    for draw_index in np.flatnonzero(valid):
-        denominator = in_vitro_draws.values[draw_index]
-        numerator = in_vivo_draws.values[draw_index]
-        draw_ratio = np.full(denominator.shape, np.nan, dtype=float)
-        supported = (
-            np.isfinite(denominator)
-            & np.isfinite(numerator)
-            & (denominator != 0)
-        )
-        np.divide(numerator, denominator, out=draw_ratio, where=supported)
-        ratio_draws[draw_index] = draw_ratio
-        if not np.all(np.isfinite(draw_ratio)):
-            valid[draw_index] = False
-
-    value_draws = prediction.value.reshape(1, -1) * ratio_draws
-    valid &= np.all(np.isfinite(value_draws), axis=1)
+    denominator = in_vitro_draws.values
+    numerator = in_vivo_draws.values
+    ratio_draws = np.full(denominator.shape, np.nan, dtype=float)
+    supported = np.isfinite(denominator) & np.isfinite(numerator) & (denominator != 0)
+    with np.errstate(over='ignore', divide='ignore', invalid='ignore'):
+        np.divide(numerator, denominator, out=ratio_draws, where=supported)
+        value_draws = prediction.value.reshape(1, -1) * ratio_draws
+    # Keep partially valid rows for pointwise intervals. Design callers still
+    # use valid_draws to select complete finite trajectories.
+    valid = np.all(np.isfinite(value_draws), axis=1)
+    valid &= bool(np.all(np.isfinite(prediction.time)))
     central = predict_value_ratio(
         prediction,
         model_name=model_name,
@@ -534,6 +548,7 @@ def sample_value_ratio_trajectories(
         value_draws=value_draws,
         valid_draws=valid,
         metadata={
+            'in_vitro_model_draws': in_vitro_draws.values,
             'in_vitro_parameter_names': in_vitro_samples.parameter_names,
             'in_vitro_parameter_samples': in_vitro_samples.values,
             'in_vivo_parameter_names': in_vivo_samples.parameter_names,

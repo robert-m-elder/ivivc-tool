@@ -108,6 +108,32 @@ it does not treat pointwise uncertainty bounds as independent observations.
 Approach 3 has no fitted covariance and therefore yields a deterministic
 one-draw ensemble.
 
+### Response-value ratio uncertainty
+
+`predict_value_ratio` remains the point-only operation.
+`predict_value_ratio_with_uncertainty` (also used by `predict_in_vivo`) returns
+`value_lower`/`value_upper` and per-point diagnostics in `auxiliary`. It samples
+the two parameter vectors independently from their fitted normal covariance
+approximations and takes pointwise percentiles of **input response times ratio**.
+Input times and responses are fixed; no residual or observation noise is added.
+The center is the fitted-parameter prediction, not the Monte Carlo mean. These
+are approximate parameter-uncertainty intervals, not future-observation
+prediction intervals or simultaneous bands. Model choice, preprocessing, and
+transferability of the fitted relationship are not included.
+
+Use `random_state` on the low-level wrapper for repeatable draws. The app uses
+1,000 draws, 95% intervals, and seed 12345. Covariance/sampling failures retain
+usable central predictions but mark intervals unavailable. No denominator floor
+or physical-response clipping is applied. A pointwise interval is withheld if
+any requested draw is unusable there or the denominator's sampled equal-tailed
+interval includes zero (a conservative display safeguard, not a formal ratio
+confidence procedure). Statuses, draw counts, denominator bounds, and sampling
+errors are retained, rather than silently conditioning on valid draws.
+
+The ratio ensemble preserves partially finite rows for these pointwise checks.
+Its `valid_draws` mask still identifies **complete** finite trajectories for
+study-design callers; observation-noise simulation remains separate.
+
 ## Error handling
 
 Low-level numerical functions such as `fit_profile` raise their original

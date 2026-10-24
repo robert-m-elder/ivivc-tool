@@ -17,6 +17,7 @@ from .predictions import (
     predict_tau_ratio,
     predict_time_mapping,
     predict_value_ratio,
+    predict_value_ratio_with_uncertainty,
     safe_ratio,
 )
 from .preprocessing import prepare_data, prepare_ivivc_data, prepare_time_course
@@ -95,6 +96,7 @@ __all__ = [
     'predict_tau_ratio',
     'predict_time_mapping',
     'predict_value_ratio',
+    'predict_value_ratio_with_uncertainty',
     'prepare_data',
     'prepare_ivivc_data',
     'prepare_time_course',
