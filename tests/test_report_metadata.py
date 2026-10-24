@@ -155,18 +155,31 @@ class PredictionRecordTests(unittest.TestCase):
         self.assertEqual(result['prediction_records'][0]['upper_95'], 8.)
         self.assertEqual(result['prediction_records'][1]['upper_95'], 13.)
 
-    def test_value_bounds_use_existing_scaled_bars(self):
-        band = {'mean': np.array([10., 10.]), 'lower': np.array([9., 8.]), 'upper': np.array([12., 13.])}
-        with patch.object(engine, 'generate_ratio_prediction_bands', return_value=band) as calculate:
-            result = engine.create_prediction_plot_a2(self.data, self.times, self.values, self.values,
-                self.times, self.values, self.values,
-                {'model_name': 'Example', 'model_function': proportional, 'params': [{'a': 2.}, {'a': 3.}],
-                 'pcov': [np.eye(1), np.eye(1)], 'residuals': [np.array([.1, -.1]), np.array([.1, -.1])]})
-        self.assertEqual(calculate.call_count, 1)
-        self.assertAlmostEqual(result['prediction_records'][0]['lower_95'], 0.)
-        self.assertAlmostEqual(result['prediction_records'][0]['upper_95'], 1.5)
-        self.assertAlmostEqual(result['prediction_records'][1]['lower_95'], -.2)
-        self.assertAlmostEqual(result['prediction_records'][1]['upper_95'], .8)
+    def test_value_bounds_are_supplied_numerically_not_rescaled_in_the_plot(self):
+        from ivivc_core.predictions import predict_value_ratio_with_uncertainty
+        from ivivc_core.types import TimeCourse
+        prediction = predict_value_ratio_with_uncertainty(
+            TimeCourse(self.times, self.values), model_name='exponential',
+            in_vitro_parameters={'a': 1., 'b': 0.},
+            in_vivo_parameters={'a': 4., 'b': 0.},
+            in_vitro_covariance=np.zeros((2, 2)),
+            in_vivo_covariance=np.zeros((2, 2)), n_samples=10, random_state=7,
+        )
+        prediction.value_lower = np.array([1.7, .9])
+        prediction.value_upper = np.array([2.4, 1.1])
+        result = engine.create_prediction_plot_a2(
+            self.data, self.times, self.values, prediction.in_vivo_value,
+            self.times, self.values, self.values, {'model_name': 'Example'},
+            value_prediction=prediction,
+        )
+        rows = result['prediction_records']
+        self.assertEqual(rows[0]['predicted_in_vivo_value'], 2.)
+        self.assertEqual(rows[0]['lower_95'], 1.7)
+        self.assertEqual(rows[0]['upper_95'], 2.4)
+        # Bounds may exclude the fitted-parameter center; keep the actual interval.
+        self.assertEqual(rows[1]['predicted_in_vivo_value'], .8)
+        self.assertEqual(rows[1]['lower_95'], .9)
+        self.assertEqual(rows[1]['upper_95'], 1.1)
 
     def test_inverse_missing_bars_and_direct_mapping_are_explicit(self):
         result = engine.create_prediction_plot_a2(self.data, self.times, self.values, np.array([2., 5.]),

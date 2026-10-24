@@ -271,7 +271,7 @@ def test_process_predictions_delegates_all_approach2_numerical_methods(monkeypat
 
     calls = {'value': 0, 'tau': 0, 'inverse': 0}
     for name, key in (
-        ('predict_value_ratio', 'value'),
+        ('predict_value_ratio_with_uncertainty', 'value'),
         ('predict_tau_ratio', 'tau'),
         ('predict_inverse_response', 'inverse'),
     ):

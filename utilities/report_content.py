@@ -37,7 +37,12 @@ _METHODS = {
     'value_ratio': (
         'Both fitted calibration curves are evaluated at each prediction time. Their in vivo/in vitro response ratio scales the supplied prediction response.',
         'y_vivo,pred = y_vitro,pred × f_vivo(t) / f_vitro(t)',
-        'Vertical error bars propagate uncertainty from both fitted curves and residual-based ratio uncertainty as approximate 95% intervals. '
+        'Vertical intervals show approximate 95% parameter uncertainty conditional on fixed prediction times and responses. '
+        'Independent multivariate normal draws from the two fitted parameter covariance matrices preserve covariance within each fit. '
+        'The input response multiplies each sampled ratio; bounds are pointwise 2.5th and 97.5th percentiles, while the point estimate uses the fitted parameters. '
+        'No additional observation noise, residual scatter, model-selection uncertainty, or model inadequacy is included; these are not prediction intervals for future measurements. '
+        'A bounded interval is withheld when any requested draw is unusable at that time, sampling fails, or the sampled denominator interval includes zero. '
+        'The zero-crossing check is a conservative display safeguard, not a formal ratio-confidence method. '
         'The ratio can become unstable near a zero fitted in vitro response. Prediction times may extend beyond either observed calibration time range.'),
     'tau_ratio': (
         'The prediction time is scaled by the ratio of the fitted in vivo and in vitro time constants. The prediction response is not used to calculate that time.',
@@ -530,7 +535,17 @@ def build_report_sections(context, option):
                     rows.append([index + 1, row.get('in_vitro_time', row.get('input_time')), row.get('in_vitro_value', row.get('input_response')),
                                  row.get(output_key), row.get('lower_95'), row.get('upper_95'), row.get('status', ''), row.get('interval_status', '')])
                 sections.append(_table('Predictions and displayed uncertainty bounds', ['Row', 'Input time', 'Input response', 'Predicted in vivo response' if output_key.endswith('value') else 'Predicted in vivo time', 'Lower 95%', 'Upper 95%', 'Mapping status', 'Interval status'], rows))
-                sections.append(_paragraph('Inputs and predictions in this table are preprocessed quantities. N/A denotes an unavailable value or interval, not a zero. Bounds match the displayed error bars; a numerical point can be available when its interval is unavailable.'))
+                sections.append(_paragraph('Inputs and predictions in this table are preprocessed quantities. N/A denotes an unavailable value or interval, not a zero. Bounds match the displayed intervals; a numerical point can be available when its interval is unavailable.'))
+                if method == 'value_ratio':
+                    extra = [[i + 1, row.get('interval_valid_samples'), row.get('interval_total_samples'),
+                              row.get('interval_requested_samples'), row.get('denominator_lower_95'),
+                              row.get('denominator_upper_95'), row.get('interval_random_seed')]
+                             for i, row in enumerate(records) if 'interval_requested_samples' in row]
+                    if extra:
+                        sections.append(_table('Response-ratio uncertainty diagnostics',
+                            ['Row', 'Usable draws', 'Generated draws', 'Requested draws',
+                             'Denominator lower 95%', 'Denominator upper 95%', 'Random seed'], extra))
+                        sections.append(_paragraph('Usable draws are counted separately at each prediction time. No residual noise is added. Intervals that exclude the point estimate are drawn as separate vertical segments at the calculated bounds, not re-centered.'))
                 if method == 'observed_response_inverse':
                     extra = [[i + 1, row.get('calculated_lower_95'), row.get('calculated_upper_95'), row.get('interval_valid_samples'), row.get('interval_total_samples', row.get('total_samples'))]
                              for i, row in enumerate(records) if row.get('calculated_lower_95') is not None or row.get('calculated_upper_95') is not None]
@@ -538,10 +553,12 @@ def build_report_sections(context, option):
                         sections.append(_table('Calculated inverse interval diagnostics', ['Row', 'Calculated lower 95%', 'Calculated upper 95%', 'Valid Monte Carlo draws', 'Requested draws'], extra))
                         sections.append(_paragraph('Calculated percentile bounds can be suppressed from the plot when they do not contain the point estimate or too few valid inverse solutions are available; see each interval status.'))
             selected_predictions = (context.get('prediction_results') or {}).get(approach, {}).get(option.get('model_name'), {})
+            if method == 'value_ratio' and selected_predictions.get('plot_value_ratio_note'):
+                sections.append(_paragraph(selected_predictions['plot_value_ratio_note']))
             if method == 'observed_response_inverse' and selected_predictions.get('plot_inverse_response_note'):
                 sections.append(_paragraph(selected_predictions['plot_inverse_response_note']))
             for source in option.get('prediction_plot_sources') or []:
-                caption = ('Predicted in vivo responses at the supplied analyzed times; vertical bars show available approximate 95% intervals.' if method == 'value_ratio' else
+                caption = ('Predicted in vivo responses at the supplied analyzed times; vertical intervals show available approximate 95% parameter uncertainty conditional on fixed prediction inputs, without additional observation noise.' if method == 'value_ratio' else
                            'Predicted in vivo times from the supplied analyzed in vitro responses; horizontal bars show available approximate 95% inverse-prediction intervals.' if method == 'observed_response_inverse' else
                            'Predicted in vivo times from the supplied analyzed in vitro times; horizontal bars show available approximate 95% intervals.' if method in ('direct_time_correlation', 'tau_ratio') else
                            'Predictions from the selected deterministic mapping on the analyzed scales; no formal uncertainty bars are available.')

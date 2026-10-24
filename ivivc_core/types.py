@@ -330,8 +330,10 @@ class ParameterSamples:
 class CurveDraws:
     """Model evaluations for complete joint parameter draws.
 
-    Invalid model evaluations are retained as NaN rows and identified by
-    ``valid_draws`` so callers can report the requested and usable draw counts.
+    Invalid model evaluations are identified by ``valid_draws``. When
+    pointwise evaluation is requested, partially finite rows may be retained;
+    callers can inspect individual values without accepting an incomplete row
+    as a valid full trajectory.
     """
 
     x: np.ndarray
