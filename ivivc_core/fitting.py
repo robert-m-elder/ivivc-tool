@@ -148,16 +148,15 @@ def fit_profile(
 
     tau_estimate = None
     tau_sd = None
+    tau_diagnostics = {}
     if calculate_tau:
-        tau_estimate, tau_sd = calculate_tau_with_uncertainty(
+        (tau_estimate, tau_sd), tau_diagnostics = calculate_tau_with_uncertainty(
             spec.model_function,
-            list(parameters.values()),
+            [parameters[name] for name in spec.parameter_names],
             covariance,
+            random_state=12345,
+            return_diagnostics=True,
         )
-        # Preserve the established legacy sentinel for undefined/integral-failure
-        # cases so downstream reporting and tau-ratio skip reasons are unchanged.
-        if not (tau_estimate > 0 and np.isfinite(tau_estimate)):
-            tau_estimate, tau_sd = 0.0, 1.0
 
     return ProfileFit(
         model_name=model_name,
@@ -177,4 +176,5 @@ def fit_profile(
         cv_parameter_sets=cv_parameter_sets,
         tau_estimate=tau_estimate,
         tau_sd=tau_sd,
+        tau_diagnostics=tau_diagnostics,
     )

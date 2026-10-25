@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
-import uncertainties as unc
+from types import SimpleNamespace
 
 import engine
 from ivivc_core import (
@@ -86,8 +86,12 @@ def test_tau_ratio_returns_time_uncertainty_or_structured_skip_reason():
     result = predict_tau_ratio(
         prediction,
         model_name='exponential',
-        tau_values=[unc.ufloat(5.0, 0.1), unc.ufloat(10.0, 0.2)],
+        tau_values=[SimpleNamespace(n=5.0, s=0.1), SimpleNamespace(n=10.0, s=0.2)],
         residual_dof=[4, 6],
+        in_vitro_parameters={'a': 1., 'b': -.2},
+        in_vitro_covariance=np.diag([0., 1e-6]),
+        in_vivo_parameters={'a': 1., 'b': -.1},
+        in_vivo_covariance=np.diag([0., 1e-6]),
     )
 
     assert result.available is True
@@ -96,13 +100,14 @@ def test_tau_ratio_returns_time_uncertainty_or_structured_skip_reason():
     np.testing.assert_allclose(result.scaling_factor, 2.0)
     assert result.time_error_upper[0] == 0.0
     assert np.all(result.time_error_upper[1:] > 0.0)
-    np.testing.assert_array_equal(result.time_error_lower, result.time_error_upper)
-    assert result.auxiliary['residual_dof'] == 4
+    assert result.auxiliary['interval_kind'] == 'parameter_uncertainty'
+    assert result.auxiliary['interval_requested_samples'] == 1000
+    assert np.all(result.time_lower <= result.time_upper)
 
     unavailable = predict_tau_ratio(
         prediction,
         model_name='exponential',
-        tau_values=[unc.ufloat(0.0, 1.0), unc.ufloat(10.0, 0.2)],
+        tau_values=[SimpleNamespace(n=0.0, s=1.0), SimpleNamespace(n=10.0, s=0.2)],
     )
     assert unavailable.available is False
     assert 'In vitro tau is not positive' in unavailable.skip_reason
@@ -124,7 +129,8 @@ def test_inverse_response_prediction_retains_bounds_status_and_interval_metadata
         observed_responses=None,
         confidence_level=0.95,
         n_samples=1000,
-        grid_points=501,
+        grid_points=1001,
+        **kwargs,
     ):
         mapped = 2.0 * t_pred
         return {
@@ -132,7 +138,14 @@ def test_inverse_response_prediction_retains_bounds_status_and_interval_metadata
             'upper': mapped + 0.2,
             'valid_counts': np.full(mapped.shape, n_samples, dtype=int),
             'n_samples': n_samples,
-            'residual_std': 0.01,
+            'residual_std': 0.0,
+            'interval_kind': 'parameter_uncertainty',
+            'interval_confidence_level': confidence_level,
+            'interval_status': np.full(mapped.shape, 'available', dtype=object),
+            'interval_valid_samples': np.full(mapped.shape, n_samples, dtype=int),
+            'interval_total_samples': n_samples,
+            'interval_requested_samples': n_samples,
+            'interval_random_seed': 12345,
         }, None
 
     result = predict_inverse_response(
@@ -266,7 +279,7 @@ def test_process_predictions_delegates_all_approach2_numerical_methods(monkeypat
         'pcov': [np.eye(2) * 1e-6, np.eye(2) * 1e-6],
         'residuals': [np.zeros(6), np.full(6, 0.01)],
         'residual_dof': [4, 4],
-        'tau': [unc.ufloat(5.0, 0.1), unc.ufloat(10.0, 0.2)],
+        'tau': [SimpleNamespace(n=5.0, s=0.1), SimpleNamespace(n=10.0, s=0.2)],
     }
 
     calls = {'value': 0, 'tau': 0, 'inverse': 0}
@@ -296,7 +309,8 @@ def test_process_predictions_delegates_all_approach2_numerical_methods(monkeypat
         observed_responses=None,
         confidence_level=0.95,
         n_samples=1000,
-        grid_points=501,
+        grid_points=1001,
+        **kwargs,
     ):
         mapped = 2.0 * prediction_data[0]
         return {
@@ -304,7 +318,14 @@ def test_process_predictions_delegates_all_approach2_numerical_methods(monkeypat
             'upper': mapped + 0.2,
             'valid_counts': np.full(mapped.shape, n_samples, dtype=int),
             'n_samples': n_samples,
-            'residual_std': 0.01,
+            'residual_std': 0.0,
+            'interval_kind': 'parameter_uncertainty',
+            'interval_confidence_level': confidence_level,
+            'interval_status': np.full(mapped.shape, 'available', dtype=object),
+            'interval_valid_samples': np.full(mapped.shape, n_samples, dtype=int),
+            'interval_total_samples': n_samples,
+            'interval_requested_samples': n_samples,
+            'interval_random_seed': 12345,
         }, None
 
     monkeypatch.setattr(engine, '_inverse_response_prediction_intervals', fixed_intervals)

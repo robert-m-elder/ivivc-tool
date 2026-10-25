@@ -298,7 +298,7 @@ def index():
 
                 prediction_interpolation_info = create_prediction_interpolation_plotly(*prediction_data)
 
-                prediction_results = process_predictions(data, prediction_data, results, selected_approaches, interpolated_data=data)
+                prediction_results = process_predictions(data, prediction_data, results, selected_approaches, interpolated_data=data, selected_scalings=selected_scalings)
 
             except Exception as e:
                 print(f"Error processing prediction file: {e}")

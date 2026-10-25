@@ -93,7 +93,7 @@ def test_fit_ivivc_returns_structured_model_components(fast_analysis_config):
 
 def test_predict_in_vivo_uses_one_common_public_result_contract(fast_analysis_config):
     analysis = _paired_exponential_analysis(fast_analysis_config)
-    prediction_time = np.array([0.0, 2.5, 5.0])
+    prediction_time = np.array([0.5, 2.5, 5.0])
     prediction = TimeCourse(
         prediction_time,
         np.exp(-0.2 * prediction_time),

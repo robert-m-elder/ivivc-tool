@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
-import uncertainties as unc
+from types import SimpleNamespace
 
 import engine
 from engine import process_predictions
@@ -24,7 +24,7 @@ def _calibration_data():
 def test_approach1_prediction_contract(monkeypatch):
     captured = {}
 
-    def fake_plot(data, t_pred, m_pred, t_pred_vivo, model_info, include_bands=True):
+    def fake_plot(data, t_pred, m_pred, t_pred_vivo, model_info, include_bands=True, **kwargs):
         captured['t_pred_vivo'] = np.asarray(t_pred_vivo)
         return {'plot': 'a1-prediction', 'table_html': 'table'}
 
@@ -68,7 +68,8 @@ def test_approach2_prediction_modes_and_tau_mutation(monkeypatch):
         observed_responses=None,
         confidence_level=0.95,
         n_samples=1000,
-        grid_points=501,
+        grid_points=1001,
+        **kwargs,
     ):
         mapped, _, _ = engine._inverse_response_times(
             model_function,
@@ -82,7 +83,14 @@ def test_approach2_prediction_modes_and_tau_mutation(monkeypatch):
             'upper': mapped + 0.2,
             'valid_counts': np.full(mapped.shape, n_samples, dtype=int),
             'n_samples': n_samples,
-            'residual_std': 0.01,
+            'residual_std': 0.0,
+            'interval_kind': 'parameter_uncertainty',
+            'interval_confidence_level': confidence_level,
+            'interval_status': np.full(mapped.shape, 'available', dtype=object),
+            'interval_valid_samples': np.full(mapped.shape, n_samples, dtype=int),
+            'interval_total_samples': n_samples,
+            'interval_requested_samples': n_samples,
+            'interval_random_seed': 12345,
         }, None
 
     monkeypatch.setattr(engine, 'create_prediction_plot_a2', fake_plot)
@@ -99,7 +107,7 @@ def test_approach2_prediction_modes_and_tau_mutation(monkeypatch):
         'pcov': [np.eye(2) * 1e-6, np.eye(2) * 1e-6],
         'residuals': [np.zeros(6), np.full(6, 0.01)],
         'residual_dof': [4, 4],
-        'tau': [unc.ufloat(5.0, 0.1), unc.ufloat(10.0, 0.2)],
+        'tau': [SimpleNamespace(n=5.0, s=0.1), SimpleNamespace(n=10.0, s=0.2)],
     }
     results = {'approach2:exponential': model_result}
 
@@ -145,7 +153,7 @@ def test_undefined_tau_is_recorded_on_legacy_model_result(monkeypatch):
         'pcov': [np.eye(2), np.eye(2)],
         'residuals': [np.zeros(6), np.zeros(6)],
         'residual_dof': [4, 4],
-        'tau': [unc.ufloat(0.0, 1.0), unc.ufloat(10.0, 0.2)],
+        'tau': [SimpleNamespace(n=0.0, s=1.0), SimpleNamespace(n=10.0, s=0.2)],
     }
 
     output = process_predictions(

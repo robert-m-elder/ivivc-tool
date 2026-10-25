@@ -165,6 +165,7 @@ class ProfileFit:
     cv_parameter_sets: list[np.ndarray | None] = field(default_factory=list)
     tau_estimate: float | None = None
     tau_sd: float | None = None
+    tau_diagnostics: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.time = np.asarray(self.time).copy()
@@ -182,6 +183,7 @@ class ProfileFit:
         }
         self.cv_means = dict(self.cv_means)
         self.cv_diagnostics = dict(self.cv_diagnostics)
+        self.tau_diagnostics = dict(self.tau_diagnostics)
         self.cv_parameter_sets = [
             None if values is None else np.asarray(values).copy()
             for values in self.cv_parameter_sets

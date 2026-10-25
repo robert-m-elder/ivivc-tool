@@ -289,45 +289,73 @@ def cross_validation_curve_fit(
 
 ## time constant, generic function
 def calculate_tau(model_function, params):
-    if getattr(model_function, 'supports_tau', True) is False:
-        return np.nan
-    # Get the initial value
-    f_0 = model_function(0, *params)
-    # Integrate from 0 to infinity
-    integral, _ = sp.integrate.quad(model_function, 0, np.inf, args=params)
-    # Normalize by dividing by the initial value
-    tau = integral / f_0
-    return tau
+    """Return a checked integral time constant, or NaN when unavailable."""
+    from utilities.time_constants import evaluate_tau
+    return evaluate_tau(model_function, params)[0]
 
-def calculate_tau_with_uncertainty(model_function, params, pcov, num_samples=50, random_state=None):
-    if getattr(model_function, 'supports_tau', True) is False:
-        return np.nan, np.nan
-    # Import locally to avoid a module-import cycle: the reusable fitting core
-    # depends on this compatibility module.
+
+def calculate_tau_with_uncertainty(
+    model_function, params, pcov, num_samples=50, random_state=None, *,
+    return_diagnostics=False,
+):
+    """Return fitted-parameter tau and sampled SD, with optional diagnostics.
+
+    The central estimate never depends on sampling. An unavailable covariance
+    or any failed sampled integral makes the SD unavailable, not the fitted
+    curve or an otherwise valid central tau. Do not silently drop failed draws.
+    The default two-value return remains compatible with existing callers.
+    """
+    from utilities.time_constants import evaluate_tau
+    # Import locally: the fitting core depends on this compatibility module.
     from ivivc_core.uncertainty import sample_parameter_sets
 
-    sampled_parameters = sample_parameter_sets(
-        params,
-        pcov,
-        parameter_names=[f'p{index}' for index in range(len(params))],
-        n_samples=num_samples,
-        random_state=random_state,
-    )
-    tau_samples = []
-    for sample in sampled_parameters.values:
-        # Get the initial value
-        f_0 = model_function(0, *sample)
-        # Integrate from 0 to infinity
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=sp.integrate.IntegrationWarning)
-            integral, _ = sp.integrate.quad(model_function, 0, np.inf, args=tuple(sample), limit=100)
-        # Normalize by dividing by the initial value
-        tau = integral / f_0
-        tau_samples.append(tau)
-    # Calculate mean and standard deviation of tau
-    tau_mean = np.mean(tau_samples)
-    tau_std = np.std(tau_samples)
-    return tau_mean, tau_std
+    tau, reason = evaluate_tau(model_function, params)
+    diagnostics = {
+        'reason': reason,
+        'uncertainty_reason': None,
+        'requested_samples': int(num_samples),
+        'valid_samples': 0,
+        'random_state': int(random_state) if isinstance(random_state, (int, np.integer)) else None,
+    }
+
+    def result(sd=np.nan):
+        values = (tau, sd)
+        return (values, diagnostics) if return_diagnostics else values
+
+    if reason is not None:
+        diagnostics['uncertainty_reason'] = 'The central time constant is unavailable.'
+        return result()
+    if int(num_samples) < 2:
+        diagnostics['uncertainty_reason'] = 'At least two parameter draws are needed to estimate tau uncertainty.'
+        return result()
+    try:
+        sampled_parameters = sample_parameter_sets(
+            params, pcov,
+            parameter_names=[f'p{index}' for index in range(len(params))],
+            n_samples=num_samples,
+            random_state=random_state,
+        )
+        tau_samples = np.array([
+            evaluate_tau(model_function, sample)[0]
+            for sample in sampled_parameters.values
+        ])
+    except Exception as exception:
+        diagnostics['uncertainty_reason'] = f'Parameter sampling failed: {exception}'
+        return result()
+
+    diagnostics['valid_samples'] = int(np.count_nonzero(np.isfinite(tau_samples)))
+    if diagnostics['valid_samples'] != len(tau_samples):
+        diagnostics['uncertainty_reason'] = (
+            f'Only {diagnostics["valid_samples"]} of {len(tau_samples)} parameter draws '
+            'gave valid time constants; uncertainty is unavailable.'
+        )
+        return result()
+    with np.errstate(over='ignore', invalid='ignore'):
+        tau_sd = float(np.std(tau_samples))
+    if not np.isfinite(tau_sd):
+        diagnostics['uncertainty_reason'] = 'The sampled time-constant standard uncertainty is not finite.'
+        return result()
+    return result(tau_sd)
 
 ## time constant
 def get_tau(modelname,popt):
@@ -352,155 +380,35 @@ def get_tau(modelname,popt):
     return tau
 
 def generate_confidence_bands(
-    model_function,
-    x_values,
-    params,
-    pcov,
-    confidence_level=0.95,
-    n_samples=1000,
-    random_state=None,
+    model_function, x_values, params, pcov, confidence_level=0.95,
+    n_samples=1000, random_state=12345,
 ):
+    """Compatibility name for pointwise fitted-parameter percentile intervals.
+
+    Retains the historical three-key return; use curve_parameter_intervals for
+    per-point draw counts and availability diagnostics.
     """
-    Generate prediction bands using Monte Carlo sampling of parameter uncertainty
-
-    Parameters:
-    -----------
-    model_function : callable
-        The model function to evaluate
-    x_values : array-like
-        X values for prediction
-    params : dict
-        Best-fit parameters
-    pcov : array-like
-        Parameter covariance matrix
-    confidence_level : float
-        Confidence level (default 0.95 for 95% CI)
-    n_samples : int
-        Number of Monte Carlo samples
-
-    Returns:
-    --------
-    dict with 'lower', 'upper', 'mean' prediction bands
-    """
-    # Import locally to avoid a module-import cycle: the reusable fitting core
-    # depends on this compatibility module.
-    from ivivc_core.uncertainty import (
-        evaluate_curve_draws,
-        sample_parameter_sets,
-        summarize_draws,
+    from ivivc_core.intervals import curve_parameter_intervals
+    interval = curve_parameter_intervals(
+        model_function, x_values, params, pcov, confidence_level=confidence_level,
+        n_samples=n_samples, random_state=random_state,
     )
+    return {key: interval[key] for key in ('lower', 'upper', 'mean')}
 
-    parameter_samples = sample_parameter_sets(
-        params,
-        pcov,
-        n_samples=n_samples,
-        random_state=random_state,
-    )
-    curve_draws = evaluate_curve_draws(
-        model_function,
-        x_values,
-        parameter_samples,
-    )
-    summary = summarize_draws(
-        curve_draws,
-        confidence_level=confidence_level,
-    )
-
-    return {
-        'lower': summary.lower,
-        'upper': summary.upper,
-        'mean': summary.mean,
-    }
 
 def generate_prediction_bands(
-    model_function,
-    x_values,
-    params,
-    pcov,
-    residuals=None,
-    confidence_level=0.95,
-    n_samples=1000,
-    random_state=None,
+    model_function, x_values, params, pcov, residuals=None,
+    confidence_level=0.95, n_samples=1000, random_state=12345,
 ):
+    """Legacy alias: returns parameter-only intervals, NOT observation bands.
+
+    ``residuals`` is accepted for source compatibility but deliberately ignored.
+    There is no observation-noise fallback or Student-t multiplier. New callers
+    should use curve_parameter_intervals, which also supplies diagnostics.
     """
-    Generate prediction bands that include both parameter uncertainty and residual variance
-
-    Parameters:
-    -----------
-    model_function : callable
-        The model function to evaluate
-    x_values : array-like
-        X values for prediction
-    params : dict
-        Best-fit parameters
-    pcov : array-like
-        Parameter covariance matrix
-    residuals : array-like, optional
-        Residuals from the fit (y_true - y_pred). If None, will estimate from parameter uncertainty only
-    confidence_level : float
-        Confidence level (default 0.95 for 95% prediction interval)
-    n_samples : int
-        Number of Monte Carlo samples
-
-    Returns:
-    --------
-    dict with 'lower', 'upper', 'mean' prediction bands
-    """
-    from ivivc_core.uncertainty import (
-        evaluate_curve_draws,
-        sample_parameter_sets,
-        summarize_draws,
+    from ivivc_core.intervals import curve_parameter_intervals
+    interval = curve_parameter_intervals(
+        model_function, x_values, params, pcov, confidence_level=confidence_level,
+        n_samples=n_samples, random_state=random_state,
     )
-
-    parameter_samples = sample_parameter_sets(
-        params,
-        pcov,
-        n_samples=n_samples,
-        random_state=random_state,
-    )
-    curve_draws = evaluate_curve_draws(
-        model_function,
-        x_values,
-        parameter_samples,
-    )
-    summary = summarize_draws(curve_draws, confidence_level=confidence_level)
-    mean_prediction = summary.mean
-    param_values = np.asarray([params[name] for name in params], dtype=float)
-
-    # Estimate residual standard error
-    if residuals is not None:
-        # Use provided residuals
-        residual_std = np.std(residuals, ddof=len(param_values))
-    else:
-        # Estimate from parameter uncertainty (this is less accurate)
-        residual_std = np.nanmean(summary.std)
-        print("Warning: No residuals provided. Using parameter uncertainty to estimate residual variance.")
-
-    # For prediction intervals, we need to account for:
-    # 1. Parameter uncertainty (captured in the Monte Carlo samples)
-    # 2. Residual variance (the inherent scatter in the data)
-
-    # Calculate prediction variance = model uncertainty + residual variance
-    model_variance = summary.std ** 2
-    total_variance = model_variance + residual_std**2
-    prediction_std = np.sqrt(total_variance)
-
-    # Use t-distribution for small sample sizes
-    # Degrees of freedom = number of data points - number of parameters
-    if residuals is not None:
-        dof = len(residuals) - len(param_values)
-    else:
-        dof = n_samples - len(param_values)  # Conservative estimate
-
-    # Calculate prediction intervals using t-distribution
-    alpha = 1 - confidence_level
-    t_value = sp.stats.t.ppf(1 - alpha/2, dof) if dof > 0 else 1.96  # Fall back to normal if dof <= 0
-
-    margin_of_error = t_value * prediction_std
-
-    return {
-        'lower': mean_prediction - margin_of_error,
-        'upper': mean_prediction + margin_of_error,
-        'mean': mean_prediction,
-        'std': prediction_std
-    }
+    return {key: interval[key] for key in ('lower', 'upper', 'mean', 'std')}

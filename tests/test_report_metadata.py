@@ -143,17 +143,18 @@ class PredictionRecordTests(unittest.TestCase):
         self.data = [self.times, self.values, self.times, self.values,
                      self.values, self.times, self.times, self.times, self.values, self.values]
 
-    def test_time_bounds_use_displayed_center_and_one_existing_band_call(self):
-        band = {'mean': np.array([101., 102.]), 'lower': np.array([98., 97.]), 'upper': np.array([106., 110.])}
-        with patch.object(engine, 'generate_prediction_bands', return_value=band) as calculate:
+    def test_time_bounds_keep_calculated_endpoints_and_one_band_call(self):
+        band = {'mean': np.array([101., 102.]), 'lower': np.array([98., 97.]), 'upper': np.array([106., 110.]),
+                'interval_status': np.array(['available', 'available'])}
+        with patch.object(engine, 'curve_parameter_intervals', return_value=band) as calculate:
             result = engine.create_prediction_plot_a1(self.data, self.times, self.values, np.array([3., 5.]),
                 {'model_name': 'Example', 'model_function': proportional, 'params': {'a': 2.},
                  'pcov': np.eye(1), 'residuals': np.array([.1, -.1])})
         self.assertEqual(calculate.call_count, 1)
         self.assertEqual(result['prediction_records'][0]['predicted_in_vivo_time'], 3.)
-        self.assertEqual(result['prediction_records'][0]['lower_95'], 0.)
-        self.assertEqual(result['prediction_records'][0]['upper_95'], 8.)
-        self.assertEqual(result['prediction_records'][1]['upper_95'], 13.)
+        self.assertEqual(result['prediction_records'][0]['lower_95'], 98.)
+        self.assertEqual(result['prediction_records'][0]['upper_95'], 106.)
+        self.assertEqual(result['prediction_records'][1]['upper_95'], 110.)
 
     def test_value_bounds_are_supplied_numerically_not_rescaled_in_the_plot(self):
         from ivivc_core.predictions import predict_value_ratio_with_uncertainty

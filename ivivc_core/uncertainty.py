@@ -16,6 +16,7 @@ from typing import Any, Callable
 import numpy as np
 import scipy as sp
 
+from .inverse import DEFAULT_INVERSE_EXPANSIONS
 from .registry import get_model_spec
 from .types import (
     CurveDraws,
@@ -564,26 +565,10 @@ def sample_value_ratio_trajectories(
 
 
 def _tau_from_parameter_vector(model_function, parameters) -> float:
-    if getattr(model_function, 'supports_tau', True) is False:
-        return np.nan
-    parameters = tuple(np.asarray(parameters, dtype=float))
-    try:
-        initial_value = float(model_function(0.0, *parameters))
-        if not np.isfinite(initial_value) or initial_value == 0:
-            return np.nan
-        with warnings.catch_warnings():
-            warnings.filterwarnings('ignore', category=sp.integrate.IntegrationWarning)
-            integral, _ = sp.integrate.quad(
-                model_function,
-                0.0,
-                np.inf,
-                args=parameters,
-                limit=100,
-            )
-        tau = float(integral / initial_value)
-    except Exception:
-        return np.nan
-    return tau if np.isfinite(tau) else np.nan
+    # Share the app's convergence checks; do not accept warned-about integrals
+    # in trajectory ensembles when the same calculation is unavailable in a fit.
+    from utilities.time_constants import evaluate_tau
+    return evaluate_tau(model_function, parameters)[0]
 
 
 def sample_tau_ratio_trajectories(
@@ -717,6 +702,9 @@ def sample_inverse_response_trajectories(
     n_samples: int = 1000,
     random_state=None,
     grid_points: int = 1001,
+    minimum_time: float | None = 0.0,
+    allow_extrapolation: bool = True,
+    max_expansions: int = DEFAULT_INVERSE_EXPANSIONS,
 ) -> TrajectoryEnsemble:
     """Generate complete inverse response-to-time mapping draws."""
     from .predictions import inverse_response_times
@@ -728,7 +716,8 @@ def sample_inverse_response_trajectories(
         prediction.value,
         calibration_time_range,
         observed_responses=observed_responses,
-        grid_points=grid_points,
+        grid_points=grid_points, minimum_time=minimum_time,
+        allow_extrapolation=allow_extrapolation, max_expansions=max_expansions,
     )
     central_time = np.asarray(central_time, dtype=float)
     central_supported = np.isfinite(central_time)
@@ -745,6 +734,9 @@ def sample_inverse_response_trajectories(
         status=status,
     )
 
+    from .extrapolation import annotate_prediction_domain
+    annotate_prediction_domain(central, in_vivo_time=calibration_time_range,
+                               in_vivo_response=observed_responses)
     parameter_samples = sample_parameter_sets(
         parameters,
         covariance,
@@ -766,7 +758,8 @@ def sample_inverse_response_trajectories(
             prediction.value,
             calibration_time_range,
             observed_responses=observed_responses,
-            grid_points=grid_points,
+            grid_points=grid_points, minimum_time=minimum_time,
+            allow_extrapolation=allow_extrapolation, max_expansions=max_expansions,
         )
         mapped_time = np.asarray(mapped_time, dtype=float)
         time_draws[draw_index] = mapped_time
@@ -783,6 +776,9 @@ def sample_inverse_response_trajectories(
         ).copy(),
         valid_draws=valid,
         metadata={
+            'inverse_minimum_time': minimum_time,
+            'inverse_max_expansions': max_expansions,
+            'inverse_allow_extrapolation': allow_extrapolation,
             'parameter_names': parameter_samples.parameter_names,
             'parameter_samples': parameter_samples.values,
             'central_supported': central_supported,
