@@ -140,10 +140,11 @@ def test_direct_mapping_export_has_domain_and_availability_status(monkeypatch, m
         assert records[1]['extrapolated'] is True
 
 
-def test_source_descriptions_no_longer_describe_bounded_or_clipped_inverse():
+def test_source_descriptions_explain_inverse_extrapolation_and_unavailable_results():
     from utilities.descriptions import APPROACH_DESCRIPTIONS
     text = APPROACH_DESCRIPTIONS['approach2']['prediction_error_html']
-    assert 'never clips' in text
+    assert 'search can extend beyond calibration' in text
+    assert 'cannot reliably identify a unique time' in text
     for path in ('docs/user_guide.tex', 'docs/appendices/glossary.tex', 'ivivc_core/README.md'):
         source = Path(path).read_text()
         assert 'does not automatically identify' not in source

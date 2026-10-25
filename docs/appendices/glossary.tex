@@ -93,7 +93,7 @@ Normalization & Preprocessing that expresses response values relative to a refer
 
 %NRMSE (normalized root mean squared error) & RMSE divided by a selected normalization factor, such as the response mean or standard deviation. Interpretation depends on the normalization method used. \\
 
-Observed-response inverse mapping & Approach 2 method that maps a fixed preprocessed in vitro prediction response to a time on the fitted in vivo curve. A numerical monotonic-branch search can extend beyond calibration, with a caution; responses are not clipped to endpoints. Nonunique, nonfinite, or unresolved inverses are unavailable. Approximate pointwise 95\% parameter-uncertainty intervals apply the same mapper to covariance-aware in vivo parameter draws without added response noise. \\
+Observed-response inverse mapping & Approach 2 method that estimates when the fitted in vivo curve reaches a supplied in vitro response. It does not use the supplied prediction time or fitted in vitro curve. Extrapolation is flagged; predictions without a reliably calculated unique time are unavailable. Horizontal intervals show uncertainty from the fitted in vivo parameters, with the supplied response held fixed. \\
 
 Overfitting & Situation in which a model's flexibility allows it to follow random variation in the fitted data rather than only the underlying relationship. Overfitting can appear as excellent full-fit metrics accompanied by poorer CV performance or unstable parameters. \\
 

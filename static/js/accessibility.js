@@ -216,9 +216,9 @@
         });
     }
 
-    function hasPredictionBand(plotDiv) {
+    function hasParameterInterval(plotDiv) {
         return (plotDiv.data || []).some(function(trace) {
-            return /prediction band/i.test(trace.name || '') || trace.fill === 'tonexty';
+            return /parameter[- ]uncertainty/i.test(trace.name || '');
         });
     }
 
@@ -255,19 +255,23 @@
             explanation = ' Markers show the uploaded in vitro and in vivo observations before preprocessing.';
         } else if (id.indexOf('interpolation') !== -1) {
             explanation = ' Marker symbols distinguish measured observations from values estimated by interpolation.';
+        } else if (id.indexOf('plot-cv-fit-') !== -1 || titleLower.indexOf('cv fit variability') !== -1 ||
+                   (plotDiv.data || []).some(function(trace) { return trace.name === 'CV mean +/- 1 SD'; })) {
+            explanation = ' Lines compare the full-data fit with fits to cross-validation training subsets. Shading shows their mean plus or minus one standard deviation; it describes sensitivity to omitted observations, not a 95% uncertainty interval.';
         } else if (id.indexOf('plot-fit-approach3') !== -1) {
             explanation = ' The plot shows the direct interpolation-based value or time ratio used for mapping; no parametric fitted curve or model-based uncertainty band is shown.';
         } else if (id.indexOf('plot-fit-') !== -1 || titleLower.indexOf(' fit') !== -1) {
             explanation = ' Markers show observations and lines show the fitted model relationship.';
-            if (hasPredictionBand(plotDiv)) {
-                explanation += ' Shaded areas show approximate 95% prediction bands.';
+            if (hasParameterInterval(plotDiv)) {
+                explanation += ' Shaded areas show approximate pointwise 95% parameter-uncertainty intervals. They do not include the additional scatter of future observations.';
             }
         } else if (id.indexOf('prediction') !== -1 || titleLower.indexOf('prediction') !== -1) {
             explanation = ' Marker symbols distinguish fitting observations, prediction inputs, and predicted in vivo values or times. Dotted connecting lines, when present, show the corresponding mapping between input and prediction points.';
         }
 
-        if (hasErrorBars(plotDiv)) {
-            explanation += ' Error bars show the calculated uncertainty around predicted values or times.';
+        if (hasErrorBars(plotDiv) ||
+            (hasParameterInterval(plotDiv) && (id.indexOf('prediction') !== -1 || titleLower.indexOf('prediction') !== -1))) {
+            explanation += ' Error bars or separate interval segments show approximate pointwise 95% parameter-uncertainty intervals for calculated values or times. Prediction inputs are treated as fixed; the intervals do not include the additional scatter of future observations.';
         }
 
         const warning = associatedUncertaintyText(container);

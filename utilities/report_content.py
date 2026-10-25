@@ -54,8 +54,8 @@ _METHODS = {
         'The supplied prediction time and fitted in vitro curve are not used to calculate the mapped time.',
         't_vivo,pred = inverse(f_vivo)(y_vitro,pred)',
         'Horizontal parameter-uncertainty intervals invert sampled in vivo curves at the fixed supplied response. No response perturbations or residual noise are added. '
-        'A common numerical mapper starts in the calibration interval and extends its search along the monotonic continuation when needed. '
-        'Extrapolation is flagged, not clipped to a calibration endpoint. Nonunique or numerically flat responses, '
+        'The same numerical search is used for central predictions and sampled curves. It starts within calibration and can extend while the fitted response continues in the same direction. '
+        'Extrapolated results are flagged. Responses without a unique mapped time, numerically flat responses, '
         'nonmonotonic continuations, nonfinite model domains, and unresolved roots remain unavailable. '
         'The search uses up to 16 doubling extensions of the calibration span; failure to find a root is not proof that no root exists. '
         'Unscaled time is searched no earlier than zero (or the observed minimum if negative); log10 time has no zero-coordinate floor. '
@@ -63,12 +63,12 @@ _METHODS = {
     'value_scaling': (
         'The calibration data supply an in vivo/in vitro response ratio at each supported prediction time. The interpolated ratio scales the supplied prediction response.',
         'y_vivo,pred = y_vitro,pred × response_ratio(t_vitro,pred)',
-        'This deterministic mapping has no fitted-parameter covariance or formal propagated prediction interval. '
+        'No uncertainty interval is calculated for this interpolation-based mapping. Missing error bars do not mean the prediction is exact. '
         'Inputs outside the calibration lookup range are unavailable; the resulting scaled in vivo response is not itself restricted to the observed in vivo response range.'),
     'time_scaling': (
         'The calibration data supply an in vivo/in vitro time ratio at each supported prediction response. The interpolated ratio scales the supplied prediction time.',
         't_vivo,pred = t_vitro,pred × time_ratio(y_vitro,pred)',
-        'This deterministic mapping has no fitted-parameter covariance or formal propagated prediction interval. '
+        'No uncertainty interval is calculated for this interpolation-based mapping. Missing error bars do not mean the prediction is exact. '
         'Inputs outside the calibration lookup range are unavailable; the resulting scaled in vivo time is not itself restricted to the observed in vivo time range.'),
 }
 
@@ -485,8 +485,8 @@ def build_report_sections(context, option):
     for warning in (result.get('plot') or {}).get('uncertainty_warnings', []):
         sections.append(_paragraph('Fitting-plot warning: ' + str(warning.get('message', '')) + (' ' + str(warning['detail']) if warning.get('detail') else '')))
     if approach != 'approach3':
-        sections.append(_paragraph('Parameter-table intervals remain approximate local 95% confidence intervals from fitted covariance. Fitting bands and prediction error bars are approximate pointwise 95% parameter-uncertainty intervals: 2.5th and 97.5th percentiles of covariance-aware parameter draws, conditional on the model, preprocessing, and fixed prediction inputs. Separate fits are sampled independently. No additional residual/observation noise, model-selection uncertainty, or model inadequacy is included. These are not prediction intervals for future observations or a simultaneous envelope. Calibration variability still informs fitted covariance.'))
-        sections.append(_paragraph('Fitting and parametric prediction intervals use 1,000 parameter draws and uncertainty seed 12345, independently of the CV/initialization seeds. Central values use fitted parameters, not the sampled mean. Any unusable draw at a point makes its interval unavailable; unrelated requested times do not change an available pointwise interval. Export reuses the already calculated bounds without resampling or re-centering.'))
+        sections.append(_paragraph('Shading and error bars show uncertainty in fitted or calculated values because the model parameters were estimated from data. They are approximate pointwise 95% parameter-uncertainty intervals, with the selected model, preprocessing, and prediction inputs held fixed. They exclude the additional scatter of future observations, uncertainty about model choice, and errors from an unsuitable model. These are not prediction intervals for future observations or a 95% envelope for the whole curve. Calibration variability still affects fitted covariance. Parameter tables separately report approximate local 95% confidence intervals for individual coefficients; the half-width is the amount added to or subtracted from the estimate.'))
+        sections.append(_paragraph('Fitting and parametric prediction intervals use 1,000 parameter draws and uncertainty seed 12345, independently of the CV/initialization seeds. Parameter sets are sampled from the fitted multivariate normal covariance approximation, preserving correlations within each fit; separate fits are sampled independently. Bounds are the pointwise 2.5th and 97.5th percentiles. Central values use fitted parameters. An invalid sampled calculation makes the interval unavailable at that point; a missing interval does not mean zero uncertainty. Plots, downloads, and reports use the same calculated bounds.'))
         for index, label in enumerate(('In vitro', 'In vivo') if approach == 'approach2' else ('Time correlation',)):
             metadata = _fit_metadata(result, index)
             sections.append(_heading(label, 2))

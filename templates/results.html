@@ -581,7 +581,7 @@
                             </button>
                         </h2>
                         {% if approach_id != "approach3" %}
-                        <p class="evidence-note">Shading and error bars show approximate pointwise 95% parameter-uncertainty intervals for fitted or calculated values, conditional on the model, preprocessing, and fixed prediction inputs. They do not include the additional scatter of future observations.</p>
+                        <p class="evidence-note">Shading and error bars show approximate 95% parameter-uncertainty intervals: uncertainty in calculated values because the fitted parameters are uncertain. The model, preprocessing, and prediction inputs are treated as fixed. These intervals apply at each plotted point; they do not include the additional scatter of future observations.</p>
                         {% endif %}
                         <nav class="model-jump-nav" aria-label="Model navigation for {{ approaches[approach_id].display_name }} prediction results">
                             <label for="model-jump-prediction-{{ approach_id }}">{% if approach_id == "approach3" %}Jump to prediction:{% else %}Jump to model:{% endif %}</label>
@@ -654,7 +654,7 @@
                                         {% endif %}
                                         <h4>Observed-response inverse mapping</h4>
                                         {{ render_prediction_cautions((pred_result.prediction_cautions or {}).get('observed_response_inverse', [])) }}
-                                        <p class="evidence-note">Maps each preprocessed observed in vitro prediction response to the corresponding time on the fitted in vivo calibration curve. Horizontal intervals propagate fitted in vivo parameters while holding the response fixed. The same numerical search is used for central and sampled inverses. Mapping can extend beyond calibration along a supported monotonic branch; extrapolation is flagged, not clipped to an endpoint. Ambiguous, nonfinite, or unresolved inverses are unavailable.</p>
+                                        <p class="evidence-note">Estimates when the fitted in vivo curve reaches each supplied in vitro response. Horizontal intervals show uncertainty in that time from the fitted in vivo parameters, with the response held fixed. Results outside the observed in vivo calibration range carry an extrapolation caution. A prediction is unavailable when a unique time cannot be calculated reliably.</p>
                                         {% if pred_result.plot_inverse_response is defined and pred_result.plot_inverse_response is not none %}
                                             <div id="plot-prediction-{{ approach_id }}-{{ model_name }}-inverse" class="plot-container report-source-plot">
                                                 {{ pred_result.plot_inverse_response.plot | safe }}
@@ -740,7 +740,7 @@
             <ul>
                 <li><strong>Plot:</strong> paired in vitro and in vivo times at common response values with the fitted model overlay.</li>
                 <li><strong>Function:</strong> mathematical equation of the fitted model.</li>
-                <li><strong>Model parameters:</strong> coefficients reported as estimate ± 95% confidence interval.</li>
+                <li><strong>Model parameters:</strong> coefficients reported as estimate ± the half-width of an approximate 95% confidence interval.</li>
                 <li><strong>Fitted parameter diagnostics:</strong> brief badges that flag parameter uncertainty, coupling, or identifiability cautions.</li>
                 <li><strong>Goodness of fit:</strong> selected fitted-data metrics, eligible cross-validation metrics, fit/CV ratios, and CV comparison badges.</li>
                 <li><strong>Residual diagnostics:</strong> raw residual-vs-time plots in response units with independent symmetric axes, plus normal Q-Q plots when residual variation is large enough to make the diagnostic informative.</li>
@@ -755,7 +755,7 @@
             <ul>
                 <li><strong>Plot:</strong> both datasets with separate fitted model curves.</li>
                 <li><strong>Function:</strong> mathematical equation of the fitted model family.</li>
-                <li><strong>Model parameters:</strong> in vitro and in vivo coefficients reported as estimate ± 95% confidence interval.</li>
+                <li><strong>Model parameters:</strong> in vitro and in vivo coefficients reported as estimate ± the half-width of an approximate 95% confidence interval.</li>
                 <li><strong>Fitted parameter diagnostics:</strong> brief badges shown separately for the in vitro and in vivo fits.</li>
                 <li><strong>Time constant:</strong> fitted characteristic time scale where available.</li>
                 <li><strong>Goodness of fit:</strong> selected fitted-data metrics, eligible cross-validation metrics, fit/CV ratios, and CV comparison badges for each dataset.</li>

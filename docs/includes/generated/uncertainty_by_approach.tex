@@ -5,51 +5,59 @@
 
 \textbf{Fitting uncertainty}
 
-Parameter estimates: table entries remain approximate local estimate \(\pm\) 95\% confidence intervals from the fitted covariance, parameter standard errors, and residual degrees of freedom.
+Parameter estimates: each entry shows the estimate \(\pm\) the half-width of an approximate 95\% confidence interval. These intervals describe individual fitted coefficients and use the fitted covariance, standard errors, and residual degrees of freedom.
 
-Plotted uncertainty: shading and error bars show approximate 95\% parameter-uncertainty intervals for fitted or calculated values, conditional on the selected model, preprocessing, and fixed prediction inputs. The app draws 1,000 parameter vectors from the fitted multivariate normal covariance approximation (seed 12345), preserving covariance within each fit; separate fits are sampled independently. Bounds are pointwise 2.5th and 97.5th percentiles, not a simultaneous envelope. Central curves and points use the fitted parameters, not the sampled mean.
+Plotted uncertainty: shading and error bars show approximate 95\% parameter-uncertainty intervals: uncertainty in fitted or calculated values because the model parameters were estimated from data. The selected model, preprocessing, and supplied prediction times and responses are treated as fixed.
 
-No additional residual or observation noise is added. Calibration variability already informs the fitted covariance; the intervals do not include additional scatter of future observations, model-selection uncertainty, or model inadequacy, and are not observation prediction bands. An interval is unavailable if covariance sampling fails or any requested draw is unusable at that point. Unavailable intervals are not zero-width intervals. CV-refit spread is a separate descriptive diagnostic.
+The app samples 1,000 sets of parameter values from the fitted multivariate normal covariance approximation (seed 12345), keeping parameter correlations within each fit; separate fits are sampled independently. Bounds enclose the middle 95\% of calculated values at each plotted position (the 2.5th and 97.5th percentiles). They do not describe the whole curve simultaneously. Central values use the fitted parameters.
+
+No additional residual or observation noise is added. These are not observation prediction bands: they exclude the additional scatter of future observations, uncertainty about which model to use, and errors from an unsuitable model. Calibration variability still affects the fitted covariance. If sampling fails or a sampled calculation is invalid at a point, its interval is unavailable. A missing interval does not mean zero uncertainty. CV fit variability is a separate descriptive diagnostic.
 
 \textbf{Prediction uncertainty}
 
-Plotted uncertainty: shading and error bars show approximate 95\% parameter-uncertainty intervals for fitted or calculated values, conditional on the selected model, preprocessing, and fixed prediction inputs. The app draws 1,000 parameter vectors from the fitted multivariate normal covariance approximation (seed 12345), preserving covariance within each fit; separate fits are sampled independently. Bounds are pointwise 2.5th and 97.5th percentiles, not a simultaneous envelope. Central curves and points use the fitted parameters, not the sampled mean.
+Plotted uncertainty: shading and error bars show approximate 95\% parameter-uncertainty intervals: uncertainty in fitted or calculated values because the model parameters were estimated from data. The selected model, preprocessing, and supplied prediction times and responses are treated as fixed.
 
-No additional residual or observation noise is added. Calibration variability already informs the fitted covariance; the intervals do not include additional scatter of future observations, model-selection uncertainty, or model inadequacy, and are not observation prediction bands. An interval is unavailable if covariance sampling fails or any requested draw is unusable at that point. Unavailable intervals are not zero-width intervals. CV-refit spread is a separate descriptive diagnostic.
+The app samples 1,000 sets of parameter values from the fitted multivariate normal covariance approximation (seed 12345), keeping parameter correlations within each fit; separate fits are sampled independently. Bounds enclose the middle 95\% of calculated values at each plotted position (the 2.5th and 97.5th percentiles). They do not describe the whole curve simultaneously. Central values use the fitted parameters.
 
-Time mapping: evaluate the sampled fitted relationship at each fixed supplied in vitro time. Horizontal intervals use the calculated endpoints unchanged, even when they exclude the fitted-parameter point; such intervals are drawn separately rather than shifted. Input and mapped times are checked against the paired-time fitting ranges; points or intervals outside those ranges carry an extrapolation caution.
+No additional residual or observation noise is added. These are not observation prediction bands: they exclude the additional scatter of future observations, uncertainty about which model to use, and errors from an unsuitable model. Calibration variability still affects the fitted covariance. If sampling fails or a sampled calculation is invalid at a point, its interval is unavailable. A missing interval does not mean zero uncertainty. CV fit variability is a separate descriptive diagnostic.
+
+Time mapping: the fitted time relationship is evaluated at each fixed supplied in vitro time for every set of sampled parameters. Horizontal intervals show uncertainty in the mapped in vivo time. Input or mapped times outside the paired-time fitting ranges carry an extrapolation caution.
 
 \subsubsection{Approach 2: Independent Model Fitting}
 
 \textbf{Fitting uncertainty}
 
-Parameter estimates: table entries remain approximate local estimate \(\pm\) 95\% confidence intervals from the fitted covariance, parameter standard errors, and residual degrees of freedom.
+Parameter estimates: each entry shows the estimate \(\pm\) the half-width of an approximate 95\% confidence interval. These intervals describe individual fitted coefficients and use the fitted covariance, standard errors, and residual degrees of freedom.
 
-Time constants: central tau is evaluated at the fitted parameters by checked numerical integration. Its table standard uncertainty uses 50 draws (seed 12345) and remains unavailable if any sampled tau is invalid. Tau table intervals retain their existing symmetric approximation; plotted time-rescaling intervals instead propagate both parameter vectors directly using the common percentile method below.
+Time constants: tau summarizes the fitted curve's overall time scale and is evaluated at the fitted parameters by numerical integration. Its table interval is a symmetric approximation based on 50 parameter draws (seed 12345); it is unavailable if sampling or any sampled integration fails. Plotted time-rescaling intervals instead use the common percentile calculation below.
 
-Plotted uncertainty: shading and error bars show approximate 95\% parameter-uncertainty intervals for fitted or calculated values, conditional on the selected model, preprocessing, and fixed prediction inputs. The app draws 1,000 parameter vectors from the fitted multivariate normal covariance approximation (seed 12345), preserving covariance within each fit; separate fits are sampled independently. Bounds are pointwise 2.5th and 97.5th percentiles, not a simultaneous envelope. Central curves and points use the fitted parameters, not the sampled mean.
+Plotted uncertainty: shading and error bars show approximate 95\% parameter-uncertainty intervals: uncertainty in fitted or calculated values because the model parameters were estimated from data. The selected model, preprocessing, and supplied prediction times and responses are treated as fixed.
 
-No additional residual or observation noise is added. Calibration variability already informs the fitted covariance; the intervals do not include additional scatter of future observations, model-selection uncertainty, or model inadequacy, and are not observation prediction bands. An interval is unavailable if covariance sampling fails or any requested draw is unusable at that point. Unavailable intervals are not zero-width intervals. CV-refit spread is a separate descriptive diagnostic.
+The app samples 1,000 sets of parameter values from the fitted multivariate normal covariance approximation (seed 12345), keeping parameter correlations within each fit; separate fits are sampled independently. Bounds enclose the middle 95\% of calculated values at each plotted position (the 2.5th and 97.5th percentiles). They do not describe the whole curve simultaneously. Central values use the fitted parameters.
+
+No additional residual or observation noise is added. These are not observation prediction bands: they exclude the additional scatter of future observations, uncertainty about which model to use, and errors from an unsuitable model. Calibration variability still affects the fitted covariance. If sampling fails or a sampled calculation is invalid at a point, its interval is unavailable. A missing interval does not mean zero uncertainty. CV fit variability is a separate descriptive diagnostic.
 
 \textbf{Prediction uncertainty}
 
-Plotted uncertainty: shading and error bars show approximate 95\% parameter-uncertainty intervals for fitted or calculated values, conditional on the selected model, preprocessing, and fixed prediction inputs. The app draws 1,000 parameter vectors from the fitted multivariate normal covariance approximation (seed 12345), preserving covariance within each fit; separate fits are sampled independently. Bounds are pointwise 2.5th and 97.5th percentiles, not a simultaneous envelope. Central curves and points use the fitted parameters, not the sampled mean.
+Plotted uncertainty: shading and error bars show approximate 95\% parameter-uncertainty intervals: uncertainty in fitted or calculated values because the model parameters were estimated from data. The selected model, preprocessing, and supplied prediction times and responses are treated as fixed.
 
-No additional residual or observation noise is added. Calibration variability already informs the fitted covariance; the intervals do not include additional scatter of future observations, model-selection uncertainty, or model inadequacy, and are not observation prediction bands. An interval is unavailable if covariance sampling fails or any requested draw is unusable at that point. Unavailable intervals are not zero-width intervals. CV-refit spread is a separate descriptive diagnostic.
+The app samples 1,000 sets of parameter values from the fitted multivariate normal covariance approximation (seed 12345), keeping parameter correlations within each fit; separate fits are sampled independently. Bounds enclose the middle 95\% of calculated values at each plotted position (the 2.5th and 97.5th percentiles). They do not describe the whole curve simultaneously. Central values use the fitted parameters.
 
-Response-value ratio: multiply each sampled in vivo/in vitro curve ratio by the fixed supplied response. The denominator safeguard is unchanged: intervals are withheld when its central 95\% interval includes zero, and exact-zero or nonfinite central denominators make the point unavailable. This is a conservative display safeguard, not a formal ratio-confidence test.
+No additional residual or observation noise is added. These are not observation prediction bands: they exclude the additional scatter of future observations, uncertainty about which model to use, and errors from an unsuitable model. Calibration variability still affects the fitted covariance. If sampling fails or a sampled calculation is invalid at a point, its interval is unavailable. A missing interval does not mean zero uncertainty. CV fit variability is a separate descriptive diagnostic.
 
-Time-constant ratio: calculate both time constants for each sampled pair of parameter vectors, then multiply their ratio by the fixed prediction time. The original fitted-parameter time scaling remains the center. Failed sampled integrations make the interval unavailable without removing a valid point. This one-scale summary can miss time-dependent differences in curve shape and depends on the extrapolated tail.
+Response-value ratio: each sampled in vivo/in vitro curve ratio scales the fixed supplied response. The ratio can be unstable when the fitted in vitro response is near zero. Its interval is unavailable if the sampled in vitro response interval includes zero; this is a precaution, not proof that other ratios are reliable. A zero or nonfinite fitted in vitro response also makes the point unavailable.
 
-Observed-response inverse: invert each sampled in vivo curve at the fixed supplied response, using the same mapping procedure as the central estimate. No response perturbation is added. The common central/sampled mapper starts inside calibration and can extend along a numerically monotonic continuation. It never clips an outside response to an endpoint. Nonunique or numerically flat inverses, nonfinite domains, nonmonotonic continuations, and roots not resolved within the search limit remain unavailable. Calibration-range cautions distinguish extrapolated points from intervals alone extending outside calibration. A finite interval does not establish extrapolation reliability.
+Time-constant ratio: both time constants are calculated for each sampled pair of parameter sets, and their ratio scales the fixed prediction time. Failed sampled integrations make the interval unavailable without removing a valid point. This overall time scaling can miss differences in curve shape and depends on the fitted curve beyond the observed times.
 
-Finite intervals that exclude the central estimate are drawn separately at their actual endpoints. Downloads and reports reuse the numerical bounds and include pointwise status and usable-draw counts.
+Observed-response inverse: each sampled in vivo curve is used to find when it reaches the fixed supplied response. The search can extend beyond calibration, with an extrapolation caution. A prediction is unavailable when the numerical search cannot reliably identify a unique time, for example on a flat part of the curve. A finite or narrow interval does not establish that extrapolation is reliable.
+
+Intervals that exclude the central estimate are drawn separately at their calculated endpoints. Downloads and reports use the same bounds and include calculation-status details.
 
 \subsubsection{Approach 3: Direct Mapping}
 
 \textbf{Fitting uncertainty}
 
-Parameter uncertainty: Approach 3 does not fit a parametric model, so there is no fitted-parameter covariance matrix, no parameter confidence intervals, and no model-based 95\% prediction band.
+Parameter uncertainty: Approach 3 does not fit a parametric model, so there is no fitted-parameter covariance matrix, no parameter confidence intervals, and no parameter-uncertainty band.
 
 Fitting plots: the plots show interpolation-based ratios/mappings calculated from the preprocessed datasets. They represent deterministic mappings from the supplied data and preprocessing choices, not statistical uncertainty bands.
 
@@ -57,4 +65,4 @@ Fitting plots: the plots show interpolation-based ratios/mappings calculated fro
 
 Prediction plot error bars: Approach 3 does not generate formal propagated error bars for prediction outputs because no parametric covariance model is fitted.
 
-Uncertainty is therefore limited to the quality of the input data, preprocessing, interpolation, and the assumption that the observed mapping remains valid for the prediction dataset. Lookup ratios outside the interpolation range remain unavailable rather than extrapolated. A supported mapping that produces a time outside observed calibration is flagged.
+The app does not quantify how uncertainty in the input data, preprocessing, or mapping assumptions affects these predictions. Missing error bars do not mean the predictions are exact. Lookup ratios outside the interpolation range remain unavailable rather than extrapolated. A supported mapping that produces a time outside observed calibration is flagged.

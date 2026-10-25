@@ -114,16 +114,19 @@ replication or measurement precision is generally unimportant.
     100 repeated studies. Points in C--H come from the separate illustrative
     study. B also shows selected individual fits spanning the observed shape
     variation; these are not frequency-weighted examples. The shaded areas
-    describe variation between simulated studies, not a confidence interval,
-    prediction interval, or cross-validation band from one dataset.}
+    describe variation between simulated studies, not the app's 95\%
+    parameter-uncertainty bands, observation prediction intervals, or
+    cross-validation variability from one dataset.}
   \label{fig:sampling-design-curves}
 \end{figure}
 
 \subsection{Recognizing weak support in the app}
 
 Figure~\ref{fig:sampling-design-uncertainty} summarizes the approximate 95\%
-confidence-interval half-width for $t_{50}$, the same type of parameter uncertainty
-reported by the app. The reference and misplaced-focus schedules often give wide
+confidence-interval half-width for $t_{50}$, the same type of interval shown
+in the app's parameter tables. It describes uncertainty in this one fitted
+parameter, rather than the shaded curve intervals shown in the app. The reference
+and misplaced-focus schedules often give wide
 or unavailable intervals. Transition-focused and denser sampling give much
 narrower intervals; denser sampling generally narrows them further. Under higher
 noise, adding times gives more consistently narrow intervals than adding
@@ -163,5 +166,7 @@ initial coverage can help locate important changes. Comparing candidate schedule
 across several plausible transition times and curve shapes would provide a
 stronger basis for study planning. This example illustrates that reasoning for
 one known curve and error model; it does not identify a universally best schedule.
+The same sampling principles apply to other model forms, although useful sampling
+times and the size of the improvement will depend on the curve and noise.
 
 %\SamplingTutorialEnd
