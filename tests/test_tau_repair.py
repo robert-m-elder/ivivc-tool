@@ -239,14 +239,30 @@ def test_tau_points_remain_available_without_uncertainty():
     assert 'parameter vectors and covariance' in result.note
 
 
-def test_failed_tau_prediction_explains_integration_reason():
+def test_failed_tau_prediction_uses_concise_user_reason():
     result = predict_tau_ratio(
         TimeCourse(np.array([1.]), np.array([.8])), model_name='exponential',
         tau_values=[SimpleNamespace(n=np.nan, s=np.nan), SimpleNamespace(n=10., s=.1)],
         tau_diagnostics=({'reason': 'Numerical integration did not converge reliably.'}, {}),
     )
     assert not result.available
-    assert 'did not converge' in result.skip_reason
+    assert result.skip_reason == (
+        'Time-constant rescaling was not performed because the in vitro time constant '
+        'could not be calculated.'
+    )
+
+
+def test_unsupported_tau_model_uses_concise_user_reason():
+    result = predict_tau_ratio(
+        TimeCourse(np.array([1.]), np.array([.8])), model_name='example',
+        tau_values=[SimpleNamespace(n=np.nan, s=np.nan), SimpleNamespace(n=np.nan, s=np.nan)],
+        tau_diagnostics=(
+            {'reason': 'Time-constant calculation is not supported for this model.'},
+            {'reason': 'Time-constant calculation is not supported for this model.'},
+        ),
+    )
+    assert not result.available
+    assert result.skip_reason == 'Time-constant rescaling is not available for this model.'
 
 
 def test_ui_separates_tau_and_interval_availability():
@@ -346,7 +362,9 @@ def test_unexpected_tau_prediction_failure_does_not_hide_other_predictions(monke
                                          {'approach2:exponential': fitted}, ['approach2'])['approach2']['exponential']
     assert 'error' not in output
     assert output['plot_tau'] is None
-    assert 'Example optional tau failure' in output['plot_tau_skip_reason']
+    assert output['plot_tau_skip_reason'] == (
+        'Time-constant rescaling could not be completed because the calculation failed.'
+    )
     assert output['plot'] is not None
     assert output['plot_inverse_response'] is not None
     assert len(output['prediction_tables']['tau_ratio']) == 2

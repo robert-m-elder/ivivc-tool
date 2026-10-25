@@ -800,6 +800,7 @@
                 <li><strong>Time-constant ratio:</strong> uses prediction time. When both fitted time constants are available, their ratio is used to scale the prediction time. <strong>Output:</strong> predicted in vivo time.</li>
                 <li><strong>Observed-response inverse mapping:</strong> uses the observed prediction response. The app finds the time at which the fitted in vivo curve reaches that response. <strong>Output:</strong> predicted in vivo time.</li>
 </ul>
+            <p>These methods emphasize different features of the calibration profiles. Response-value ratio preserves time-dependent response differences, while time-constant ratio provides a simple overall time scaling; both are relatively straightforward to reproduce outside the app. Observed-response inverse mapping treats the supplied response as a degradation state and can capture nonlinear in vivo kinetics, but does not use the supplied prediction time or fitted in vitro calibration curve.</p>
             <h4>Error propagation and uncertainty</h4>
             {{ approach_descriptions['approach2']['prediction_error_html'] | safe }}
 </div>

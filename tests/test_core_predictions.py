@@ -110,7 +110,7 @@ def test_tau_ratio_returns_time_uncertainty_or_structured_skip_reason():
         tau_values=[SimpleNamespace(n=0.0, s=1.0), SimpleNamespace(n=10.0, s=0.2)],
     )
     assert unavailable.available is False
-    assert 'In vitro tau is not positive' in unavailable.skip_reason
+    assert unavailable.skip_reason == 'Time-constant rescaling was not performed because the in vitro time constant could not be calculated.'
     assert np.all(np.isnan(unavailable.in_vivo_time))
 
 

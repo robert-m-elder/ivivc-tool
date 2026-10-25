@@ -20,23 +20,28 @@ def describe_tau_prediction_skip_reason(tau_values):
     display in the prediction tab and report.
     """
     if not tau_values or len(tau_values) != 2:
-        return 'Time-constant-ratio rescaling was not performed because both in vitro and in vivo tau values were not available.'
+        return (
+            'Time-constant rescaling was not performed because valid time constants '
+            'could not be calculated for the in vitro and in vivo fits.'
+        )
 
-    labels = ['In vitro tau', 'In vivo tau']
-    reasons = []
-
-    for label, tau in zip(labels, tau_values):
+    available = []
+    for tau in tau_values:
         nominal = getattr(tau, 'n', None)
+        available.append(_finite_number(nominal) and float(nominal) > 0)
 
-        if not _finite_number(nominal):
-            reasons.append(f'{label} is not finite')
-        elif float(nominal) <= 0:
-            reasons.append(f'{label} is not positive')
-
-    if reasons:
-        return 'Time-constant-ratio rescaling was not performed because ' + '; '.join(reasons) + '.'
-
-    return None
+    if all(available):
+        return None
+    if not any(available):
+        return (
+            'Time-constant rescaling was not performed because valid time constants '
+            'could not be calculated for the in vitro and in vivo fits.'
+        )
+    missing_label = 'in vitro' if not available[0] else 'in vivo'
+    return (
+        f'Time-constant rescaling was not performed because the {missing_label} '
+        'time constant could not be calculated.'
+    )
 
 
 def tau_prediction_is_valid(tau_values):
