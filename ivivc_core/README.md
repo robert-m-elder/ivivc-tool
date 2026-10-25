@@ -186,9 +186,34 @@ The legacy `generate_prediction_bands` accepts but ignores `residuals` and now
 returns parameter-only bounds; new callers should use the diagnostic-aware
 helper. The inverse helper likewise ignores its legacy residuals argument.
 
-This patch retains the bounded inverse mapper and its endpoint convention.
-It makes central and sampled inversions use that same mapper; it does not
-resolve plateau ambiguity or add extrapolation. Those policies are deferred.
+Inverse mapping uses one generic mapper (`ivivc_core.inverse`) for central and
+sampled calculations, including trajectory-ensemble draws. It checks a finite,
+numerically monotonic calibration grid, then searches the indicated continuation
+with up to 16 doubling extensions (129 points per extension) and Brent roots.
+There is no response clipping or model-specific inverse. Plateaus/rounded tails,
+nonmonotonic continuations, nonfinite domains and unresolved roots are explicit
+unavailable statuses. These checks establish numerical support on the examined
+branch, not global mathematical uniqueness. The finite search budget is not a
+physical endpoint. An invalid distant target cannot alter an earlier result.
+
+Low-level inverse functions accept `allow_extrapolation`, `minimum_time` (default
+0) and `max_expansions` (default 16). Use `minimum_time=None` for transformed time
+coordinates such as log10 time. The public API and Flask adapter apply this choice
+from **applied** scaling metadata. A negative calibration minimum on unlogged
+coordinates remains allowed; the app does not invent a domain excluding data.
+Failed sampled inverses are counted by reason and are not silently dropped from
+parameter intervals. Extra raw-mass or raw-response sign constraints are not
+imposed on normalized/log-transformed responses.
+
+`annotate_prediction_domain` keeps calibration coverage distinct from numerical
+validity. Prediction auxiliary metadata carries ranges, per-point reasons,
+point/interval flags and caution messages. The high-level API and app use actual
+paired-time fitting ranges for Approach 1, both evaluation-time ranges for
+response ratios, input/output time ranges for tau rescaling, and only in vivo
+response/time ranges for inverse mapping. Lookup-only Approach 3 remains bounded;
+no endpoint-hold or linear extrapolation rule is silently introduced. Plots,
+downloads, and reports reuse these annotations. Within-range status is not
+validation of transfer between devices or of the underlying model.
 Parameter-table and tau-table local intervals and descriptive CV variability
 retain their distinct meanings. Normal covariance draws remain a local
 approximation, conditional on the preprocessing and model selection; no

@@ -2122,3 +2122,16 @@ main:focus {
     border-left: 4px solid #f0ad4e;
     background-color: #fff8e1;
 }
+
+/* Text-labelled cautions remain distinguishable without relying on color. */
+.prediction-domain-caution {
+    padding: 0.6rem 0.8rem;
+    border-left: 4px solid #8a5900;
+    background: #fff6e5;
+    color: #493000;
+}
+.prediction-domain-badge {
+    border: 1px solid #8a5900;
+    background: #fff0cd;
+    color: #493000;
+}

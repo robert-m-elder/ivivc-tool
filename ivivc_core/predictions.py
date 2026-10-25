@@ -11,12 +11,13 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 import numpy as np
-import scipy as sp
 
 from utilities.prediction_validity import (
     describe_tau_prediction_skip_reason,
 )
 
+from .inverse import inverse_response_times, DEFAULT_INVERSE_EXPANSIONS
+from .extrapolation import annotate_prediction_domain
 from .registry import get_model_spec
 from .types import PredictedTrajectory, TimeCourse
 from .intervals import (
@@ -37,126 +38,31 @@ def safe_ratio(numerator, denominator):
     return result
 
 
-def inverse_response_times(
-    model_function,
-    params,
-    target_responses,
-    time_range,
-    observed_responses=None,
-    grid_points=1001,
-):
-    """Map response values to unique fitted times over a calibration range."""
-    target_responses = np.asarray(target_responses, dtype=float)
-    result = np.full(target_responses.shape, np.nan, dtype=float)
-    status = np.full(target_responses.shape, 'unavailable', dtype=object)
-
-    t_min, t_max = [float(value) for value in time_range]
-    if not np.isfinite(t_min) or not np.isfinite(t_max) or t_max <= t_min:
-        return result, status, 'Observed-response inverse prediction requires at least two distinct in vivo calibration times.'
-
-    t_grid = np.linspace(t_min, t_max, max(int(grid_points), 101))
-    try:
-        y_grid = np.asarray(model_function(t_grid, **params), dtype=float)
-    except Exception as exc:
-        return result, status, f'Observed-response inverse prediction was not performed because the fitted in vivo curve could not be evaluated: {exc}'
-
-    finite = np.isfinite(t_grid) & np.isfinite(y_grid)
-    if np.count_nonzero(finite) < 2:
-        return result, status, 'Observed-response inverse prediction was not performed because the fitted in vivo curve is not finite over the calibration range.'
-    t_grid = t_grid[finite]
-    y_grid = y_grid[finite]
-
-    y_span = float(np.max(y_grid) - np.min(y_grid))
-    monotonic_tol = max(1e-10, y_span * 1e-8)
-    dy = np.diff(y_grid)
-    nondecreasing = bool(np.all(dy >= -monotonic_tol))
-    nonincreasing = bool(np.all(dy <= monotonic_tol))
-    if not (nondecreasing or nonincreasing) or y_span <= monotonic_tol:
-        return result, status, 'Observed-response inverse prediction was not performed because the fitted in vivo curve is not one-to-one over the observed in vivo time range.'
-
-    y_min = float(np.min(y_grid))
-    y_max = float(np.max(y_grid))
-    response_tol = max(1e-10, y_span * 1e-8)
-
-    observed = np.asarray(observed_responses, dtype=float) if observed_responses is not None else y_grid
-    observed = observed[np.isfinite(observed)]
-    if observed.size == 0:
-        observed = y_grid
-    observed_min = float(np.min(observed))
-    observed_max = float(np.max(observed))
-    observed_span = float(observed_max - observed_min)
-    observed_tol = max(1e-10, observed_span * 1e-8)
-
-    high_response_time = t_grid[0] if y_grid[0] >= y_grid[-1] else t_grid[-1]
-    low_response_time = t_grid[-1] if y_grid[0] >= y_grid[-1] else t_grid[0]
-
-    def root_function(time_value, target):
-        value = np.asarray(
-            model_function(np.asarray([time_value], dtype=float), **params),
-            dtype=float,
-        ).reshape(-1)[0]
-        return float(value - target)
-
-    for index, target in np.ndenumerate(target_responses):
-        if not np.isfinite(target):
-            status[index] = 'nonfinite input response'
-            continue
-        if target < observed_min - observed_tol or target > observed_max + observed_tol:
-            status[index] = 'outside observed in vivo response range'
-            continue
-        if target > y_max + response_tol:
-            result[index] = high_response_time
-            status[index] = 'mapped to calibration endpoint'
-            continue
-        if target < y_min - response_tol:
-            result[index] = low_response_time
-            status[index] = 'mapped to calibration endpoint'
-            continue
-        if np.isclose(target, y_grid[0], atol=response_tol, rtol=0):
-            result[index] = t_grid[0]
-            status[index] = 'mapped'
-            continue
-        if np.isclose(target, y_grid[-1], atol=response_tol, rtol=0):
-            result[index] = t_grid[-1]
-            status[index] = 'mapped'
-            continue
-        try:
-            result[index] = sp.optimize.brentq(
-                root_function,
-                t_grid[0],
-                t_grid[-1],
-                args=(float(target),),
-                xtol=1e-10,
-                rtol=1e-10,
-                maxiter=200,
-            )
-            status[index] = 'mapped'
-        except Exception:
-            status[index] = 'no unique root in calibration range'
-
-    return result, status, None
-
-
 def inverse_response_prediction_intervals(
     model_function, params, pcov, residuals, target_responses, time_range,
     observed_responses=None, confidence_level=0.95, n_samples=1000,
     grid_points=1001, random_state=DEFAULT_INTERVAL_SEED,
-    inverse_mapper=inverse_response_times,
+    inverse_mapper=inverse_response_times, *, minimum_time=0.0,
+    allow_extrapolation=True, max_expansions=DEFAULT_INVERSE_EXPANSIONS,
 ):
     """Parameter-only intervals for fixed responses under the current mapper.
 
     ``residuals`` is retained for compatibility but is not used. Central and
-    sampled calculations use the same bounded inversion policy, including its
-    existing endpoint convention. Extrapolation/uniqueness policy is separate.
+    sampled calculations use the same monotonic-branch search and time domain.
+    Outside responses are never clipped to calibration endpoints.
     No response noise is generated and no failed draws are silently discarded.
     """
     from .uncertainty import sample_parameter_sets
 
     confidence_level, n_samples = validate_interval_settings(confidence_level, n_samples)
     targets = np.asarray(target_responses, dtype=float)
+    mapper_options = dict(minimum_time=minimum_time, allow_extrapolation=allow_extrapolation,
+                          max_expansions=max_expansions)
+    failed_reasons = [{} for _ in range(targets.size)]
+    extrapolated_counts = np.zeros(targets.size, dtype=int)
     central, _, reason = inverse_mapper(
         model_function, params, targets, time_range,
-        observed_responses=observed_responses, grid_points=grid_points,
+        observed_responses=observed_responses, grid_points=grid_points, **mapper_options,
     )
     central = np.asarray(central, dtype=float).reshape(-1)
     sampling_error = None
@@ -171,21 +77,31 @@ def inverse_response_prediction_intervals(
             draws = np.full((samples.n_samples, targets.size), np.nan)
             for index, sample in enumerate(samples.values):
                 try:
-                    mapped, _, draw_reason = inverse_mapper(
+                    mapped, draw_status, draw_reason = inverse_mapper(
                         model_function, dict(zip(samples.parameter_names, sample)),
                         targets, time_range, observed_responses=observed_responses,
-                        grid_points=grid_points,
+                        grid_points=grid_points, **mapper_options,
                     )
+                    mapped = np.asarray(mapped, dtype=float).reshape(-1)
                     if draw_reason is None:
-                        draws[index] = np.asarray(mapped, dtype=float).reshape(-1)
-                except (ValueError, TypeError, RuntimeError, OverflowError, FloatingPointError):
-                    continue
+                        draws[index] = mapped
+                        extrapolated_counts += (np.isfinite(mapped) &
+                            ((mapped < time_range[0]) | (mapped > time_range[1])))
+                    for column in np.flatnonzero(~np.isfinite(draws[index])):
+                        message = draw_reason or str(np.asarray(draw_status).reshape(-1)[column])
+                        failed_reasons[column][message] = failed_reasons[column].get(message, 0) + 1
+                except (ValueError, TypeError, RuntimeError, OverflowError, FloatingPointError) as exc:
+                    for reasons in failed_reasons:
+                        message = 'inverse evaluation failed: ' + str(exc)
+                        reasons[message] = reasons.get(message, 0) + 1
     interval = parameter_interval_summary(
         draws, central, confidence_level=confidence_level, n_samples=n_samples,
         random_state=random_state, sampling_error=sampling_error,
     )
     # Legacy field now explicitly indicates that no response perturbation is used.
     interval['residual_std'] = 0.0
+    interval['inverse_failed_draw_reasons'] = failed_reasons
+    interval['inverse_extrapolated_samples'] = extrapolated_counts.reshape(targets.shape)
     for key in ('lower', 'upper', 'valid_counts', 'interval_status', 'interval_valid_samples'):
         interval[key] = interval[key].reshape(targets.shape)
     unavailable = int(np.count_nonzero(interval['interval_status'] != 'available'))
@@ -193,7 +109,7 @@ def inverse_response_prediction_intervals(
     if unavailable and note is None:
         note = (f'{unavailable} of {targets.size} inverse parameter-uncertainty intervals '
                 'are unavailable; all requested draws must support the point. '
-                'The current calibration-range and endpoint convention is unchanged.')
+                'Unsupported or ambiguous inverses are not clipped or discarded.')
         if sampling_error:
             note += ' Parameter sampling failed: ' + sampling_error
     return interval, note
@@ -498,13 +414,18 @@ def predict_inverse_response(
     random_state=DEFAULT_INTERVAL_SEED,
     inverse_mapper: Callable[..., tuple[np.ndarray, np.ndarray, str | None]] = inverse_response_times,
     interval_estimator: Callable[..., tuple[dict[str, Any], str | None]] = inverse_response_prediction_intervals,
+    minimum_time: float | None = 0.0,
+    allow_extrapolation: bool = True,
+    max_expansions: int = DEFAULT_INVERSE_EXPANSIONS,
 ) -> PredictedTrajectory:
     """Map fixed responses and propagate only fitted in vivo parameter uncertainty."""
     confidence_level, n_samples = validate_interval_settings(confidence_level, n_samples)
     function = get_model_spec(model_name).model_function
+    mapper_options = dict(minimum_time=minimum_time, allow_extrapolation=allow_extrapolation,
+                          max_expansions=max_expansions)
     times, status, skip_reason = inverse_mapper(
         function, parameters, prediction.value, calibration_time_range,
-        observed_responses=observed_responses,
+        observed_responses=observed_responses, **mapper_options,
     )
     times = np.asarray(times, dtype=float)
     supported = np.isfinite(times)
@@ -519,10 +440,12 @@ def predict_inverse_response(
             np.where(supported, prediction.value, np.nan), calibration_time_range,
             observed_responses=observed_responses, confidence_level=confidence_level,
             n_samples=n_samples, random_state=random_state, inverse_mapper=inverse_mapper,
+            **mapper_options,
         )
     elif skip_reason is None:
         skip_reason = ('Observed-response inverse prediction was not performed because none of '
-                       'the responses can be mapped within the current calibration range.')
+                       'the responses have a supported unique inverse on the searched branch. '
+                       'See the per-point mapping statuses.')
     trajectory = PredictedTrajectory(
         source_approach='approach2', source_method='observed_response_inverse', model_name=model_name,
         in_vitro_time=prediction.time, in_vitro_value=prediction.value,
@@ -534,10 +457,21 @@ def predict_inverse_response(
     trajectory.auxiliary.update({
         'assumed_response_sd': 0.0,
         'interval_note': interval_note,
+        'inverse_minimum_time': minimum_time,
+        'inverse_max_expansions': max_expansions,
+        'inverse_allow_extrapolation': bool(allow_extrapolation),
+        'inverse_failed_draw_reasons': interval.get('inverse_failed_draw_reasons', [{} for _ in times]),
+        'inverse_extrapolated_samples': interval.get('inverse_extrapolated_samples', np.zeros(len(times), dtype=int)),
     })
     if interval_note:
         trajectory.note = interval_note
-    return trajectory
+    missing = int(np.count_nonzero(~supported))
+    if missing:
+        message = f'{missing} of {len(times)} responses have no supported unique inverse on the searched branch; see mapping statuses.'
+        trajectory.note = ' '.join(part for part in (trajectory.note, message) if part)
+    return annotate_prediction_domain(
+        trajectory, in_vivo_time=calibration_time_range, in_vivo_response=observed_responses,
+    )
 
 
 def predict_direct_value_scaling(
@@ -560,9 +494,11 @@ def predict_direct_value_scaling(
         right=np.nan,
     )
     in_vivo_value = prediction.value * scaling_factor
+    status = np.where(np.isfinite(in_vivo_value), 'predicted', 'unavailable (outside or undefined response-ratio lookup)')
     return PredictedTrajectory(
         source_approach='approach3',
         source_method='value_scaling',
+        status=status,
         in_vitro_time=prediction.time,
         in_vitro_value=prediction.value,
         in_vivo_time=prediction.time,
@@ -590,9 +526,13 @@ def predict_direct_time_scaling(
     )
     in_vivo_time = prediction.time * scaling_factor
     in_vivo_time[np.isfinite(prediction.time) & (prediction.time == 0)] = 0.0
+    status = np.where(np.isfinite(in_vivo_time), 'predicted', 'unavailable (outside or undefined time-ratio lookup)')
+    retained_zero = (prediction.time == 0) & ~np.isfinite(scaling_factor)
+    status[retained_zero] = 'time zero retained without supported response lookup'
     return PredictedTrajectory(
         source_approach='approach3',
         source_method='time_scaling',
+        status=status,
         in_vitro_time=prediction.time,
         in_vitro_value=prediction.value,
         in_vivo_time=in_vivo_time,

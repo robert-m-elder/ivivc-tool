@@ -54,8 +54,12 @@ _METHODS = {
         'The supplied prediction time and fitted in vitro curve are not used to calculate the mapped time.',
         't_vivo,pred = inverse(f_vivo)(y_vitro,pred)',
         'Horizontal parameter-uncertainty intervals invert sampled in vivo curves at the fixed supplied response. No response perturbations or residual noise are added. '
-        'The mapping requires a one-to-one fitted curve and is bounded by the observed in vivo calibration time and response ranges. '
-        'Responses just beyond the fitted endpoint but within the observed response range can map to a calibration endpoint; interval bounds are bounded by construction.'),
+        'A common numerical mapper starts in the calibration interval and extends its search along the monotonic continuation when needed. '
+        'Extrapolation is flagged, not clipped to a calibration endpoint. Nonunique or numerically flat responses, '
+        'nonmonotonic continuations, nonfinite model domains, and unresolved roots remain unavailable. '
+        'The search uses up to 16 doubling extensions of the calibration span; failure to find a root is not proof that no root exists. '
+        'Unscaled time is searched no earlier than zero (or the observed minimum if negative); log10 time has no zero-coordinate floor. '
+        'Monotonicity/uniqueness are numerical checks on the examined branch, not global proofs for arbitrary functions.'),
     'value_scaling': (
         'The calibration data supply an in vivo/in vitro response ratio at each supported prediction time. The interpolated ratio scales the supplied prediction response.',
         'y_vivo,pred = y_vitro,pred × response_ratio(t_vitro,pred)',
@@ -543,6 +547,34 @@ def build_report_sections(context, option):
                                  row.get(output_key), row.get('lower_95'), row.get('upper_95'), row.get('status', ''), row.get('interval_status', '')])
                 sections.append(_table('Predictions and displayed uncertainty bounds', ['Row', 'Input time', 'Input response', 'Predicted in vivo response' if output_key.endswith('value') else 'Predicted in vivo time', 'Lower 95%', 'Upper 95%', 'Mapping status', 'Interval status'], rows))
                 sections.append(_paragraph('Inputs and predictions in this table are preprocessed quantities. N/A denotes an unavailable value or interval, not a zero. Bounds match the displayed intervals; a numerical point can be available when its interval is unavailable.'))
+                domain_rows = [
+                    [i + 1, row.get('extrapolation_status'), row.get('extrapolation_reason'),
+                     row.get('interval_extrapolation_status')]
+                    for i, row in enumerate(records) if 'extrapolation_status' in row
+                ]
+                if domain_rows:
+                    sections.append(_table('Calibration-domain cautions',
+                        ['Row', 'Point domain status', 'Reason', 'Interval domain status'], domain_rows))
+                    ranges = next((row['calibration_ranges'] for row in records if row.get('calibration_ranges')), '')
+                    if ranges:
+                        sections.append(_paragraph('Calibration ranges on analyzed scales: ' + ranges))
+                    if any(row.get('extrapolated') or row.get('interval_extrapolated') for row in records):
+                        sections.append(_paragraph('Extrapolation caution: one or more calculated points or interval bounds are outside relevant calibration ranges. Narrow parameter-uncertainty intervals do not establish reliability outside calibration.'))
+                    sections.append(_paragraph('Range checks use the quantities used by the selected method, not unused prediction inputs. Within-range status does not establish scientific transferability or independent validation.'))
+                if method == 'observed_response_inverse':
+                    inverse_rows = [[i + 1, row.get('inverse_extrapolated_samples'),
+                                     row.get('inverse_failed_draw_reasons', '')]
+                                    for i, row in enumerate(records) if 'inverse_failed_draw_reasons' in row]
+                    if inverse_rows:
+                        sections.append(_table('Inverse search diagnostics',
+                            ['Row', 'Draws with times outside calibration', 'Failed draws by reason'], inverse_rows))
+                    first = records[0]
+                    if 'inverse_max_expansions' in first:
+                        minimum = first.get('inverse_minimum_time')
+                        sections.append(_paragraph('Inverse search settings (analyzed time scale): minimum time = '
+                            + ('no finite lower bound' if minimum is None else _fmt(minimum))
+                            + '; maximum doubling extensions = ' + _fmt(first['inverse_max_expansions'])
+                            + '; extrapolation enabled = ' + str(first.get('inverse_allow_extrapolation', True)) + '.'))
                 if method == 'value_ratio':
                     extra = [[i + 1, row.get('interval_valid_samples'), row.get('interval_total_samples'),
                               row.get('interval_requested_samples'), row.get('denominator_lower_95'),

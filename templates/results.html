@@ -1,3 +1,12 @@
+{% macro render_prediction_cautions(warnings) -%}
+    {% for warning in warnings or [] %}
+        <p class="prediction-domain-caution" role="note">
+            <span class="evidence-badge prediction-domain-badge">{{ warning.label }}</span>
+            {{ warning.message }}
+        </p>
+    {% endfor %}
+{%- endmacro %}
+
 
 {% macro render_uncertainty_warnings(warnings) -%}
     {% for warning in warnings or [] %}
@@ -607,6 +616,7 @@
                                     <div class="model-result">
                                         <h3 id="prediction-{{ approach_id }}-result-{{ model_name|replace('_', '-') }}" class="model-jump-target" tabindex="-1">{{ models[model_name].display_name }}</h3>
                                         {% if 'plot' in pred_result %}
+                                            {{ render_prediction_cautions(pred_result.extrapolation_warnings) }}
                                             <div id="plot-prediction-{{ approach_id }}-{{ model_name }}" class="plot-container report-source-plot">
                                                 {{ pred_result.plot.plot | safe }}
                                             </div>
@@ -621,6 +631,7 @@
                                         <h3 id="prediction-{{ approach_id }}-result-{{ model_name|replace('_', '-') }}" class="model-jump-target" tabindex="-1">Model: {{ models[model_name].display_name }}</h3>
                                         {% if 'plot' in pred_result %}
                                             <h4>Response-value ratio rescaling</h4>
+                                            {{ render_prediction_cautions((pred_result.prediction_cautions or {}).get('value_ratio', [])) }}
                                             {% if pred_result.plot_value_ratio_note %}
                                                 <p class="prediction-skip-reason"><span class="evidence-badge uncertainty-plot-badge">Some intervals unavailable</span> {{ pred_result.plot_value_ratio_note }}</p>
                                             {% endif %}
@@ -631,6 +642,7 @@
 {% endif %}
                                         {% if 'plot_tau' in pred_result and pred_result['plot_tau'] is not none %}
                                             <h4>Time constant ratio rescaling</h4>
+                                            {{ render_prediction_cautions((pred_result.prediction_cautions or {}).get('tau_ratio', [])) }}
                                             {% if pred_result.plot_tau_note %}<p class="evidence-note">{{ pred_result.plot_tau_note }}</p>{% endif %}
                                             <div id="plot-prediction-{{ approach_id }}-{{ model_name }}-tau" class="plot-container report-source-plot">
                                                 {{ pred_result.plot_tau.plot | safe }}
@@ -641,7 +653,8 @@
                                             <p class="prediction-skip-reason">{{ pred_result.plot_tau_skip_reason }}</p>
                                         {% endif %}
                                         <h4>Observed-response inverse mapping</h4>
-                                        <p class="evidence-note">Maps each preprocessed observed in vitro prediction response to the corresponding time on the fitted in vivo calibration curve. Horizontal intervals propagate fitted in vivo parameters while holding the response fixed. The mapping and intervals are limited to the observed in vivo calibration time range.</p>
+                                        {{ render_prediction_cautions((pred_result.prediction_cautions or {}).get('observed_response_inverse', [])) }}
+                                        <p class="evidence-note">Maps each preprocessed observed in vitro prediction response to the corresponding time on the fitted in vivo calibration curve. Horizontal intervals propagate fitted in vivo parameters while holding the response fixed. The same numerical search is used for central and sampled inverses. Mapping can extend beyond calibration along a supported monotonic branch; extrapolation is flagged, not clipped to an endpoint. Ambiguous, nonfinite, or unresolved inverses are unavailable.</p>
                                         {% if pred_result.plot_inverse_response is defined and pred_result.plot_inverse_response is not none %}
                                             <div id="plot-prediction-{{ approach_id }}-{{ model_name }}-inverse" class="plot-container report-source-plot">
                                                 {{ pred_result.plot_inverse_response.plot | safe }}
@@ -652,6 +665,9 @@
                                             {% endif %}
                                         {% elif pred_result.plot_inverse_response_skip_reason %}
                                             <p class="prediction-skip-reason">{{ pred_result.plot_inverse_response_skip_reason }}</p>
+                                            {% if pred_result.inverse_response_table_html %}
+                                            {{ render_plot_data_downloads('approach2-' ~ model_name ~ '-table-pred-inverse-unavailable', models[model_name].display_name ~ ' inverse mapping statuses', pred_result.inverse_response_table_html) }}
+                                            {% endif %}
                                         {% endif %}
 </div>
                                 {% endif %}
@@ -662,6 +678,7 @@
                                             {% if model_name == "method1_value_scaling" %}Direct Mapping Prediction: Response-value scaling{% elif model_name == "method2_time_scaling" %}Direct Mapping Prediction: Time scaling{% else %}Direct Mapping Predictions{% endif %}
                                         </h3>
                                         {% if 'plot' in pred_result %}
+                                            {{ render_prediction_cautions(pred_result.extrapolation_warnings) }}
                                             <div id="plot-prediction-approach3-{{ model_name|replace('_', '-') }}" class="plot-container report-source-plot">
                                                 {{ pred_result.plot.plot | safe }}
                                             </div>
@@ -794,7 +811,7 @@
                 <li><strong>Response-value scaling:</strong> uses both prediction time and response. The prediction time determines the in vivo/in vitro response ratio, which is then applied to the observed prediction response. <strong>Output:</strong> predicted in vivo response.</li>
                 <li><strong>Time scaling:</strong> uses both prediction response and time. The observed response determines the in vivo/in vitro time ratio, which is then applied to the prediction time. <strong>Output:</strong> predicted in vivo time.</li>
             </ul>
-            <p>Prediction points outside the applicable interpolation range are reported as unavailable rather than extrapolated.</p>
+            <p>Approach 3 does not extrapolate lookup ratios: outside or undefined lookup values remain unavailable. A supported lookup can still produce a mapped time outside the observed in vivo range; that calculated result carries an extrapolation caution.</p>
             <h4>Error propagation and uncertainty</h4>
             {{ approach_descriptions['approach3']['prediction_error_html'] | safe }}
 </div>

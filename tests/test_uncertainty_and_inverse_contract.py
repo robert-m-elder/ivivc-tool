@@ -43,7 +43,7 @@ def test_legacy_prediction_band_name_now_returns_parameter_only_summary():
     assert np.all(result['mean'] <= result['upper'])
 
 
-def test_inverse_response_mapping_is_bounded_by_observed_calibration_range():
+def test_inverse_response_mapping_respects_physical_time_domain_and_finite_inputs():
     targets = np.array([1.0, np.exp(-0.5), np.exp(-1.0), 1.2, np.nan])
     mapped, status, reason = _inverse_response_times(
         exponential_model,
@@ -61,6 +61,6 @@ def test_inverse_response_mapping_is_bounded_by_observed_calibration_range():
         'mapped',
         'mapped',
         'mapped',
-        'outside observed in vivo response range',
+        'response not reached within allowed time domain',
         'nonfinite input response',
     ]

@@ -16,6 +16,7 @@ from typing import Any
 import numpy as np
 import scipy as sp
 
+from .inverse import DEFAULT_INVERSE_EXPANSIONS
 from .registry import get_model_spec
 from .types import (
     CurveDraws,
@@ -547,6 +548,9 @@ def sample_inverse_response_trajectories(
     n_samples: int = 1000,
     random_state=None,
     grid_points: int = 1001,
+    minimum_time: float | None = 0.0,
+    allow_extrapolation: bool = True,
+    max_expansions: int = DEFAULT_INVERSE_EXPANSIONS,
 ) -> TrajectoryEnsemble:
     """Generate complete inverse response-to-time mapping draws."""
     from .predictions import inverse_response_times
@@ -558,7 +562,8 @@ def sample_inverse_response_trajectories(
         prediction.value,
         calibration_time_range,
         observed_responses=observed_responses,
-        grid_points=grid_points,
+        grid_points=grid_points, minimum_time=minimum_time,
+        allow_extrapolation=allow_extrapolation, max_expansions=max_expansions,
     )
     central_time = np.asarray(central_time, dtype=float)
     central_supported = np.isfinite(central_time)
@@ -575,6 +580,9 @@ def sample_inverse_response_trajectories(
         status=status,
     )
 
+    from .extrapolation import annotate_prediction_domain
+    annotate_prediction_domain(central, in_vivo_time=calibration_time_range,
+                               in_vivo_response=observed_responses)
     parameter_samples = sample_parameter_sets(
         parameters,
         covariance,
@@ -595,7 +603,8 @@ def sample_inverse_response_trajectories(
             prediction.value,
             calibration_time_range,
             observed_responses=observed_responses,
-            grid_points=grid_points,
+            grid_points=grid_points, minimum_time=minimum_time,
+            allow_extrapolation=allow_extrapolation, max_expansions=max_expansions,
         )
         mapped_time = np.asarray(mapped_time, dtype=float)
         time_draws[draw_index] = mapped_time
@@ -612,6 +621,9 @@ def sample_inverse_response_trajectories(
         ).copy(),
         valid_draws=valid,
         metadata={
+            'inverse_minimum_time': minimum_time,
+            'inverse_max_expansions': max_expansions,
+            'inverse_allow_extrapolation': allow_extrapolation,
             'parameter_names': parameter_samples.parameter_names,
             'parameter_samples': parameter_samples.values,
             'central_supported': central_supported,

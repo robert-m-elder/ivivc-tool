@@ -195,7 +195,7 @@ def test_inverse_holds_response_fixed_and_does_not_require_residual_df(residuals
 
 def test_inverse_pointwise_intervals_are_reproducible_and_do_not_depend_on_other_targets():
     single = inverse(responses=(.6,))
-    multiple = inverse(responses=(.6, 1.5))  # Second response remains unsupported in patch 2.
+    multiple = inverse(responses=(.6, 1.5))  # Second response would require a negative physical time.
     assert single.time_lower[0] == multiple.time_lower[0]
     assert single.time_upper[0] == multiple.time_upper[0]
     assert np.isnan(multiple.in_vivo_time[1])
@@ -203,9 +203,8 @@ def test_inverse_pointwise_intervals_are_reproducible_and_do_not_depend_on_other
     assert inverse(responses=(.6,)).time_lower[0] == single.time_lower[0]
 
 
-def test_inverse_zero_covariance_uses_same_endpoint_convention_for_center_and_draws():
-    # Scope boundary: patch 2 removes center/sample disagreement; it does NOT
-    # turn a plateau inverse into a physically unique or first-passage solution.
+def test_inverse_zero_covariance_does_not_make_a_plateau_unique():
+    # A zero-response plateau has no unique inverse, even with exact parameters.
     from models.mass_loss_surface_erosion import model_function
     params = {'y0': 1., 'k': .1, 'n': 1.}
     central, _, _ = inverse_response_times(model_function, params, [0.], (0., 20.), observed_responses=[0., 1.])
@@ -213,8 +212,9 @@ def test_inverse_zero_covariance_uses_same_endpoint_convention_for_center_and_dr
         model_function, params, np.zeros((3, 3)), [], [0.], (0., 20.),
         observed_responses=[0., 1.], n_samples=10,
     )
-    np.testing.assert_array_equal(interval['lower'], central)
-    np.testing.assert_array_equal(interval['upper'], central)
+    assert np.isnan(central).all()
+    assert np.isnan(interval['lower']).all()
+    assert np.isnan(interval['upper']).all()
 
 
 def test_inverse_failed_draw_counts_are_not_hidden(monkeypatch):

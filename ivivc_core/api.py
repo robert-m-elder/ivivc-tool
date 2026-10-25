@@ -16,6 +16,7 @@ import numpy as np
 from numpy.typing import ArrayLike
 from uncertainties import ufloat
 
+from .extrapolation import annotate_prediction_domain
 from .fitting import fit_profile
 from .predictions import (
     predict_direct_time_scaling,
@@ -384,6 +385,8 @@ def predict_in_vivo(
                                 float(np.max(prepared.in_vivo.time)),
                             ),
                             observed_responses=prepared.in_vivo.value,
+                            minimum_time=(None if 'log_x' in prepared.preprocessing.applied_scalings
+                                          else min(0.0, float(np.min(prepared.in_vivo.time)))),
                             confidence_level=confidence_level,
                             n_samples=n_samples, random_state=random_state,
                         )
@@ -410,6 +413,13 @@ def predict_in_vivo(
                                 prepared.in_vivo_time_at_response
                             ),
                         )
+                mapping = model_fit.time_mapping_fit
+                annotate_prediction_domain(
+                    trajectory, in_vitro_time=prepared.in_vitro.time,
+                    in_vivo_time=prepared.in_vivo.time, in_vivo_response=prepared.in_vivo.value,
+                    paired_in_vitro_time=mapping.time if mapping is not None else None,
+                    paired_in_vivo_time=mapping.response if mapping is not None else None,
+                )
                 trajectories[key] = trajectory
             except Exception as exception:
                 _record_failure(
@@ -510,6 +520,8 @@ def generate_trajectory_ensembles(
                             float(np.max(prepared.in_vivo.time)),
                         ),
                         observed_responses=prepared.in_vivo.value,
+                        minimum_time=(None if 'log_x' in prepared.preprocessing.applied_scalings
+                                      else min(0.0, float(np.min(prepared.in_vivo.time)))),
                         n_samples=n_samples,
                         random_state=method_random_state,
                     )
@@ -543,6 +555,13 @@ def generate_trajectory_ensembles(
                         'requested_samples': 1,
                     },
                 )
+            mapping = model_fit.time_mapping_fit
+            annotate_prediction_domain(
+                ensemble.central, in_vitro_time=prepared.in_vitro.time,
+                in_vivo_time=prepared.in_vivo.time, in_vivo_response=prepared.in_vivo.value,
+                paired_in_vitro_time=mapping.time if mapping is not None else None,
+                paired_in_vivo_time=mapping.response if mapping is not None else None,
+            )
             ensembles[key] = ensemble
         except Exception as exception:
             _record_failure(

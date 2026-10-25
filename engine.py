@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import numpy as np
 from ivivc_core.intervals import curve_parameter_intervals
+from ivivc_core.extrapolation import annotate_prediction_domain
 from utilities.prediction_validity import tau_estimate_is_available, tau_uncertainty_is_available
 import pandas as pd
 import scipy as sp
@@ -716,12 +717,27 @@ def _safe_ratio(numerator, denominator):
     return core_safe_ratio(numerator, denominator)
 
 
-def process_predictions(data, prediction_data, results, selected_approaches, interpolated_data=None):
+def process_predictions(data, prediction_data, results, selected_approaches, interpolated_data=None, *, selected_scalings=None):
     """Process predictions using fitted models on a new dataset."""
     t1, m1, t2, m2, mm, tt, ti1, ti2, mi1, mi2 = data
     t_pred, m_pred = prediction_data
     prediction_course = TimeCourse(t_pred, m_pred, label='prediction_input')
     prediction_results = {}
+    minimum_inverse_time = (None if 'log_x' in (selected_scalings or ())
+                            else min(0.0, float(np.nanmin(t2))))
+
+    def annotate(trajectory, model_results):
+        if trajectory.source_method == 'time_mapping':
+            pairs_x = np.asarray(model_results.get('residual_x', ti1), dtype=float)
+            pairs_y = np.asarray(model_results.get('residual_y', ti2), dtype=float)
+            paired = np.isfinite(pairs_x) & np.isfinite(pairs_y)
+            pairs_x, pairs_y = pairs_x[paired], pairs_y[paired]
+        else:
+            pairs_x = pairs_y = None
+        return annotate_prediction_domain(
+            trajectory, in_vitro_time=t1, in_vivo_time=t2, in_vivo_response=m2,
+            paired_in_vitro_time=pairs_x, paired_in_vivo_time=pairs_y,
+        )
 
     for approach in selected_approaches:
         approach_predictions = {}
@@ -744,6 +760,7 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                             include_uncertainty=True,
                         )
 
+                        annotate(trajectory, model_results)
                         plot_image = create_prediction_plot_a1(
                             data,
                             trajectory.in_vitro_time,
@@ -771,6 +788,7 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                             },
                             'plot': plot_image,
                             'plot_note': trajectory.note,
+                            'extrapolation_warnings': trajectory.auxiliary.get('extrapolation_warnings', []),
                         }
 
                     elif approach == 'approach2':
@@ -787,6 +805,7 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                             n_samples=1000,
                             random_state=12345,
                         )
+                        annotate(value_prediction, model_results)
                         plot_time = value_prediction.auxiliary['plot_time']
                         model1_plot = value_prediction.auxiliary['in_vitro_model_plot']
                         model2_plot = value_prediction.auxiliary['in_vivo_model_plot']
@@ -827,6 +846,7 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                                 residual_dof=model_results.get('residual_dof', []),
                                 confidence_level=0.95,
                             )
+                            annotate(tau_prediction, model_results)
                             model_results.setdefault('prediction_skip_reasons', {})[
                                 'tau_ratio'
                             ] = tau_prediction.skip_reason
@@ -867,7 +887,8 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                             parameters=params2,
                             covariance=model_results['pcov'][1],
                             residuals=model_results['residuals'][1],
-                            calibration_time_range=(np.min(t2), np.max(t2)),
+                            calibration_time_range=(np.nanmin(t2), np.nanmax(t2)),
+                            minimum_time=minimum_inverse_time,
                             observed_responses=m2,
                             confidence_level=0.95,
                             n_samples=1000,
@@ -875,6 +896,7 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                             interval_estimator=_inverse_response_prediction_intervals,
                         )
 
+                        annotate(inverse_prediction, model_results)
                         plot_image_inverse = None
                         if inverse_prediction.available:
                             plot_image_inverse = create_prediction_plot_a2(
@@ -889,6 +911,7 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                                     'model_name': models[model_name]['display_name'],
                                     'approach': approaches[approach_id]['display_name'],
                                     'model_function': models[model_name]['model_function'],
+                                    'params': model_results['params'],
                                 },
                                 time_prediction=inverse_prediction,
                                 prediction_mode='observed_response_inverse',
@@ -918,12 +941,20 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                             'plot_tau': plot_image_tau,
                             'plot_tau_note': tau_prediction.note if tau_prediction is not None else None,
                             'plot_value_ratio_note': value_prediction.note,
+                            'prediction_cautions': {
+                                'value_ratio': value_prediction.auxiliary.get('extrapolation_warnings', []),
+                                'tau_ratio': tau_prediction.auxiliary.get('extrapolation_warnings', []) if tau_prediction is not None else [],
+                                'observed_response_inverse': inverse_prediction.auxiliary.get('extrapolation_warnings', []),
+                            },
                             'plot_tau_skip_reason': model_results.get(
                                 'prediction_skip_reasons', {}
                             ).get('tau_ratio'),
                             'plot_inverse_response': plot_image_inverse,
                             'plot_inverse_response_skip_reason': inverse_prediction.skip_reason,
                             'plot_inverse_response_note': inverse_prediction.note,
+                            'inverse_response_table_html': (pd.DataFrame(inverse_records).to_html(
+                                classes='table table-striped', index=False, na_rep='')
+                                if plot_image_inverse is None else None),
                             'prediction_tables': {
                                 'value_ratio': _value_ratio_prediction_records(value_prediction),
                                 'tau_ratio': tau_records,
@@ -975,31 +1006,26 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                             in_vivo_time_at_response=in_vivo_time_at_response,
                         )
 
+                        annotate(value_prediction, model_results)
+                        annotate(time_prediction, model_results)
                         plot_method1 = create_prediction_plot_a3(
                             data,
                             value_prediction.in_vitro_time,
                             value_prediction.in_vitro_value,
                             value_prediction.in_vivo_value,
-                            ptype='v',
+                            ptype='v', trajectory=value_prediction,
                         )
                         plot_method2 = create_prediction_plot_a3(
                             data,
                             time_prediction.in_vitro_time,
                             time_prediction.in_vitro_value,
                             time_prediction.in_vivo_time,
-                            ptype='t',
+                            ptype='t', trajectory=time_prediction,
                         )
 
                         approach_predictions['method1_value_scaling'] = {
                             'prediction_tables': {
-                                'value_scaling': _prediction_records_from_plot_or_values(
-                                    plot_method1,
-                                    value_prediction.in_vitro_time,
-                                    value_prediction.in_vitro_value,
-                                    'value',
-                                    value_prediction.in_vivo_value,
-                                    interval_applicable=False,
-                                )
+                                'value_scaling': _parameter_prediction_records(value_prediction, 'value')
                             },
                             'predictions': {
                                 'in_vitro_time': value_prediction.in_vitro_time,
@@ -1008,19 +1034,13 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                                 'scaling_factor': value_prediction.scaling_factor,
                             },
                             'plot': plot_method1,
+                            'extrapolation_warnings': value_prediction.auxiliary.get('extrapolation_warnings', []),
                             'description': 'Scale prediction values by (dataset2_value / dataset1_value)',
                         }
 
                         approach_predictions['method2_time_scaling'] = {
                             'prediction_tables': {
-                                'time_scaling': _prediction_records_from_plot_or_values(
-                                    plot_method2,
-                                    time_prediction.in_vitro_time,
-                                    time_prediction.in_vitro_value,
-                                    'time',
-                                    time_prediction.in_vivo_time,
-                                    interval_applicable=False,
-                                )
+                                'time_scaling': _parameter_prediction_records(time_prediction, 'time')
                             },
                             'predictions': {
                                 'in_vitro_time': time_prediction.in_vitro_time,
@@ -1029,6 +1049,7 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                                 'scaling_factor': time_prediction.scaling_factor,
                             },
                             'plot': plot_method2,
+                            'extrapolation_warnings': time_prediction.auxiliary.get('extrapolation_warnings', []),
                             'description': 'Scale prediction times by (dataset2_time / dataset1_time)',
                         }
 
@@ -2336,6 +2357,14 @@ def extract_plotly_data_for_table(fig):
             for key, label in (
                 ('status', 'Prediction status'),
                 ('interval_status', 'Interval status'),
+                ('extrapolation_status', 'Calibration domain status'),
+                ('extrapolation_reason', 'Extrapolation reason'),
+                ('interval_extrapolation_status', 'Interval domain status'),
+                ('calibration_ranges', 'Calibration ranges (analyzed scales)'),
+                ('inverse_extrapolated_samples', 'Inverse draws outside calibration times'),
+                ('inverse_failed_draw_reasons', 'Failed inverse draws by reason'),
+                ('inverse_minimum_time', 'Inverse minimum time'),
+                ('inverse_max_expansions', 'Inverse maximum search expansions'),
                 ('interval_valid_samples', 'Usable draws'),
                 ('interval_requested_samples', 'Requested draws'),
             ):
@@ -2896,7 +2925,7 @@ def _parameter_prediction_records(trajectory, output_kind):
     center = getattr(trajectory, 'in_vivo_' + output_kind)
     rows = _prediction_records_for_report(
         None, trajectory.in_vitro_time, trajectory.in_vitro_value,
-        output_kind, predictions=center,
+        output_kind, predictions=center, interval_applicable=trajectory.source_approach != 'approach3',
     )
     lower = getattr(trajectory, output_kind + '_lower')
     upper = getattr(trajectory, output_kind + '_upper')
@@ -2920,6 +2949,27 @@ def _parameter_prediction_records(trajectory, output_kind):
                 row[key] = metadata[key]
         if 'interval_valid_samples' in metadata:
             row['interval_valid_samples'] = int(metadata['interval_valid_samples'][index])
+        for key in ('extrapolation_status', 'extrapolation_reason', 'interval_extrapolation_status'):
+            if key in metadata:
+                row[key] = str(metadata[key][index])
+        for key in ('extrapolated', 'interval_extrapolated'):
+            if key in metadata:
+                row[key] = bool(metadata[key][index])
+        if 'calibration_ranges' in metadata:
+            row['calibration_ranges'] = '; '.join(
+                f'{name}: [{bounds[0]!r}, {bounds[1]!r}]' if bounds is not None
+                else f'{name}: unavailable'
+                for name, bounds in metadata['calibration_ranges'].items()
+            )
+        if 'inverse_failed_draw_reasons' in metadata:
+            row['inverse_failed_draw_reasons'] = '; '.join(
+                f'{reason}: {count}' for reason, count in
+                sorted(metadata['inverse_failed_draw_reasons'][index].items())
+            )
+            row['inverse_extrapolated_samples'] = int(metadata['inverse_extrapolated_samples'][index])
+        for key in ('inverse_minimum_time', 'inverse_max_expansions', 'inverse_allow_extrapolation'):
+            if key in metadata:
+                row[key] = metadata[key]
         if 'denominator_lower' in metadata:
             row['denominator_lower_95'] = finite_value(metadata['denominator_lower'], index)
             row['denominator_upper_95'] = finite_value(metadata['denominator_upper'], index)
@@ -2953,6 +3003,10 @@ def _add_parameter_prediction_trace(fig, t_pred, m_pred, centers, records, outpu
         x=center if is_time else t_pred, y=m_pred if is_time else center,
         mode='markers', name='In Vivo (Predicted)',
         meta={'prediction_records': records, 'prediction_output_kind': output_kind},
+        text=['; '.join(str(row.get(key, '')) for key in
+              ('status', 'extrapolation_status', 'extrapolation_reason', 'interval_extrapolation_status')
+              if row.get(key)) for row in records],
+        hovertemplate='Time: %{x}<br>Response: %{y}<br>%{text}<extra>%{fullData.name}</extra>',
         marker=dict(color=colors['prediction_output'], size=15, line=dict(color='white', width=2)),
         **{'error_x' if is_time else 'error_y': error},
     ))
@@ -2967,6 +3021,19 @@ def _add_parameter_prediction_trace(fig, t_pred, m_pred, centers, records, outpu
             meta={'exclude_from_data_table': True},
             line=dict(color=colors['prediction_output'], width=2), connectgaps=False,
         ))
+
+
+def _add_prediction_cautions(fig, trajectory):
+    cautions = trajectory.auxiliary.get('extrapolation_warnings', []) if trajectory is not None else []
+    if cautions:
+        fig.add_annotation(
+            x=0, y=1.02, xref='paper', yref='paper', xanchor='left', yanchor='bottom',
+            showarrow=False, align='left',
+            text='<br>'.join(escape(item['label']) + ' - see calibration-domain details' for item in cautions),
+            font=dict(size=12, color='#734600'),
+        )
+        fig.update_layout(margin=dict(t=100))
+    return cautions
 
 
 def create_prediction_plot_a1(data, t_pred, m_pred, t_pred_vivo, model_info, include_bands=True, *, trajectory=None):
@@ -3030,6 +3097,8 @@ def create_prediction_plot_a1(data, t_pred, m_pred, t_pred_vivo, model_info, inc
     fig.update_xaxes(title_font=dict(size=20), tickfont=dict(size=18))
     fig.update_yaxes(title_font=dict(size=20), tickfont=dict(size=18))
 
+    cautions = _add_prediction_cautions(fig, trajectory)
+
     # Extract data as HTML table
     table_html = extract_plotly_data_for_table(fig)
 
@@ -3037,7 +3106,7 @@ def create_prediction_plot_a1(data, t_pred, m_pred, t_pred_vivo, model_info, inc
     plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
 
     return {'plot': plot_html, 'table_html': table_html,
-            'prediction_records': records}
+            'prediction_records': records, 'extrapolation_warnings': cautions}
 
 def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, model1_pred_plot, model2_pred_plot, model_info, t_pred_vivo_err=None, include_bands=True, prediction_mode='value_ratio', *, value_prediction=None, time_prediction=None):
     """Render existing Approach 2 predictions without recalculating uncertainty."""
@@ -3096,6 +3165,24 @@ def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, m
                 row.update(lower_95=float(low), upper_95=float(high), interval_status='available')
     _add_parameter_prediction_trace(fig, t_pred, m_pred, mt_pred_vivo, records, output_kind, include_bands)
 
+    # Extend the reference lines to cover actual inverse outputs/intervals,
+    # not just the unrelated supplied in vitro prediction times. No new draws.
+    if prediction_mode == 'observed_response_inverse' and trajectory is not None and 'params' in model_info:
+        arrays = [np.asarray(t1), np.asarray(t2), trajectory.in_vivo_time]
+        arrays.extend(value for value in (trajectory.time_lower, trajectory.time_upper) if value is not None)
+        reference_times = np.concatenate(arrays)
+        reference_times = reference_times[np.isfinite(reference_times)]
+        if reference_times.size > 1 and np.ptp(reference_times) > 0:
+            t_pred_plot = np.linspace(np.min(reference_times), np.max(reference_times), 200)
+            def reference_curve(parameters):
+                try:
+                    with np.errstate(all='ignore'):
+                        values = np.asarray(model_info['model_function'](t_pred_plot, **parameters), dtype=float)
+                    return np.where(np.isfinite(values), values, np.nan)
+                except (ValueError, TypeError, OverflowError, FloatingPointError):
+                    return np.full(t_pred_plot.shape, np.nan)
+            model1_pred_plot, model2_pred_plot = [reference_curve(p) for p in model_info['params']]
+
     # Model predictions for reference
     fig.add_trace(go.Scatter(
         x=t_pred_plot, y=model1_pred_plot,
@@ -3127,6 +3214,8 @@ def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, m
     fig.update_xaxes(title_font=dict(size=20), tickfont=dict(size=18))
     fig.update_yaxes(title_font=dict(size=20), tickfont=dict(size=18))
 
+    cautions = _add_prediction_cautions(fig, trajectory)
+
     # Extract data as HTML table
     table_html = extract_plotly_data_for_table(fig)
 
@@ -3134,9 +3223,9 @@ def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, m
     plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
 
     return {'plot': plot_html, 'table_html': table_html,
-            'prediction_records': records}
+            'prediction_records': records, 'extrapolation_warnings': cautions}
 
-def create_prediction_plot_a3(data, t_pred, m_pred, var_pred_scaled, ptype='v'):
+def create_prediction_plot_a3(data, t_pred, m_pred, var_pred_scaled, ptype='v', *, trajectory=None):
     """Create prediction plot for approach 3 - direct mapping"""
     t1,m1,t2,m2,mm,tt,ti1,ti2,mi1,mi2 = data
     if ptype == 'v':
@@ -3259,6 +3348,16 @@ def create_prediction_plot_a3(data, t_pred, m_pred, var_pred_scaled, ptype='v'):
     fig.update_xaxes(title_font=dict(size=20), tickfont=dict(size=18))
     fig.update_yaxes(title_font=dict(size=20), tickfont=dict(size=18))
 
+    records = (_parameter_prediction_records(trajectory, 'value' if ptype == 'v' else 'time')
+               if trajectory is not None else _prediction_records_for_report(
+                   None, t_pred, m_pred, 'value' if ptype == 'v' else 'time',
+                   predictions=var_pred_scaled, interval_applicable=False))
+    for trace in fig.data:
+        if trace.name == 'In Vivo (Predicted)':
+            trace.meta = {'prediction_records': records, 'prediction_output_kind': 'value' if ptype == 'v' else 'time'}
+            trace.text = ['; '.join(filter(None, (row.get('status'), row.get('extrapolation_status'), row.get('extrapolation_reason')))) for row in records]
+            trace.hovertemplate = 'Time: %{x}<br>Response: %{y}<br>%{text}<extra>%{fullData.name}</extra>'
+    cautions = _add_prediction_cautions(fig, trajectory)
     # Extract data as HTML table
     table_html = extract_plotly_data_for_table(fig)
 
@@ -3266,6 +3365,5 @@ def create_prediction_plot_a3(data, t_pred, m_pred, var_pred_scaled, ptype='v'):
     plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
 
     return {'plot': plot_html, 'table_html': table_html,
-            'prediction_records': _prediction_records_for_report(
-                fig, t_pred, m_pred, 'value' if ptype == 'v' else 'time', interval_applicable=False)}
+            'prediction_records': records, 'extrapolation_warnings': cautions}
 
