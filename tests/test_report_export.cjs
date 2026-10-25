@@ -12,7 +12,7 @@ const tableRows = [['Source row', 'Response'], ...Array.from({length: 37}, (_, i
 const base = [{type: 'paragraph', detail_key: 'endpoint', detail_label: 'Measured response', text: 'Measured response: Not provided'},
               {type: 'paragraph', detail_key: 'selection_rationale', detail_label: 'Selection rationale', text: 'Selection rationale: Not provided'},
               {type: 'table', title: 'All observations', rows: tableRows},
-              {type: 'image', source_id: 'fit-plot', title: 'Fitted curve', description: 'Approximate 95% prediction band.'}];
+              {type: 'image', source_id: 'fit-plot', title: 'Fitted curve', description: 'Approximate pointwise 95% parameter-uncertainty band.'}];
 const fields = {endpoint: {value: '<mass remaining>'}, selection_rationale: {value: ''}};
 function report(id, withImage) {
     const attributes = {'data-report-id': id};

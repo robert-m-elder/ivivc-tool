@@ -139,16 +139,16 @@ The smaller dataset already suggests that the linear model does not capture the 
 
 \subsection{Fitted-parameter uncertainty}
 
-The app reports each fitted parameter with a 95\% confidence interval. Table~\ref{tab:tutorial-parameters} also reports the standard error (SE) and relative standard error (RSE = SE / estimate in \%). 
+The app reports each fitted parameter as the estimate $\pm$ the half-width of an approximate 95\% confidence interval. Table~\ref{tab:tutorial-parameters} lists that half-width separately from the estimate, together with the standard error (SE) and relative standard error (RSE = SE / absolute estimate in \%). These intervals describe individual parameters, not the scatter of future observations. The app's fitted-curve bands and prediction error bars propagate parameter uncertainty through the calculation (Section~\ref{sec:uncertainty}); this tutorial's curve figures show fitted lines without uncertainty bands.
 
 \begin{longtable}{@{}llrrrr@{}}
 \caption{Fitted-parameter estimates and approximate uncertainty.}\label{tab:tutorial-parameters}\\
 \toprule
-\textbf{Model} & \textbf{Parameter} & \textbf{Estimate} & \textbf{SE} & \textbf{95\% CI} & \textbf{RSE (\%)} \\
+\textbf{Model} & \textbf{Parameter} & \textbf{Estimate} & \textbf{SE} & \shortstack{\textbf{95\% CI}\\\textbf{half-width}} & \textbf{RSE (\%)} \\
 \midrule
 \endfirsthead
 \toprule
-\textbf{Model} & \textbf{Parameter} & \textbf{Estimate} & \textbf{SE} & \textbf{95\% CI} & \textbf{RSE (\%)} \\
+\textbf{Model} & \textbf{Parameter} & \textbf{Estimate} & \textbf{SE} & \shortstack{\textbf{95\% CI}\\\textbf{half-width}} & \textbf{RSE (\%)} \\
 \midrule
 \endhead
 \csvreader[head to column names, late after line=\\]{tutorial/generated/parameter_estimates.csv}{}{%

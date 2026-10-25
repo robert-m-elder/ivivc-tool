@@ -15,11 +15,13 @@ For the browser payload functions, using Node.js:
 
 ```bash
 node tests/test_report_export.cjs
+node tests/test_accessibility_descriptions.cjs
 ```
 
 The browser check verifies that all rows are retained, author text is preserved,
 selection rationales stay with the correct report, and missing images remain
-explicit. It does not require installing JavaScript packages.
+explicit. The accessibility check distinguishes parameter-uncertainty intervals
+from descriptive CV-refit shading. Neither check requires installing JavaScript packages.
 
 ## Response-value ratio uncertainty
 
