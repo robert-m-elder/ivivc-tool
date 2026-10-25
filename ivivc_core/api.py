@@ -289,9 +289,9 @@ def fit_ivivc(
 
 
 def _tau_uncertain_value(fit: ProfileFit):
-    if fit.tau_estimate is None or fit.tau_sd is None:
-        return ufloat(0.0, 1.0)
-    return ufloat(fit.tau_estimate, fit.tau_sd)
+    estimate = np.nan if fit.tau_estimate is None else fit.tau_estimate
+    sd = np.nan if fit.tau_sd is None else fit.tau_sd
+    return ufloat(estimate, sd)
 
 
 def predict_in_vivo(
@@ -302,15 +302,16 @@ def predict_in_vivo(
     confidence_level: float = 0.95,
     n_samples: int = 1000,
     fail_fast: bool = False,
+    random_state=12345,
 ) -> ResultBatch[PredictedTrajectory]:
     """Generate central in vivo trajectories from a structured IVIVC analysis.
 
     The prediction time course must already be on the same preprocessed scale as
     ``analysis.prepared_data``.  Use ``methods`` to restrict the default method
     set; for example ``{'approach2': ('value_ratio', 'tau_ratio')}``.
-    Response-ratio bounds propagate fitted-parameter uncertainty only, holding
-    the prediction inputs fixed; uncertainty definitions for other methods are
-    unchanged. Use ``predict_value_ratio_with_uncertainty`` for a seeded call.
+    All parametric methods propagate fitted-parameter uncertainty only, with
+    fixed prediction inputs, pointwise percentile bounds, and a reproducible
+    default uncertainty seed independent of CV and initialization seeds.
     """
     selected_methods = _resolved_prediction_methods(methods)
     trajectories: dict[str, PredictedTrajectory] = {}
@@ -330,6 +331,9 @@ def predict_in_vivo(
                         prediction,
                         model_name=model_fit.model_name,
                         parameters=model_fit.time_mapping_fit.parameters,
+                        covariance=model_fit.time_mapping_fit.covariance,
+                        include_uncertainty=True, confidence_level=confidence_level,
+                        n_samples=n_samples, random_state=random_state,
                     )
                 elif model_fit.approach_id == 'approach2':
                     assert model_fit.model_name is not None
@@ -346,7 +350,7 @@ def predict_in_vivo(
                             in_vivo_parameters=in_vivo_fit.parameters,
                             in_vivo_covariance=in_vivo_fit.covariance,
                             confidence_level=confidence_level,
-                            n_samples=n_samples,
+                            n_samples=n_samples, random_state=random_state,
                         )
                     elif method == 'tau_ratio':
                         trajectory = predict_tau_ratio(
@@ -356,6 +360,12 @@ def predict_in_vivo(
                                 _tau_uncertain_value(in_vitro_fit),
                                 _tau_uncertain_value(in_vivo_fit),
                             ),
+                            tau_diagnostics=(in_vitro_fit.tau_diagnostics, in_vivo_fit.tau_diagnostics),
+                            in_vitro_parameters=in_vitro_fit.parameters,
+                            in_vitro_covariance=in_vitro_fit.covariance,
+                            in_vivo_parameters=in_vivo_fit.parameters,
+                            in_vivo_covariance=in_vivo_fit.covariance,
+                            n_samples=n_samples, random_state=random_state,
                             residual_dof=(
                                 in_vitro_fit.residual_dof,
                                 in_vivo_fit.residual_dof,
@@ -375,7 +385,7 @@ def predict_in_vivo(
                             ),
                             observed_responses=prepared.in_vivo.value,
                             confidence_level=confidence_level,
-                            n_samples=n_samples,
+                            n_samples=n_samples, random_state=random_state,
                         )
                 else:
                     if method == 'value_scaling':

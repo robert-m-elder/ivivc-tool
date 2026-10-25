@@ -236,7 +236,7 @@ def test_tau_points_remain_available_without_uncertainty():
     assert result.time_error_upper is None
     assert result.time_error_lower is None
     assert not result.auxiliary['interval_available']
-    assert 'Sampling failed' in result.note
+    assert 'parameter vectors and covariance' in result.note
 
 
 def test_failed_tau_prediction_explains_integration_reason():
@@ -290,7 +290,7 @@ def test_process_predictions_retains_tau_points_and_explanatory_note(monkeypatch
         return {'plot': '<plot>', 'table_html': '<table>'}
     monkeypatch.setattr(engine, 'create_prediction_plot_a2', plot)
     fitted = {'params': [{'a': 1., 'b': -.2}, {'a': 1., 'b': -.1}],
-              'pcov': [np.zeros((2, 2)), np.zeros((2, 2))],
+              'pcov': [np.full((2, 2), np.nan), np.zeros((2, 2))],
               'residuals': [np.zeros(4), np.zeros(4)], 'residual_dof': [2, 2],
               'tau': [SimpleNamespace(n=5., s=np.nan), SimpleNamespace(n=10., s=.1)],
               'tau_diagnostics': [{'uncertainty_reason': 'Covariance unavailable.'}, {}]}
@@ -299,10 +299,10 @@ def test_process_predictions_retains_tau_points_and_explanatory_note(monkeypatch
     assert 'error' not in output
     np.testing.assert_allclose(plotted['tau_ratio'][0], 2. * time[:2])
     assert plotted['tau_ratio'][1] is None
-    assert 'Covariance unavailable' in output['plot_tau_note']
+    assert 'Parameter sampling failed' in output['plot_tau_note']
     for row in output['prediction_tables']['tau_ratio']:
         assert row['lower_95'] is None and row['upper_95'] is None
-        assert 'uncertainty unavailable' in row['interval_status']
+        assert 'unavailable' in row['interval_status']
 
 
 def test_tau_api_adapter_with_real_uncertainties_preserves_missing_sd():

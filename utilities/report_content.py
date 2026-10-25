@@ -13,6 +13,7 @@ import numpy as np
 
 from metrics import metrics
 from utilities.descriptions import CV_SCHEME_LABELS, PREPROCESSING_DESCRIPTIONS
+from utilities.prediction_validity import tau_estimate_is_available, tau_uncertainty_is_available
 
 
 REPORT_DETAIL_FIELDS = (
@@ -32,8 +33,7 @@ _METHODS = {
         'In vivo time is calculated from in vitro time using the fitted time relationship. '
         'The prediction response is carried into the plot but is not used to calculate the mapped time.',
         't_vivo,pred = f(t_vitro,pred)',
-        'Horizontal error bars use the fitted time relationship\'s approximate 95% prediction-band calculation, '
-        'including fitted-parameter uncertainty and residual error. The fitted relationship can be evaluated beyond its calibration range.'),
+        'Horizontal intervals propagate fitted time-mapping parameters at fixed input times using the common parameter-only percentile calculation. The fitted relationship can be evaluated beyond its calibration range.'),
     'value_ratio': (
         'Both fitted calibration curves are evaluated at each prediction time. Their in vivo/in vitro response ratio scales the supplied prediction response.',
         'y_vivo,pred = y_vitro,pred × f_vivo(t) / f_vitro(t)',
@@ -47,14 +47,13 @@ _METHODS = {
     'tau_ratio': (
         'The prediction time is scaled by the ratio of the fitted in vivo and in vitro time constants. The prediction response is not used to calculate that time.',
         't_vivo,pred = t_vitro,pred × tau_vivo / tau_vitro',
-        'Horizontal error bars propagate both time-constant uncertainties into approximate 95% intervals. '
+        'Horizontal parameter-uncertainty intervals propagate independent draws of both fitted parameter vectors through checked tau integration and time scaling. Failed integrations make the interval unavailable; the central point uses fitted-parameter taus. '
         'A time constant summarizes the whole fitted curve; this scaling may miss differences in curve shape. Input and output times are not restricted to observed ranges.'),
     'observed_response_inverse': (
         'Each preprocessed observed prediction response is mapped to the time at which the fitted in vivo calibration curve reaches that response. '
         'The supplied prediction time and fitted in vitro curve are not used to calculate the mapped time.',
         't_vivo,pred = inverse(f_vivo)(y_vitro,pred)',
-        'Horizontal error bars are approximate 95% inverse-prediction intervals from sampled in vivo parameter covariance and response perturbations. '
-        'The in vivo fit\'s residual standard error is used as a surrogate for the new response\'s uncertainty. '
+        'Horizontal parameter-uncertainty intervals invert sampled in vivo curves at the fixed supplied response. No response perturbations or residual noise are added. '
         'The mapping requires a one-to-one fitted curve and is bounded by the observed in vivo calibration time and response ranges. '
         'Responses just beyond the fitted endpoint but within the observed response range can map to a calibration endpoint; interval bounds are bounded by construction.'),
     'value_scaling': (
@@ -474,16 +473,16 @@ def build_report_sections(context, option):
 
     sections.extend(_candidate_sections(context, option))
     sections.append(_heading('Fit and diagnostic results' if approach != 'approach3' else 'Mapping results'))
-    fit_caption = ('Response-aligned analyzed in vitro and in vivo calibration times and their fitted relationship; shading shows the available approximate 95% prediction band.' if approach == 'approach1' else
-                   'Independent in vitro and in vivo fits to preprocessed observed time-response points; shading shows available approximate 95% prediction bands.' if approach == 'approach2' else
+    fit_caption = ('Response-aligned analyzed in vitro and in vivo calibration times and their fitted relationship; shading shows the available approximate 95% parameter-uncertainty band.' if approach == 'approach1' else
+                   'Independent in vitro and in vivo fits to preprocessed observed time-response points; shading shows available approximate 95% parameter-uncertainty bands.' if approach == 'approach2' else
                    'Deterministic ratios derived from the calibration observations and selected alignment; no statistical uncertainty band is calculated.')
     for source in option.get('fit_plot_sources') or []:
         sections.append(_image(source['source_id'], source['title'], fit_caption))
     for warning in (result.get('plot') or {}).get('uncertainty_warnings', []):
         sections.append(_paragraph('Fitting-plot warning: ' + str(warning.get('message', '')) + (' ' + str(warning['detail']) if warning.get('detail') else '')))
     if approach != 'approach3':
-        sections.append(_paragraph('Parameter intervals are approximate local 95% confidence intervals from fitted covariance. Fitting-plot bands combine Monte Carlo parameter variation with residual error as approximate 95% prediction bands. These are conditional on the model and its error assumptions.'))
-        sections.append(_paragraph('Fitting and applicable prediction-band calculations request 1,000 Monte Carlo parameter draws. The CV and initialization seeds control their respective procedures, not the uncertainty draws. Export reuses the already calculated results.'))
+        sections.append(_paragraph('Parameter-table intervals remain approximate local 95% confidence intervals from fitted covariance. Fitting bands and prediction error bars are approximate pointwise 95% parameter-uncertainty intervals: 2.5th and 97.5th percentiles of covariance-aware parameter draws, conditional on the model, preprocessing, and fixed prediction inputs. Separate fits are sampled independently. No additional residual/observation noise, model-selection uncertainty, or model inadequacy is included. These are not prediction intervals for future observations or a simultaneous envelope. Calibration variability still informs fitted covariance.'))
+        sections.append(_paragraph('Fitting and parametric prediction intervals use 1,000 parameter draws and uncertainty seed 12345, independently of the CV/initialization seeds. Central values use fitted parameters, not the sampled mean. Any unusable draw at a point makes its interval unavailable; unrelated requested times do not change an available pointwise interval. Export reuses the already calculated bounds without resampling or re-centering.'))
         for index, label in enumerate(('In vitro', 'In vivo') if approach == 'approach2' else ('Time correlation',)):
             metadata = _fit_metadata(result, index)
             sections.append(_heading(label, 2))
@@ -509,9 +508,17 @@ def build_report_sections(context, option):
             for index, label in enumerate(('In vitro', 'In vivo')):
                 value = _at(result.get('tau'), index)
                 metadata = _fit_metadata(result, index)
-                rows.append([label, getattr(value, 'n', np.nan), getattr(value, 's', np.nan) * metadata.get('ci_multiplier_95', 1.96)])
-            sections.append(_table('Time constants used for time scaling', ['Calibration series', 'Tau', '95% CI half-width'], rows))
-            sections.append(_paragraph('Tau is the integral of the fitted curve from zero to infinity divided by its fitted initial response. Its uncertainty is propagated using 50 parameter draws and may depend strongly on the extrapolated tail.'))
+                diagnostics = _at(result.get('tau_diagnostics'), index) or {}
+                estimate = value.n if tau_estimate_is_available(value) else np.nan
+                multiplier = metadata.get('ci_multiplier_95', 1.96)
+                half_width = (value.s * multiplier if tau_uncertainty_is_available(value)
+                              and np.isfinite(multiplier) and multiplier > 0 else np.nan)
+                status = ('Available' if np.isfinite(estimate) and np.isfinite(half_width)
+                          else diagnostics.get('reason') or diagnostics.get('uncertainty_reason')
+                          or ('Uncertainty unavailable' if np.isfinite(estimate) else 'Time constant unavailable'))
+                rows.append([label, estimate, half_width, status])
+            sections.append(_table('Time constants used for time scaling', ['Calibration series', 'Tau', '95% CI half-width', 'Status'], rows))
+            sections.append(_paragraph('Central tau is the integral of the fitted curve from zero to infinity divided by its fitted initial response, evaluated at the fitted parameters. Integration warnings or invalid results make tau unavailable without discarding the fitted curve. The app estimates tau standard uncertainty using 50 parameter draws (seed 12345); if sampling fails or any sampled tau is invalid, uncertainty is unavailable rather than calculated after dropping those draws. Plotted tau-ratio intervals separately propagate 1,000 pairs of fitted parameter draws using percentile bounds, rather than multiplying the table SDs by a t multiplier. A valid central time scaling can still be shown without error bars. Tau may depend strongly on the extrapolated tail; these numerical checks do not prove convergence.'))
     else:
         sections.append(_paragraph('The plotted ratios and mappings are determined by the supplied data and interpolation choices. Formal propagated uncertainty is not available.'))
 
@@ -546,21 +553,32 @@ def build_report_sections(context, option):
                             ['Row', 'Usable draws', 'Generated draws', 'Requested draws',
                              'Denominator lower 95%', 'Denominator upper 95%', 'Random seed'], extra))
                         sections.append(_paragraph('Usable draws are counted separately at each prediction time. No residual noise is added. Intervals that exclude the point estimate are drawn as separate vertical segments at the calculated bounds, not re-centered.'))
+                if method in ('direct_time_correlation', 'tau_ratio', 'observed_response_inverse'):
+                    draw_rows = [[i + 1, row.get('interval_valid_samples'), row.get('interval_total_samples'),
+                                  row.get('interval_requested_samples'), row.get('interval_random_seed')]
+                                 for i, row in enumerate(records) if 'interval_requested_samples' in row]
+                    if draw_rows:
+                        sections.append(_table('Parameter-uncertainty diagnostics',
+                            ['Row', 'Usable draws', 'Generated draws', 'Requested draws', 'Random seed'], draw_rows))
                 if method == 'observed_response_inverse':
                     extra = [[i + 1, row.get('calculated_lower_95'), row.get('calculated_upper_95'), row.get('interval_valid_samples'), row.get('interval_total_samples', row.get('total_samples'))]
                              for i, row in enumerate(records) if row.get('calculated_lower_95') is not None or row.get('calculated_upper_95') is not None]
                     if extra:
                         sections.append(_table('Calculated inverse interval diagnostics', ['Row', 'Calculated lower 95%', 'Calculated upper 95%', 'Valid Monte Carlo draws', 'Requested draws'], extra))
-                        sections.append(_paragraph('Calculated percentile bounds can be suppressed from the plot when they do not contain the point estimate or too few valid inverse solutions are available; see each interval status.'))
+                        sections.append(_paragraph('Finite calculated bounds are retained even when they do not contain the point estimate; such intervals are drawn as separate horizontal segments. Unavailable intervals and failed-draw counts are reported explicitly.'))
             selected_predictions = (context.get('prediction_results') or {}).get(approach, {}).get(option.get('model_name'), {})
+            if method == 'direct_time_correlation' and selected_predictions.get('plot_note'):
+                sections.append(_paragraph(selected_predictions['plot_note']))
             if method == 'value_ratio' and selected_predictions.get('plot_value_ratio_note'):
                 sections.append(_paragraph(selected_predictions['plot_value_ratio_note']))
+            if method == 'tau_ratio' and selected_predictions.get('plot_tau_note'):
+                sections.append(_paragraph(selected_predictions['plot_tau_note']))
             if method == 'observed_response_inverse' and selected_predictions.get('plot_inverse_response_note'):
                 sections.append(_paragraph(selected_predictions['plot_inverse_response_note']))
             for source in option.get('prediction_plot_sources') or []:
                 caption = ('Predicted in vivo responses at the supplied analyzed times; vertical intervals show available approximate 95% parameter uncertainty conditional on fixed prediction inputs, without additional observation noise.' if method == 'value_ratio' else
-                           'Predicted in vivo times from the supplied analyzed in vitro responses; horizontal bars show available approximate 95% inverse-prediction intervals.' if method == 'observed_response_inverse' else
-                           'Predicted in vivo times from the supplied analyzed in vitro times; horizontal bars show available approximate 95% intervals.' if method in ('direct_time_correlation', 'tau_ratio') else
+                           'Predicted in vivo times from the supplied analyzed in vitro responses; horizontal intervals show available approximate 95% parameter uncertainty conditional on the fixed response.' if method == 'observed_response_inverse' else
+                           'Predicted in vivo times from the supplied analyzed in vitro times; horizontal intervals show available approximate 95% parameter uncertainty conditional on fixed inputs.' if method in ('direct_time_correlation', 'tau_ratio') else
                            'Predictions from the selected deterministic mapping on the analyzed scales; no formal uncertainty bars are available.')
                 sections.append(_image(source['source_id'], source['title'], caption))
     else:

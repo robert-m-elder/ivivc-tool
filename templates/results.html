@@ -445,10 +445,11 @@
                                         <h4>Time constant</h4>
                                         {% set tau_row = model_results.tau_intervals[0] %}
                                         {% if tau_row.is_available %}
-                                            <p>Tau: {{ tau_row.estimate }} ± {{ tau_row.half_width }}</p>
+                                            <p>Tau: {{ tau_row.estimate }}{% if tau_row.interval_available %} ± {{ tau_row.half_width }}{% else %} (uncertainty unavailable){% endif %}</p>
                                         {% else %}
                                             <p>Tau: N/A</p>
                                         {% endif %}
+                                        {% if tau_row.note %}<p class="evidence-note">{{ tau_row.note }}</p>{% endif %}
                                         <h4>Goodness of Fit</h4>
                                         {{ model_results.stats_table[0] | safe }}
                                         {% if analysis_config.include_cv_fit_variability_plot and model_results.cv_fit_variability_plot is defined %}
@@ -497,10 +498,11 @@
                                     <h4>Time constant</h4>
                                     {% set tau_row = model_results.tau_intervals[1] %}
                                     {% if tau_row.is_available %}
-                                        <p>Tau: {{ tau_row.estimate }} ± {{ tau_row.half_width }}</p>
+                                        <p>Tau: {{ tau_row.estimate }}{% if tau_row.interval_available %} ± {{ tau_row.half_width }}{% else %} (uncertainty unavailable){% endif %}</p>
                                     {% else %}
                                         <p>Tau: N/A</p>
                                     {% endif %}
+                                    {% if tau_row.note %}<p class="evidence-note">{{ tau_row.note }}</p>{% endif %}
                                     <h4>Goodness of Fit</h4>
                                     {{ model_results.stats_table[1] | safe }}
                                     {% if analysis_config.include_cv_fit_variability_plot and model_results.cv_fit_variability_plot is defined %}
@@ -569,6 +571,9 @@
                                 <span class="help-icon" aria-hidden="true">?</span>
                             </button>
                         </h2>
+                        {% if approach_id != "approach3" %}
+                        <p class="evidence-note">Shading and error bars show approximate pointwise 95% parameter-uncertainty intervals for fitted or calculated values, conditional on the model, preprocessing, and fixed prediction inputs. They do not include the additional scatter of future observations.</p>
+                        {% endif %}
                         <nav class="model-jump-nav" aria-label="Model navigation for {{ approaches[approach_id].display_name }} prediction results">
                             <label for="model-jump-prediction-{{ approach_id }}">{% if approach_id == "approach3" %}Jump to prediction:{% else %}Jump to model:{% endif %}</label>
                             <select id="model-jump-prediction-{{ approach_id }}" class="model-jump-select">
@@ -606,6 +611,7 @@
                                                 {{ pred_result.plot.plot | safe }}
                                             </div>
 {{ render_plot_data_downloads('approach1-' ~ model_name ~ '-table-pred', models[model_name].display_name ~ ' Approach 1 prediction plot', pred_result['plot']['table_html']) }}
+                                            {% if pred_result.plot_note %}<p class="evidence-note">{{ pred_result.plot_note }}</p>{% endif %}
                                         {% endif %}
 </div>
                                 {% endif %}
@@ -615,7 +621,6 @@
                                         <h3 id="prediction-{{ approach_id }}-result-{{ model_name|replace('_', '-') }}" class="model-jump-target" tabindex="-1">Model: {{ models[model_name].display_name }}</h3>
                                         {% if 'plot' in pred_result %}
                                             <h4>Response-value ratio rescaling</h4>
-                                            <p class="evidence-note">Vertical intervals show approximate 95% parameter uncertainty from both fitted calibration curves, treating the supplied prediction times and responses as fixed. No additional measurement variability or model inadequacy is included.</p>
                                             {% if pred_result.plot_value_ratio_note %}
                                                 <p class="prediction-skip-reason"><span class="evidence-badge uncertainty-plot-badge">Some intervals unavailable</span> {{ pred_result.plot_value_ratio_note }}</p>
                                             {% endif %}
@@ -626,6 +631,7 @@
 {% endif %}
                                         {% if 'plot_tau' in pred_result and pred_result['plot_tau'] is not none %}
                                             <h4>Time constant ratio rescaling</h4>
+                                            {% if pred_result.plot_tau_note %}<p class="evidence-note">{{ pred_result.plot_tau_note }}</p>{% endif %}
                                             <div id="plot-prediction-{{ approach_id }}-{{ model_name }}-tau" class="plot-container report-source-plot">
                                                 {{ pred_result.plot_tau.plot | safe }}
                                             </div>
@@ -635,7 +641,7 @@
                                             <p class="prediction-skip-reason">{{ pred_result.plot_tau_skip_reason }}</p>
                                         {% endif %}
                                         <h4>Observed-response inverse mapping</h4>
-                                        <p class="evidence-note">Maps each preprocessed observed in vitro prediction response to the corresponding time on the fitted in vivo calibration curve. Horizontal error bars show approximate 95% inverse-prediction intervals that combine fitted in vivo parameter uncertainty with an assumed response uncertainty equal to the in vivo fit's residual standard error. The mapping and intervals are limited to the observed in vivo calibration time range.</p>
+                                        <p class="evidence-note">Maps each preprocessed observed in vitro prediction response to the corresponding time on the fitted in vivo calibration curve. Horizontal intervals propagate fitted in vivo parameters while holding the response fixed. The mapping and intervals are limited to the observed in vivo calibration time range.</p>
                                         {% if pred_result.plot_inverse_response is defined and pred_result.plot_inverse_response is not none %}
                                             <div id="plot-prediction-{{ approach_id }}-{{ model_name }}-inverse" class="plot-container report-source-plot">
                                                 {{ pred_result.plot_inverse_response.plot | safe }}

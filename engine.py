@@ -5,6 +5,8 @@ from html import escape
 from uuid import uuid4
 
 import numpy as np
+from ivivc_core.intervals import curve_parameter_intervals
+from utilities.prediction_validity import tau_estimate_is_available, tau_uncertainty_is_available
 import pandas as pd
 import scipy as sp
 import plotly.graph_objects as go
@@ -27,9 +29,6 @@ from ivivc_core.predictions import (
 )
 from ivivc_core.preprocessing import prepare_data
 from ivivc_core.types import TimeCourse
-from utilities.evaluation import (
-    generate_prediction_bands,
-)
 from utilities.misc import hex_to_rgba
 from utilities.parameter_diagnostics import (
     build_parameter_diagnostics_html,
@@ -324,23 +323,29 @@ def _interval_rows_from_uparams(uparams, multiplier, confidence_label='95% CI'):
     return rows
 
 
-def _tau_interval_row(tau_value, multiplier, label='Tau'):
-    """Format a propagated tau value as estimate plus/minus CI value."""
-    estimate = _finite_float(getattr(tau_value, 'n', np.nan))
-    std_uncertainty = _finite_float(getattr(tau_value, 's', np.nan))
-    is_available = bool(estimate > 0 and np.isfinite(std_uncertainty) and std_uncertainty >= 0)
-    row = {
+def _tau_interval_row(tau_value, multiplier, label='Tau', diagnostics=None):
+    """Keep the central tau and its interval availability separate."""
+    diagnostics = diagnostics or {}
+    is_available = tau_estimate_is_available(tau_value)
+    half_width = np.nan
+    if tau_uncertainty_is_available(tau_value) and np.isfinite(multiplier) and multiplier > 0:
+        half_width = multiplier * float(tau_value.s)
+    interval_available = bool(np.isfinite(half_width))
+    note = None
+    if not is_available:
+        note = diagnostics.get('reason') or 'A finite positive time constant is unavailable.'
+    elif not interval_available:
+        note = diagnostics.get('uncertainty_reason') or 'Time-constant uncertainty is unavailable.'
+    return {
         'label': label,
-        'estimate': _format_interval_number(estimate),
+        'estimate': _format_interval_number(tau_value.n) if is_available else 'N/A',
         'confidence_label': '95% CI',
         'is_available': is_available,
+        'interval_available': interval_available,
+        'half_width': _format_interval_number(half_width) if interval_available else 'N/A',
+        'note': note,
     }
-    if is_available:
-        half_width = multiplier * std_uncertainty
-        row['half_width'] = _format_interval_number(half_width)
-    else:
-        row['half_width'] = 'N/A'
-    return row
+
 
 def preprocess_data(t1, m1, t2, m2, selected_interpolation=None, selected_scalings=None, selected_normalizations=None,
                     fallback_invalid_log_scaling=False, return_metadata=False):
@@ -496,9 +501,15 @@ def _profile_fit_to_legacy_components(profile_fit, *, include_tau=False):
     }
 
     if include_tau:
-        tau = unc.ufloat(profile_fit.tau_estimate, profile_fit.tau_sd)
+        tau = unc.ufloat(
+            np.nan if profile_fit.tau_estimate is None else profile_fit.tau_estimate,
+            np.nan if profile_fit.tau_sd is None else profile_fit.tau_sd,
+        )
         components['tau'] = tau
-        components['tau_interval'] = _tau_interval_row(tau, parameter_ci_multiplier)
+        components['tau_diagnostics'] = dict(profile_fit.tau_diagnostics)
+        components['tau_interval'] = _tau_interval_row(
+            tau, parameter_ci_multiplier, diagnostics=profile_fit.tau_diagnostics,
+        )
 
     return components
 
@@ -630,6 +641,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                         legacy2['parameter_intervals'],
                     ],
                     'tau': [legacy1['tau'], legacy2['tau']],
+                    'tau_diagnostics': [legacy1['tau_diagnostics'], legacy2['tau_diagnostics']],
                     'tau_intervals': [
                         legacy1['tau_interval'],
                         legacy2['tau_interval'],
@@ -728,6 +740,8 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                             prediction_course,
                             model_name=model_name,
                             parameters=model_results['params'],
+                            covariance=model_results['pcov'],
+                            include_uncertainty=True,
                         )
 
                         plot_image = create_prediction_plot_a1(
@@ -743,6 +757,7 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                                 'pcov': model_results['pcov'],
                                 'residuals': model_results['residuals'],
                             },
+                            trajectory=trajectory,
                         )
 
                         approach_predictions[model_name] = {
@@ -752,15 +767,10 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                                 'predicted_in_vivo_time': trajectory.in_vivo_time,
                             },
                             'prediction_tables': {
-                                    'direct_time_correlation': _prediction_records_from_plot_or_values(
-                                        plot_image,
-                                        t_pred,
-                                        m_pred,
-                                        'time',
-                                        trajectory.in_vivo_time,
-                                    )
+                                    'direct_time_correlation': _parameter_prediction_records(trajectory, 'time')
                             },
                             'plot': plot_image,
+                            'plot_note': trajectory.note,
                         }
 
                     elif approach == 'approach2':
@@ -803,11 +813,17 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
 
                         # The legacy fit result retains this mutation because the
                         # report reads the reason from the fitted-model dictionary.
+                        tau_prediction = None
                         try:
                             tau_prediction = predict_tau_ratio(
                                 prediction_course,
                                 model_name=model_name,
                                 tau_values=model_results.get('tau'),
+                                tau_diagnostics=model_results.get('tau_diagnostics', []),
+                                in_vitro_parameters=params1,
+                                in_vitro_covariance=model_results['pcov'][0],
+                                in_vivo_parameters=params2,
+                                in_vivo_covariance=model_results['pcov'][1],
                                 residual_dof=model_results.get('residual_dof', []),
                                 confidence_level=0.95,
                             )
@@ -830,13 +846,14 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                                     },
                                     tau_prediction.time_error_upper,
                                     prediction_mode='tau_ratio',
+                                    time_prediction=tau_prediction,
                                 )
                             else:
                                 plot_image_tau = None
                         except Exception as e:
                             tau_skip_reason = (
                                 'Time-constant-ratio rescaling was not performed because '
-                                f'plot generation failed: {e}'
+                                f'calculation or plot generation failed: {e}'
                             )
                             model_results.setdefault('prediction_skip_reasons', {})[
                                 'tau_ratio'
@@ -860,16 +877,6 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
 
                         plot_image_inverse = None
                         if inverse_prediction.available:
-                            inverse_error = None
-                            interval_displayable = np.asarray(
-                                inverse_prediction.auxiliary['interval_displayable'],
-                                dtype=bool,
-                            )
-                            if np.any(interval_displayable):
-                                inverse_error = {
-                                    'lower': inverse_prediction.time_error_lower,
-                                    'upper': inverse_prediction.time_error_upper,
-                                }
                             plot_image_inverse = create_prediction_plot_a2(
                                 data,
                                 inverse_prediction.in_vitro_time,
@@ -883,59 +890,20 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                                     'approach': approaches[approach_id]['display_name'],
                                     'model_function': models[model_name]['model_function'],
                                 },
-                                t_pred_vivo_err=inverse_error,
+                                time_prediction=inverse_prediction,
                                 prediction_mode='observed_response_inverse',
                             )
 
-                        # Preserve the exact plotted quantities and all inverse
-                        # statuses, including calculated intervals suppressed
-                        # from display. No new fit or Monte Carlo draw is made.
-                        inverse_records = _prediction_records_from_plot_or_values(
-                            plot_image_inverse,
-                            inverse_prediction.in_vitro_time,
-                            inverse_prediction.in_vitro_value,
-                            'time',
-                            inverse_prediction.in_vivo_time,
-                        )
+                        # Copy authoritative numerical bounds, not reconstructed bar lengths.
+                        inverse_records = _parameter_prediction_records(inverse_prediction, 'time')
+                        for row in inverse_records:
+                            row['calculated_lower_95'] = row['lower_95']
+                            row['calculated_upper_95'] = row['upper_95']
 
-                        inverse_status = np.asarray(inverse_prediction.status).reshape(-1)
-                        inverse_lower = np.asarray(inverse_prediction.time_lower, dtype=float).reshape(-1)
-                        inverse_upper = np.asarray(inverse_prediction.time_upper, dtype=float).reshape(-1)
-                        inverse_valid_counts = np.asarray(
-                            inverse_prediction.auxiliary['interval_valid_samples']
-                        ).reshape(-1)
-                        inverse_total_samples = int(
-                            inverse_prediction.auxiliary['interval_total_samples']
-                        )
-
-                        for index, row in enumerate(inverse_records):
-                            row['status'] = str(inverse_status[index])
-                            raw_lower = float(inverse_lower[index])
-                            raw_upper = float(inverse_upper[index])
-                            row['calculated_lower_95'] = (
-                                raw_lower if np.isfinite(raw_lower) else None
-                            )
-                            row['calculated_upper_95'] = (
-                                raw_upper if np.isfinite(raw_upper) else None
-                            )
-                            row['interval_valid_samples'] = int(inverse_valid_counts[index])
-                            row['interval_total_samples'] = inverse_total_samples
-
-                            if row['predicted_in_vivo_time'] is None:
-                                row['interval_status'] = 'unavailable (response not mapped)'
-                            elif row['lower_95'] is None:
-                                row['interval_status'] = (
-                                    'calculated interval not displayed (does not contain point estimate)'
-                                    if np.isfinite([raw_lower, raw_upper]).all()
-                                    else 'unavailable (too few valid inverse solutions or calculation failed)'
-                                )
-
-                        tau_records = _prediction_records_from_plot_or_values(
-                            plot_image_tau,
-                            t_pred,
-                            m_pred,
-                            'time',
-                            tau_prediction.in_vivo_time,
+                        tau_records = (
+                            _parameter_prediction_records(tau_prediction, 'time')
+                            if tau_prediction is not None else
+                            _prediction_records_for_report(None, t_pred, m_pred, 'time')
                         )
                         if plot_image_tau is None:
                             for row in tau_records:
@@ -948,6 +916,7 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                         approach_predictions[model_name] = {
                             'plot': plot_image,
                             'plot_tau': plot_image_tau,
+                            'plot_tau_note': tau_prediction.note if tau_prediction is not None else None,
                             'plot_value_ratio_note': value_prediction.note,
                             'plot_tau_skip_reason': model_results.get(
                                 'prediction_skip_reasons', {}
@@ -2253,12 +2222,12 @@ def _plot_table_series_label(trace_name):
     label = str(trace_name or '').strip()
     replacements = {
         'Data': 'observed data',
-        '95% Prediction Band Upper Bound': '95% band upper',
-        '95% Prediction Band Lower Bound': '95% band lower',
-        '95% Prediction Band Upper Bound (In Vitro)': '95% band upper, in vitro',
-        '95% Prediction Band Lower Bound (In Vitro)': '95% band lower, in vitro',
-        '95% Prediction Band Upper Bound (In Vivo)': '95% band upper, in vivo',
-        '95% Prediction Band Lower Bound (In Vivo)': '95% band lower, in vivo',
+        '95% Parameter-Uncertainty Band Upper Bound': '95% band upper',
+        '95% Parameter-Uncertainty Band Lower Bound': '95% band lower',
+        '95% Parameter-Uncertainty Band Upper Bound (In Vitro)': '95% band upper, in vitro',
+        '95% Parameter-Uncertainty Band Lower Bound (In Vitro)': '95% band lower, in vitro',
+        '95% Parameter-Uncertainty Band Upper Bound (In Vivo)': '95% band upper, in vivo',
+        '95% Parameter-Uncertainty Band Lower Bound (In Vivo)': '95% band lower, in vivo',
     }
     if label in replacements:
         return replacements[label]
@@ -2309,6 +2278,8 @@ def extract_plotly_data_for_table(fig):
             continue
 
         base_name = str(getattr(trace, 'name', '') or '').strip()
+        if 'Parameter-Uncertainty Band' in base_name:
+            has_numerical_prediction_records = True  # Keep small fitted-band bounds as well.
         if not base_name:
             continue
         table_name = getattr(trace, 'meta', None)
@@ -2355,10 +2326,11 @@ def extract_plotly_data_for_table(fig):
         if isinstance(trace_metadata, dict) and 'prediction_records' in trace_metadata:
             has_numerical_prediction_records = True
             records = trace_metadata['prediction_records']
+            bound_axis_title = (x_title if trace_metadata.get('prediction_output_kind') == 'time' else y_title)
             # Percentile intervals need not contain the fitted-parameter point.
             # Export their actual endpoints, not re-centered bar lengths.
             for bound in ('lower', 'upper'):
-                columns[_plot_table_column_label(y_title, trace_name, bound)] = [
+                columns[_plot_table_column_label(bound_axis_title, trace_name, bound)] = [
                     row.get(f'{bound}_95') for row in records
                 ]
             for key, label in (
@@ -2407,7 +2379,7 @@ def create_plotly_a1(x, y, model_info, include_bands=True):
     x_range = _padded_axis_range(x, x_smooth)
     y_range = _padded_axis_range(y, y_smooth)
     
-    # Add prediction bands if requested and covariance matrix is available
+    # Add parameter-uncertainty bands if requested and covariance matrix is available
     if include_bands:
         if 'pcov' not in model_info or model_info['pcov'] is None:
             uncertainty_warnings.append(
@@ -2415,12 +2387,11 @@ def create_plotly_a1(x, y, model_info, include_bands=True):
             )
         else:
             try:
-                bands = generate_prediction_bands(
+                bands = curve_parameter_intervals(
                     model_info['model_function'],
                     x_smooth,
                     model_info['params'],
                     model_info['pcov'],
-                    model_info['residuals']
                 )
                 uncertainty_warnings.extend(
                     _assess_uncertainty_band_visibility(
@@ -2435,7 +2406,7 @@ def create_plotly_a1(x, y, model_info, include_bands=True):
                         x=x_smooth, y=bands['upper'],
                         mode='lines',
                         line=dict(width=0),
-                        name='95% Prediction Band Upper Bound',
+                        name='95% Parameter-Uncertainty Band Upper Bound',
                         showlegend=False,
                         hoverinfo='skip',
                         zorder=0
@@ -2447,8 +2418,8 @@ def create_plotly_a1(x, y, model_info, include_bands=True):
                         fill='tonexty',
                         fillcolor='rgba(128,128,128,0.3)',
                         line=dict(width=0),
-                        name='95% Prediction Band',
-                        meta='95% Prediction Band Lower Bound',
+                        name='95% Parameter-Uncertainty Band',
+                        meta='95% Parameter-Uncertainty Band Lower Bound',
                         hoverinfo='skip',
                         zorder=0
                     )
@@ -2457,7 +2428,7 @@ def create_plotly_a1(x, y, model_info, include_bands=True):
                     traces = [trace_data, trace_upper, trace_lower, trace_fit]
 
             except Exception as e:
-                print(f"Warning: Could not generate prediction bands: {e}")
+                print(f"Warning: Could not generate parameter-uncertainty bands: {e}")
                 uncertainty_warnings.append(_uncertainty_unavailable_warning())
 
     # Create the figure and add the traces
@@ -2580,7 +2551,7 @@ def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
     traces = [trace1, trace2]
     uncertainty_warnings = []
     
-    # Add prediction bands for dataset 1 (In Vitro) if requested.
+    # Add parameter-uncertainty bands for dataset 1 (In Vitro) if requested.
     if include_bands:
         if 'pcov1' not in model_info or model_info['pcov1'] is None:
             uncertainty_warnings.append(
@@ -2588,12 +2559,11 @@ def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
             )
         else:
             try:
-                bands1 = generate_prediction_bands(
+                bands1 = curve_parameter_intervals(
                     model_info['model_function'],
                     x_smooth,
                     model_info['params1'],
                     model_info['pcov1'],
-                    model_info['residuals1']
                 )
                 uncertainty_warnings.extend(
                     _assess_uncertainty_band_visibility(
@@ -2607,7 +2577,7 @@ def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
                         x=x_smooth, y=bands1['upper'],
                         mode='lines',
                         line=dict(width=0),
-                        name='95% Prediction Band Upper Bound (In Vitro)',
+                        name='95% Parameter-Uncertainty Band Upper Bound (In Vitro)',
                         showlegend=False,
                         hoverinfo='skip',
                         zorder=0
@@ -2619,8 +2589,8 @@ def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
                         fill='tonexty',
                         fillcolor=hex_to_rgba(colors['in_vitro'], 0.2),
                         line=dict(width=0),
-                        name='95% Prediction Band (In Vitro)',
-                        meta='95% Prediction Band Lower Bound (In Vitro)',
+                        name='95% Parameter-Uncertainty Band (In Vitro)',
+                        meta='95% Parameter-Uncertainty Band Lower Bound (In Vitro)',
                         hoverinfo='skip',
                         zorder=0
                     )
@@ -2628,10 +2598,10 @@ def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
                     traces.extend([trace1_upper, trace1_lower])
 
             except Exception as e:
-                print(f"Warning: Could not generate prediction bands for dataset 1: {e}")
+                print(f"Warning: Could not generate parameter-uncertainty bands for dataset 1: {e}")
                 uncertainty_warnings.append(_uncertainty_unavailable_warning('In vitro'))
 
-    # Add prediction bands for dataset 2 (In Vivo) if requested.
+    # Add parameter-uncertainty bands for dataset 2 (In Vivo) if requested.
     if include_bands:
         if 'pcov2' not in model_info or model_info['pcov2'] is None:
             uncertainty_warnings.append(
@@ -2639,12 +2609,11 @@ def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
             )
         else:
             try:
-                bands2 = generate_prediction_bands(
+                bands2 = curve_parameter_intervals(
                     model_info['model_function'],
                     x_smooth,
                     model_info['params2'],
                     model_info['pcov2'],
-                    model_info['residuals2']
                 )
                 uncertainty_warnings.extend(
                     _assess_uncertainty_band_visibility(
@@ -2658,7 +2627,7 @@ def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
                         x=x_smooth, y=bands2['upper'],
                         mode='lines',
                         line=dict(width=0),
-                        name='95% Prediction Band Upper Bound (In Vivo)',
+                        name='95% Parameter-Uncertainty Band Upper Bound (In Vivo)',
                         showlegend=False,
                         hoverinfo='skip',
                         zorder=0
@@ -2670,8 +2639,8 @@ def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
                         fill='tonexty',
                         fillcolor=hex_to_rgba(colors['in_vivo'], 0.2),
                         line=dict(width=0),
-                        name='95% Prediction Band (In Vivo)',
-                        meta='95% Prediction Band Lower Bound (In Vivo)',
+                        name='95% Parameter-Uncertainty Band (In Vivo)',
+                        meta='95% Parameter-Uncertainty Band Lower Bound (In Vivo)',
                         hoverinfo='skip',
                         zorder=0
                     )
@@ -2679,7 +2648,7 @@ def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
                     traces.extend([trace2_upper, trace2_lower])
 
             except Exception as e:
-                print(f"Warning: Could not generate prediction bands for dataset 2: {e}")
+                print(f"Warning: Could not generate parameter-uncertainty bands for dataset 2: {e}")
                 uncertainty_warnings.append(_uncertainty_unavailable_warning('In vivo'))
 
 
@@ -2748,7 +2717,7 @@ def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
         tickfont=dict(size=18)
     )
     # Draw an explicit border around the plotting area so the filled
-    # prediction bands cannot hide the top or right edge of the plot box.
+    # parameter-uncertainty bands cannot hide the top or right edge of the plot box.
     fig.add_shape(
         type='rect',
         xref='paper',
@@ -2922,12 +2891,15 @@ def _prediction_records_for_report(fig, t_pred, m_pred, output_kind,
     return records
 
 
-def _value_ratio_prediction_records(trajectory):
-    """Copy numerical response-ratio results; never infer bounds from a plot."""
+def _parameter_prediction_records(trajectory, output_kind):
+    """Copy calculated bounds and diagnostic metadata without resampling."""
+    center = getattr(trajectory, 'in_vivo_' + output_kind)
     rows = _prediction_records_for_report(
-        None, trajectory.in_vitro_time, trajectory.in_vitro_value, 'value',
-        predictions=trajectory.in_vivo_value,
+        None, trajectory.in_vitro_time, trajectory.in_vitro_value,
+        output_kind, predictions=center,
     )
+    lower = getattr(trajectory, output_kind + '_lower')
+    upper = getattr(trajectory, output_kind + '_upper')
     metadata = trajectory.auxiliary
 
     def finite_value(values, index):
@@ -2936,23 +2908,68 @@ def _value_ratio_prediction_records(trajectory):
         return float(values[index])
 
     for index, row in enumerate(rows):
-        row['lower_95'] = finite_value(trajectory.value_lower, index)
-        row['upper_95'] = finite_value(trajectory.value_upper, index)
+        row['lower_95'] = finite_value(lower, index)
+        row['upper_95'] = finite_value(upper, index)
         if trajectory.status is not None:
             row['status'] = str(trajectory.status[index])
-        row['interval_status'] = str(metadata['interval_status'][index])
-        row['interval_kind'] = metadata['interval_kind']
-        row['interval_confidence_level'] = float(metadata['interval_confidence_level'])
-        row['interval_valid_samples'] = int(metadata['interval_valid_samples'][index])
-        row['interval_total_samples'] = int(metadata['interval_total_samples'])
-        row['interval_requested_samples'] = int(metadata['interval_requested_samples'])
-        row['interval_random_seed'] = metadata['interval_random_seed']
-        row['denominator_lower_95'] = finite_value(metadata['denominator_lower'], index)
-        row['denominator_upper_95'] = finite_value(metadata['denominator_upper'], index)
+        if 'interval_status' in metadata:
+            row['interval_status'] = str(metadata['interval_status'][index])
+        for key in ('interval_kind', 'interval_confidence_level', 'interval_total_samples',
+                    'interval_requested_samples', 'interval_random_seed'):
+            if key in metadata:
+                row[key] = metadata[key]
+        if 'interval_valid_samples' in metadata:
+            row['interval_valid_samples'] = int(metadata['interval_valid_samples'][index])
+        if 'denominator_lower' in metadata:
+            row['denominator_lower_95'] = finite_value(metadata['denominator_lower'], index)
+            row['denominator_upper_95'] = finite_value(metadata['denominator_upper'], index)
     return rows
 
 
-def create_prediction_plot_a1(data, t_pred, m_pred, t_pred_vivo, model_info, include_bands=True):
+def _value_ratio_prediction_records(trajectory):
+    """Compatibility wrapper for the shared numerical prediction-table adapter."""
+    return _parameter_prediction_records(trajectory, 'value')
+
+
+def _add_parameter_prediction_trace(fig, t_pred, m_pred, centers, records, output_kind,
+                                    include_bands=True):
+    """Draw exact bounds on either axis, including non-centered intervals."""
+    if not include_bands:
+        for row in records:
+            row.update(lower_95=None, upper_95=None, interval_status='not displayed (disabled)')
+    lower = np.asarray([row['lower_95'] for row in records], dtype=float)
+    upper = np.asarray([row['upper_95'] for row in records], dtype=float)
+    center = np.asarray(centers, dtype=float)
+    bounded = np.isfinite(lower) & np.isfinite(upper) & np.isfinite(center)
+    contains = bounded & (lower <= center) & (center <= upper)
+    error = dict(
+        type='data', symmetric=False,
+        array=np.where(contains, upper - center, np.nan),
+        arrayminus=np.where(contains, center - lower, np.nan),
+        visible=bool(np.any(contains)), color=colors['prediction_output'], thickness=2, width=8,
+    )
+    is_time = output_kind == 'time'
+    fig.add_trace(go.Scatter(
+        x=center if is_time else t_pred, y=m_pred if is_time else center,
+        mode='markers', name='In Vivo (Predicted)',
+        meta={'prediction_records': records, 'prediction_output_kind': output_kind},
+        marker=dict(color=colors['prediction_output'], size=15, line=dict(color='white', width=2)),
+        **{'error_x' if is_time else 'error_y': error},
+    ))
+    outside = np.flatnonzero(bounded & ~contains)
+    if len(outside):
+        limits = [v for i in outside for v in (lower[i], upper[i], None)]
+        fixed = m_pred if is_time else t_pred
+        coordinates = [v for i in outside for v in (fixed[i], fixed[i], None)]
+        fig.add_trace(go.Scatter(
+            x=limits if is_time else coordinates, y=coordinates if is_time else limits,
+            mode='lines', name='95% parameter-uncertainty interval',
+            meta={'exclude_from_data_table': True},
+            line=dict(color=colors['prediction_output'], width=2), connectgaps=False,
+        ))
+
+
+def create_prediction_plot_a1(data, t_pred, m_pred, t_pred_vivo, model_info, include_bands=True, *, trajectory=None):
     """Create prediction plot for approach 1 - time scaling"""
     t1,m1,t2,m2,mm,tt,ti1,ti2,mi1,mi2 = data
     fig = go.Figure()
@@ -2981,54 +2998,21 @@ def create_prediction_plot_a1(data, t_pred, m_pred, t_pred_vivo, model_info, inc
         marker=dict(color=colors['prediction_input'], size=15, line=dict(color='white', width=2))
     ))
 
-    # Calculate prediction bands for the predicted in vivo times if available
-    error_x_lower = None
-    error_x_upper = None
-    
-    if include_bands and 'pcov' in model_info and model_info['pcov'] is not None and 'residuals' in model_info:
-        try:
-            # Generate prediction bands for the predicted times
-            bands = generate_prediction_bands(
-                model_info['model_function'], 
-                t_pred,  # Use the actual prediction times
-                model_info['params'], 
-                model_info['pcov'],
-                model_info['residuals']
-            )
-            
-            # Calculate error bar lengths (distance from mean to upper/lower bounds)
-            error_x_lower = bands['mean'] - bands['lower']  # Distance to lower bound
-            error_x_upper = bands['upper'] - bands['mean']  # Distance to upper bound
-            
-        except Exception as e:
-            print(f"Warning: Could not generate prediction bands for error bars: {e}")
-
-    # Predicted in vivo timeline with error bars
-    if error_x_lower is not None and error_x_upper is not None:
-        fig.add_trace(go.Scatter(
-            x=t_pred_vivo, y=m_pred,
-            mode='markers',
-            name='In Vivo (Predicted)',
-            marker=dict(color=colors['prediction_output'], size=15, line=dict(color='white', width=2)),
-            error_x=dict(
-                type='data',
-                symmetric=False,
-                array=error_x_upper,      # Upper error
-                arrayminus=error_x_lower, # Lower error
-                visible=True,
-                color=colors['prediction_output'],
-                thickness=2,
-                width=8
-            )
-        ))
+    if trajectory is not None:
+        records = _parameter_prediction_records(trajectory, 'time')
     else:
-        # Fallback: predicted points without error bars
-        fig.add_trace(go.Scatter(
-            x=t_pred_vivo, y=m_pred,
-            mode='markers',
-            name='In Vivo (Predicted)',
-            marker=dict(color=colors['prediction_output'], size=15, line=dict(color='white', width=2))
-        ))
+        records = _prediction_records_for_report(None, t_pred, m_pred, 'time', predictions=t_pred_vivo)
+        if include_bands:
+            interval = curve_parameter_intervals(
+                model_info['model_function'], t_pred, model_info['params'], model_info.get('pcov'),
+            )
+            for index, row in enumerate(records):
+                row.update(
+                    lower_95=float(interval['lower'][index]) if np.isfinite(interval['lower'][index]) else None,
+                    upper_95=float(interval['upper'][index]) if np.isfinite(interval['upper'][index]) else None,
+                    interval_status=str(interval['interval_status'][index]),
+                )
+    _add_parameter_prediction_trace(fig, t_pred, m_pred, t_pred_vivo, records, 'time', include_bands)
 
     fig.update_layout(
         template='plotly_white',
@@ -3053,9 +3037,9 @@ def create_prediction_plot_a1(data, t_pred, m_pred, t_pred_vivo, model_info, inc
     plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
 
     return {'plot': plot_html, 'table_html': table_html,
-            'prediction_records': _prediction_records_for_report(fig, t_pred, m_pred, 'time')}
+            'prediction_records': records}
 
-def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, model1_pred_plot, model2_pred_plot, model_info, t_pred_vivo_err=None, include_bands=True, prediction_mode='value_ratio', *, value_prediction=None):
+def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, model1_pred_plot, model2_pred_plot, model_info, t_pred_vivo_err=None, include_bands=True, prediction_mode='value_ratio', *, value_prediction=None, time_prediction=None):
     """Render existing Approach 2 predictions without recalculating uncertainty."""
     t1,m1,t2,m2,mm,tt,ti1,ti2,mi1,mi2 = data
     if prediction_mode == 'value_ratio' and value_prediction is not None:
@@ -3088,112 +3072,29 @@ def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, m
         marker=dict(color=colors['prediction_input'], size=15, line=dict(color='white', width=2))
     ))
 
-    # Numerical response-ratio intervals are supplied by the core, in response
-    # units. There is no residual addition, ratio scaling, or sampling here.
-    ratio_records = None
     if prediction_mode == 'value_ratio':
         title = f"In Vitro to In Vivo Value Prediction using value ratio rescaling with {model_info['model_name']}"
-        ratio_records = (
-            _value_ratio_prediction_records(value_prediction)
-            if value_prediction is not None
-            else _prediction_records_for_report(
-                None, t_pred, m_pred, 'value', predictions=mt_pred_vivo,
-            )
-        )
-        if not include_bands:
-            for row in ratio_records:
-                row.update(lower_95=None, upper_95=None, interval_status='not displayed (disabled)')
-        lower = np.asarray([row['lower_95'] for row in ratio_records], dtype=float)
-        upper = np.asarray([row['upper_95'] for row in ratio_records], dtype=float)
-        center = np.asarray(mt_pred_vivo, dtype=float)
-        bounded = np.isfinite(lower) & np.isfinite(upper) & np.isfinite(center)
-        contains_center = bounded & (lower <= center) & (center <= upper)
-        fig.add_trace(go.Scatter(
-            x=t_pred, y=center,
-            mode='markers',
-            name='In Vivo (Predicted)',
-            meta={'prediction_records': ratio_records},
-            marker=dict(color=colors['prediction_output'], size=15, line=dict(color='white', width=2)),
-            error_y=dict(
-                type='data', symmetric=False,
-                array=np.where(contains_center, upper - center, np.nan),
-                arrayminus=np.where(contains_center, center - lower, np.nan),
-                visible=bool(np.any(contains_center)),
-                color=colors['prediction_output'], thickness=2, width=8,
-            ),
-        ))
-        # A percentile interval can exclude the fitted-parameter point. Draw
-        # such intervals at their actual endpoints, without negative error bars
-        # or a shifted/clipped interval. The point estimate remains visible.
-        outside = np.flatnonzero(bounded & ~contains_center)
-        if len(outside):
-            fig.add_trace(go.Scatter(
-                x=[x for i in outside for x in (t_pred[i], t_pred[i], None)],
-                y=[y for i in outside for y in (lower[i], upper[i], None)],
-                mode='lines', name='95% parameter-uncertainty interval',
-                meta={'exclude_from_data_table': True},
-                line=dict(color=colors['prediction_output'], width=2),
-                connectgaps=False,
-            ))
-
+        trajectory, output_kind = value_prediction, 'value'
     else:
-        ## TIME MAPPING
-        # Predicted in vivo timeline with optional horizontal error bars
-        if prediction_mode == 'observed_response_inverse':
-            title = f"In Vitro to In Vivo Time Prediction using observed-response inverse mapping with {model_info['model_name']}"
+        method_label = ('observed-response inverse mapping' if prediction_mode == 'observed_response_inverse'
+                        else 'time constant ratio rescaling')
+        title = f"In Vitro to In Vivo Time Prediction using {method_label} with {model_info['model_name']}"
+        trajectory, output_kind = time_prediction, 'time'
+    records = (_parameter_prediction_records(trajectory, output_kind) if trajectory is not None else
+               _prediction_records_for_report(None, t_pred, m_pred, output_kind, predictions=mt_pred_vivo))
+    # Source compatibility for external callers supplying already-computed bar
+    # lengths. The app uses trajectories and never reconstructs numeric bounds.
+    if trajectory is None and output_kind == 'time' and t_pred_vivo_err is not None:
+        if isinstance(t_pred_vivo_err, dict):
+            minus, plus = t_pred_vivo_err['lower'], t_pred_vivo_err['upper']
         else:
-            title = f"In Vitro to In Vivo Time Prediction using time constant ratio rescaling with {model_info['model_name']}"
-        if t_pred_vivo_err is not None:
-            if isinstance(t_pred_vivo_err, dict):
-                error_x_lower = np.asarray(t_pred_vivo_err.get('lower'), dtype=float)
-                error_x_upper = np.asarray(t_pred_vivo_err.get('upper'), dtype=float)
-            else:
-                error_x_lower = np.asarray(t_pred_vivo_err, dtype=float)
-                error_x_upper = np.asarray(t_pred_vivo_err, dtype=float)
-            fig.add_trace(go.Scatter(
-                x=mt_pred_vivo, y=m_pred,
-                mode='markers',
-                name='In Vivo (Predicted)',
-                marker=dict(color=colors['prediction_output'], size=15, line=dict(color='white', width=2)),
-                error_x=dict(
-                    type='data',
-                    symmetric=False,
-                    array=error_x_upper,      # Upper error
-                    arrayminus=error_x_lower, # Lower error
-                    visible=True,
-                    color=colors['prediction_output'],
-                    thickness=2,
-                    width=8
-                )
-            ))
-        else:
-            # Fallback: predicted points without error bars
-            fig.add_trace(go.Scatter(
-                x=mt_pred_vivo, y=m_pred,
-                mode='markers',
-                name='In Vivo (Predicted)',
-                marker=dict(color=colors['prediction_output'], size=15, line=dict(color='white', width=2))
-            ))
-    if 0:
-        ## MASS, no error bars
-        # Predicted in vivo values
-        fig.add_trace(go.Scatter(
-            x=mt_pred_vivo, y=m_pred,
-            mode='markers',
-            name='In Vivo (Predicted)',
-            marker=dict(color=colors['prediction_output'], size=15, line=dict(color='white', width=2))
-        ))
-
-        # Connection lines to show time scaling
-        for i in range(len(t_pred)):
-            fig.add_trace(go.Scatter(
-                x=[t_pred[i], t_pred_vivo[i]],
-                y=[m_pred[i], m_pred[i]],
-                mode='lines',
-                line=dict(color='gray', width=2, dash='dot'),
-                showlegend=False,
-                hoverinfo='skip'
-            ))
+            minus = plus = t_pred_vivo_err
+        for index, row in enumerate(records):
+            low = mt_pred_vivo[index] - np.asarray(minus)[index]
+            high = mt_pred_vivo[index] + np.asarray(plus)[index]
+            if np.isfinite([low, high]).all():
+                row.update(lower_95=float(low), upper_95=float(high), interval_status='available')
+    _add_parameter_prediction_trace(fig, t_pred, m_pred, mt_pred_vivo, records, output_kind, include_bands)
 
     # Model predictions for reference
     fig.add_trace(go.Scatter(
@@ -3233,8 +3134,7 @@ def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, m
     plot_html = pio.to_html(fig, full_html=False, include_plotlyjs=False, config=config)
 
     return {'plot': plot_html, 'table_html': table_html,
-            'prediction_records': (ratio_records if prediction_mode == 'value_ratio'
-                                   else _prediction_records_for_report(fig, t_pred, m_pred, 'time'))}
+            'prediction_records': records}
 
 def create_prediction_plot_a3(data, t_pred, m_pred, var_pred_scaled, ptype='v'):
     """Create prediction plot for approach 3 - direct mapping"""

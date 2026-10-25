@@ -147,3 +147,49 @@ Backend code for a new module should import from `ivivc_core`, not from
 `engine.py`. Existing UI code can continue to import `preprocess_data`,
 `process_data`, and `process_predictions` from `engine.py`; their legacy return
 contracts are preserved by adapters in that facade.
+
+### Time-constant availability
+
+`ProfileFit.tau_estimate` is evaluated at the fitted parameters by one generic,
+checked `quad` calculation (default tolerances, `limit=100`). Unsupported models,
+integration warnings, invalid evaluations/results, or nonpositive tau produce
+NaN, with a reason in `tau_diagnostics`; they do not invalidate the profile fit.
+`tau_sd` is separate: sampling failure or any invalid sampled tau produces NaN
+uncertainty while retaining a valid central estimate. The fitting API uses 50
+draws and seed 12345 for the tau table. Plotted tau-ratio intervals separately
+propagate 1,000 pairs of parameter draws; table-SD availability is not their
+gate. Valid time-scaled points remain available if the new propagation fails.
+Trajectory ensembles use the same checked evaluator and retain invalid-draw
+masks; no model-specific formulas or custom convergence search are introduced.
+The numerical safeguards are not a guarantee of convergence for arbitrary
+functions. The table retains its local tau interval; plotted intervals follow
+the shared percentile convention below.
+
+
+## Common plotted parameter uncertainty
+
+`ivivc_core.intervals.curve_parameter_intervals` and `parameter_interval_summary`
+provide pointwise equal-tailed bounds and diagnostics. App fitting plots and
+parametric predictions use 1,000 covariance-aware normal parameter draws, seed
+12345, and no added residual/measurement noise. Separate fits are sampled
+independently. The center remains the fitted-parameter calculation; percentile
+bounds can exclude it and are never moved to fit error-bar geometry.
+
+All requested draws must be usable at a point for its interval to be displayed.
+Whole-trajectory validity masks remain separate for study-design callers.
+`predict_in_vivo` now supplies this interpretation for every parametric method,
+with an optional `random_state` to control reproducibility. Low-level
+`predict_time_mapping` remains central-only unless `include_uncertainty=True`.
+`predict_tau_ratio` requires both fitted parameter mappings/covariances for its
+intervals; legacy tau values alone still supply central times, not intervals.
+The legacy `generate_prediction_bands` accepts but ignores `residuals` and now
+returns parameter-only bounds; new callers should use the diagnostic-aware
+helper. The inverse helper likewise ignores its legacy residuals argument.
+
+This patch retains the bounded inverse mapper and its endpoint convention.
+It makes central and sampled inversions use that same mapper; it does not
+resolve plateau ambiguity or add extrapolation. Those policies are deferred.
+Parameter-table and tau-table local intervals and descriptive CV variability
+retain their distinct meanings. Normal covariance draws remain a local
+approximation, conditional on the preprocessing and model selection; no
+interpolation-error, model-discrepancy, or future-observation coverage is claimed.

@@ -24,7 +24,7 @@ def test_confidence_band_contract_returns_pointwise_summary_arrays():
     assert np.all(result['mean'] <= result['upper'])
 
 
-def test_prediction_band_contract_includes_residual_variance_summary():
+def test_legacy_prediction_band_name_now_returns_parameter_only_summary():
     np.random.seed(12345)
     x = np.array([0.0, 1.0, 2.0])
     result = generate_prediction_bands(

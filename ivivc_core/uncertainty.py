@@ -416,26 +416,10 @@ def sample_value_ratio_trajectories(
 
 
 def _tau_from_parameter_vector(model_function, parameters) -> float:
-    if getattr(model_function, 'supports_tau', True) is False:
-        return np.nan
-    parameters = tuple(np.asarray(parameters, dtype=float))
-    try:
-        initial_value = float(model_function(0.0, *parameters))
-        if not np.isfinite(initial_value) or initial_value == 0:
-            return np.nan
-        with warnings.catch_warnings():
-            warnings.filterwarnings('ignore', category=sp.integrate.IntegrationWarning)
-            integral, _ = sp.integrate.quad(
-                model_function,
-                0.0,
-                np.inf,
-                args=parameters,
-                limit=100,
-            )
-        tau = float(integral / initial_value)
-    except Exception:
-        return np.nan
-    return tau if np.isfinite(tau) else np.nan
+    # Share the app's convergence checks; do not accept warned-about integrals
+    # in trajectory ensembles when the same calculation is unavailable in a fit.
+    from utilities.time_constants import evaluate_tau
+    return evaluate_tau(model_function, parameters)[0]
 
 
 def sample_tau_ratio_trajectories(
