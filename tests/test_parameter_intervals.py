@@ -233,7 +233,18 @@ def test_inverse_failed_draw_counts_are_not_hidden(monkeypatch):
     assert np.isfinite(result['lower'][0])
     assert np.isnan(result['lower'][1])
     np.testing.assert_array_equal(result['valid_counts'], [3, 2])
-    assert note
+    assert note == (
+        'An uncertainty interval could not be calculated for 1 of 2 predictions because '
+        'some parameter estimates did not produce a unique inverse mapping.'
+    )
+
+
+def test_inverse_missing_point_does_not_duplicate_interval_warning():
+    result = inverse(responses=(.6, 1.5), covariance=np.zeros((2, 2)), n_samples=3)
+    assert result.note == (
+        '1 of 2 predictions could not be calculated because the response does not have '
+        'a unique inverse mapping to in vivo time.'
+    )
 
 
 def test_response_unit_conversion_preserves_conditional_curve_intervals():

@@ -872,8 +872,8 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                                 plot_image_tau = None
                         except Exception as e:
                             tau_skip_reason = (
-                                'Time-constant-ratio rescaling was not performed because '
-                                f'calculation or plot generation failed: {e}'
+                                'Time-constant rescaling could not be completed because the '
+                                'calculation failed.'
                             )
                             model_results.setdefault('prediction_skip_reasons', {})[
                                 'tau_ratio'

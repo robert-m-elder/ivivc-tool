@@ -104,14 +104,29 @@ def inverse_response_prediction_intervals(
     interval['inverse_extrapolated_samples'] = extrapolated_counts.reshape(targets.shape)
     for key in ('lower', 'upper', 'valid_counts', 'interval_status', 'interval_valid_samples'):
         interval[key] = interval[key].reshape(targets.shape)
-    unavailable = int(np.count_nonzero(interval['interval_status'] != 'available'))
+    eligible_for_interval = np.isfinite(targets) & np.isfinite(central)
+    unavailable = int(np.count_nonzero(
+        (interval['interval_status'] != 'available') & eligible_for_interval
+    ))
     note = reason
     if unavailable and note is None:
-        note = (f'{unavailable} of {targets.size} inverse parameter-uncertainty intervals '
-                'are unavailable; all requested draws must support the point. '
-                'Unsupported or ambiguous inverses are not clipped or discarded.')
         if sampling_error:
-            note += ' Parameter sampling failed: ' + sampling_error
+            note = (
+                'Uncertainty intervals could not be calculated because parameter '
+                'uncertainty could not be evaluated.'
+            )
+        elif unavailable == 1:
+            note = (
+                f'An uncertainty interval could not be calculated for 1 of {targets.size} '
+                'predictions because some parameter estimates did not produce a unique '
+                'inverse mapping.'
+            )
+        else:
+            note = (
+                f'Uncertainty intervals could not be calculated for {unavailable} of '
+                f'{targets.size} predictions because some parameter estimates did not '
+                'produce unique inverse mappings.'
+            )
     return interval, note
 
 def predict_time_mapping(
@@ -337,13 +352,13 @@ def predict_tau_ratio(
     confidence_level, n_samples = validate_interval_settings(confidence_level, n_samples)
     skip_reason = describe_tau_prediction_skip_reason(tau_values)
     if skip_reason is not None:
-        details = [
-            f'{label}: {diagnostics["reason"]}'
-            for label, diagnostics in zip(('In vitro tau', 'In vivo tau'), tau_diagnostics)
+        unsupported = [
+            diagnostics.get('reason', '')
+            for diagnostics in tau_diagnostics
             if diagnostics.get('reason')
         ]
-        if details:
-            skip_reason += ' ' + ' '.join(details)
+        if unsupported and all('not supported for this model' in reason.lower() for reason in unsupported):
+            skip_reason = 'Time-constant rescaling is not available for this model.'
         return PredictedTrajectory(
             source_approach='approach2',
             source_method='tau_ratio',
@@ -366,7 +381,7 @@ def predict_tau_ratio(
             in_vitro_time=prediction.time, in_vitro_value=prediction.value,
             in_vivo_time=np.full(prediction.time.shape, np.nan),
             in_vivo_value=prediction.value, available=False,
-            skip_reason='Time-constant-ratio rescaling was not performed because the ratio is not finite and positive.',
+            skip_reason='Time-constant rescaling was not performed because a valid time-constant ratio could not be calculated.',
         )
     trajectory = PredictedTrajectory(
         source_approach='approach2', source_method='tau_ratio', model_name=model_name,
@@ -443,9 +458,10 @@ def predict_inverse_response(
             **mapper_options,
         )
     elif skip_reason is None:
-        skip_reason = ('Observed-response inverse prediction was not performed because none of '
-                       'the responses have a supported unique inverse on the searched branch. '
-                       'See the per-point mapping statuses.')
+        skip_reason = (
+            'Observed-response inverse mapping could not be calculated because none of '
+            'the responses have a unique inverse mapping to in vivo time.'
+        )
     trajectory = PredictedTrajectory(
         source_approach='approach2', source_method='observed_response_inverse', model_name=model_name,
         in_vitro_time=prediction.time, in_vitro_value=prediction.value,
@@ -454,6 +470,9 @@ def predict_inverse_response(
         skip_reason=skip_reason, status=status,
     )
     attach_parameter_interval(trajectory, interval, output_kind='time')
+    # Inverse mapping has more specific user-facing messages below; keep the
+    # generic interval diagnostics in auxiliary metadata rather than duplicating them.
+    trajectory.note = None
     trajectory.auxiliary.update({
         'assumed_response_sd': 0.0,
         'interval_note': interval_note,
@@ -467,7 +486,16 @@ def predict_inverse_response(
         trajectory.note = interval_note
     missing = int(np.count_nonzero(~supported))
     if missing:
-        message = f'{missing} of {len(times)} responses have no supported unique inverse on the searched branch; see mapping statuses.'
+        if missing == 1:
+            message = (
+                f'1 of {len(times)} predictions could not be calculated because the response '
+                'does not have a unique inverse mapping to in vivo time.'
+            )
+        else:
+            message = (
+                f'{missing} of {len(times)} predictions could not be calculated because the '
+                'responses do not have unique inverse mappings to in vivo time.'
+            )
         trajectory.note = ' '.join(part for part in (trajectory.note, message) if part)
     return annotate_prediction_domain(
         trajectory, in_vivo_time=calibration_time_range, in_vivo_response=observed_responses,

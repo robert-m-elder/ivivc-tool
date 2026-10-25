@@ -164,7 +164,7 @@ def test_undefined_tau_is_recorded_on_legacy_model_result(monkeypatch):
     )
 
     reason = model_result['prediction_skip_reasons']['tau_ratio']
-    assert 'In vitro tau is not positive' in reason
+    assert reason == 'Time-constant rescaling was not performed because the in vitro time constant could not be calculated.'
     assert output['approach2']['exponential']['plot_tau'] is None
     assert output['approach2']['exponential']['plot_tau_skip_reason'] == reason
 
