@@ -891,7 +891,7 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                             minimum_time=minimum_inverse_time,
                             observed_responses=m2,
                             confidence_level=0.95,
-                            n_samples=1000,
+                            n_samples=100,
                             inverse_mapper=_inverse_response_times,
                             interval_estimator=_inverse_response_prediction_intervals,
                         )
