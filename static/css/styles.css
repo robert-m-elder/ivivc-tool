@@ -1889,10 +1889,6 @@ main:focus {
     gap: 12px;
 }
 
-.approach-options-grid {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
-}
-
 .option-group,
 .semantic-fieldset,
 .advanced-parameter-row,

@@ -34,6 +34,14 @@ Approach 2 also provides `exponential_normalized`, `double_exponential_normalize
 and `stretched_exponential_normalized`. These fix amplitudes or their sum at 1;
 they do not transform the input data. 
 
+`logistic_logistic` and `logistic_logistic_normalized` are Approach 2 models
+combining two decreasing logistic components, each normalized by its own value
+at time zero. The standard parameters are `A, w, t1, t2, k1, k2`; the normalized
+variant fixes `A=1`. Fits constrain `A >= 0`, `0 <= w <= 1`, and both rates to be
+positive. Midpoints may precede zero. Both forms approach zero at long times
+and use the existing generic tau and inverse calculations. Component labels are
+interchangeable, and overlapping transitions may leave parameters poorly identified.
+
 ## In vivo-only fitting
 
 ```python
