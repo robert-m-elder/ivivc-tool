@@ -56,3 +56,18 @@ for filename in os.listdir(current_dir):
 for approach in approaches.values():
     approach['models'].sort(key=lambda x: models[x]['display_name'])
 
+# Pair the explicit variants for display without changing submitted model IDs.
+model_families = {}
+for model_name in approaches['approach2']['models']:
+    normalized = model_name.endswith('_normalized')
+    family_name = model_name[:-len('_normalized')] if normalized else model_name
+    family = model_families.setdefault(family_name, {
+        'id': family_name,
+        'display_name': models.get(family_name, models[model_name])['display_name'],
+        'standard': None,
+        'normalized': None,
+    })
+    family['normalized' if normalized else 'standard'] = model_name
+approaches['approach2']['model_families'] = sorted(
+    model_families.values(), key=lambda family: family['display_name'],
+)

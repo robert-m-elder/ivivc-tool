@@ -2,14 +2,15 @@ import numpy as np
 
 # Constrained surface-erosion model for responses already normalized to 0-1.
 # The response at time zero is fixed at 1 and the terminal response remains fixed at 0.
-display_name = "Mass Loss (Surface Erosion, Normalized)"
+display_name = 'Finite-Time Power Decay (Normalized)'
 approaches = ['approach2']
 fit_kwargs = {'maxfev': 20000, 'ftol': 1e-6, 'xtol': 1e-6}
 latex_equation = r"y = \max(1-kx,0)^n"
 description = (
-    "Less-flexible surface-erosion mass-remaining model for responses already "
-    "normalized from 0 to 1. The response at time zero is fixed at 1, leaving the "
-    "erosion-rate and geometry/shape parameters to be fitted."
+    'Finite-time power-decay profile with amplitude fixed at 1. This surface-erosion form '
+    'can describe fraction remaining or normalized retained properties when the shape is '
+    'appropriate. The rate and shape exponent remain fitted; selecting this model does not '
+    'normalize data.'
 )
 
 
@@ -23,7 +24,7 @@ def _positive_or_epsilon(value):
 
 
 def model_function(x, k, n):
-    """Normalized surface-erosion mass-loss model.
+    """Normalized finite-time power-decay response model.
 
     Parameters
     ----------

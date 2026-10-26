@@ -1,14 +1,14 @@
 import numpy as np
 
 # Compact asymmetric sigmoidal mass-loss model with lag/plateau behavior.
-display_name = "Mass Loss (Gompertz)"
+display_name = 'Modified Gompertz'
 approaches = ['approach2']
 fit_kwargs = {'maxfev': 20000, 'ftol': 1e-6, 'xtol': 1e-6}
 latex_equation = r"y = y_0 - A \exp\{-\exp[(e r_{max}/A)(t_{lag}-x)+1]\}"
 description = (
-    "Mass-remaining model based on the modified Gompertz curve. It is intended "
-    "for asymmetric sigmoidal mass-loss profiles with an apparent lag or plateau, "
-    "a maximum loss-rate region, and a terminal loss extent."
+    'Modified Gompertz response profile with an asymmetric sigmoidal transition, fitted '
+    'baseline, change magnitude, rate, and lag. Examples include mass remaining, molecular '
+    'weight, or retained properties with a delayed asymmetric change.'
 )
 
 
@@ -22,7 +22,7 @@ def _safe_nonzero(value):
 
 
 def model_function(x, y0, A, rmax, lag):
-    """Modified Gompertz mass-loss model expressed as mass remaining over time.
+    """Modified Gompertz model expressed as response over time.
 
     Parameters
     ----------

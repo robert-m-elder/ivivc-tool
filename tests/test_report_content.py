@@ -63,6 +63,24 @@ def text(sections):
 
 
 class ReportContentTests(unittest.TestCase):
+    def test_response_reversal_reference_and_order_are_reported(self):
+        context, option = fixture()
+        context['selected_normalizations'] = ['min_max', 'one_minus']
+        context['preprocessing_metadata']['normalization_records'] = [
+            {'dataset': 'in_vitro', 'operation': 'min_max', 'minimum': 0., 'maximum': 100., 'applied': True},
+            {'dataset': 'in_vitro', 'operation': 'one_minus', 'reference': 1., 'applied': True},
+        ]
+        context['prediction_preprocessing_metadata'] = {'normalization_records': [
+            {'dataset': 'prediction', 'operation': 'one_minus', 'reference': 1., 'applied': True},
+        ]}
+        sections = build_report_sections(context, option)
+        references = table(sections, 'Normalization reference values in application order')
+        self.assertEqual([row[1] for row in references['rows'][1:]], ['min_max', 'one_minus', 'one_minus'])
+        self.assertEqual(references['rows'][2][:3], ['in_vitro', 'one_minus', '1'])
+        self.assertEqual(references['rows'][3][:3], ['prediction', 'one_minus', '1'])
+        self.assertIn('1 - response after the selected normalizations', text(sections))
+        self.assertIn('not automatically reversed', text(sections))
+
     def test_parameter_constraints_preserve_small_bounds_and_unbounded_values(self):
         context, option = fixture()
         context['models_registry']['example']['fit_kwargs'] = {'bounds': ([0., 1e-12], np.inf)}

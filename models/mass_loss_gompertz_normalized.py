@@ -2,20 +2,20 @@ import numpy as np
 
 # Constrained modified-Gompertz mass-loss model for responses already normalized
 # to a 0-1 scale. The baseline response and ultimate loss magnitude are fixed at 1.
-display_name = "Mass Loss (Gompertz, Normalized)"
+display_name = 'Modified Gompertz (Normalized)'
 approaches = ['approach2']
 fit_kwargs = {'maxfev': 20000, 'ftol': 1e-6, 'xtol': 1e-6}
 latex_equation = r"y = 1 - \exp\{-\exp[e r_{max}(t_{lag}-x)+1]\}"
 description = (
-    "Less-flexible modified Gompertz mass-remaining model for responses already "
-    "normalized from 0 to 1. The baseline response and ultimate loss magnitude "
-    "are fixed at 1, leaving only the maximum loss-rate and lag-time parameters "
-    "to be fitted."
+    'Modified Gompertz response profile with baseline and total change fixed at 1, giving '
+    'asymptotes at 0 and 1. Examples include fraction remaining or normalized retained '
+    'properties with a delayed asymmetric transition. Selecting this model does not '
+    'normalize data.'
 )
 
 
 def model_function(x, rmax, lag):
-    """Normalized modified-Gompertz mass-loss model.
+    """Normalized modified-Gompertz response model.
 
     Parameters
     ----------

@@ -2,15 +2,15 @@ import numpy as np
 
 # Constrained one-phase mass-loss model for responses already normalized to 0-1.
 # The baseline response and total delayed-loss magnitude are both fixed at 1.
-display_name = "Mass Loss (One-Phase, Normalized)"
+display_name = 'Logistic (Normalized)'
 approaches = ['approach2']
 fit_kwargs = {'maxfev': 20000, 'ftol': 1e-6, 'xtol': 1e-6}
 latex_equation = r"y = 1 - 1/(1 + e^{-(x-t_{50})/s})"
 description = (
-    "Less-flexible one-phase mass-remaining model for responses already normalized "
-    "from 0 to 1. The baseline response and delayed-loss magnitude are fixed at 1, "
-    "leaving only the transition midpoint and width to be fitted. "
-    "This is a shifted and inverted logistic (sigmoid) function."
+    'Logistic (sigmoid) response profile with baseline and total change fixed at 1, giving '
+    'asymptotes at 0 and 1. Examples include fraction remaining or normalized retained '
+    'properties with a delayed transition. The analyzed response must already match this '
+    'scale; selecting the model does not normalize data.'
 )
 
 
@@ -24,7 +24,7 @@ def _safe_width(value):
 
 
 def model_function(x, t50, s):
-    """Normalized one-phase mass-loss model.
+    """Normalized logistic response model.
 
     Parameters
     ----------

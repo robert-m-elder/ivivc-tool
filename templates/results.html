@@ -581,7 +581,7 @@
                             </button>
                         </h2>
                         {% if approach_id != "approach3" %}
-                        <p class="evidence-note">Error bars show approximate 95% parameter-uncertainty intervals: uncertainty in calculated values because the fitted parameters are uncertain. They do not include the additional scatter of future observations.</p>
+                        <!--<p class="evidence-note">Error bars show approximate 95% parameter-uncertainty intervals: uncertainty in calculated values because the fitted parameters are uncertain. They do not include the additional scatter of future observations.</p>--!>
                         {% endif %}
                         <nav class="model-jump-nav" aria-label="Model navigation for {{ approaches[approach_id].display_name }} prediction results">
                             <label for="model-jump-prediction-{{ approach_id }}">{% if approach_id == "approach3" %}Jump to prediction:{% else %}Jump to model:{% endif %}</label>
@@ -653,18 +653,20 @@
                                             <p class="prediction-skip-reason">{{ pred_result.plot_tau_skip_reason }}</p>
                                         {% endif %}
                                         <h4>Observed-response inverse mapping</h4>
-                                        {{ render_prediction_cautions((pred_result.prediction_cautions or {}).get('observed_response_inverse', [])) }}
                                         <p class="evidence-note">Estimates when the fitted in vivo curve reaches each supplied in vitro response. Horizontal intervals show uncertainty in that time from the fitted in vivo parameters, with the response held fixed. Results outside the observed in vivo calibration range carry an extrapolation caution. A prediction is unavailable when a unique time cannot be calculated reliably.</p>
+                                        {{ render_prediction_cautions((pred_result.prediction_cautions or {}).get('observed_response_inverse', [])) }}
+                                        {% if pred_result.plot_inverse_response_note %}
+                                            <p class="prediction-skip-reason">{{ pred_result.plot_inverse_response_note }}</p>
+                                        {% endif %}
+                                        {% if pred_result.plot_inverse_response_skip_reason and pred_result.plot_inverse_response_skip_reason != pred_result.plot_inverse_response_note %}
+                                            <p class="prediction-skip-reason">{{ pred_result.plot_inverse_response_skip_reason }}</p>
+                                        {% endif %}
                                         {% if pred_result.plot_inverse_response is defined and pred_result.plot_inverse_response is not none %}
                                             <div id="plot-prediction-{{ approach_id }}-{{ model_name }}-inverse" class="plot-container report-source-plot">
                                                 {{ pred_result.plot_inverse_response.plot | safe }}
                                             </div>
                                             {{ render_plot_data_downloads('approach2-' ~ model_name ~ '-table-pred-inverse', models[model_name].display_name ~ ' Approach 2 observed-response inverse prediction plot', pred_result['plot_inverse_response']['table_html']) }}
-                                            {% if pred_result.plot_inverse_response_note %}
-                                                <p class="prediction-skip-reason">{{ pred_result.plot_inverse_response_note }}</p>
-                                            {% endif %}
-                                        {% elif pred_result.plot_inverse_response_skip_reason %}
-                                            <p class="prediction-skip-reason">{{ pred_result.plot_inverse_response_skip_reason }}</p>
+                                        {% else %}
                                             {% if pred_result.inverse_response_table_html %}
                                             {{ render_plot_data_downloads('approach2-' ~ model_name ~ '-table-pred-inverse-unavailable', models[model_name].display_name ~ ' inverse mapping statuses', pred_result.inverse_response_table_html) }}
                                             {% endif %}

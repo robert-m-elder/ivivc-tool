@@ -1,14 +1,14 @@
 import numpy as np
 
 # A parsimonious mass-remaining model for profiles with a delayed/bulk-loss phase.
-display_name = "Mass Loss (One-Phase)"
+display_name = 'Logistic'
 approaches = ['approach2']
 fit_kwargs = {'maxfev': 20000, 'ftol': 1e-6, 'xtol': 1e-6}
 latex_equation = r"y = y_0 - A/(1 + e^{-(x-t_{50})/s})"
 description = (
-    "Mass-remaining model with a delayed sigmoidal loss phase. It is intended "
-    "for mass-loss profiles that begin constant and show a later drop. "
-    "This is a scaled, shifted, and inverted logistic (sigmoid) function."
+    'Scaled and shifted logistic (sigmoid) response profile with fitted baseline and change '
+    'magnitude. Examples include delayed changes in mass remaining, molecular weight, or '
+    'retained mechanical properties.'
 )
 
 
@@ -22,7 +22,7 @@ def _safe_width(value):
 
 
 def model_function(x, y0, A, t50, s):
-    """One-phase mass-loss model expressed as mass remaining over time.
+    """One-phase model expressed as response over time.
 
     Parameters
     ----------

@@ -99,6 +99,7 @@ def latex_escape(value: object) -> str:
         ("≤", r"\(\le\)"),
         ("–", "-"),
         ("—", "-"),
+        ("−", "-"),
         ("×", r"\(\times\)"),
     ]
 
