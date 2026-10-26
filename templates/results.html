@@ -581,7 +581,7 @@
                             </button>
                         </h2>
                         {% if approach_id != "approach3" %}
-                        <p class="evidence-note">Shading and error bars show approximate 95% parameter-uncertainty intervals: uncertainty in calculated values because the fitted parameters are uncertain. The model, preprocessing, and prediction inputs are treated as fixed. These intervals apply at each plotted point; they do not include the additional scatter of future observations.</p>
+                        <p class="evidence-note">Error bars show approximate 95% parameter-uncertainty intervals: uncertainty in calculated values because the fitted parameters are uncertain. They do not include the additional scatter of future observations.</p>
                         {% endif %}
                         <nav class="model-jump-nav" aria-label="Model navigation for {{ approaches[approach_id].display_name }} prediction results">
                             <label for="model-jump-prediction-{{ approach_id }}">{% if approach_id == "approach3" %}Jump to prediction:{% else %}Jump to model:{% endif %}</label>
