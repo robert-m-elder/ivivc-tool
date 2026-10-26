@@ -17,10 +17,11 @@ from ivivc_core.types import TimeCourse, PredictedTrajectory
 from utilities.report_content import build_report_sections
 
 
-def inverse_result():
+def inverse_result(**kwargs):
     return predict_inverse_response(TimeCourse(np.array([3., 6.]), np.array([.6, .2])),
         model_name='exponential', parameters={'a': 1., 'b': -.1}, covariance=np.zeros((2, 2)),
-        residuals=[], calibration_time_range=(0., 10.), observed_responses=[1., np.exp(-1.)], n_samples=8)
+        residuals=[], calibration_time_range=(0., 10.), observed_responses=[1., np.exp(-1.)], n_samples=8,
+        **kwargs)
 
 
 def calibration():
@@ -29,8 +30,9 @@ def calibration():
     return (t, y, t, y, y, t, t, t, y, y)
 
 
-def test_inverse_plot_download_report_and_annotations_reuse_numerical_results(monkeypatch):
-    result = inverse_result()
+@pytest.mark.parametrize('max_expansions', [2, 7])
+def test_inverse_plot_download_report_and_annotations_reuse_numerical_results(monkeypatch, max_expansions):
+    result = inverse_result(max_expansions=max_expansions)
     figures = []
     monkeypatch.setattr(engine.pio, 'to_html', lambda fig, **k: figures.append(fig) or '<plot>')
     data = calibration()
@@ -59,7 +61,7 @@ def test_inverse_plot_download_report_and_annotations_reuse_numerical_results(mo
     domains = report_table(sections, 'Calibration-domain cautions')['rows']
     assert domains[2][1] == 'extrapolation'
     assert 'Extrapolation caution' in text(sections)
-    assert 'maximum doubling extensions = 16' in text(sections)
+    assert f'maximum doubling extensions = {max_expansions}' in text(sections)
     np.testing.assert_allclose([float(row[4]) for row in report_table(sections, 'Predictions and displayed uncertainty bounds')['rows'][1:]], result.time_lower, rtol=1e-5)
     json.dumps(records, allow_nan=False)
     json.dumps(sections, allow_nan=False)
@@ -107,12 +109,15 @@ def result_dict():
 
 
 def test_app_adapter_keeps_failed_inverse_row_statuses_available_without_a_plot(monkeypatch):
+    failure_status = 'inverse not resolved within search limit'
     monkeypatch.setattr(engine, 'create_prediction_plot_a2', lambda *a, **k: {'plot': '<plot>', 'table_html': ''})
+    monkeypatch.setattr(engine, '_inverse_response_times', lambda *a, **k:
+        (np.array([np.nan]), np.array([failure_status], dtype=object), None))
     output = engine.process_predictions(calibration(), [np.array([1.]), np.array([0.])], result_dict(), ['approach2'])
     inverse = output['approach2']['exponential']
     assert inverse['plot_inverse_response'] is None
-    assert 'flat' in inverse['prediction_tables']['observed_response_inverse'][0]['status']
-    assert 'flat' in inverse['inverse_response_table_html']
+    assert inverse['prediction_tables']['observed_response_inverse'][0]['status'] == failure_status
+    assert failure_status in inverse['inverse_response_table_html']
 
 
 def test_app_adapter_passes_applied_log_time_domain(monkeypatch):
