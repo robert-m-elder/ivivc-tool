@@ -1,15 +1,16 @@
 import numpy as np
 
 # Geometry-inspired surface-erosion model with fitted shape exponent.
-display_name = "Mass Loss (Surface Erosion)"
+display_name = 'Finite-Time Power Decay'
 approaches = ['approach2']
 fit_kwargs = {'maxfev': 20000, 'ftol': 1e-6, 'xtol': 1e-6}
 latex_equation = r"y = y_0 \max(1-kx,0)^n"
 #latex_equation = r"y = yinf + (y0 - yinf) \cdot \max(1 - k \cdot x, 0)^n"
 description = (
-    "Mass-remaining model for surface-controlled erosion. The fitted exponent "
-    "n allows the profile shape to adapt to slab-like, cylindrical, spherical, "
-    "or empirical geometry-like erosion behavior."
+    'Response profile that reaches zero in finite time, with fitted amplitude, rate, and '
+    'shape exponent. This surface-erosion form can also be used empirically for remaining '
+    'mass, volume, molecular weight, or retained mechanical properties when the shape is '
+    'appropriate.'
 )
 
 
@@ -24,7 +25,7 @@ def _positive_or_epsilon(value):
 
 def model_function(x, y0, k, n):
 #def model_function(x, y0, yinf, k, n):
-    """Surface-erosion mass-loss model expressed as mass remaining over time.
+    """Surface-erosion model expressed as response over time.
 
     Parameters
     ----------

@@ -31,7 +31,7 @@ def calibration():
 
 
 @pytest.mark.parametrize('max_expansions', [2, 7])
-def test_inverse_plot_download_report_and_annotations_reuse_numerical_results(monkeypatch, max_expansions):
+def test_inverse_plot_download_and_report_reuse_numerical_results(monkeypatch, max_expansions):
     result = inverse_result(max_expansions=max_expansions)
     figures = []
     monkeypatch.setattr(engine.pio, 'to_html', lambda fig, **k: figures.append(fig) or '<plot>')
@@ -47,7 +47,8 @@ def test_inverse_plot_download_report_and_annotations_reuse_numerical_results(mo
     assert records[1]['extrapolated'] is True
     assert records[1]['inverse_extrapolated_samples'] == 8
     assert plot['extrapolation_warnings'][0]['label'] == 'Extrapolation'
-    assert any('Extrapolation' in a.text for a in figures[0].layout.annotations)
+    assert not figures[0].layout.annotations
+    assert plot['extrapolation_warnings'] == result.auxiliary['extrapolation_warnings']
     reference = next(trace for trace in figures[0].data if trace.name == 'In Vivo (Fitted Model)')
     assert max(reference.x) >= result.in_vivo_time[-1]
     table = pd.read_html(StringIO(plot['table_html']))[0]
@@ -97,6 +98,34 @@ def test_badge_macro_is_text_labelled_and_escaped_and_template_is_valid():
     assert 'role="note"' in rendered and 'Extrapolation' in rendered
     assert '&lt;outside&gt;' in rendered and '<outside>' not in rendered
     assert template.render(items=[]).strip() == ''
+
+
+@pytest.mark.parametrize('has_plot', [False, True])
+def test_inverse_messages_follow_description_and_precede_plot_or_status_table(has_plot):
+    source = Path('templates/results.html').read_text()
+    macro = source[:source.index('{%- endmacro %}') + len('{%- endmacro %}')]
+    start = source.index('<h4>Observed-response inverse mapping</h4>')
+    section = source[start:source.index('\n</div>', start)]
+    result = {
+        'prediction_cautions': {'observed_response_inverse': [
+            {'label': 'Extrapolation', 'message': 'Outside calibration.'},
+            {'label': 'Interval extends beyond calibration', 'message': 'Interval caution.'},
+        ]},
+        'plot_inverse_response_note': 'Some predictions could not be calculated.',
+        'plot_inverse_response_skip_reason': None if has_plot else 'Some predictions could not be calculated.',
+        'plot_inverse_response': {'plot': 'PLOT_MARKER', 'table_html': ''} if has_plot else None,
+        'inverse_response_table_html': 'STATUS_TABLE_MARKER',
+    }
+    template = Environment(autoescape=True).from_string(macro + section)
+    rendered = template.render(pred_result=result, approach_id='approach2', model_name='example',
+        models={'example': {'display_name': 'Example'}},
+        render_plot_data_downloads=lambda ident, title, table_html: table_html)
+    description = rendered.index('Estimates when the fitted in vivo curve')
+    last_message = rendered.index('Some predictions could not be calculated.')
+    assert description < rendered.index('Outside calibration.') < last_message
+    assert description < rendered.index('Interval caution.') < last_message
+    assert rendered.count('Some predictions could not be calculated.') == 1
+    assert last_message < rendered.index('PLOT_MARKER' if has_plot else 'STATUS_TABLE_MARKER')
 
 
 def result_dict():

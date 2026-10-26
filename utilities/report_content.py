@@ -414,8 +414,10 @@ def build_report_sections(context, option):
     if references:
         rows = [[r.get('dataset'), r.get('operation'), r.get('reference'), r.get('minimum'), r.get('maximum'),
                  'Applied' if r.get('applied') else 'Not applied', r.get('note', '')] for r in references]
-        sections.append(_table('Normalization reference values in application order', ['Dataset', 'Operation', 'Initial reference', 'Minimum', 'Maximum', 'Status', 'Note'], rows))
-    sections.append(_paragraph('Calculations use the preprocessed time and response scales. Normalization, when selected, precedes log10 scaling. Predictions are reported on those analyzed scales; normalization and logarithmic transformations are not automatically reversed.'))
+        sections.append(_table('Normalization reference values in application order', ['Dataset', 'Operation', 'Reference value', 'Minimum', 'Maximum', 'Status', 'Note'], rows))
+    if any(record.get('operation') == 'one_minus' for record in references):
+        sections.append(_paragraph('Response reversal applied 1 - response after the selected normalizations and before scaling or interpolation. For fractional inputs, this can convert fraction lost to fraction remaining. Values were not clipped to 0-1.'))
+    sections.append(_paragraph('Calculations use the preprocessed time and response scales. Normalization and any response reversal precede log10 scaling. Predictions are reported on those analyzed scales; these response transformations and logarithmic transformations are not automatically reversed.'))
     if approach == 'approach2':
         sections.append(_paragraph('The in vitro and in vivo models use preprocessed observed points independently. Interpolation does not add fitting observations for this approach.'))
     else:

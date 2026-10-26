@@ -23,6 +23,14 @@ def _as_selection_list(selection: Iterable[str] | None) -> list[str]:
     return list(selection or [])
 
 
+def _normalization_order(selection: Iterable[str] | None) -> list[str]:
+    """Apply response reversal once, after the other selected normalizations."""
+    names = _as_selection_list(selection)
+    return [name for name in names if name != 'one_minus'] + (
+        ['one_minus'] if 'one_minus' in names else []
+    )
+
+
 def _clean_time_course(course: TimeCourse) -> TimeCourse:
     """Remove rows with missing responses while preserving true zero times."""
     mask = ~pd.isna(course.value)
@@ -46,6 +54,8 @@ def _normalization_parameters(values: np.ndarray, name: str) -> dict[str, float 
             'range': maximum - minimum,
             'applied': True,
         }
+    if name == 'one_minus':
+        return {'reference': 1.0, 'applied': True}
     return {'applied': True}
 
 
@@ -220,7 +230,7 @@ def prepare_time_course(
 ) -> tuple[TimeCourse, PreprocessingMetadata]:
     """Clean and transform one time course without performing interpolation."""
     scaling_names = _as_selection_list(selected_scalings)
-    normalization_names = _as_selection_list(selected_normalizations)
+    normalization_names = _normalization_order(selected_normalizations)
 
     cleaned = _clean_time_course(TimeCourse(time, value, label=label))
     normalized, _, normalization_records = _apply_normalizations(
@@ -257,7 +267,7 @@ def prepare_ivivc_data(
     """Prepare paired in vitro and in vivo time courses for IVIVC analysis."""
     interpolation_names = _as_selection_list(selected_interpolation)
     scaling_names = _as_selection_list(selected_scalings)
-    normalization_names = _as_selection_list(selected_normalizations)
+    normalization_names = _normalization_order(selected_normalizations)
 
     cleaned_in_vitro = _clean_time_course(in_vitro)
     cleaned_in_vivo = _clean_time_course(in_vivo)

@@ -25,6 +25,15 @@ All arrays passed to fitting and prediction functions are assumed to be on the
 same analyzed scale. The public API does not silently apply or reverse
 normalization, scaling, or interpolation.
 
+Preprocessing accepts `one_minus` to apply `1 - response` after the selected
+normalizations and before logarithmic scaling or interpolation. It applies to
+each supplied profile and records its fixed reference value of 1 in preprocessing
+metadata. Already fractional inputs need no other normalization for this option.
+
+Approach 2 also provides `exponential_normalized`, `double_exponential_normalized`,
+and `stretched_exponential_normalized`. These fix amplitudes or their sum at 1;
+they do not transform the input data. 
+
 ## In vivo-only fitting
 
 ```python

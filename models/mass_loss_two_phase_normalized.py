@@ -2,14 +2,15 @@ import numpy as np
 
 # Constrained two-phase mass-loss model for responses already normalized to 0-1.
 # The baseline response is fixed at 1; the early and delayed loss magnitudes remain fitted.
-display_name = "Mass Loss (Two-Phase, Normalized)"
+display_name = 'Exponential + Logistic (Normalized)'
 approaches = ['approach2']
 fit_kwargs = {'maxfev': 20000, 'ftol': 1e-6, 'xtol': 1e-6}
 latex_equation = r"y = 1 - B(1-e^{-k_b x}) - D/(1+e^{-(x-t_{50})/s})"
 description = (
-    "Less-flexible two-phase mass-remaining model for responses already normalized "
-    "from 0 to 1. The baseline response is fixed at 1, while the early and delayed "
-    "loss magnitudes (B and D) and their timing/rate parameters remain fitted."
+    'Exponential-plus-logistic response profile with baseline fixed at 1. Both change '
+    'magnitudes remain fitted, so the terminal response is not fixed. Examples include '
+    'fraction remaining or normalized retained properties with early and delayed changes. '
+    'Selecting this model does not normalize data.'
 )
 
 
@@ -23,7 +24,7 @@ def _safe_width(value):
 
 
 def model_function(x, B, kb, D, t50, s):
-    """Normalized two-phase mass-loss model.
+    """Normalized exponential-plus-logistic response model.
 
     Parameters
     ----------

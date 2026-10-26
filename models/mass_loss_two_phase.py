@@ -2,14 +2,14 @@ import numpy as np
 
 # A parsimonious mass-remaining model for profiles with an optional early
 # burst-loss phase, an intermediate plateau, and a delayed/bulk-loss phase.
-display_name = "Mass Loss (Two-Phase)"
+display_name = 'Exponential + Logistic'
 approaches = ['approach2']
 fit_kwargs = {'maxfev': 20000, 'ftol': 1e-6, 'xtol': 1e-6}
 latex_equation = r"y = y_0 - B(1-e^{-k_b x}) - D/(1+e^{-(x-t_{50})/s})"
 description = (
-    "Mass-remaining model with an optional early burst-loss phase followed by "
-    "a delayed sigmoidal loss phase. It is intended for mass-loss profiles that "
-    "may show an initial drop, an intermediate plateau, and a later drop."
+    'Two-phase response profile combining an early exponential change and a delayed logistic '
+    'transition, with fitted baseline and magnitudes. Examples include multistage changes '
+    'in mass remaining, molecular weight, or retained mechanical properties.'
 )
 
 
@@ -23,7 +23,7 @@ def _safe_width(value):
 
 
 def model_function(x, y0, B, kb, D, t50, s):
-    """Two-phase mass-loss model expressed as mass remaining over time.
+    """Two-phase model expressed as response over time.
 
     Parameters
     ----------

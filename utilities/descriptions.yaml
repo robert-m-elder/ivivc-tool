@@ -61,13 +61,16 @@ approaches:
 preprocessing:
   normalization:
     _guide_intro: >-
-      Normalization changes how response values are expressed without adding or removing observations. Initial-value normalization expresses each profile relative to its first response value, whereas min-max normalization expresses each profile relative to its observed range; either transformation changes the response scale used for subsequent fitting, mapping, and metrics.
+      Normalization changes how response values are expressed without adding or removing observations. Initial-value normalization expresses each profile relative to its first response value, whereas min-max normalization expresses each profile relative to its observed range. Optional response reversal applies 1 minus the response after these normalizations and before logarithmic scaling or interpolation. These choices change the response scale used for fitting, mapping, and metrics.
     min_max:
       display_name: Min-max normalization
       description: Converts response values to a 0-1 scale using the observed minimum and maximum within each dataset.
     initial_value:
       display_name: Initial-value normalization
       description: Expresses each response value relative to the first response value in the corresponding dataset.
+    one_minus:
+      display_name: Reverse response (1 − value)
+      description: Applies 1 minus each response after any selected normalizations and before logarithmic scaling or interpolation. For data already expressed as fractions, this converts fraction lost to fraction remaining without requiring another normalization. The same selection applies to both calibration profiles and prediction inputs; values are not clipped to 0-1.
   scaling:
     _guide_intro: >-
       Scaling changes the numerical representation of time or response values while preserving the observations themselves. The available base-10 logarithmic transformations compress wide numerical ranges and are applied only when the relevant processed values are positive; otherwise the app retains the unscaled values and reports the fallback.

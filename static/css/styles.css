@@ -1889,6 +1889,10 @@ main:focus {
     gap: 12px;
 }
 
+.approach-options-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
+}
+
 .option-group,
 .semantic-fieldset,
 .advanced-parameter-row,
@@ -1929,6 +1933,78 @@ main:focus {
 .model-fieldset > legend {
     padding: 0 6px 0 0;
     font-weight: 700;
+}
+
+.model-family-header,
+.model-family-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 4.5rem 5.5rem;
+    align-items: center;
+    gap: 6px;
+}
+
+.model-family-header {
+    margin: 4px 0;
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.model-family-header > :not(:first-child),
+.model-variant-unavailable {
+    text-align: center;
+}
+
+.model-family-row {
+    padding: 5px 0;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.model-family-name {
+    overflow-wrap: anywhere;
+}
+
+.model-fieldset[aria-disabled="true"] .model-family-name {
+    color: #666;
+}
+
+.model-variant-option {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin: 0;
+    padding: 4px;
+    min-height: 32px;
+    min-width: 0;
+    cursor: pointer;
+}
+
+.model-variant-label {
+    display: none;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+    .model-family-header {
+        display: none;
+    }
+
+    .model-family-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        padding: 8px 0;
+    }
+
+    .model-family-name {
+        grid-column: 1 / -1;
+    }
+
+    .model-variant-option {
+        justify-content: flex-start;
+    }
+
+    .model-variant-label {
+        display: inline;
+    }
 }
 
 .not-applicable-text {

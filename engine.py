@@ -414,6 +414,13 @@ def preprocess_data(t1, m1, t2, m2, selected_interpolation=None, selected_scalin
                             'normalized response is undefined.'
                         )
 
+                elif normalization.name == 'one_minus':
+                    record['reference'] = parameters['reference']
+                    record['note'] = (
+                        'Applied 1 - response after selected normalizations and '
+                        'before scaling or interpolation.'
+                    )
+
                 normalization_records.append(record)
 
         metadata['normalization_records'] = normalization_records
@@ -3023,17 +3030,9 @@ def _add_parameter_prediction_trace(fig, t_pred, m_pred, centers, records, outpu
         ))
 
 
-def _add_prediction_cautions(fig, trajectory):
-    cautions = trajectory.auxiliary.get('extrapolation_warnings', []) if trajectory is not None else []
-    if cautions:
-        fig.add_annotation(
-            x=0, y=1.02, xref='paper', yref='paper', xanchor='left', yanchor='bottom',
-            showarrow=False, align='left',
-            text='<br>'.join(escape(item['label']) + ' - see calibration-domain details' for item in cautions),
-            font=dict(size=12, color='#734600'),
-        )
-        fig.update_layout(margin=dict(t=100))
-    return cautions
+def _prediction_cautions(trajectory):
+    """Keep cautions in page/report text rather than annotating the figure."""
+    return trajectory.auxiliary.get('extrapolation_warnings', []) if trajectory is not None else []
 
 
 def create_prediction_plot_a1(data, t_pred, m_pred, t_pred_vivo, model_info, include_bands=True, *, trajectory=None):
@@ -3097,7 +3096,7 @@ def create_prediction_plot_a1(data, t_pred, m_pred, t_pred_vivo, model_info, inc
     fig.update_xaxes(title_font=dict(size=20), tickfont=dict(size=18))
     fig.update_yaxes(title_font=dict(size=20), tickfont=dict(size=18))
 
-    cautions = _add_prediction_cautions(fig, trajectory)
+    cautions = _prediction_cautions(trajectory)
 
     # Extract data as HTML table
     table_html = extract_plotly_data_for_table(fig)
@@ -3214,7 +3213,7 @@ def create_prediction_plot_a2(data, t_pred, m_pred, mt_pred_vivo, t_pred_plot, m
     fig.update_xaxes(title_font=dict(size=20), tickfont=dict(size=18))
     fig.update_yaxes(title_font=dict(size=20), tickfont=dict(size=18))
 
-    cautions = _add_prediction_cautions(fig, trajectory)
+    cautions = _prediction_cautions(trajectory)
 
     # Extract data as HTML table
     table_html = extract_plotly_data_for_table(fig)
@@ -3357,7 +3356,7 @@ def create_prediction_plot_a3(data, t_pred, m_pred, var_pred_scaled, ptype='v', 
             trace.meta = {'prediction_records': records, 'prediction_output_kind': 'value' if ptype == 'v' else 'time'}
             trace.text = ['; '.join(filter(None, (row.get('status'), row.get('extrapolation_status'), row.get('extrapolation_reason')))) for row in records]
             trace.hovertemplate = 'Time: %{x}<br>Response: %{y}<br>%{text}<extra>%{fullData.name}</extra>'
-    cautions = _add_prediction_cautions(fig, trajectory)
+    cautions = _prediction_cautions(trajectory)
     # Extract data as HTML table
     table_html = extract_plotly_data_for_table(fig)
 

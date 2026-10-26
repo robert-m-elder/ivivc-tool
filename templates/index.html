@@ -115,7 +115,7 @@
                     <span class="help-icon" aria-hidden="true">?</span>
                 </button>
             </h3>
-            <div id="approaches-group" class="option-group-grid" tabindex="-1"{% if 'approaches-group' in error_field_ids %} aria-invalid="true" aria-describedby="approaches-group-error"{% endif %}>
+            <div id="approaches-group" class="option-group-grid approach-options-grid" tabindex="-1"{% if 'approaches-group' in error_field_ids %} aria-invalid="true" aria-describedby="approaches-group-error"{% endif %}>
                 {% for approach_id, approach in approaches.items() %}
                 <fieldset class="option-group approach-option-group">
                     <legend>
@@ -128,12 +128,32 @@
                     </label>
                     <fieldset id="{{ approach_id }}-models" class="model-fieldset">
                         <legend>Models</legend>
+                        {% if approach_id == 'approach2' %}
+                        <div class="model-family-header" aria-hidden="true">
+                            <span>Model family</span><span>Standard</span><span>Normalized</span>
+                        </div>
+                        {% for family in approach.model_families %}
+                        <div class="model-family-row" role="group" aria-labelledby="{{ approach_id }}-{{ family.id }}-family">
+                            <span id="{{ approach_id }}-{{ family.id }}-family" class="model-family-name">{{ family.display_name }}</span>
+                            {% for variant, variant_label in [('standard', 'Standard'), ('normalized', 'Normalized')] %}
+                            {% if family[variant] %}
+                            <label class="model-option-label model-variant-option">
+                                <input type="checkbox" name="models" value="{{ approach_id }}:{{ family[variant] }}" aria-label="{{ family.display_name }} — {{ variant_label }}">
+                                <span class="model-variant-label" aria-hidden="true">{{ variant_label }}</span>
+                            </label>
+                            {% else %}<span class="model-variant-unavailable" aria-label="{{ variant_label }} variant unavailable">—</span>{% endif %}
+                            {% endfor %}
+                        </div>
+                        {% endfor %}
+                        <!--<p class="evidence-note">Select either variant or both. Normalized models fix response levels; they do not normalize the input data. The fixed levels depend on the model family.</p>--!>
+                        {% else %}
                         {% for model_name in approach.models %}
                         <label class="model-option-label">
                             <input type="checkbox" name="models" value="{{ approach_id }}:{{ model_name }}">
                             {{ models[model_name].display_name }}
                         </label>
                         {% endfor %}
+                        {% endif %}
                         {% if approach_id == 'approach3' %}
                         <p class="not-applicable-text">No parametric model selection is required.</p>
                         {% endif %}
@@ -158,6 +178,7 @@
                     {% set norm_meta = preprocessing_descriptions['normalization'].get(norm_name, {}) %}
                     <label class="stacked-option-label"><input type="checkbox" name="normalizations" value="{{ norm_name }}"> {{ norm_meta.get('display_name', norm_name) }}</label>
                     {% endfor %}
+                    <!--<p class="evidence-note">Response reversal is applied after any selected normalization.</p>--!>
                 </fieldset>
                 <fieldset class="option-group">
                     <legend>Scaling <button type="button" class="help-btn-small" data-modal="scaling-help" aria-label="Help for scaling options" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button></legend>
@@ -371,7 +392,7 @@
                 <li>Does not require matching time points or response values; interpolation is not used for Approach 2 fitting.</li>
             </ul>
             <p><strong>May be relevant when:</strong> datasets have different time scales or sampling schedules, or when a specific degradation-curve shape is scientifically meaningful for both datasets.</p>
-            <p>Mass-loss models labeled <strong>Normalized 0-1</strong> use fewer fitted parameters by fixing response levels defined by a 0-1 response scale. These variants assume that the analyzed response is already on that scale.</p>
+            <p>Each Approach 2 model family offers <strong>Standard</strong> and <strong>Normalized</strong> variants; either or both can be selected. Normalized variants use fewer fitted parameters by fixing amplitudes or response levels, as specified in each model description. They assume that the analyzed response already matches those levels. Selecting a normalized model does not transform the input data.</p>
         </div>
 
         <div id="approach3-help-content">
