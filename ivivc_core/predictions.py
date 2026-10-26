@@ -40,8 +40,8 @@ def safe_ratio(numerator, denominator):
 
 def inverse_response_prediction_intervals(
     model_function, params, pcov, residuals, target_responses, time_range,
-    observed_responses=None, confidence_level=0.95, n_samples=1000,
-    grid_points=1001, random_state=DEFAULT_INTERVAL_SEED,
+    observed_responses=None, confidence_level=0.95, n_samples=100,
+    grid_points=101, random_state=DEFAULT_INTERVAL_SEED,
     inverse_mapper=inverse_response_times, *, minimum_time=0.0,
     allow_extrapolation=True, max_expansions=DEFAULT_INVERSE_EXPANSIONS,
 ):
@@ -425,7 +425,7 @@ def predict_inverse_response(
     calibration_time_range,
     observed_responses=None,
     confidence_level: float = 0.95,
-    n_samples: int = 1000,
+    n_samples: int = 100,
     random_state=DEFAULT_INTERVAL_SEED,
     inverse_mapper: Callable[..., tuple[np.ndarray, np.ndarray, str | None]] = inverse_response_times,
     interval_estimator: Callable[..., tuple[dict[str, Any], str | None]] = inverse_response_prediction_intervals,
