@@ -52,6 +52,7 @@ def test_approach1_prediction_contract(monkeypatch):
 
 def test_approach2_prediction_modes_and_tau_mutation(monkeypatch):
     plotted = {}
+    interval_settings = {}
 
     def fake_plot(*args, **kwargs):
         mode = kwargs.get('prediction_mode', 'value_ratio')
@@ -71,6 +72,7 @@ def test_approach2_prediction_modes_and_tau_mutation(monkeypatch):
         grid_points=1001,
         **kwargs,
     ):
+        interval_settings['n_samples'] = n_samples
         mapped, _, _ = engine._inverse_response_times(
             model_function,
             params,
@@ -124,7 +126,7 @@ def test_approach2_prediction_modes_and_tau_mutation(monkeypatch):
     np.testing.assert_allclose(inverse['predicted_in_vivo_time'], 2.0 * t_pred, atol=1e-7)
     np.testing.assert_allclose(inverse['lower_95'], 2.0 * t_pred - 0.2, atol=1e-7)
     np.testing.assert_allclose(inverse['upper_95'], 2.0 * t_pred + 0.2, atol=1e-7)
-    assert inverse['interval_total_samples'] == 1000
+    assert inverse['interval_total_samples'] == interval_settings['n_samples']
     assert inverse['status'].tolist() == ['mapped', 'mapped', 'mapped']
 
 

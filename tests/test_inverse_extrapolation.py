@@ -24,7 +24,8 @@ def mapping(targets, time_range=(0., 10.), **kwargs):
 
 @pytest.mark.parametrize('target', [np.exp(-.5), np.exp(-1.), .2, .01, 1e-20])
 def test_exponential_inverse_agrees_with_exact_solution_inside_and_outside_calibration(target):
-    values, status, reason = mapping([target])
+    # Give this accuracy check enough search range even if app defaults change.
+    values, status, reason = mapping([target], max_expansions=16)
     assert reason is None
     np.testing.assert_allclose(values, [-10. * np.log(target)], rtol=1e-8, atol=1e-9)
     assert ('extrapolated' in status[0]) == (values[0] > 10.)

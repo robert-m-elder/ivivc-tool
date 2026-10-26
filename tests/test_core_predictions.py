@@ -118,6 +118,7 @@ def test_inverse_response_prediction_retains_bounds_status_and_interval_metadata
     t_pred = np.array([0.0, 2.5, 5.0])
     prediction = TimeCourse(t_pred, np.exp(-0.2 * t_pred))
     observed_response = np.exp(-0.1 * np.linspace(0.0, 10.0, 6))
+    n_samples = 37
 
     def fixed_intervals(
         model_function,
@@ -157,6 +158,7 @@ def test_inverse_response_prediction_retains_bounds_status_and_interval_metadata
         calibration_time_range=(0.0, 10.0),
         observed_responses=observed_response,
         interval_estimator=fixed_intervals,
+        n_samples=n_samples,
     )
 
     assert result.available is True
@@ -168,8 +170,8 @@ def test_inverse_response_prediction_retains_bounds_status_and_interval_metadata
     np.testing.assert_allclose(result.time_error_lower, 0.2)
     np.testing.assert_allclose(result.time_error_upper, 0.2)
     assert result.status.tolist() == ['mapped', 'mapped', 'mapped']
-    assert result.auxiliary['interval_total_samples'] == 1000
-    np.testing.assert_array_equal(result.auxiliary['interval_valid_samples'], 1000)
+    assert result.auxiliary['interval_total_samples'] == n_samples
+    np.testing.assert_array_equal(result.auxiliary['interval_valid_samples'], n_samples)
 
 
 def test_direct_scaling_methods_preserve_current_approach3_calculations():
