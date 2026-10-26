@@ -8,5 +8,4 @@ study_design_poc_output/
 .pytest_cache/
 .coverage
 htmlcov/
-study_design_poc_output/
 profiling-output/
