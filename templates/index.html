@@ -115,7 +115,7 @@
                     <span class="help-icon" aria-hidden="true">?</span>
                 </button>
             </h3>
-            <div id="approaches-group" class="option-group-grid approach-options-grid" tabindex="-1"{% if 'approaches-group' in error_field_ids %} aria-invalid="true" aria-describedby="approaches-group-error"{% endif %}>
+            <div id="approaches-group" class="option-group-grid" tabindex="-1"{% if 'approaches-group' in error_field_ids %} aria-invalid="true" aria-describedby="approaches-group-error"{% endif %}>
                 {% for approach_id, approach in approaches.items() %}
                 <fieldset class="option-group approach-option-group">
                     <legend>

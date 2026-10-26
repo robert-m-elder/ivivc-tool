@@ -36,6 +36,10 @@ After installing and launching the app:
 5. Select **Analyze** to process the data and open the results page.
 6. Review the processed data, fitted or mapped relationships, model-comparison and diagnostic results, predictions where applicable, downloadable data, and report outputs.
 
+To rebuild the example workbook from the app's model functions, run
+`python tools/generate_toy_data.py`. See [toy-data generation](tools/TOY_DATA.md)
+for parameters, noise settings, and alternate output paths.
+
 ## Main inputs
 
 - **Fitting dataset:** required four-column dataset used for model fitting.
