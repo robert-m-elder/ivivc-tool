@@ -16,7 +16,7 @@ fit_kwargs = {
 }
 latex_equation = (
     r"y = A\left[w\frac{L(x;k_1,t_1)}{L(0;k_1,t_1)}"
-    r"+(1-w)\frac{L(x;k_2,t_2)}{L(0;k_2,t_2)}\right],\quad "
+    r"+(1-w)\frac{L(x;k_2,t_2)}{L(0;k_2,t_2)}\right], "
     r"L(x;k,t)=\frac{1}{1+e^{k(x-t)}}"
 )
 description = (
