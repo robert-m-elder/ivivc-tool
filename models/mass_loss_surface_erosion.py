@@ -4,8 +4,7 @@ import numpy as np
 display_name = 'Finite-Time Power Decay'
 approaches = ['approach2']
 fit_kwargs = {'maxfev': 20000, 'ftol': 1e-6, 'xtol': 1e-6}
-latex_equation = r"y = y_0 \max(1-kx,0)^n"
-#latex_equation = r"y = yinf + (y0 - yinf) \cdot \max(1 - k \cdot x, 0)^n"
+latex_equation = r"y = A + (y_0-A) \max(1-kx,0)^n"
 description = (
     'Response profile that reaches zero in finite time, with fitted amplitude, rate, and '
     'shape exponent. This surface-erosion form can also be used empirically for remaining '
@@ -23,24 +22,22 @@ def _positive_or_epsilon(value):
     return value
 
 
-def model_function(x, y0, k, n):
-#def model_function(x, y0, yinf, k, n):
+def model_function(x, y0, k, n, A):
     """Surface-erosion model expressed as response over time.
 
     Parameters
     ----------
     y0 : initial mass/response level
-    yinf : terminal/asymptotic mass/response level
     k : surface erosion rate parameter
     n : fitted geometry/shape exponent
+    A : terminal/asymptotic mass/response level
     """
-    yinf = 0
     x = np.asarray(x, dtype=float)
     k_safe = _positive_or_epsilon(k)
     n_safe = _positive_or_epsilon(n)
 
     remaining_fraction = np.maximum(1.0 - k_safe * x, 0.0) ** n_safe
-    return yinf + (y0 - yinf) * remaining_fraction
+    return A + (y0 - A) * remaining_fraction
 
 
 def initial_guess(x, y):
@@ -62,12 +59,11 @@ def initial_guess(x, y):
     span = max(x_max - x_min, np.finfo(float).eps)
 
     y0 = float(y[0])
-    yinf = float(y[-1])
     k = 0.8 / span
     n = 1.0
+    A = float(y[-1])
 
-    return np.array([y0, k, n], dtype=float)
-    #return np.array([y0, yinf, k, n], dtype=float)
+    return np.array([y0, k, n, A], dtype=float)
 
 
 model_function.supports_tau = False
