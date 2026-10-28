@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """Run reproducible proof-of-concept degradation study-design examples.
 
-The runner demonstrates four backend-only workflows:
+The runner demonstrates five backend-only scenarios:
 
 1. fit measured in vivo data and optimize a prospective time course;
 2. generate an uncertain in vivo trajectory through the IVIVC core and optimize
    sampling on that predicted trajectory;
-3. fit an incomplete in vivo study and optimize future time points;
+3. fit an incomplete in vivo study and optimize additional time points;
 4. update an IVIVC-predicted in vivo trajectory using completed target-study
-   observations and optimize future time points.
+   observations and optimize additional time points;
+5. use that IVIVC-informed workflow to fill a deliberately missed transition
+   region between completed observations.
 
 Each scenario uses the same downstream workflow:
 
@@ -81,6 +83,7 @@ SCENARIO_NAMES = (
     'ivivc_prediction',
     'adaptive_in_vivo_only',
     'adaptive_ivivc_prediction',
+    'adaptive_gap_filling',
 )
 LEGACY_SCENARIO_NAMES = ('adaptive_refinement',)
 
@@ -105,13 +108,14 @@ DESIGN_EXPLANATIONS: Mapping[str, str] = {
 }
 
 
-# Hard-coded proof-of-concept study settings. Keep these here so exploratory
-# changes propagate consistently through reference construction, design constraints,
-# observation models, and adaptive workflows without adding CLI surface area.
+# Shared proof-of-concept study settings. Keep numerical example constants here
+# so exploratory changes propagate consistently through reference construction,
+# design constraints, observation models, and adaptive workflows.
 POC_FUTURE_REPLICATES_PER_TIME = 3
 POC_MINIMUM_SPACING = 1.0
 POC_PROSPECTIVE_MINIMUM_N = 3
 POC_DEFAULT_MAXIMUM_N = 7
+ADAPTIVE_CANDIDATE_POLICIES = ('future_only', 'any_unobserved')
 
 # Common synthetic in vivo truth used by every proof-of-concept scenario.
 POC_IN_VIVO_TIME_RANGE = (0.0, 52.0)
@@ -143,6 +147,7 @@ ADAPTIVE_IVIVC_CANDIDATE_STEP = 1.0
 #ADAPTIVE_COMPLETED_TIMES = (0, 8, 16, 24)
 #ADAPTIVE_COMPLETED_TIMES = (0,8,16,24,28) # works with original ground truth (mass_loss_one_phase)
 ADAPTIVE_COMPLETED_TIMES = (0.0, 10.0, 20.0) # works fine for mass_loss_one_phase_normalized
+GAP_FILLING_COMPLETED_TIMES = (0.0, 10.0, 40.0)
 #ADAPTIVE_COMPLETED_TIMES = (0.0, 10, 20, 22.0) 
 #ADAPTIVE_COMPLETED_TIMES = (0.0, 10.0, 15, 20.0, 25) # XXX  does not work with narrower ground truth (mass_loss_one_phase)
 
@@ -187,6 +192,7 @@ class ProofOfConceptSettings:
     observation_sd: float = 0.05
     fit_initialization: str = 'data_driven'
     ivivc_calibration_response_sd: float = 0.05
+    adaptive_candidate_policy: str = 'future_only'
 
     def __post_init__(self) -> None:
         if int(self.n_reference_draws) != self.n_reference_draws or self.n_reference_draws < 2:
@@ -222,6 +228,13 @@ class ProofOfConceptSettings:
                 "fit_initialization must be 'data_driven', 'central_reference', or 'oracle'."
             )
         object.__setattr__(self, 'fit_initialization', initialization)
+        candidate_policy = str(self.adaptive_candidate_policy).strip().lower()
+        if candidate_policy not in ADAPTIVE_CANDIDATE_POLICIES:
+            allowed = ', '.join(ADAPTIVE_CANDIDATE_POLICIES)
+            raise ValueError(
+                f'adaptive_candidate_policy must be one of: {allowed}.'
+            )
+        object.__setattr__(self, 'adaptive_candidate_policy', candidate_policy)
 
 
 @dataclass
@@ -391,19 +404,49 @@ def _candidate_grid(
 
 
 
-def _future_candidate_grid(
+def _adaptive_candidate_grid(
     lower: float,
     upper: float,
     *,
-    latest_completed_time: float,
+    completed_times: Sequence[float],
     step: float,
+    policy: str,
 ) -> np.ndarray:
-    """Return selectable times strictly after the latest completed time."""
+    """Return selectable elapsed times under one adaptive-candidate policy."""
+    completed = np.unique(np.asarray(completed_times, dtype=float))
+    if completed.ndim != 1 or len(completed) == 0 or np.any(~np.isfinite(completed)):
+        raise ValueError('completed_times must contain at least one finite time.')
+    if np.any(completed < lower) or np.any(completed > upper):
+        raise ValueError('Completed times must lie within the candidate-grid bounds.')
+    policy = str(policy).strip().lower()
+    if policy not in ADAPTIVE_CANDIDATE_POLICIES:
+        allowed = ', '.join(ADAPTIVE_CANDIDATE_POLICIES)
+        raise ValueError(f'Unknown adaptive candidate policy; expected one of: {allowed}.')
+
     full = _candidate_grid(lower, upper, step=step, include_zero=False)
-    future = full[full > float(latest_completed_time) + 1e-12]
-    if len(future) == 0:
-        raise ValueError('No future candidate times remain after the completed study period.')
-    return future
+    observed = np.any(
+        np.isclose(full[:, None], completed[None, :], rtol=0.0, atol=1e-12),
+        axis=1,
+    )
+    candidates = full[~observed]
+    if policy == 'future_only':
+        candidates = candidates[candidates > float(completed[-1]) + 1e-12]
+    if len(candidates) == 0:
+        if policy == 'future_only':
+            raise ValueError(
+                'No candidate times remain after the latest completed elapsed time.'
+            )
+        raise ValueError('No unobserved candidate times remain in the supported range.')
+    return candidates
+
+
+def _adaptive_candidate_description(policy: str) -> str:
+    if policy == 'future_only':
+        return 'Only elapsed times later than the latest completed time are eligible.'
+    return (
+        'Any unobserved elapsed time in the supported range is eligible, including '
+        'earlier gap-filling times.'
+    )
 
 
 def _common_in_vivo_preset(settings: ProofOfConceptSettings):
@@ -856,16 +899,17 @@ def build_adaptive_in_vivo_only_scenario(
         random_state=settings.random_seed + 303,
     )
 
-    future_candidates = _future_candidate_grid(
+    candidates = _adaptive_candidate_grid(
         reference.supported_time_range[0],
         reference.supported_time_range[1],
-        latest_completed_time=existing.latest_time,
+        completed_times=existing.unique_times,
         step=ADAPTIVE_IN_VIVO_CANDIDATE_STEP,
+        policy=settings.adaptive_candidate_policy,
     )
     minimum_n = len(completed_times) + 1
     maximum_n = _scenario_max_n(minimum_n, POC_DEFAULT_MAXIMUM_N, settings)
     constraints = DesignConstraints(
-        candidate_times=future_candidates,
+        candidate_times=candidates,
         fixed_times=completed_times,
         min_time=float(reference.supported_time_range[0]),
         max_time=float(reference.supported_time_range[1]),
@@ -879,8 +923,8 @@ def build_adaptive_in_vivo_only_scenario(
         title='Adaptive refinement from incomplete in vivo data only',
         description=(
             'Completed target-study observations are retained exactly. A provisional '
-            'full trajectory is fitted from the incomplete in vivo data alone, and '
-            'only later time points are eligible for recommendation.'
+            'full trajectory is fitted from the incomplete in vivo data alone. '
+            + _adaptive_candidate_description(settings.adaptive_candidate_policy)
         ),
         reference=reference,
         observation_model=ObservationModel(
@@ -899,6 +943,7 @@ def build_adaptive_in_vivo_only_scenario(
         metadata={
             'reference_source': 'partial_target_in_vivo_study',
             'adaptive_mode': 'in_vivo_only',
+            'adaptive_candidate_policy': settings.adaptive_candidate_policy,
             'reference_model': settings.analysis_model,
             'completed_times': completed_times.tolist(),
             'latest_completed_time': existing.latest_time,
@@ -927,15 +972,24 @@ def build_adaptive_refinement_scenario(
     return build_adaptive_in_vivo_only_scenario(settings)
 
 
-def build_adaptive_ivivc_scenario(
+def _build_adaptive_ivivc_scenario(
     settings: ProofOfConceptSettings,
+    *,
+    scenario_name: str,
+    title: str,
+    description: str,
+    completed_times: Sequence[float],
+    candidate_policy: str,
+    candidate_policy_source: str,
+    adaptive_mode: str,
+    observation_seed_offset: int,
 ) -> ScenarioDefinition:
-    """Update an IVIVC-predicted target trajectory with completed in vivo data."""
+    """Build one IVIVC-informed adaptive scenario."""
     prior = build_ivivc_prediction_scenario(settings)
     if prior.ground_truth is None:  # pragma: no cover - synthetic scenario invariant
         raise RuntimeError('The synthetic IVIVC scenario did not provide ground truth.')
 
-    completed_times = np.asarray(ADAPTIVE_COMPLETED_TIMES, dtype=float)
+    completed_times = np.asarray(completed_times, dtype=float)
     replicate_count = POC_FUTURE_REPLICATES_PER_TIME
     if (
         np.any(completed_times < prior.reference.supported_time_range[0])
@@ -949,7 +1003,7 @@ def build_adaptive_ivivc_scenario(
         completed_times,
         replicate_count=replicate_count,
         observation_sd=settings.observation_sd,
-        random_state=settings.random_seed + 401,
+        random_state=settings.random_seed + observation_seed_offset,
     )
     observation_model = ObservationModel(
         kind='constant_sd',
@@ -964,16 +1018,17 @@ def build_adaptive_ivivc_scenario(
     )
     reference = update.reference
 
-    future_candidates = _future_candidate_grid(
+    candidates = _adaptive_candidate_grid(
         reference.supported_time_range[0],
         reference.supported_time_range[1],
-        latest_completed_time=existing.latest_time,
+        completed_times=existing.unique_times,
         step=ADAPTIVE_IVIVC_CANDIDATE_STEP,
+        policy=candidate_policy,
     )
     minimum_n = len(completed_times) + 1
     maximum_n = _scenario_max_n(minimum_n, POC_DEFAULT_MAXIMUM_N, settings)
     constraints = DesignConstraints(
-        candidate_times=future_candidates,
+        candidate_times=candidates,
         fixed_times=completed_times,
         min_time=float(reference.supported_time_range[0]),
         max_time=float(reference.supported_time_range[1]),
@@ -1003,7 +1058,9 @@ def build_adaptive_ivivc_scenario(
     metadata = dict(prior.metadata)
     metadata.update({
         'reference_source': 'ivivc_prediction_updated_by_completed_target_in_vivo',
-        'adaptive_mode': 'ivivc_informed',
+        'adaptive_mode': adaptive_mode,
+        'adaptive_candidate_policy': candidate_policy,
+        'adaptive_candidate_policy_source': candidate_policy_source,
         'completed_times': completed_times.tolist(),
         'latest_completed_time': existing.latest_time,
         'completed_replicates_per_time': replicate_count,
@@ -1023,13 +1080,10 @@ def build_adaptive_ivivc_scenario(
         ),
     })
     return ScenarioDefinition(
-        name='adaptive_ivivc_prediction',
-        title='IVIVC-informed adaptive refinement',
+        name=scenario_name,
+        title=title,
         description=(
-            'Paired calibration data and a target in vitro profile define a prior '
-            'target in vivo trajectory ensemble. Completed target-study in vivo '
-            'observations reweight that ensemble, and only later times are eligible '
-            'for recommendation.'
+            description + ' ' + _adaptive_candidate_description(candidate_policy)
         ),
         reference=reference,
         observation_model=observation_model,
@@ -1045,6 +1099,54 @@ def build_adaptive_ivivc_scenario(
     )
 
 
+def build_adaptive_ivivc_scenario(
+    settings: ProofOfConceptSettings,
+) -> ScenarioDefinition:
+    """Update an IVIVC-predicted target trajectory with completed in vivo data."""
+    return _build_adaptive_ivivc_scenario(
+        settings,
+        scenario_name='adaptive_ivivc_prediction',
+        title='IVIVC-informed adaptive refinement',
+        description=(
+            'Paired calibration data and a target in vitro profile define a prior '
+            'target in vivo trajectory ensemble. Completed target-study in vivo '
+            'observations reweight that ensemble.'
+        ),
+        completed_times=ADAPTIVE_COMPLETED_TIMES,
+        candidate_policy=settings.adaptive_candidate_policy,
+        candidate_policy_source='proof_of_concept_settings',
+        adaptive_mode='ivivc_informed',
+        observation_seed_offset=401,
+    )
+
+
+def build_adaptive_gap_filling_scenario(
+    settings: ProofOfConceptSettings,
+) -> ScenarioDefinition:
+    """Demonstrate selection inside a transition region missed by completed times."""
+    scenario = _build_adaptive_ivivc_scenario(
+        settings,
+        scenario_name='adaptive_gap_filling',
+        title='Adaptive gap filling after a missed transition',
+        description=(
+            'Completed observations at elapsed times 0, 10, and 40 bracket but do '
+            'not sample the synthetic transition region. The IVIVC-informed '
+            'reference is used to recommend an additional elapsed time inside '
+            'that gap.'
+        ),
+        completed_times=GAP_FILLING_COMPLETED_TIMES,
+        candidate_policy='any_unobserved',
+        candidate_policy_source='fixed_gap_filling_demonstration',
+        adaptive_mode='ivivc_informed_gap_filling_example',
+        observation_seed_offset=501,
+    )
+    scenario.metadata.update({
+        'example_purpose': 'demonstrate_earlier_elapsed_time_gap_filling',
+        'missed_elapsed_time_interval': (10.0, 40.0),
+    })
+    return scenario
+
+
 
 SCENARIO_BUILDERS: Mapping[
     str,
@@ -1054,6 +1156,7 @@ SCENARIO_BUILDERS: Mapping[
     'ivivc_prediction': build_ivivc_prediction_scenario,
     'adaptive_in_vivo_only': build_adaptive_in_vivo_only_scenario,
     'adaptive_ivivc_prediction': build_adaptive_ivivc_scenario,
+    'adaptive_gap_filling': build_adaptive_gap_filling_scenario,
     # Backward-compatible runner alias retained for existing scripts/tests.
     'adaptive_refinement': build_adaptive_refinement_scenario,
 }
@@ -1123,11 +1226,30 @@ def _split_schedule_times(
     return design_times[completed_mask], design_times[~completed_mask]
 
 
+def _adaptive_candidate_summary(
+    definition: ScenarioDefinition,
+) -> tuple[float, float]:
+    """Return earliest overall and later-than-completed candidate times."""
+    candidates = definition.constraints.available_candidates()
+    if len(candidates) == 0:
+        raise ValueError('No candidate time satisfies the current design constraints.')
+    earliest = float(np.min(candidates))
+    if definition.existing_observations is None:
+        return earliest, np.nan
+    later = candidates[
+        candidates > definition.existing_observations.latest_time + 1e-12
+    ]
+    earliest_later = float(np.min(later)) if len(later) else np.nan
+    return earliest, earliest_later
+
+
 def _time_role(definition: ScenarioDefinition, time: float) -> str:
     """Describe how one schedule time is used in the prospective/adaptive workflow."""
     if definition.existing_observations is not None:
         if _contains_time(definition.existing_observations.unique_times, time):
             return 'completed observation'
+        if time < definition.existing_observations.latest_time - 1e-12:
+            return 'recommended earlier gap-filling time'
         return 'recommended future time'
     if _contains_time(definition.constraints.fixed_times, time):
         return 'required fixed time'
@@ -1250,11 +1372,13 @@ def _performance_tables(
                 if definition.existing_observations is None
                 else definition.existing_observations.latest_time
             )
-            earliest_future_candidate_time = (
-                np.nan
-                if definition.existing_observations is None
-                else float(np.min(definition.constraints.candidate_times))
-            )
+            earliest_candidate_time = float(np.min(definition.constraints.candidate_times))
+            earliest_future_candidate_time = np.nan
+            if definition.existing_observations is not None:
+                (
+                    earliest_candidate_time,
+                    earliest_future_candidate_time,
+                ) = _adaptive_candidate_summary(definition)
             rows.append({
                 'scenario': definition.name,
                 'design': design_code,
@@ -1265,6 +1389,12 @@ def _performance_tables(
                 'existing_times': _format_times(existing_times),
                 'new_times': _format_times(new_times),
                 'latest_completed_time': latest_completed_time,
+                'adaptive_candidate_policy': definition.metadata.get(
+                    'adaptive_candidate_policy'
+                ),
+                'earliest_candidate_time': earliest_candidate_time,
+                # Retained for compatibility; this is specifically the earliest
+                # candidate later than the latest completed elapsed time.
                 'earliest_future_candidate_time': earliest_future_candidate_time,
                 'reference_effective_sample_size': definition.metadata.get(
                     'effective_sample_size',
@@ -1601,11 +1731,21 @@ def _scenario_metadata(result: ScenarioResult) -> dict[str, Any]:
     definition = result.definition
     adaptive_summary = None
     if definition.existing_observations is not None:
+        earliest_candidate, earliest_future_candidate = _adaptive_candidate_summary(
+            definition
+        )
         adaptive_summary = {
             'completed_times': definition.existing_observations.unique_times,
             'latest_completed_time': definition.existing_observations.latest_time,
-            'earliest_future_candidate_time': float(
-                np.min(definition.constraints.candidate_times)
+            'candidate_policy': definition.metadata.get(
+                'adaptive_candidate_policy', 'future_only'
+            ),
+            'earliest_candidate_time': earliest_candidate,
+            # Retained for compatibility with existing output consumers.
+            'earliest_future_candidate_time': (
+                earliest_future_candidate
+                if np.isfinite(earliest_future_candidate)
+                else None
             ),
         }
     return {
@@ -1992,10 +2132,22 @@ def _plotly_summary_html(result: ScenarioResult) -> str:
         )
     if definition.existing_observations is not None:
         completed = _format_times(definition.existing_observations.unique_times)
-        earliest_future = float(np.min(definition.constraints.candidate_times))
+        earliest_candidate, earliest_future = _adaptive_candidate_summary(definition)
+        candidate_policy = definition.metadata.get(
+            'adaptive_candidate_policy', 'future_only'
+        )
+        timing_summary = (
+            f'<strong>earliest eligible elapsed time:</strong> {earliest_candidate:g}'
+        )
+        if np.isfinite(earliest_future):
+            timing_summary += (
+                '; <strong>earliest eligible time after completion:</strong> '
+                f'{earliest_future:g}'
+            )
         extra_summary.append(
             '<strong>Completed times:</strong> '
-            f'{completed}; <strong>earliest candidate future time:</strong> {earliest_future:g}'
+            f'{completed}; <strong>candidate policy:</strong> '
+            f'<code>{candidate_policy}</code>; {timing_summary}'
         )
     if 'effective_sample_size' in scenario_metadata:
         ess = float(scenario_metadata['effective_sample_size'])
@@ -2132,6 +2284,7 @@ def write_proof_of_concept_outputs(
             'observation_sd': run.settings.observation_sd,
             'fit_initialization': run.settings.fit_initialization,
             'ivivc_calibration_response_sd': run.settings.ivivc_calibration_response_sd,
+            'adaptive_candidate_policy': run.settings.adaptive_candidate_policy,
         },
         'scenarios': list(run.scenarios),
         'output_interpretation': {
@@ -2288,6 +2441,16 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        '--adaptive-candidate-policy',
+        choices=('future-only', 'any-unobserved'),
+        default='future-only',
+        help=(
+            'Eligible elapsed times for adaptive recommendations: only times after '
+            'the latest completed time, or any unobserved time in the supported '
+            'range (default: future-only).'
+        ),
+    )
+    parser.add_argument(
         '--quick',
         action='store_true',
         help='Use small draw/simulation counts and only two design sizes.',
@@ -2316,6 +2479,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         observation_sd=args.observation_sd,
         fit_initialization=args.fit_initialization,
         ivivc_calibration_response_sd=args.ivivc_calibration_response_sd,
+        adaptive_candidate_policy=args.adaptive_candidate_policy.replace('-', '_'),
     )
     scenario_names = SCENARIO_NAMES if args.scenario == 'all' else (args.scenario,)
     run = run_proof_of_concept(scenario_names, settings=settings)

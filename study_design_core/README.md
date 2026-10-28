@@ -174,7 +174,7 @@ requires a monotonic central reference trajectory.
 
 `ExistingObservations` stores replicate-level measurements that have already
 been collected. Adaptive simulations keep these values fixed and simulate only
-new measurements at proposed future times. `reweight_reference_ensemble()` can
+new measurements at proposed elapsed times. `reweight_reference_ensemble()` can
 update the weights of complete IVIVC-predicted trajectories using the
 likelihood of those completed observations; trajectory shapes are retained and
 the effective sample size of the reweighted ensemble is reported.
@@ -182,24 +182,30 @@ the effective sample size of the reweighted ensemble is reported.
 The backend therefore supports two distinct adaptive use cases:
 
 - **in vivo-only adaptive refinement:** fit a provisional reference from an
-  incomplete target in vivo study and use it to select later observations;
+  incomplete target in vivo study and use it to select additional observations;
 - **IVIVC-informed adaptive refinement:** predict a target in vivo ensemble from
   calibration IVIVC data and a target in vitro profile, reweight that ensemble
-  with completed target in vivo observations, and select later observations.
+  with completed target in vivo observations, and select additional observations.
 
-In both cases, completed times are fixed and selectable candidate times are
-strictly later than the latest completed observation.
+In both cases, completed times are fixed. The proof-of-concept candidate policy
+can either restrict recommendations to elapsed times strictly later than the
+latest completed observation (`future_only`, the default), or permit any
+unobserved elapsed time in the supported range (`any_unobserved`). The latter
+supports a new experiment or retained specimen that fills an earlier sampling
+gap; it does not imply retrospective measurement of an unavailable specimen.
 
 ## Proof-of-concept runner
 
 `examples/study_design_proof_of_concept.py` composes the refactored IVIVC core,
-local information optimizer, and simulation evaluator into four backend-only
+local information optimizer, and simulation evaluator into five backend-only
 examples:
 
 - measured in vivo data used as the reference;
 - an IVIVC-derived predicted in vivo trajectory;
 - adaptive refinement from incomplete in vivo data alone;
-- IVIVC-informed adaptive refinement using completed target in vivo data.
+- IVIVC-informed adaptive refinement using completed target in vivo data;
+- IVIVC-informed gap filling after completed times 0, 10, and 40 miss the
+  synthetic transition region.
 
 Run a small demonstration from the repository root with:
 
@@ -226,6 +232,26 @@ python examples/study_design_proof_of_concept.py \
     --observation-sd 0.05 \
     --ivivc-calibration-response-sd 0.05 \
     --fit-initialization data_driven
+```
+
+To permit adaptive recommendations at unobserved elapsed times earlier than the
+latest completed observation, run with:
+
+```bash
+python examples/study_design_proof_of_concept.py \
+    --scenario adaptive_in_vivo_only \
+    --adaptive-candidate-policy any-unobserved
+```
+
+Completed times remain fixed. An earlier recommendation represents an
+additional experiment or a suitable retained specimen at that elapsed time.
+The built-in `adaptive_gap_filling` scenario demonstrates this behavior with
+the `any_unobserved` policy fixed for that example:
+
+```bash
+python examples/study_design_proof_of_concept.py \
+    --quick \
+    --scenario adaptive_gap_filling
 ```
 
 The built-in demonstration currently defines explicit example parameter presets

@@ -413,6 +413,9 @@ def simulate_design(
             'existing_time_point_count': (
                 0 if existing_observations is None else existing_observations.n_time_points
             ),
+            'additional_design_times': future_design.copy(),
+            # Backward-compatible alias. Additional observations may now be
+            # collected at elapsed times earlier than the latest completed time.
             'future_design_times': future_design.copy(),
             'common_random_numbers': bool(
                 simulation_plan.metadata.get('common_random_numbers', False)

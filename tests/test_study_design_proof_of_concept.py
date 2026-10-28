@@ -4,10 +4,12 @@ import json
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from examples.study_design_proof_of_concept import (
     DESIGN_LABELS,
     ProofOfConceptSettings,
+    _parse_args,
     build_adaptive_refinement_scenario,
     build_adaptive_in_vivo_only_scenario,
     build_adaptive_ivivc_scenario,
@@ -211,6 +213,10 @@ def test_adaptive_outputs_separate_completed_and_new_future_times():
     assert optimized['number_of_new_times'] == (
         optimized['number_of_times'] - optimized['number_of_existing_times']
     )
+    assert optimized['adaptive_candidate_policy'] == 'future_only'
+    assert optimized['earliest_candidate_time'] == (
+        optimized['earliest_future_candidate_time']
+    )
     new_times = np.array(
         [float(value) for value in optimized['new_times'].split('; ')],
         dtype=float,
@@ -226,6 +232,52 @@ def test_adaptive_outputs_separate_completed_and_new_future_times():
         selected.loc[selected['time_role'] == 'recommended future time', 'time']
         > result.definition.existing_observations.latest_time
     )
+
+
+def test_any_unobserved_policy_is_reported_with_generic_candidate_metadata():
+    settings = ProofOfConceptSettings(
+        n_reference_draws=8,
+        n_simulations=8,
+        random_seed=1234,
+        refine=False,
+        write_html=False,
+        max_design_sizes=1,
+        analysis_model='mass_loss_one_phase_normalized',
+        adaptive_candidate_policy='any_unobserved',
+    )
+    run = run_proof_of_concept(('adaptive_in_vivo_only',), settings=settings)
+    result = run.scenarios['adaptive_in_vivo_only']
+    metadata = result.definition.metadata
+    performance = result.performance_table
+
+    assert metadata['adaptive_candidate_policy'] == 'any_unobserved'
+    assert set(performance['adaptive_candidate_policy']) == {'any_unobserved'}
+    assert np.all(
+        performance['earliest_candidate_time']
+        < performance['latest_completed_time']
+    )
+    assert np.all(
+        performance['earliest_future_candidate_time']
+        > performance['latest_completed_time']
+    )
+
+
+def test_invalid_adaptive_candidate_policy_is_rejected():
+    with pytest.raises(ValueError, match='adaptive_candidate_policy'):
+        ProofOfConceptSettings(adaptive_candidate_policy='retrospective_magic')
+
+
+def test_adaptive_candidate_policy_cli_defaults_and_accepts_gap_filling():
+    assert _parse_args([]).adaptive_candidate_policy == 'future-only'
+    assert _parse_args([
+        '--adaptive-candidate-policy',
+        'any-unobserved',
+    ]).adaptive_candidate_policy == 'any-unobserved'
+    assert _parse_args([
+        '--scenario',
+        'adaptive_gap_filling',
+    ]).scenario == 'adaptive_gap_filling'
+
 
 def test_runner_model_and_absolute_noise_are_configurable():
     settings = ProofOfConceptSettings(

@@ -174,7 +174,8 @@ def get_synthetic_model_preset(
         erosion_rate = 1.0 / time_max
         initial_fraction = max(1.0 - erosion_rate * time_min, np.finfo(float).eps)
         initial_level = 1.0 / initial_fraction**exponent
-        parameters = (float(initial_level), float(erosion_rate), exponent)
+        final_level = 0.0
+        parameters = (float(initial_level), float(erosion_rate), exponent, final_level)
 
     spec = get_model_spec(model_name)
     if len(parameters) != len(spec.parameter_names):

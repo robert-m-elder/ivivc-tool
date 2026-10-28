@@ -206,7 +206,7 @@ def test_inverse_pointwise_intervals_are_reproducible_and_do_not_depend_on_other
 def test_inverse_zero_covariance_does_not_make_a_plateau_unique():
     # A zero-response plateau has no unique inverse, even with exact parameters.
     from models.mass_loss_surface_erosion import model_function
-    params = {'y0': 1., 'k': .1, 'n': 1.}
+    params = {'y0': 1., 'k': .1, 'n': 1., 'A':0}
     central, _, _ = inverse_response_times(model_function, params, [0.], (0., 20.), observed_responses=[0., 1.])
     interval, _ = inverse_response_prediction_intervals(
         model_function, params, np.zeros((3, 3)), [], [0.], (0., 20.),
