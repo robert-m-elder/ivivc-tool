@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run reproducible proof-of-concept degradation study-design examples.
 
-The runner demonstrates five backend-only scenarios:
+The runner demonstrates six backend-only scenarios:
 
 1. fit measured in vivo data and optimize a prospective time course;
 2. generate an uncertain in vivo trajectory through the IVIVC core and optimize
@@ -10,13 +10,15 @@ The runner demonstrates five backend-only scenarios:
 4. update an IVIVC-predicted in vivo trajectory using completed target-study
    observations and optimize additional time points;
 5. use that IVIVC-informed workflow to fill a deliberately missed transition
-   region between completed observations.
+   region between completed observations;
+6. compare an unrestricted next-time design with direct and I-optimal
+   crossing-time deadline policies using incomplete in vivo data alone.
 
 Each scenario uses the same downstream workflow:
 
 reference trajectory ensemble
     -> central analysis-model fit
-    -> rank-aware local I-optimal time selection
+    -> rank-aware local I-optimal or crossing-time policy selection
     -> Monte Carlo recovery assessment
     -> comparison with simple baseline schedules
 
@@ -27,7 +29,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import json
 from pathlib import Path
 import sys
@@ -57,7 +59,9 @@ from examples.study_design_poc_models import (  # noqa: E402
     supported_synthetic_models,
 )
 from study_design_core import (  # noqa: E402
+    CrossingTimeSummary,
     DesignConstraints,
+    DesignInformationScore,
     DesignOptimizationResult,
     ExistingObservations,
     DesignSimulationComparison,
@@ -68,11 +72,15 @@ from study_design_core import (  # noqa: E402
     create_simulation_plan,
     equal_response_spaced_design,
     equally_spaced_design,
+    evaluate_local_i_optimal_design,
     fit_reference_model_ensemble,
     log_spaced_design,
+    latest_time_before_deadline,
+    optimize_next_time_before_deadline,
     optimize_local_i_optimal_designs,
     reference_from_profile_fit,
     reference_from_trajectory_ensemble,
+    reference_crossing_time_summary,
     reweight_reference_ensemble,
     threshold_crossing_time,
 )
@@ -84,6 +92,7 @@ SCENARIO_NAMES = (
     'adaptive_in_vivo_only',
     'adaptive_ivivc_prediction',
     'adaptive_gap_filling',
+    'adaptive_timing_comparison',
 )
 LEGACY_SCENARIO_NAMES = ('adaptive_refinement',)
 
@@ -94,6 +103,12 @@ DESIGN_LABELS: Mapping[str, str] = {
     'equal_time': 'Equal time spacing',
     'log_time': 'Log time spacing',
     'equal_response': 'Equal response spacing',
+}
+
+TIMING_POLICY_LABELS: Mapping[str, str] = {
+    'central_next_time': 'Central I-optimal next time',
+    'direct_quantile': 'Direct early-quantile timing',
+    'deadline_i_optimal': 'Deadline-constrained I-optimal next time',
 }
 
 DESIGN_EXPLANATIONS: Mapping[str, str] = {
@@ -193,6 +208,8 @@ class ProofOfConceptSettings:
     fit_initialization: str = 'data_driven'
     ivivc_calibration_response_sd: float = 0.05
     adaptive_candidate_policy: str = 'future_only'
+    timing_degraded_fraction: float = 0.50
+    timing_quantile: float = 0.10
 
     def __post_init__(self) -> None:
         if int(self.n_reference_draws) != self.n_reference_draws or self.n_reference_draws < 2:
@@ -235,6 +252,11 @@ class ProofOfConceptSettings:
                 f'adaptive_candidate_policy must be one of: {allowed}.'
             )
         object.__setattr__(self, 'adaptive_candidate_policy', candidate_policy)
+        for name in ('timing_degraded_fraction', 'timing_quantile'):
+            value = float(getattr(self, name))
+            if not np.isfinite(value) or not 0 < value < 1:
+                raise ValueError(f'{name} must be finite and strictly between zero and one.')
+            object.__setattr__(self, name, value)
 
 
 @dataclass
@@ -312,11 +334,15 @@ class ScenarioResult:
     comparisons_by_n: Mapping[int, DesignSimulationComparison]
     performance_table: pd.DataFrame
     selected_times_table: pd.DataFrame
+    timing_summary: CrossingTimeSummary | None = None
+    timing_policy_table: pd.DataFrame | None = None
 
     def __post_init__(self) -> None:
         self.comparisons_by_n = dict(self.comparisons_by_n)
         self.performance_table = self.performance_table.copy()
         self.selected_times_table = self.selected_times_table.copy()
+        if self.timing_policy_table is not None:
+            self.timing_policy_table = self.timing_policy_table.copy()
 
 
 @dataclass
@@ -1147,6 +1173,42 @@ def build_adaptive_gap_filling_scenario(
     return scenario
 
 
+def build_adaptive_timing_comparison_scenario(
+    settings: ProofOfConceptSettings,
+) -> ScenarioDefinition:
+    """Compare three policies for one additional future observation."""
+    scenario = build_adaptive_in_vivo_only_scenario(
+        replace(settings, adaptive_candidate_policy='future_only')
+    )
+    number_of_times = len(scenario.constraints.fixed_times) + 1
+    return replace(
+        scenario,
+        name='adaptive_timing_comparison',
+        title='Partial in vivo next-time timing comparison',
+        description=(
+            'Completed target-study observations are retained. One additional '
+            'future time is selected by unrestricted central I-optimality, '
+            'direct early-quantile timing, or I-optimality subject to the same '
+            'crossing-time deadline. Feasible schedules share the same Monte '
+            'Carlo trajectories and observation errors.'
+        ),
+        constraints=replace(
+            scenario.constraints,
+            min_number_of_times=number_of_times,
+            max_number_of_times=number_of_times,
+        ),
+        metadata={
+            **scenario.metadata,
+            'example_purpose': 'compare_one_point_timing_policies',
+            'adaptive_candidate_policy_source': 'fixed_next_time_demonstration',
+            'timing_degraded_fraction': settings.timing_degraded_fraction,
+            'timing_quantile': settings.timing_quantile,
+            'timing_baseline_time': 0.0,
+            'one_additional_time': True,
+        },
+    )
+
+
 
 SCENARIO_BUILDERS: Mapping[
     str,
@@ -1157,6 +1219,7 @@ SCENARIO_BUILDERS: Mapping[
     'adaptive_in_vivo_only': build_adaptive_in_vivo_only_scenario,
     'adaptive_ivivc_prediction': build_adaptive_ivivc_scenario,
     'adaptive_gap_filling': build_adaptive_gap_filling_scenario,
+    'adaptive_timing_comparison': build_adaptive_timing_comparison_scenario,
     # Backward-compatible runner alias retained for existing scripts/tests.
     'adaptive_refinement': build_adaptive_refinement_scenario,
 }
@@ -1188,7 +1251,10 @@ def _baseline_designs(
 
 def _design_label(design_code: str) -> str:
     """Return a concise user-facing label for one machine-readable design code."""
-    return DESIGN_LABELS.get(str(design_code), str(design_code).replace('_', ' '))
+    return TIMING_POLICY_LABELS.get(
+        str(design_code),
+        DESIGN_LABELS.get(str(design_code), str(design_code).replace('_', ' ')),
+    )
 
 
 def _selection_rule_label(rule: str | None) -> str | None:
@@ -1350,9 +1416,23 @@ def _performance_tables(
     definition: ScenarioDefinition,
     optimization: DesignOptimizationResult,
     comparisons: Mapping[int, DesignSimulationComparison],
+    *,
+    timing_policy_table: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Create Monte Carlo-first performance tables with transparent schedule roles."""
     information = _information_lookup(optimization)
+    if timing_policy_table is not None:
+        for row in timing_policy_table.to_dict(orient='records'):
+            if row['status'] != 'available':
+                continue
+            information[(row['number_of_times'], row['design'])] = {
+                'criterion': row['information_criterion'],
+                'full_rank_fraction': row['full_rank_fraction'],
+                'rank': row['information_rank'],
+                'parameter_count': row['information_parameter_count'],
+                'log_pseudodeterminant': row['mean_log_pseudodeterminant'],
+                'selection_rule': row['information_selection_rule'],
+            }
     rows: list[dict[str, Any]] = []
     time_rows: list[dict[str, Any]] = []
     for number_of_times in sorted(comparisons):
@@ -1502,6 +1582,98 @@ def _performance_tables(
     return performance, selected_times
 
 
+def _timing_comparison_designs(
+    definition: ScenarioDefinition,
+    reference_model: ReferenceModelEnsemble,
+    optimization: DesignOptimizationResult,
+) -> tuple[dict[str, Sequence[float]], CrossingTimeSummary, pd.DataFrame]:
+    """Create one schedule per feasible policy and retain all policy statuses."""
+    existing = definition.existing_observations
+    if existing is None:
+        raise ValueError('The timing comparison requires completed observations.')
+    summary = reference_crossing_time_summary(
+        definition.reference,
+        degraded_fraction=definition.metadata['timing_degraded_fraction'],
+        quantile=definition.metadata['timing_quantile'],
+        baseline_time=definition.metadata['timing_baseline_time'],
+    )
+    direct = latest_time_before_deadline(
+        summary, definition.constraints,
+        latest_completed_time=existing.latest_time,
+    )
+    constrained = optimize_next_time_before_deadline(
+        summary, reference_model, definition.observation_model,
+        definition.constraints, latest_completed_time=existing.latest_time,
+    )
+    central = optimization.nested_steps[0]
+    designs: dict[str, Sequence[float]] = {'central_next_time': central.times}
+    rows: list[dict[str, Any]] = []
+    for code, recommendation in (
+        ('central_next_time', None),
+        ('direct_quantile', direct),
+        ('deadline_i_optimal', constrained),
+    ):
+        available = recommendation is None or recommendation.status == 'available'
+        if recommendation is None:
+            times = central.times
+            new_time = central.added_time
+            score = central.score
+            rule = central.metadata['selection_rule']
+            status = 'available'
+            message = 'Unrestricted central I-optimal next time.'
+            eligible_count = len(definition.constraints.available_candidates())
+        else:
+            times = recommendation.times
+            new_time = recommendation.new_time
+            score = recommendation.score
+            rule = recommendation.metadata.get('selection_rule')
+            status, message = recommendation.status, recommendation.message
+            eligible_count = len(recommendation.eligible_times)
+            if available:
+                designs[code] = times
+                if score is None:
+                    score = evaluate_local_i_optimal_design(
+                        times, reference_model, definition.observation_model,
+                        definition.constraints,
+                    )
+        crossed_before = (
+            summary.crossed_weight_before(new_time)
+            if available and summary.status != 'invalid_reference' else np.nan
+        )
+        rows.append({
+            'design': code,
+            'design_label': _design_label(code),
+            'status': status,
+            'message': message,
+            'number_of_times': len(definition.constraints.fixed_times) + 1,
+            'new_time': new_time,
+            'complete_schedule': _format_times(times) if available else None,
+            'degraded_fraction': summary.degraded_fraction,
+            'quantile': summary.quantile,
+            'baseline_time': summary.baseline_time,
+            'deadline': summary.deadline,
+            'deadline_status': summary.status,
+            'reached_weight': summary.reached_weight,
+            'noncrossing_weight': summary.noncrossing_weight,
+            'invalid_weight': summary.invalid_weight,
+            'eligible_candidate_count': eligible_count,
+            'deadline_slack': (
+                summary.deadline - new_time
+                if available and summary.deadline is not None else np.nan
+            ),
+            'crossed_weight_before': crossed_before,
+            'information_criterion': np.nan if score is None else score.criterion,
+            'full_rank_fraction': np.nan if score is None else score.full_rank_fraction,
+            'information_rank': np.nan if score is None else score.min_rank,
+            'information_parameter_count': np.nan if score is None else score.parameter_count,
+            'information_selection_rule': rule,
+            'mean_log_pseudodeterminant': (
+                np.nan if score is None else score.mean_log_pseudodeterminant
+            ),
+        })
+    return designs, summary, pd.DataFrame(rows)
+
+
 def run_scenario(
     definition: ScenarioDefinition,
     settings: ProofOfConceptSettings,
@@ -1510,6 +1682,7 @@ def run_scenario(
 ) -> ScenarioResult:
     """Optimize and simulate one scenario using the common backend workflow."""
     seed = settings.random_seed if random_seed is None else int(random_seed)
+    timing_comparison = definition.name == 'adaptive_timing_comparison'
     reference_model = fit_reference_model_ensemble(
         definition.reference,
         model_name=definition.analysis_model,
@@ -1519,7 +1692,7 @@ def run_scenario(
         reference_model,
         definition.observation_model,
         definition.constraints,
-        refine=settings.refine,
+        refine=False if timing_comparison else settings.refine,
     )
     plan = create_simulation_plan(
         definition.reference,
@@ -1529,6 +1702,8 @@ def run_scenario(
         random_state=seed,
     )
 
+    timing_summary = None
+    timing_policy_table = None
     refined_by_n = {
         step.number_of_times: step
         for step in optimization.refined_steps
@@ -1539,6 +1714,10 @@ def run_scenario(
         designs: dict[str, Sequence[float]] = {
             'optimized_nested': nested_step.times,
         }
+        if timing_comparison:
+            designs, timing_summary, timing_policy_table = _timing_comparison_designs(
+                definition, reference_model, optimization,
+            )
         if number_of_times in refined_by_n:
             designs['optimized_refined'] = refined_by_n[number_of_times].times
         designs.update(_baseline_designs(definition, number_of_times))
@@ -1560,6 +1739,7 @@ def run_scenario(
         definition,
         optimization,
         comparisons,
+        timing_policy_table=timing_policy_table,
     )
     return ScenarioResult(
         definition=definition,
@@ -1568,6 +1748,8 @@ def run_scenario(
         comparisons_by_n=comparisons,
         performance_table=performance,
         selected_times_table=selected_times,
+        timing_summary=timing_summary,
+        timing_policy_table=timing_policy_table,
     )
 
 
@@ -1748,7 +1930,7 @@ def _scenario_metadata(result: ScenarioResult) -> dict[str, Any]:
                 else None
             ),
         }
-    return {
+    metadata = {
         'name': definition.name,
         'title': definition.title,
         'description': definition.description,
@@ -1817,6 +1999,50 @@ def _scenario_metadata(result: ScenarioResult) -> dict[str, Any]:
         'optimization': result.optimization.metadata,
         'scenario_metadata': definition.metadata,
     }
+    if result.timing_summary is not None:
+        summary = result.timing_summary
+        metadata['timing_summary'] = {
+            'degraded_fraction': summary.degraded_fraction,
+            'quantile': summary.quantile,
+            'baseline_time': summary.baseline_time,
+            'supported_time_range': summary.supported_time_range,
+            'deadline': summary.deadline,
+            'status': summary.status,
+            'message': summary.message,
+            'reached_weight': summary.reached_weight,
+            'noncrossing_weight': summary.noncrossing_weight,
+            'invalid_weight': summary.invalid_weight,
+            'quantile_method': 'inverse_weighted_empirical_cdf',
+        }
+        metadata['timing_policies'] = _timing_json_safe(
+            result.timing_policy_table.to_dict(orient='records')
+        )
+        metadata['output_interpretation'].update({
+            'schedule_generator': 'central_i_optimality_and_crossing_time_deadline',
+            'reference_uncertainty_used_for_local_schedule_generation': True,
+            'reference_uncertainty_used_for_timing_deadline': True,
+            'reference_uncertainty_averaged_into_information_criterion': False,
+            'central_information_parameter_source': 'central_reference_fit',
+            'one_additional_time': True,
+            'design_labels': {**DESIGN_LABELS, **TIMING_POLICY_LABELS},
+            'optimized_design_explanations': {
+                'central_next_time': 'Central I-optimality over all feasible future times.',
+                'direct_quantile': 'Latest feasible future time at or before the deadline.',
+                'deadline_i_optimal': 'Central I-optimality over future times at or before the deadline.',
+            },
+        })
+    return metadata
+
+
+def _timing_json_safe(value: Any) -> Any:
+    """Keep unavailable timing values valid JSON without altering legacy output."""
+    if isinstance(value, Mapping):
+        return {key: _timing_json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_timing_json_safe(item) for item in value]
+    if isinstance(value, (float, np.floating)) and not np.isfinite(value):
+        return None
+    return _jsonable(value)
 
 
 def _plotly_summary_html(result: ScenarioResult) -> str:
@@ -1825,6 +2051,9 @@ def _plotly_summary_html(result: ScenarioResult) -> str:
         from plotly.io import to_html
     except ImportError as exception:  # pragma: no cover - project requirements include Plotly
         raise RuntimeError('Plotly is required to write proof-of-concept HTML output.') from exception
+
+    if result.timing_summary is not None:
+        return _timing_comparison_html(result, go, to_html)
 
     definition = result.definition
     reference_table = _reference_table(
@@ -2206,6 +2435,149 @@ def _plotly_summary_html(result: ScenarioResult) -> str:
 '''
 
 
+def _timing_comparison_html(result: ScenarioResult, go, to_html) -> str:
+    """Present one-point policies, including unavailable ones, separately from MC."""
+    definition = result.definition
+    summary = result.timing_summary
+    policy_table = result.timing_policy_table
+    reference = _reference_table(definition.reference, definition.ground_truth)
+    figure = go.Figure()
+    figure.add_trace(go.Scatter(
+        x=reference['time'], y=reference['upper_95'], mode='lines',
+        line={'width': 0}, showlegend=False, hoverinfo='skip',
+    ))
+    figure.add_trace(go.Scatter(
+        x=reference['time'], y=reference['lower_95'], mode='lines',
+        fill='tonexty', line={'width': 0}, fillcolor='rgba(136,231,136,0.3)',
+        name='95% reference envelope',
+    ))
+    figure.add_trace(go.Scatter(
+        x=reference['time'], y=reference['central_response'], mode='lines',
+        name='Central reference trajectory', line={'color': 'rgb(27,136,37)'},
+    ))
+    if 'ground_truth_response' in reference:
+        figure.add_trace(go.Scatter(
+            x=reference['time'], y=reference['ground_truth_response'], mode='lines',
+            name='Synthetic ground truth — not used by optimizer',
+            line={'color': 'rgb(40,40,40)', 'dash': 'dash'},
+        ))
+    figure.add_trace(go.Scatter(
+        x=definition.observed_data['time'], y=definition.observed_data['response'],
+        mode='markers', name='Completed target in vivo observations',
+    ))
+    for index, row in enumerate(policy_table.itertuples(index=False)):
+        if row.status != 'available':
+            continue
+        figure.add_trace(go.Scatter(
+            x=[row.new_time], y=definition.reference.evaluate_central([row.new_time]),
+            mode='markers', name=row.design_label,
+            marker={'size': 18 - 3 * index, 'symbol': ('circle', 'diamond', 'x')[index]},
+        ))
+    latest = definition.existing_observations.latest_time
+    if summary.deadline is not None:
+        figure.add_vline(
+            x=summary.deadline, line_dash='dot', line_color='rgb(80,80,180)',
+            annotation_text='Crossing-time deadline',
+        )
+        if summary.deadline > latest:
+            figure.add_vrect(
+                x0=latest, x1=summary.deadline, fillcolor='rgb(80,80,180)',
+                opacity=0.08, line_width=0, layer='below',
+            )
+    figure.update_layout(
+        title='One additional observation: reference and timing deadline',
+        xaxis_title='Time', yaxis_title='Response', template='plotly_white',
+    )
+    performance = result.performance_table
+    comparison = go.Figure(go.Bar(
+        x=performance['design_label'],
+        y=performance['penalized_mean_normalized_irmse'],
+        name='Penalized mean normalized IRMSE',
+    ))
+    comparison.update_layout(
+        title='Monte Carlo curve recovery for feasible schedules',
+        yaxis_title='Penalized mean normalized IRMSE', template='plotly_white',
+    )
+
+    def number(value):
+        return '' if value is None or pd.isna(value) else (
+            f'{float(value):.5g}' if np.isfinite(value) else 'not finite'
+        )
+
+    policies = policy_table[[
+        'design_label', 'status', 'message', 'new_time', 'complete_schedule',
+        'deadline_slack', 'crossed_weight_before', 'information_criterion',
+        'information_rank', 'information_parameter_count', 'information_selection_rule',
+    ]].copy().rename(columns={
+        'design_label': 'Policy', 'status': 'Status', 'message': 'Reason',
+        'new_time': 'New time', 'complete_schedule': 'Complete schedule',
+        'deadline_slack': 'Deadline minus new time',
+        'crossed_weight_before': 'Reference weight crossed before new time',
+        'information_criterion': 'Central I criterion',
+        'information_rank': 'Information rank',
+        'information_parameter_count': 'Parameters',
+        'information_selection_rule': 'Selection rule',
+    })
+    for column in (
+        'New time', 'Deadline minus new time', 'Reference weight crossed before new time',
+        'Central I criterion', 'Information rank', 'Parameters',
+    ):
+        policies[column] = policies[column].map(number)
+    policies['Selection rule'] = policies['Selection rule'].map(_selection_rule_label)
+    policies = policies.fillna('')
+    mc = performance[[
+        'design_label', 'number_of_times', 'number_of_new_times', 'new_times',
+        'failure_rate', 'median_normalized_irmse', 'p90_normalized_irmse',
+        'penalized_mean_normalized_irmse',
+    ]].copy().rename(columns={
+        'design_label': 'Design', 'number_of_times': 'Total N',
+        'number_of_new_times': 'New N', 'new_times': 'New times',
+        'failure_rate': 'Fit failure rate',
+        'median_normalized_irmse': 'Median normalized IRMSE',
+        'p90_normalized_irmse': 'P90 normalized IRMSE',
+        'penalized_mean_normalized_irmse': 'Penalized mean normalized IRMSE',
+    })
+    for column in mc.select_dtypes(include=[np.number]).columns:
+        mc[column] = mc[column].map(number)
+    deadline = 'unavailable' if summary.deadline is None else f'{summary.deadline:.5g}'
+    first = to_html(figure, full_html=False, include_plotlyjs='cdn')
+    second = to_html(comparison, full_html=False, include_plotlyjs=False)
+    return f'''<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>{definition.title}</title>
+<style>body {{font-family:Arial,sans-serif;max-width:1200px;margin:2rem auto;padding:0 1rem;}}
+table {{border-collapse:collapse;width:100%;font-size:.9rem;}} th,td {{border:1px solid #ccc;padding:.4rem;text-align:left;}}
+th {{background:#f3f3f3;}}</style></head><body>
+<h1>{definition.title}</h1><p>{definition.description}</p>
+<p><strong>Analysis model:</strong> <code>{definition.analysis_model}</code>;
+<strong>completed times:</strong> {_format_times(definition.existing_observations.unique_times)};
+<strong>new times per schedule:</strong> 1; <strong>candidate policy:</strong> future_only.</p>
+<p><strong>Timing target:</strong> time to {100 * summary.degraded_fraction:g}% degradation,
+relative to each trajectory's response at time {summary.baseline_time:g};
+<strong>crossing-time quantile:</strong> {summary.quantile:g} ({100 * summary.quantile:g}%);
+<strong>deadline:</strong> {deadline}; <strong>deadline calculation status:</strong> {summary.status}.
+{summary.message}</p>
+<p><strong>Reference weight:</strong> reached milestone {summary.reached_weight:.1%};
+not reached within horizon {summary.noncrossing_weight:.1%}; unsuitable {summary.invalid_weight:.1%}.
+Noncrossing trajectories retain their weights in the planning quantile.</p>
+<p>Central I-optimality searches all feasible future times. Direct early-quantile timing
+uses the latest legal time at or before the deadline. Deadline-constrained I-optimality
+uses the same central criterion and full evaluation horizon over that restricted set.
+Unavailable policies remain in the policy table and are excluded from simulation.</p>
+<p>These weights describe uncertainty in the supplied reference, not population event rates.
+The deadline does not guarantee transition capture or exactly the requested crossed weight.
+The displayed reference envelope is pointwise; timing uses complete trajectories.</p>
+<p><strong>Synthetic ground truth:</strong> displayed for evaluation only and never used to select schedules.</p>
+{first}
+<h2>Timing policies</h2><p>Negative deadline slack means the unrestricted policy samples after the deadline.
+The central I criterion is supporting precision information, including for the direct timing rule.</p>
+{policies.to_html(index=False, escape=True)}
+{second}<h2>Monte Carlo performance summary</h2>
+<p>All feasible schedules share the same reference draws and observation errors;
+completed measurements remain fixed. P90 normalized IRMSE is a recovery-error summary,
+separate from the crossing-time quantile.</p>{mc.to_html(index=False, escape=True)}
+</body></html>'''
+
+
 def write_proof_of_concept_outputs(
     run: ProofOfConceptRun,
     output_directory: str | Path,
@@ -2248,6 +2620,10 @@ def write_proof_of_concept_outputs(
             scenario_directory / 'selected_times.csv',
             index=False,
         )
+        if result.timing_policy_table is not None:
+            result.timing_policy_table.to_csv(
+                scenario_directory / 'timing_policies.csv', index=False,
+            )
         with (scenario_directory / 'metadata.json').open('w', encoding='utf-8') as handle:
             json.dump(
                 _jsonable(_scenario_metadata(result)),
@@ -2297,6 +2673,20 @@ def write_proof_of_concept_outputs(
             'combined_selected_times': 'combined_selected_times.csv',
         },
     }
+    timing_scenarios = [
+        name for name, result in run.scenarios.items()
+        if result.timing_summary is not None
+    ]
+    if timing_scenarios:
+        manifest['settings'].update({
+            'timing_degraded_fraction': run.settings.timing_degraded_fraction,
+            'timing_quantile': run.settings.timing_quantile,
+        })
+        manifest['output_interpretation'].update({
+            'schedule_generator': 'local_i_optimality_and_timing_policy_comparison',
+            'timing_comparison_scenarios': timing_scenarios,
+            'timing_policy_labels': TIMING_POLICY_LABELS,
+        })
     with (output_directory / 'manifest.json').open('w', encoding='utf-8') as handle:
         json.dump(manifest, handle, indent=2, sort_keys=True)
 
@@ -2305,12 +2695,26 @@ def write_proof_of_concept_outputs(
             f'<li><a href="{href}">{title}</a></li>'
             for title, href in scenario_links
         )
+        timing_intro = (
+            '<p>The partial in vivo timing comparison plans exactly one new '
+            'observation using central I-optimality and crossing-time deadlines. '
+            'Its page reports unavailable policies as well as feasible schedules.</p>'
+            if timing_scenarios else ''
+        )
+        generation_intro = (
+            'The timing comparison adds direct and deadline-constrained policies; '
+            'the other scenarios use local I-optimality at the central reference. '
+            if timing_scenarios else
+            'Each scenario uses local I-optimality to generate candidate schedules '
+            'from the central reference trajectory. '
+        )
         index_html = f'''<!doctype html>
 <html lang="en">
 <head><meta charset="utf-8"><title>Study-design proof of concept</title></head>
 <body style="font-family: Arial, sans-serif; max-width: 900px; margin: 2rem auto;">
 <h1>Study-design proof of concept</h1>
-<p>Each scenario uses local I-optimality to generate candidate schedules from the central reference trajectory. Monte Carlo simulation across plausible trajectories and measurement noise is the primary performance comparison.</p>
+<p>{generation_intro}Monte Carlo simulation across plausible trajectories and measurement noise is the primary performance comparison.</p>
+{timing_intro}
 <p><strong>{DESIGN_LABELS['optimized_nested']}:</strong> adds one time at a time while retaining earlier selections. <strong>{DESIGN_LABELS['optimized_refined']}:</strong> locally adjusts that schedule for each fixed N using the same I-optimal criterion. Both are information-based; neither is Monte Carlo optimized.</p>
 <ul>{links}</ul>
 <p>Machine-readable combined results are available in <code>combined_design_performance.csv</code>
@@ -2328,6 +2732,29 @@ def write_proof_of_concept_outputs(
 def _print_console_summary(run: ProofOfConceptRun) -> None:
     for name, result in run.scenarios.items():
         print(f'\n{name}: {result.definition.title}')
+        if result.timing_summary is not None:
+            summary = result.timing_summary
+            deadline = 'unavailable' if summary.deadline is None else f'{summary.deadline:g}'
+            print(
+                f'  Timing target: {100 * summary.degraded_fraction:g}% degraded, '
+                f'quantile={summary.quantile:g}, deadline={deadline} '
+                f'(calculation: {summary.status})'
+            )
+            for row in result.timing_policy_table.itertuples(index=False):
+                if row.status == 'available':
+                    performance = result.performance_table.loc[
+                        result.performance_table['design'] == row.design
+                    ].iloc[0]
+                    print(
+                        f'  {row.design_label}: new=[{row.new_time:g}] '
+                        f'full=[{row.complete_schedule}], '
+                        f'MC penalized normalized IRMSE='
+                        f'{performance.penalized_mean_normalized_irmse:.4g}, '
+                        f'failure rate={performance.failure_rate:.1%}'
+                    )
+                else:
+                    print(f'  {row.design_label}: {row.status} — {row.message}')
+            continue
         preferred = (
             'optimized_refined'
             if 'optimized_refined' in set(result.performance_table['design'])
@@ -2451,6 +2878,18 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        '--timing-degraded-fraction',
+        type=float,
+        default=0.50,
+        help='Fraction degraded defining the timing-comparison milestone (default: 0.50).',
+    )
+    parser.add_argument(
+        '--timing-quantile',
+        type=float,
+        default=0.10,
+        help='Weighted crossing-time quantile for the timing comparison (default: 0.10).',
+    )
+    parser.add_argument(
         '--quick',
         action='store_true',
         help='Use small draw/simulation counts and only two design sizes.',
@@ -2480,6 +2919,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         fit_initialization=args.fit_initialization,
         ivivc_calibration_response_sd=args.ivivc_calibration_response_sd,
         adaptive_candidate_policy=args.adaptive_candidate_policy.replace('-', '_'),
+        timing_degraded_fraction=args.timing_degraded_fraction,
+        timing_quantile=args.timing_quantile,
     )
     scenario_names = SCENARIO_NAMES if args.scenario == 'all' else (args.scenario,)
     run = run_proof_of_concept(scenario_names, settings=settings)

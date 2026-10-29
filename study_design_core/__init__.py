@@ -46,8 +46,14 @@ from .reference import (
     reference_from_time_course,
     reference_from_trajectory_ensemble,
 )
+from .timing import (
+    latest_time_before_deadline,
+    optimize_next_time_before_deadline,
+    reference_crossing_time_summary,
+)
 from .types import (
     CoordinateExchangeResult,
+    CrossingTimeSummary,
     DesignConstraints,
     ExistingObservations,
     DesignInformationScore,
@@ -57,6 +63,7 @@ from .types import (
     DesignOptimizationResult,
     DesignStep,
     ModelFitResult,
+    NextTimeRecommendation,
     ObservationModel,
     ReferenceModelEnsemble,
     ReferenceUpdateResult,
@@ -66,6 +73,7 @@ from .types import (
 
 __all__ = [
     'CoordinateExchangeResult',
+    'CrossingTimeSummary',
     'DesignConstraints',
     'ExistingObservations',
     'DesignInformationScore',
@@ -75,6 +83,7 @@ __all__ = [
     'DesignOptimizationResult',
     'DesignStep',
     'ModelFitResult',
+    'NextTimeRecommendation',
     'ObservationModel',
     'ReferenceModelEnsemble',
     'ReferenceUpdateResult',
@@ -99,6 +108,7 @@ __all__ = [
     'greedy_i_optimal_designs',
     'information_matrix',
     'integrated_root_mean_square_error',
+    'latest_time_before_deadline',
     'log_spaced_design',
     'maximum_absolute_error',
     'parameter_near_bounds',
@@ -106,7 +116,9 @@ __all__ = [
     'observation_model_from_residuals',
     'optimize_local_i_optimal_designs',
     'optimize_i_optimal_designs',
+    'optimize_next_time_before_deadline',
     'reference_response_scale',
+    'reference_crossing_time_summary',
     'reweight_reference_ensemble',
     'simulate_design',
     'summarize_simulation',

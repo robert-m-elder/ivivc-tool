@@ -738,6 +738,159 @@ class DesignOptimizationResult:
         label = 'refined' if refined else 'nested'
         raise KeyError(f'No {label} design is available for N={int(number_of_times)}.')
 
+
+@dataclass
+class CrossingTimeSummary:
+    """Reference-ensemble timing of a relative degradation milestone.
+
+    Finite ``crossing_times`` are first crossings after ``baseline_time``.
+    Positive infinity marks a valid trajectory that has not crossed within the
+    supported horizon. NaN marks an ignored draw or an invalid timing input;
+    positive-weight invalid inputs make the whole summary unavailable.
+    """
+
+    degraded_fraction: float
+    quantile: float
+    baseline_time: float
+    supported_time_range: tuple[float, float]
+    crossing_times: np.ndarray
+    draw_weights: np.ndarray
+    deadline: float | None
+    status: str
+    message: str = ''
+
+    def __post_init__(self) -> None:
+        self.degraded_fraction = float(self.degraded_fraction)
+        self.quantile = float(self.quantile)
+        for value, name in (
+            (self.degraded_fraction, 'degraded_fraction'),
+            (self.quantile, 'quantile'),
+        ):
+            if not np.isfinite(value) or not 0 < value < 1:
+                raise ValueError(f'{name} must be finite and strictly between zero and one.')
+        self.supported_time_range = tuple(float(value) for value in self.supported_time_range)
+        if (
+            len(self.supported_time_range) != 2
+            or not all(np.isfinite(self.supported_time_range))
+            or self.supported_time_range[0] >= self.supported_time_range[1]
+        ):
+            raise ValueError('supported_time_range must be finite and increasing.')
+        self.baseline_time = float(self.baseline_time)
+        lower, upper = self.supported_time_range
+        if not np.isfinite(self.baseline_time) or not lower <= self.baseline_time <= upper:
+            raise ValueError('baseline_time must lie within the supported time range.')
+        self.crossing_times = np.asarray(self.crossing_times, dtype=float).copy()
+        self.draw_weights = np.asarray(self.draw_weights, dtype=float).copy()
+        if (
+            self.crossing_times.ndim != 1
+            or self.draw_weights.shape != self.crossing_times.shape
+            or len(self.crossing_times) == 0
+        ):
+            raise ValueError('crossing_times and draw_weights must be matching nonempty vectors.')
+        if np.any(~np.isfinite(self.draw_weights)) or np.any(self.draw_weights < 0):
+            raise ValueError('draw_weights must be finite and nonnegative.')
+        total = float(np.sum(self.draw_weights))
+        if not np.isfinite(total) or not total > 0:
+            raise ValueError('At least one reference draw must have positive weight.')
+        self.draw_weights /= total
+        if np.any(np.isneginf(self.crossing_times)):
+            raise ValueError('Crossing times cannot contain negative infinity.')
+        finite = np.isfinite(self.crossing_times)
+        if np.any(self.crossing_times[finite] < self.baseline_time) or np.any(
+            self.crossing_times[finite] > upper
+        ):
+            raise ValueError('Finite crossing times must lie between baseline and horizon.')
+        if self.status not in {'available', 'beyond_horizon', 'invalid_reference'}:
+            raise ValueError('Unknown crossing-time summary status.')
+        if self.deadline is not None:
+            self.deadline = float(self.deadline)
+            if not np.isfinite(self.deadline) or not self.baseline_time <= self.deadline <= upper:
+                raise ValueError('A finite deadline must lie between baseline and horizon.')
+        if (self.status == 'available') != (self.deadline is not None):
+            raise ValueError('Only an available crossing-time summary can have a deadline.')
+        if self.status != 'invalid_reference' and self.invalid_weight > 0:
+            raise ValueError('Positive-weight invalid timing inputs require invalid_reference status.')
+
+    @property
+    def reached_weight(self) -> float:
+        return float(np.sum(self.draw_weights[np.isfinite(self.crossing_times)]))
+
+    @property
+    def noncrossing_weight(self) -> float:
+        return float(np.sum(self.draw_weights[np.isposinf(self.crossing_times)]))
+
+    @property
+    def invalid_weight(self) -> float:
+        return float(np.sum(self.draw_weights[np.isnan(self.crossing_times)]))
+
+    def crossed_weight_before(self, time: float) -> float:
+        """Return reference weight crossing strictly before an in-range time."""
+        time = float(time)
+        lower, upper = self.supported_time_range
+        if not np.isfinite(time) or not lower <= time <= upper:
+            raise ValueError('time must lie within the supported time range.')
+        if self.status == 'invalid_reference':
+            raise ValueError('Crossed weight is unavailable for an invalid reference.')
+        return float(np.sum(self.draw_weights[self.crossing_times < time]))
+
+
+@dataclass
+class NextTimeRecommendation:
+    """One additional future time, or an explicit unavailable-policy result."""
+
+    policy: str
+    summary: CrossingTimeSummary
+    status: str
+    message: str
+    times: np.ndarray = field(default_factory=lambda: np.array([], dtype=float))
+    new_time: float | None = None
+    eligible_times: np.ndarray = field(default_factory=lambda: np.array([], dtype=float))
+    score: DesignInformationScore | None = None
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.policy not in {'direct_quantile', 'deadline_i_optimal'}:
+            raise ValueError('Unknown next-time policy.')
+        if self.status not in {
+            'available', 'beyond_horizon', 'invalid_reference',
+            'deadline_elapsed', 'no_feasible_candidate',
+        }:
+            raise ValueError('Unknown next-time recommendation status.')
+        self.times = np.asarray(self.times, dtype=float).copy()
+        self.eligible_times = np.asarray(self.eligible_times, dtype=float).copy()
+        for values, name in ((self.times, 'times'), (self.eligible_times, 'eligible_times')):
+            if values.ndim != 1 or np.any(~np.isfinite(values)):
+                raise ValueError(f'{name} must be a finite one-dimensional array.')
+            if np.any(np.diff(values) <= 0):
+                raise ValueError(f'{name} must be strictly increasing.')
+        if self.status == 'available':
+            if self.new_time is None or self.summary.deadline is None:
+                raise ValueError('An available recommendation requires a new time and deadline.')
+            self.new_time = float(self.new_time)
+            if (
+                not np.isfinite(self.new_time)
+                or self.new_time > self.summary.deadline
+                or not np.any(self.times == self.new_time)
+                or not np.any(self.eligible_times == self.new_time)
+            ):
+                raise ValueError('The new time must be an eligible schedule time before the deadline.')
+        elif self.new_time is not None or len(self.times) or self.score is not None:
+            raise ValueError('Unavailable recommendations cannot contain a selected schedule or score.')
+        self.metadata = dict(self.metadata)
+
+    @property
+    def deadline_slack(self) -> float | None:
+        if self.new_time is None:
+            return None
+        return float(self.summary.deadline - self.new_time)
+
+    @property
+    def crossed_weight_before(self) -> float | None:
+        if self.new_time is None:
+            return None
+        return self.summary.crossed_weight_before(self.new_time)
+
+
 @dataclass
 class SimulationPlan:
     """Reusable trajectory selections and standard-normal errors.

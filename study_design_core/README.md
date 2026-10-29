@@ -91,14 +91,14 @@ result = optimize_i_optimal_designs(
 )
 ```
 
-The proof-of-concept runner now uses the simpler
+The five original proof-of-concept scenarios use the simpler
 `optimize_local_i_optimal_designs()` path. It evaluates the information
 calculation only at the parameter vector fitted to the central reference
 trajectory. Before that information matrix is full rank, candidate additions
 are selected by rank and then log pseudo-determinant. Once full rank is reached,
 selection minimizes local I-optimality.
 
-The runner presents two versions of this same information-based design.
+Those scenarios present two versions of this same information-based design.
 **I-optimal (add-one-at-a-time)** greedily adds one time while retaining all
 previously selected times; this is why the internal implementation calls the
 sequence *nested*. **I-optimal (refined at fixed N)** starts from that schedule
@@ -194,10 +194,85 @@ unobserved elapsed time in the supported range (`any_unobserved`). The latter
 supports a new experiment or retained specimen that fills an earlier sampling
 gap; it does not imply retrospective measurement of an unavailable specimen.
 
+## Crossing-time deadlines for one additional observation
+
+The timing functions use complete reference trajectories to calculate an early
+deadline for a selected amount of degradation. The two inputs have separate
+meanings: `degraded_fraction=0.50` selects time to 50% degradation, while
+`quantile=0.10` selects the weighted 10th percentile of those crossing times.
+These are crossing-time quantiles, rather than percentiles of an information
+criterion.
+
+```python
+from study_design_core import (
+    reference_crossing_time_summary,
+    latest_time_before_deadline,
+    optimize_next_time_before_deadline,
+)
+
+timing = reference_crossing_time_summary(
+    reference,
+    degraded_fraction=0.50,
+    quantile=0.10,
+    baseline_time=0.0,
+)
+direct = latest_time_before_deadline(
+    timing,
+    constraints,
+    latest_completed_time=existing.latest_time,
+)
+constrained = optimize_next_time_before_deadline(
+    timing,
+    reference_model,
+    observation,
+    constraints,
+    latest_completed_time=existing.latest_time,
+)
+if direct.status == 'available':
+    print(direct.new_time, direct.times)
+```
+
+The baseline time must be inside the supported reference domain. Each draw's
+positive response at that time defines its own relative threshold; only
+crossings at or after that baseline are considered. Crossings are linearly
+interpolated between reference evaluations. The deadline is the smallest
+crossing time whose cumulative normalized draw weight reaches the requested
+quantile, without interpolation between different draws.
+
+Valid trajectories that do not cross within the supported horizon retain their
+weights and have crossing time `inf`. Original invalid and zero-weight draws
+are excluded. A quantile beyond the horizon has status `beyond_horizon` and no
+finite deadline. An unsuitable positive-weight trajectory, such as one with a
+nonpositive baseline response, gives status `invalid_reference`; its weight is
+not silently discarded.
+
+Both selectors plan exactly one new time after `latest_completed_time`, which
+must be at or after the baseline. All fixed times must represent completed
+observations, and the original constraints must permit
+`len(fixed_times) + 1` distinct times. The direct rule
+chooses the latest feasible candidate at or before the deadline. The constrained
+rule uses the existing central I-optimal optimizer over that same candidate
+subset, retaining its rank fallback and the original evaluation horizon.
+Completed times, spacing, observation variability, and replicates are preserved.
+
+An elapsed deadline has status `deadline_elapsed`; a deadline without a legal
+future candidate has status `no_feasible_candidate`. Unavailable policies return
+no schedule, rather than moving the date past the deadline. With the reference,
+grid, and central criterion held fixed, lowering the quantile can only keep or
+move these one-point recommendations earlier, while they remain feasible.
+
+The weights describe uncertainty in the supplied reference, rather than verified
+population event rates. A quantile deadline is a planning rule; finite weighted
+ties do not imply that exactly the requested fraction has crossed by that date.
+The existing POC endpoint tables remain descriptive summaries conditional on
+reaching the endpoint and are separate from these planning calculations.
+The separate `adaptive_timing_comparison` POC scenario compares these timing
+policies with unrestricted central I-optimality.
+
 ## Proof-of-concept runner
 
 `examples/study_design_proof_of_concept.py` composes the refactored IVIVC core,
-local information optimizer, and simulation evaluator into five backend-only
+local information optimizer, and simulation evaluator into six backend-only
 examples:
 
 - measured in vivo data used as the reference;
@@ -205,7 +280,10 @@ examples:
 - adaptive refinement from incomplete in vivo data alone;
 - IVIVC-informed adaptive refinement using completed target in vivo data;
 - IVIVC-informed gap filling after completed times 0, 10, and 40 miss the
-  synthetic transition region.
+  synthetic transition region;
+- a next-time comparison using incomplete in vivo data alone, with unrestricted
+  central I-optimality, direct early-quantile timing, and deadline-constrained
+  central I-optimality.
 
 Run a small demonstration from the repository root with:
 
@@ -253,6 +331,40 @@ python examples/study_design_proof_of_concept.py \
     --quick \
     --scenario adaptive_gap_filling
 ```
+
+The next-time comparison uses the same partial in vivo reference for all three
+policies. It retains completed times 0, 10, and 20 and proposes exactly one new
+time (total N=4). This example fixes the candidate policy to `future_only`;
+earlier gap filling remains a separate example. Each timing policy appears
+once, alongside an equal-time baseline, without duplicate nested/refined rows.
+All feasible schedules share the same Monte Carlo trajectory draws and
+observation errors, and completed measurements stay fixed.
+
+Run the comparison with the normalized one-phase model:
+
+```bash
+python examples/study_design_proof_of_concept.py \
+    --quick \
+    --scenario adaptive_timing_comparison \
+    --analysis-model mass_loss_one_phase_normalized \
+    --timing-degraded-fraction 0.50 \
+    --timing-quantile 0.10
+```
+
+`--timing-degraded-fraction` selects the degradation milestone; the separate
+`--timing-quantile` selects its early crossing-time percentile. These settings
+affect only the timing-comparison scenario. Use
+`--analysis-model stretched_exponential` to try another model family. The
+ordinary unnormalized one-phase fit to partial data can produce an unsuitable
+reference or fail to reach the milestone within the supported horizon; the
+example reports that status without substituting another model.
+
+The new scenario writes `timing_policies.csv` with the deadline, selected time,
+deadline slack, weight crossed before selection, information diagnostics, and
+status/reason for every policy. Unavailable policies remain visible in this
+table and the HTML/JSON summaries, but are omitted from Monte Carlo performance
+rows. The reference plot marks the deadline and eligible sampling region. The
+five original examples retain their existing schedule generation and outputs.
 
 The built-in demonstration currently defines explicit example parameter presets
 for `mass_loss_one_phase`, `mass_loss_one_phase_normalized`, `exponential`, and
