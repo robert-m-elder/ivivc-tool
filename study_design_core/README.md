@@ -269,6 +269,96 @@ reaching the endpoint and are separate from these planning calculations.
 The separate `adaptive_timing_comparison` POC scenario compares these timing
 policies with unrestricted central I-optimality.
 
+## Requirements for future schedule planning
+
+`study_design_core.requirements` defines timing requirements independently of
+the source of the reference and the selected analysis model. This first layer
+resolves deadlines and checks requirement accounting. It does not select a
+schedule, resolve multiple latest-before points, or establish that all
+requirements can be satisfied together. The existing one-point policies and
+POC examples retain their behavior.
+
+- `CrossingTimeTarget` specifies a degraded fraction, crossing-time quantile,
+  and reference baseline time. It uses `reference_crossing_time_summary()`
+  with the original reference weights, including updated IVIVC weights.
+- `SamplingWindow` requires a minimum number of distinct sampling times in
+  `(lower_bound, upper_bound]`. Either bound can be a calendar time or a
+  `CrossingTimeTarget`.
+- `LatestBefore` records a request for a future point at or before a deadline,
+  with an optional lower bound. This layer identifies eligible times; choosing
+  the latest times jointly is a later scheduling step.
+- `PlanningContext` identifies baseline and completed target-study times and
+  the planning start. Baseline and completed times must be fixed in the
+  supplied `DesignConstraints`. Other fixed times are future commitments.
+
+Window counts exclude baseline. The default `count_scope='new'` also excludes
+completed times but includes fixed future points. `count_scope='all'` includes
+completed nonbaseline times when assessing coverage already achieved. Replicates
+at the same time count once. Historical reference and calibration measurement
+times never enter these counts automatically.
+
+The planning start defaults to the latest completed time for adaptive studies,
+or `constraints.min_time` for prospective studies. It can be specified
+explicitly, but cannot precede completed observations. Newly planned times
+must be strictly after the planning start. A prospective baseline can therefore
+be fixed without being described as an observation already collected. This is
+separate from the reference baseline used to define relative degradation.
+
+For example, given a reference and constraints with completed times 0, 10, and
+20 fixed, requirements can be resolved without choosing future points:
+
+```python
+from study_design_core import (
+    CrossingTimeTarget,
+    LatestBefore,
+    PlanningContext,
+    SamplingWindow,
+    evaluate_timing_requirements,
+    resolve_timing_requirements,
+)
+
+requirements = (
+    SamplingWindow(
+        lower_bound=20.0,
+        upper_bound=CrossingTimeTarget(degraded_fraction=0.50, quantile=0.10),
+        minimum_count=1,
+        label='new point before early T50',
+    ),
+    LatestBefore(
+        deadline=CrossingTimeTarget(degraded_fraction=0.90, quantile=0.50),
+        label='point near median T90',
+    ),
+)
+resolved = resolve_timing_requirements(
+    requirements, reference, constraints,
+    context=PlanningContext(
+        baseline_times=[0.0],
+        completed_times=[0.0, 10.0, 20.0],
+    ),
+)
+print(resolved.status)
+for requirement in resolved.requirements:
+    print(requirement.label, requirement.status, requirement.eligible_times)
+
+# Assess an independently supplied complete schedule; no optimization occurs.
+assessment = evaluate_timing_requirements(proposed_times, resolved, constraints)
+```
+
+Repeated crossing targets are resolved once per request. Unavailable crossing
+targets, reversed or empty windows, elapsed new-sampling deadlines, and windows
+without enough candidates remain visible in the results. An elapsed window can
+still be covered by completed observations under `count_scope='all'`.
+Resolve requirements again whenever the reference or study constraints change.
+
+Resolution status `ready` means the bounds and individual candidate checks are
+usable. It does not prove that the requested budget, overlapping requirements,
+and spacing permit a complete schedule. Candidate-count bounds are upper
+bounds, rather than guarantees that those candidates can coexist. Actual
+schedule evaluation validates ordinary design constraints and reports the
+qualifying times and counts for each requirement. A latest-before evaluation
+can establish `not_past_deadline`; it does not certify that the chosen point is
+the latest feasible one or assign distinct points to multiple such requests.
+
 ## Proof-of-concept runner
 
 `examples/study_design_proof_of_concept.py` composes the refactored IVIVC core,

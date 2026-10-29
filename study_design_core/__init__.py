@@ -46,6 +46,18 @@ from .reference import (
     reference_from_time_course,
     reference_from_trajectory_ensemble,
 )
+from .requirements import (
+    CrossingTimeTarget,
+    LatestBefore,
+    PlanningContext,
+    RequirementEvaluation,
+    ResolvedTimingRequirement,
+    ResolvedTimingRequirements,
+    SamplingWindow,
+    TimingRequirementsEvaluation,
+    evaluate_timing_requirements,
+    resolve_timing_requirements,
+)
 from .timing import (
     latest_time_before_deadline,
     optimize_next_time_before_deadline,
@@ -73,9 +85,17 @@ from .types import (
 
 __all__ = [
     'CoordinateExchangeResult',
+    'CrossingTimeTarget',
     'CrossingTimeSummary',
     'DesignConstraints',
     'ExistingObservations',
+    'LatestBefore',
+    'PlanningContext',
+    'RequirementEvaluation',
+    'ResolvedTimingRequirement',
+    'ResolvedTimingRequirements',
+    'SamplingWindow',
+    'TimingRequirementsEvaluation',
     'DesignInformationScore',
     'DesignPerformanceSummary',
     'DesignSimulationComparison',
@@ -101,6 +121,7 @@ __all__ = [
     'evaluate_local_i_optimal_design',
     'evaluate_i_optimal_design',
     'evaluate_reference_trajectories',
+    'evaluate_timing_requirements',
     'finite_difference_sensitivities',
     'fit_model_once',
     'fit_reference_model_ensemble',
@@ -120,6 +141,7 @@ __all__ = [
     'reference_response_scale',
     'reference_crossing_time_summary',
     'reweight_reference_ensemble',
+    'resolve_timing_requirements',
     'simulate_design',
     'summarize_simulation',
     'reference_from_profile_fit',
