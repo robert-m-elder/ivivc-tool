@@ -1,17 +1,23 @@
-"""Central information optimization subject to sampling-window requirements.
+"""Central information optimization subject to timing requirements.
 
 Each requested final size is planned independently. Feasibility is checked
 separately from the heuristic information search; a feasible result does not
-assert globally optimal information. Latest-before anchors are a later step.
+assert globally optimal information. The mixed API reserves joint
+latest-before points before optimizing the remaining sampling times.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Mapping, Sequence
 
 import numpy as np
 
+from .anchors import (
+    LatestBeforeSelectionResult,
+    _lock_latest_before_times,
+    select_latest_before_times,
+)
 from .feasibility import check_schedule_feasibility
 from .optimize import (
     _build_local_information_context,
@@ -50,6 +56,7 @@ class WindowDesignResult:
     feasibility_checks: int = 0
     exchanges: tuple[tuple[float, float], ...] = ()
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    latest_before_selection: LatestBeforeSelectionResult | None = None
 
 
 @dataclass(frozen=True)
@@ -315,5 +322,150 @@ def optimize_window_constrained_designs(
             'max_search_states_per_check': max_search_states,
             'global_information_optimum_verified': False,
         },
+        resolved_requirements,
+    )
+
+
+def _evaluate_assigned_points(times, resolved, constraints, selection):
+    """Add the joint selector's distinct-point evidence to schedule accounting."""
+    assessment = evaluate_timing_requirements(times, resolved, constraints)
+    points = {point.label: point for point in selection.points}
+    rows = []
+    for row in assessment.requirements:
+        if row.kind == 'latest_before':
+            point = points[row.label]
+            if point.selected_time not in times:
+                raise RuntimeError('An optimized schedule omitted a reserved latest-before point.')
+            row = replace(
+                row, qualifying_times=(point.selected_time,), achieved_count=1,
+                status='satisfied', deadline_slack=point.deadline_slack,
+                message='A distinct point was selected jointly in the reported latest-before priority order.',
+            )
+        rows.append(row)
+    if any(row.status != 'satisfied' for row in rows):
+        raise RuntimeError('Mixed optimization failed to preserve a timing requirement.')
+    return replace(assessment, requirements=tuple(rows), status='satisfied',
+                   message='Window counts and all distinct latest-before selections are satisfied.')
+
+
+def optimize_timing_constrained_designs(
+    reference_model: ReferenceModelEnsemble,
+    observation_model: ObservationModel,
+    constraints: DesignConstraints,
+    resolved_requirements: ResolvedTimingRequirements,
+    *,
+    number_of_times: int | Sequence[int] | None = None,
+    evaluation_times=None,
+    evaluation_weights=None,
+    relative_step: float = 1e-5,
+    absolute_step: float = 1e-8,
+    rank_tolerance: float | None = None,
+    refine: bool = True,
+    max_exchange_iterations: int = 25,
+    max_search_states: int = 100000,
+    max_anchor_search_states: int = 100000,
+) -> WindowDesignOptimizationResult:
+    """Combine window coverage and distinct latest-before points for each N.
+
+    Latest-before points are chosen first, with later deadlines taking
+    priority and request order breaking equal-deadline ties. Each selection
+    preserves feasibility of every remaining request and the complete study.
+    The points are then locked while the existing central information search
+    optimizes the remaining times. A different final N can change the anchors.
+
+    The anchor budget covers the entire joint selection for each N. A limit
+    before latestness is established returns no selected schedule. The window
+    budget still limits each information-search feasibility check. If that
+    search stops, the selector's complete feasible witness remains available.
+    Window-only calls delegate to optimize_window_constrained_designs().
+    """
+    if not isinstance(resolved_requirements, ResolvedTimingRequirements):
+        raise TypeError('resolved_requirements must be a ResolvedTimingRequirements result.')
+    if _signature(constraints) != resolved_requirements.constraints_signature:
+        raise ValueError('Use the same design constraints that resolved the requirements.')
+    sizes = _requested_sizes(number_of_times, constraints)
+    max_search_states = _positive_integer(max_search_states, 'max_search_states')
+    max_anchor_search_states = _positive_integer(max_anchor_search_states, 'max_anchor_search_states')
+    if refine:
+        max_exchange_iterations = _positive_integer(max_exchange_iterations, 'max_exchange_iterations')
+    kwargs = dict(
+        evaluation_times=evaluation_times, evaluation_weights=evaluation_weights,
+        relative_step=relative_step, absolute_step=absolute_step,
+        rank_tolerance=rank_tolerance, refine=refine,
+        max_exchange_iterations=max_exchange_iterations, max_search_states=max_search_states,
+    )
+    if not any(isinstance(row.request, LatestBefore) for row in resolved_requirements.requirements):
+        return optimize_window_constrained_designs(
+            reference_model, observation_model, constraints, resolved_requirements,
+            number_of_times=sizes, **kwargs,
+        )
+    source_domain = resolved_requirements.supported_time_range
+    if source_domain is not None and not np.allclose(
+        reference_model.supported_time_range, source_domain, rtol=0.0, atol=1e-12,
+    ):
+        raise ValueError('The analysis model and resolved requirements must have the same supported domain.')
+    lower, upper = reference_model.supported_time_range
+    if constraints.min_time < lower or constraints.max_time > upper:
+        raise ValueError('Design constraints extend beyond the analysis-model domain.')
+    times, weights = _prepare_evaluation_grid(reference_model, evaluation_times, evaluation_weights)
+    results = []
+    for size in sizes:
+        selection = select_latest_before_times(
+            resolved_requirements, constraints, size, max_search_states=max_anchor_search_states,
+        )
+        if selection.status != 'feasible':
+            results.append(WindowDesignResult(
+                size, selection.status, selection.message,
+                feasibility_states_visited=selection.states_visited,
+                feasibility_checks=selection.feasibility_checks, latest_before_selection=selection,
+            ))
+            continue
+        windows, locked = _lock_latest_before_times(
+            resolved_requirements, constraints, selection.selected_times,
+        )
+        optimized = optimize_window_constrained_designs(
+            reference_model, observation_model, locked, windows, number_of_times=size, **kwargs,
+        ).result_for_n(size)
+        if optimized.status == 'search_limit':
+            # The anchor selection already supplied a complete feasible study.
+            # A tighter information-search budget must not discard that study.
+            context = _build_local_information_context(
+                reference_model, observation_model, constraints,
+                evaluation_times=times, evaluation_weights=evaluation_weights,
+                relative_step=relative_step, absolute_step=absolute_step,
+                rank_tolerance=rank_tolerance,
+            )
+            fallback_score = context.score(selection.times)
+            optimized = replace(
+                optimized, status='feasible', times=selection.times,
+                initial_times=selection.times, score=fallback_score,
+                optimization_status='search_limit',
+                message='The latest-before selection is established; its feasible witness is retained after an information-search limit.',
+                metadata={'selection_rule': _selection_rule(fallback_score),
+                          'refined': False, 'coordinate_exchange_converged': None,
+                          'seed_selection': 'latest_before_feasibility_witness',
+                          'global_information_optimum_verified': False},
+            )
+        elif optimized.status != 'feasible':
+            raise RuntimeError('A verified joint selection lost its feasible completion during optimization.')
+        assessment = _evaluate_assigned_points(
+            optimized.times, resolved_requirements, constraints, selection,
+        )
+        results.append(replace(
+            optimized, requirement_evaluation=assessment, latest_before_selection=selection,
+            feasibility_states_visited=optimized.feasibility_states_visited + selection.states_visited,
+            feasibility_checks=optimized.feasibility_checks + selection.feasibility_checks,
+            metadata={**optimized.metadata, 'latest_before_priority': selection.priority_labels,
+                      'locked_latest_before_times': selection.selected_times,
+                      'latest_before_locations_verified': True},
+        ))
+    return WindowDesignOptimizationResult(
+        reference_model.model_name, tuple(results), tuple(map(float, times)), tuple(map(float, weights)),
+        {'criterion': 'local_i_optimality', 'parameter_source': 'central_reference_fit',
+         'independent_final_sizes': True, 'nested_schedules': False,
+         'latest_before_priority': 'later_deadlines_first_then_request_order',
+         'max_anchor_search_states_per_size': max_anchor_search_states,
+         'max_search_states_per_check': max_search_states,
+         'global_information_optimum_verified': False},
         resolved_requirements,
     )

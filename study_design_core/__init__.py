@@ -1,6 +1,7 @@
 """Reusable numerical foundation for degradation study-design assessment."""
 
 from .adaptive import reweight_reference_ensemble
+from .anchors import LatestBeforePoint, LatestBeforeSelectionResult, select_latest_before_times
 from .fitting import fit_model_once
 from .feasibility import ScheduleFeasibilityResult, check_schedule_feasibility
 from .information import (
@@ -62,6 +63,7 @@ from .requirements import (
 from .scheduling import (
     WindowDesignOptimizationResult,
     WindowDesignResult,
+    optimize_timing_constrained_designs,
     optimize_window_constrained_designs,
 )
 from .timing import (
@@ -96,6 +98,8 @@ __all__ = [
     'DesignConstraints',
     'ExistingObservations',
     'LatestBefore',
+    'LatestBeforePoint',
+    'LatestBeforeSelectionResult',
     'PlanningContext',
     'RequirementEvaluation',
     'ResolvedTimingRequirement',
@@ -148,11 +152,13 @@ __all__ = [
     'optimize_local_i_optimal_designs',
     'optimize_i_optimal_designs',
     'optimize_next_time_before_deadline',
+    'optimize_timing_constrained_designs',
     'optimize_window_constrained_designs',
     'reference_response_scale',
     'reference_crossing_time_summary',
     'reweight_reference_ensemble',
     'resolve_timing_requirements',
+    'select_latest_before_times',
     'simulate_design',
     'summarize_simulation',
     'reference_from_profile_fit',

@@ -448,10 +448,91 @@ schedule and reports the incomplete improvement search separately through
 `optimization_status`. An exchange-iteration limit is also reported separately
 from schedule feasibility.
 
-`LatestBefore` requests are explicitly rejected by this optimizer until joint
-deadline-point selection is added. The existing one-point direct and
-deadline-constrained APIs remain available. Existing POC examples and their
-outputs are unchanged by this scheduling addition.
+This window-only API continues to reject `LatestBefore` requests. Use
+`optimize_timing_constrained_designs()` below for mixed requirements. The
+existing one-point direct and deadline-constrained APIs remain available.
+
+## Joint latest-before points and window coverage
+
+`select_latest_before_times()` chooses distinct future points for any number
+of `LatestBefore` requests. The selection preserves all window counts, fixed
+times, spacing, and the exact final study size. A fixed future commitment can
+fill a request, but baseline and completed observations cannot. A selected
+point can also satisfy one or more coverage windows and is counted only once
+toward the study size.
+
+Later deadlines have priority, with request order breaking equal-deadline ties.
+The selector chooses the latest time at the first priority that permits all
+remaining requests and a complete schedule, then does the same at the next
+priority. This is a deterministic ordering of preferences, rather than a
+compromise between proximity to deadlines and information. For example, with
+deadlines 24 and 25 and minimum spacing 4, the selected times can be 21 and 25.
+Independently choosing 24 and 25 would violate spacing.
+
+Use the general optimizer to mix these requests with informative sampling
+within windows. Given the reference, fitted model, observation model, and
+adaptive constraints from the preceding example:
+
+```python
+from study_design_core import LatestBefore, optimize_timing_constrained_designs
+
+mixed = resolve_timing_requirements(
+    [
+        SamplingWindow(20.0, 30.0, label='early future coverage'),
+        LatestBefore(24.0, label='earlier milestone'),
+        LatestBefore(40.0, label='later milestone'),
+    ],
+    reference, constraints,
+    context=PlanningContext(
+        baseline_times=[0.0], completed_times=[0.0, 10.0, 20.0],
+    ),
+)
+result = optimize_timing_constrained_designs(
+    reference_model, observation, constraints, mixed,
+    number_of_times=[5, 6],
+)
+for design in result.designs:
+    print(design.number_of_times, design.status, design.times)
+    for point in design.latest_before_selection.points:
+        print(point.label, point.status, point.selected_time,
+              point.deadline_slack, point.displacement)
+```
+
+Either bound can also be a `CrossingTimeTarget`. Targets are resolved once
+using the original reference and weights. Locking selected points does not
+recalculate targets or change their uncertainty quantiles. Prospective calls
+use the same API with no completed observations. Reference construction and
+adaptive updating remain separate from the choice of timing requirements.
+
+The mixed optimizer first establishes the latest-before points, then locks
+them while the central I-optimal search chooses the remaining times. It
+retains the original information evaluation domain, noise model, and rank
+fallback. Different final sizes are solved independently: a larger requested
+study can force a deadline point earlier to leave room for other observations.
+Window-only calls delegate to the existing window optimizer.
+
+Each design's `latest_before_selection` retains the complete feasible witness
+and every request's status, selected time, and priority. `priority_labels`
+records the selection order. `latest_eligible_time` is the latest grid time
+compatible with the original fixed times, before considering competing
+requirements and the final size. `displacement` reports how far the selected
+point is earlier than that time; `deadline_slack` uses the actual deadline.
+An unchanged generic `evaluate_timing_requirements()` call still checks only
+counts and deadline eligibility. The mixed optimizer's assessment additionally
+records the distinct assignments established by its joint selector.
+
+`max_anchor_search_states` bounds the total joint selection work for each
+study size, including its window-feasibility checks. If it reaches the limit
+before the latest choices are established, that size reports `search_limit`
+with no certified selections or schedule. Individually unavailable and jointly
+infeasible requests also remain explicit, without partial selections or
+omitted requirements. `max_search_states` continues to limit each feasibility
+check in the information search. If that later search stops, the already
+verified complete schedule is retained with a separate optimization status.
+
+Existing one-point policies and POC examples retain their behavior. The new
+mixed-requirements POC and input-mode reporting remain a separate integration
+step.
 
 ## Proof-of-concept runner
 

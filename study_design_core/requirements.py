@@ -103,7 +103,7 @@ class LatestBefore:
     """Request a future sampling time as late as feasible before a deadline.
 
     Resolution and inspection only identify eligible times. Selecting the
-    latest time jointly with other requests belongs to the later scheduler.
+    latest time jointly with other requests uses select_latest_before_times().
     """
 
     deadline: TimeBound
