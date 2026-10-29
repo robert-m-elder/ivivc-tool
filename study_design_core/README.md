@@ -359,6 +359,100 @@ qualifying times and counts for each requirement. A latest-before evaluation
 can establish `not_past_deadline`; it does not certify that the chosen point is
 the latest feasible one or assign distinct points to multiple such requests.
 
+## Optimizing schedules with window requirements
+
+`optimize_window_constrained_designs()` selects complete schedules subject to
+`SamplingWindow` requirements. It supports prospective planning and multiple
+additional adaptive times, using the same central I-optimal criterion as the
+existing optimizer. The original reference evaluation horizon, observation
+model, integration weights, and rank fallback are retained. Windows constrain
+sampling coverage; they do not truncate the prediction domain being scored.
+
+Given a reference and its matching fitted `reference_model`, this example
+retains three completed times and selects either two or three additional times:
+
+```python
+import numpy as np
+from study_design_core import (
+    DesignConstraints,
+    PlanningContext,
+    SamplingWindow,
+    optimize_window_constrained_designs,
+    resolve_timing_requirements,
+)
+
+constraints = DesignConstraints(
+    candidate_times=np.arange(0.0, 53.0),
+    fixed_times=np.array([0.0, 10.0, 20.0]),
+    min_time=0.0,
+    max_time=52.0,
+    minimum_spacing=1.0,
+    min_number_of_times=5,
+    max_number_of_times=6,
+    replicates_per_time=3,
+)
+resolved_windows = resolve_timing_requirements(
+    [
+        SamplingWindow(20.0, 30.0, label='early future coverage'),
+        SamplingWindow(30.0, 45.0, label='later future coverage'),
+    ],
+    reference, constraints,
+    context=PlanningContext(
+        baseline_times=[0.0], completed_times=[0.0, 10.0, 20.0],
+    ),
+)
+result = optimize_window_constrained_designs(
+    reference_model, observation, constraints, resolved_windows,
+    number_of_times=[5, 6],
+    refine=True,
+)
+for design in result.designs:
+    print(design.number_of_times, design.status, design.times)
+    print(design.optimization_status, design.requirement_evaluation)
+```
+
+`number_of_times` is the total number of distinct target-study times, including
+completed observations, baseline, and fixed future commitments. Pass an integer
+for one final size, a sequence for selected sizes, or omit it for every allowed
+size in `DesignConstraints`. Each size is solved independently; these results
+are not a nested sequence. `result_for_n()` returns any outcome, while
+`design_for_n()` requires a feasible schedule. The result retains the resolved
+requirements, including individual unavailable-target diagnostics.
+
+For prospective planning, supply the required planned baseline in `fixed_times`
+and leave `completed_times` empty. Other fixed future times remain commitments
+and count as new sampling. The same functions accept measured, IVIVC-predicted,
+or adaptively updated references; construction of the reference remains
+separate from scheduling.
+
+`check_schedule_feasibility()` checks whether a complete schedule of a specified
+size exists, without calculating information. Its discrete search enforces
+fixed times, minimum spacing, future eligibility, and all window counts
+together. Optional `required_times` test a provisional selection without
+changing the original constraints. A feasible result includes a witness
+schedule; an `infeasible` result establishes that no such schedule exists on
+the supplied grid. Unresolved reference targets remain `unavailable`.
+Ambiguous grid times within the existing `1e-12` matching tolerance are
+rejected explicitly.
+
+During optimization, greedy additions are accepted only when a feasible
+completion remains possible. Coordinate exchange then improves the complete
+schedule while preserving every window requirement. The information search
+is heuristic and does not certify a global optimum. Feasible rank-deficient
+schedules use the existing rank and log pseudo-determinant fallback.
+
+`max_search_states` bounds each feasibility search. A search that stops before
+finding or excluding a schedule reports `search_limit`, rather than
+`infeasible`. If optimization already has a feasible schedule, it retains that
+schedule and reports the incomplete improvement search separately through
+`optimization_status`. An exchange-iteration limit is also reported separately
+from schedule feasibility.
+
+`LatestBefore` requests are explicitly rejected by this optimizer until joint
+deadline-point selection is added. The existing one-point direct and
+deadline-constrained APIs remain available. Existing POC examples and their
+outputs are unchanged by this scheduling addition.
+
 ## Proof-of-concept runner
 
 `examples/study_design_proof_of_concept.py` composes the refactored IVIVC core,

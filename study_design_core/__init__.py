@@ -2,6 +2,7 @@
 
 from .adaptive import reweight_reference_ensemble
 from .fitting import fit_model_once
+from .feasibility import ScheduleFeasibilityResult, check_schedule_feasibility
 from .information import (
     ensemble_i_optimality,
     finite_difference_sensitivities,
@@ -58,6 +59,11 @@ from .requirements import (
     evaluate_timing_requirements,
     resolve_timing_requirements,
 )
+from .scheduling import (
+    WindowDesignOptimizationResult,
+    WindowDesignResult,
+    optimize_window_constrained_designs,
+)
 from .timing import (
     latest_time_before_deadline,
     optimize_next_time_before_deadline,
@@ -95,7 +101,10 @@ __all__ = [
     'ResolvedTimingRequirement',
     'ResolvedTimingRequirements',
     'SamplingWindow',
+    'ScheduleFeasibilityResult',
     'TimingRequirementsEvaluation',
+    'WindowDesignOptimizationResult',
+    'WindowDesignResult',
     'DesignInformationScore',
     'DesignPerformanceSummary',
     'DesignSimulationComparison',
@@ -110,6 +119,7 @@ __all__ = [
     'ReferenceTrajectoryEnsemble',
     'SimulationPlan',
     'approximate_mean_curve_interval_width',
+    'check_schedule_feasibility',
     'compare_designs_by_simulation',
     'create_simulation_plan',
     'coordinate_exchange_local_i_optimal_design',
@@ -138,6 +148,7 @@ __all__ = [
     'optimize_local_i_optimal_designs',
     'optimize_i_optimal_designs',
     'optimize_next_time_before_deadline',
+    'optimize_window_constrained_designs',
     'reference_response_scale',
     'reference_crossing_time_summary',
     'reweight_reference_ensemble',

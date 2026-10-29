@@ -180,6 +180,7 @@ class ResolvedTimingRequirements:
     status: str
     message: str
     constraints_signature: tuple
+    supported_time_range: tuple[float, float] | None = None
 
 
 @dataclass(frozen=True)
@@ -350,6 +351,7 @@ def resolve_timing_requirements(
         ('Requirements resolved; joint feasibility has not been checked.' if ready else
          'One or more requirements are individually unavailable; no schedule has been selected.'),
         _signature(constraints),
+        reference.supported_time_range,
     )
 
 
