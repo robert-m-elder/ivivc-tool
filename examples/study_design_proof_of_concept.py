@@ -681,7 +681,7 @@ def build_design_size_evolution_scenario(
     whose explicit baseline has a different role in timing requirements.
     """
     scenario = build_measured_in_vivo_scenario(settings)
-    maximum_n = _scenario_max_n(1, 5, settings)
+    maximum_n = _scenario_max_n(1, 6, settings)
     return replace(
         scenario,
         name='design_size_evolution',
