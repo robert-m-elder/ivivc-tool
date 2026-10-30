@@ -537,7 +537,7 @@ input modes.
 ## Proof-of-concept runner
 
 `examples/study_design_proof_of_concept.py` composes the refactored IVIVC core,
-local information optimizer, and simulation evaluator into seven backend-only
+local information optimizer, and simulation evaluator into eight backend-only
 examples:
 
 - measured in vivo data used as the reference;
@@ -550,7 +550,9 @@ examples:
   central I-optimality, direct early-quantile timing, and deadline-constrained
   central I-optimality;
 - one mixed-requirements example with selectable prospective or adaptive input
-  mode, early window coverage, and multiple latest-before points.
+  mode, early window coverage, and multiple latest-before points;
+- a separate `design_size_evolution` example that reuses the measured reference
+  with N=1–5 and a required time-zero baseline.
 
 Run a small demonstration from the repository root with:
 
@@ -560,6 +562,42 @@ python examples/study_design_proof_of_concept.py --quick
 
 The default output directory, `study_design_poc_output/`, contains transparent
 CSV and JSON files for each scenario and optional static Plotly HTML summaries.
+
+The `design_size_evolution` example appears first in `index.html`, while the
+existing examples retain their order of simulation seeds and calculations.
+Run its full five-size illustration with:
+
+```bash
+python examples/study_design_proof_of_concept.py \
+    --scenario design_size_evolution \
+    --reference-draws 100 --simulations 100 \
+    --analysis-model mass_loss_one_phase --observation-sd 0.05
+```
+
+Its four-panel figure shows the reference and N=4 schedules, optimized schedules
+across N=1–5, the existing penalized mean IRMSE, and mean T50 estimation error
+with the central 95% simulation range. Time zero is a required baseline; the
+normal optimizer selects the remaining times. Nested schedules retain earlier
+selections; fixed-N refinement can move them. The historical reference is not
+added to the simulated new study as completed data.
+
+Returned values at underdetermined sizes are included without rank filtering
+or outlier clipping. The page explains that N<4 cannot identify the four-parameter
+model (or N below the selected model's parameter count), regardless of the
+number of replicates. The existing rank / pseudo-determinant fallback selects
+points before full rank; no finite local I criterion is implied at these sizes.
+Fit failures retain the existing IRMSE penalty. T50 errors compare each fitted
+curve with its own simulated true curve; only successful fits with both T50
+values available within the evaluation horizon contribute. The new
+`t50_recovery.csv` reports their mean, 2.5th/97.5th percentiles, and counts,
+including rows with no recovered endpoints. The range describes simulation
+variability, not a confidence interval for the mean. Axes are not clipped to
+hide extreme results.
+
+`--quick` and `--max-design-sizes` can truncate this example; when N=4 is absent,
+panel a uses the largest available size. The original `measured_in_vivo` example
+and the prospective-measured mixed-requirements mode retain their fixed baseline
+and previous design-size settings. No numerical backend changes are required.
 
 All built-in scenarios are synthetic validation examples. Their HTML summaries
 and `reference_trajectory.csv` files include the known generating curve as

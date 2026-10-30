@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run reproducible proof-of-concept degradation study-design examples.
 
-The runner demonstrates seven backend-only scenarios:
+The runner demonstrates eight backend-only scenarios:
 
 1. fit measured in vivo data and optimize a prospective time course;
 2. generate an uncertain in vivo trajectory through the IVIVC core and optimize
@@ -15,6 +15,8 @@ The runner demonstrates seven backend-only scenarios:
    crossing-time deadline policies using incomplete in vivo data alone.
 7. mix window coverage and multiple latest-before points, with a selectable
    prospective or adaptive reference/input mode.
+8. reuse the measured reference to illustrate schedules of N=1–5 with a required
+   time-zero baseline, including the returned results of underdetermined fits.
 
 Each scenario uses the same downstream workflow:
 
@@ -114,6 +116,7 @@ SCENARIO_NAMES = (
     'adaptive_gap_filling',
     'adaptive_timing_comparison',
     'mixed_timing_requirements',
+    'design_size_evolution',
 )
 LEGACY_SCENARIO_NAMES = ('adaptive_refinement',)
 
@@ -149,7 +152,7 @@ DESIGN_EXPLANATIONS: Mapping[str, str] = {
 # design constraints, observation models, and adaptive workflows.
 POC_FUTURE_REPLICATES_PER_TIME = 3
 POC_MINIMUM_SPACING = 1.0
-POC_PROSPECTIVE_MINIMUM_N = 3
+POC_PROSPECTIVE_MINIMUM_N = 1
 POC_DEFAULT_MAXIMUM_N = 7
 ADAPTIVE_CANDIDATE_POLICIES = ('future_only', 'any_unobserved')
 
@@ -665,6 +668,41 @@ def build_measured_in_vivo_scenario(
             'minimum_spacing': POC_MINIMUM_SPACING,
             'generating_model': preset.model_name,
             'generating_parameters': preset.parameter_mapping,
+        },
+    )
+
+
+def build_design_size_evolution_scenario(
+    settings: ProofOfConceptSettings,
+) -> ScenarioDefinition:
+    """Present the measured reference over N=1–5 with a required time-zero baseline.
+
+    Keep the original builder available to the mixed-requirements workflow,
+    whose explicit baseline has a different role in timing requirements.
+    """
+    scenario = build_measured_in_vivo_scenario(settings)
+    maximum_n = _scenario_max_n(1, 5, settings)
+    return replace(
+        scenario,
+        name='design_size_evolution',
+        title='Measured in vivo reference: evolution with study size',
+        description=(
+            'Noisy historical in vivo data provide the planning reference for '
+            'a new study. Time zero is a required baseline; the optimizer '
+            'chooses the remaining sampling times. Returned '
+            'Monte Carlo fit statistics are retained at every study size.'
+        ),
+        constraints=replace(
+            scenario.constraints, fixed_times=np.array([0.0]),
+            min_number_of_times=1, max_number_of_times=maximum_n,
+        ),
+        metadata={
+            **scenario.metadata,
+            'presentation': 'design_size_evolution',
+            'required_sampling_times': [0.0],
+            'requested_design_sizes': list(range(1, maximum_n + 1)),
+            'representative_schedule_size': 4,
+            'underdetermined_fit_statistics_retained': True,
         },
     )
 
@@ -1317,6 +1355,7 @@ SCENARIO_BUILDERS: Mapping[
     'adaptive_gap_filling': build_adaptive_gap_filling_scenario,
     'adaptive_timing_comparison': build_adaptive_timing_comparison_scenario,
     'mixed_timing_requirements': build_mixed_timing_requirements_scenario,
+    'design_size_evolution': build_design_size_evolution_scenario,
     # Backward-compatible runner alias retained for existing scripts/tests.
     'adaptive_refinement': build_adaptive_refinement_scenario,
 }
@@ -1490,6 +1529,41 @@ def _simulation_endpoint_metrics(simulation_result) -> dict[str, float]:
             float(np.median(absolute_errors)) if len(absolute_errors) else np.nan
         )
     return metrics
+
+
+def _t50_recovery_table(result: ScenarioResult) -> pd.DataFrame:
+    """Summarize returned, paired T50 errors without a rank or outlier filter."""
+    rows = []
+    for number_of_times, comparison in sorted(result.comparisons_by_n.items()):
+        for design, simulation in comparison.results.items():
+            true_times = _fractional_remaining_times(
+                simulation.evaluation_times, simulation.true_curves, 0.5,
+            )
+            fitted_times = _fractional_remaining_times(
+                simulation.evaluation_times, simulation.fitted_curves, 0.5,
+            )
+            paired = (simulation.fit_success & np.isfinite(true_times)
+                      & np.isfinite(fitted_times))
+            errors = fitted_times[paired] - true_times[paired]
+            lower, upper = (np.quantile(errors, [0.025, 0.975])
+                            if len(errors) else (np.nan, np.nan))
+            rows.append({
+                'design': design,
+                'design_label': _design_label(design),
+                'number_of_times': number_of_times,
+                'parameter_count': result.reference_model.n_parameters,
+                'fewer_times_than_parameters': (
+                    number_of_times < result.reference_model.n_parameters
+                ),
+                'n_simulations': simulation.n_simulations,
+                'n_successful_fits': int(np.count_nonzero(simulation.fit_success)),
+                'n_true_t50_reachable': int(np.count_nonzero(np.isfinite(true_times))),
+                'n_paired_t50': len(errors),
+                'mean_t50_error': float(np.mean(errors)) if len(errors) else np.nan,
+                'lower_95_t50_error': float(lower),
+                'upper_95_t50_error': float(upper),
+            })
+    return pd.DataFrame(rows)
 
 
 def _information_lookup(
@@ -2363,10 +2437,12 @@ def _plotly_summary_html(result: ScenarioResult) -> str:
                 name='Completed target in vivo observations',
             ))
 
+    evolution_view = definition.metadata.get('presentation') == 'design_size_evolution'
     maximum_n = int(result.performance_table['number_of_times'].max())
+    representative_n = 4 if evolution_view and 4 in result.comparisons_by_n else maximum_n
     available_codes = set(
         result.performance_table.loc[
-            result.performance_table['number_of_times'] == maximum_n,
+            result.performance_table['number_of_times'] == representative_n,
             'design',
         ]
     )
@@ -2376,7 +2452,7 @@ def _plotly_summary_html(result: ScenarioResult) -> str:
         if design_code not in available_codes:
             continue
         times = result.selected_times_table.loc[
-            (result.selected_times_table['number_of_times'] == maximum_n)
+            (result.selected_times_table['number_of_times'] == representative_n)
             & (result.selected_times_table['design'] == design_code),
             'time',
         ].to_numpy(dtype=float)
@@ -2386,7 +2462,7 @@ def _plotly_summary_html(result: ScenarioResult) -> str:
             y=response,
             mode='markers',
             marker={'size': marker_sizes[design_code], 'color':marker_colors[design_code]},
-            name=f'{_design_label(design_code)} (N={maximum_n})',
+            name=f'{_design_label(design_code)} (N={representative_n})',
         ))
     reference_figure.update_layout(
         title='Reference trajectory and representative schedules',
@@ -2396,11 +2472,13 @@ def _plotly_summary_html(result: ScenarioResult) -> str:
     )
 
     performance_figure = go.Figure()
+    performance_column = ('penalized_mean_irmse' if evolution_view
+                          else 'penalized_mean_normalized_irmse')
     for design_code, group in result.performance_table.groupby('design', sort=False):
         group = group.sort_values('number_of_times')
         performance_figure.add_trace(go.Scatter(
             x=group['number_of_times'],
-            y=group['penalized_mean_normalized_irmse'],
+            y=group[performance_column],
             mode='lines+markers',
             name=_design_label(design_code),
         ))
@@ -2412,7 +2490,8 @@ def _plotly_summary_html(result: ScenarioResult) -> str:
     performance_figure.update_layout(
         title='Monte Carlo curve-recovery error versus number of time points',
         xaxis_title=count_axis_title,
-        yaxis_title='Penalized mean normalized IRMSE',
+        yaxis_title=('Penalized mean IRMSE' if evolution_view
+                     else 'Penalized mean normalized IRMSE'),
         template='plotly_white',
     )
 
@@ -2446,6 +2525,12 @@ def _plotly_summary_html(result: ScenarioResult) -> str:
         yaxis_title=count_axis_title,
         template='plotly_white',
     )
+
+    if evolution_view:
+        return _design_size_evolution_html(
+            result, reference_figure, schedule_figure, performance_figure,
+            representative_n, go, to_html,
+        )
 
     table_columns = ['design_label', 'number_of_times']
     if definition.existing_observations is not None:
@@ -2630,6 +2715,150 @@ def _plotly_summary_html(result: ScenarioResult) -> str:
 </body>
 </html>
 '''
+
+
+def _design_size_evolution_html(
+    result, reference_figure, schedule_figure, performance_figure,
+    representative_n, go, to_html,
+) -> str:
+    """Combine existing optimizer/simulation outputs into one four-panel figure."""
+    from plotly.subplots import make_subplots
+
+    definition = result.definition
+    parameter_count = result.reference_model.n_parameters
+    endpoint_table = _t50_recovery_table(result)
+    endpoint_figure = go.Figure()
+    colors = {
+        'optimized_nested': 'rgb(231, 136, 136)',
+        'optimized_refined': 'rgb(136, 136, 231)',
+        'equal_time': 'rgb(136, 136, 136)',
+    }
+    fills = {
+        'optimized_nested': 'rgba(231, 136, 136, 0.16)',
+        'optimized_refined': 'rgba(136, 136, 231, 0.16)',
+        'equal_time': 'rgba(136, 136, 136, 0.16)',
+    }
+    for design, group in endpoint_table.groupby('design', sort=False):
+        group = group.sort_values('number_of_times')
+        label = _design_label(design)
+        for column, fill in (('upper_95_t50_error', None),
+                             ('lower_95_t50_error', 'tonexty')):
+            endpoint_figure.add_trace(go.Scatter(
+                x=group['number_of_times'], y=group[column],
+                name=label, mode='lines', line={'width': 0},
+                fill=fill, fillcolor=fills[design],
+                showlegend=False, hoverinfo='skip', connectgaps=False,
+            ))
+        endpoint_figure.add_trace(go.Scatter(
+            x=group['number_of_times'], y=group['mean_t50_error'],
+            name=label, mode='lines+markers', connectgaps=False,
+            customdata=group[['n_paired_t50', 'n_simulations']].to_numpy(),
+            hovertemplate=(
+                'N=%{x}<br>Mean T50 error=%{y:g}'
+                '<br>Paired T50 values=%{customdata[0]}/%{customdata[1]}'
+                '<extra>%{fullData.name}</extra>'
+            ),
+        ))
+
+    figure = make_subplots(
+        rows=2, cols=2, horizontal_spacing=0.13, vertical_spacing=0.16,
+        subplot_titles=(
+            f'a. Reference and schedules (N={representative_n})',
+            'b. Optimized schedules across study sizes',
+            'c. Monte Carlo curve recovery',
+            'd. T50 recovery: mean error and 95% range',
+        ),
+    )
+    for source, row, column in (
+        (reference_figure, 1, 1), (schedule_figure, 1, 2),
+        (performance_figure, 2, 1), (endpoint_figure, 2, 2),
+    ):
+        for trace in source.data:
+            for design, color in colors.items():
+                label = _design_label(design)
+                if trace.name and trace.name.startswith(label):
+                    trace.name = label
+                    trace.legendgroup = design
+                    trace.line.color = color
+                    trace.marker.color = color
+                    break
+            if (row, column) != (1, 1):
+                trace.showlegend = False
+            figure.add_trace(trace, row=row, col=column)
+    figure.update_xaxes(title_text='Time', row=1, col=1)
+    figure.update_yaxes(title_text='Response', row=1, col=1)
+    figure.update_xaxes(title_text='Time', row=1, col=2)
+    figure.update_yaxes(title_text='Distinct sampling times (N)', dtick=1, row=1, col=2)
+    sizes = sorted(result.comparisons_by_n)
+    for column in (1, 2):
+        figure.update_xaxes(
+            title_text='Distinct sampling times (N)', dtick=1, tickvals=sizes,
+            range=[sizes[0] - 0.25, sizes[-1] + 0.25], row=2, col=column,
+        )
+    figure.update_yaxes(title_text='Penalized mean IRMSE', row=2, col=1)
+    figure.update_yaxes(title_text='Estimated T50 − true T50 (time units)', row=2, col=2)
+    figure.add_hline(y=0, line_dash='dash', line_color='black', row=2, col=2)
+    figure.update_layout(
+        template='plotly_white', height=950,
+        margin={'l': 80, 'r': 30, 't': 60, 'b': 160},
+        legend={'orientation': 'h', 'y': -0.17, 'x': 0},
+    )
+    plot = to_html(figure, full_html=False, include_plotlyjs=True,
+                   config={'displaylogo': False})
+    performance_columns = [
+        'design_label', 'number_of_times', 'complete_schedule', 'failure_rate',
+        'penalized_mean_irmse', 'median_normalized_irmse', 'p90_normalized_irmse',
+    ]
+    performance = result.performance_table[performance_columns]
+    diagnostics = result.performance_table.loc[
+        result.performance_table['design'].isin(['optimized_nested', 'optimized_refined']),
+        ['design_label', 'number_of_times', 'information_selection_rule_label',
+         'information_rank', 'information_parameter_count', 'information_criterion'],
+    ]
+    model_label = definition.analysis_model
+    return f'''<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>{definition.title}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body {{font-family:Arial,sans-serif;max-width:1400px;margin:2rem auto;padding:0 1rem}}
+table {{border-collapse:collapse;font-size:.85rem;width:100%}}
+th,td {{border:1px solid #ccc;padding:.35rem;text-align:left}}
+th {{background:#f3f3f3}} .scroll {{overflow-x:auto}}
+</style></head><body>
+<h1>{definition.title}</h1><p>{definition.description}</p>
+<p><strong>Model:</strong> <code>{model_label}</code> ({parameter_count} parameters).
+<strong>Observation SD:</strong> {definition.observation_model.value:g};
+<strong>replicates/time:</strong> {definition.constraints.replicates_per_time}.
+Historical observations construct the reference; they are not carried into the new study as completed observations.</p>
+<p><strong>{DESIGN_LABELS['optimized_nested']}:</strong> retains earlier choices when adding a point.
+<strong>{DESIGN_LABELS['optimized_refined']}:</strong> may move points at each study size.
+Both schedules are information-based. Time zero is a required baseline;
+the optimizer selects the remaining sampling times.</p>
+<p><strong>Underdetermined fits:</strong> with fewer than {parameter_count} distinct times
+(N&lt;{parameter_count}), the {parameter_count}-parameter curve is underdetermined, even with replicates.
+The optimizer uses its rank / pseudo-determinant fallback until the information matrix has full rank.
+Returned IRMSE and T50 values are retained without a rank filter or outlier clipping;
+small errors or narrow ranges at these sizes do not establish parameter identification.</p>
+{plot}
+<p><strong>Panel a:</strong> the reference envelope describes the historical reference and does not
+shrink as the proposed study grows. Schedule markers show planned locations on the central reference.
+Synthetic ground truth is shown for comparison and is not used to choose schedules.
+N=4 is shown when available; a size-limited run uses its largest available N.</p>
+<p><strong>Panel c:</strong> the existing penalized mean IRMSE includes fit failures using the
+backend's existing penalty. Successful-fit errors, including underdetermined fits, are unchanged.</p>
+<p><strong>Panel d:</strong> lines show mean paired T50 error; shading shows the 2.5th–97.5th
+percentiles across simulations, not a confidence interval for the mean. Each estimate is compared
+with its own simulation's true T50 (50% of that curve's initial response remaining).
+Only successful fits with finite true and fitted T50 within the evaluation horizon contribute;
+unavailable endpoints remain unavailable. Counts are reported below. No vertical axis is clipped.</p>
+<h2>Monte Carlo performance summary</h2>
+<div class="scroll">{performance.to_html(index=False, escape=True)}</div>
+<h2>T50 recovery values</h2>
+<p>The plotted statistics and counts are saved in <code>t50_recovery.csv</code>.</p>
+<div class="scroll">{endpoint_table.to_html(index=False, escape=True)}</div>
+<h2>Optimization diagnostics (supporting)</h2>
+<div class="scroll">{diagnostics.to_html(index=False, escape=True)}</div>
+</body></html>'''
 
 
 def _timing_comparison_html(result: ScenarioResult, go, to_html) -> str:
@@ -2822,6 +3051,10 @@ def write_proof_of_concept_outputs(
             scenario_directory / 'selected_times.csv',
             index=False,
         )
+        if result.definition.metadata.get('presentation') == 'design_size_evolution':
+            _t50_recovery_table(result).to_csv(
+                scenario_directory / 't50_recovery.csv', index=False,
+            )
         if result.timing_policy_table is not None:
             result.timing_policy_table.to_csv(
                 scenario_directory / 'timing_policies.csv', index=False,
@@ -2927,7 +3160,10 @@ def write_proof_of_concept_outputs(
     if run.settings.write_html:
         links = '\n'.join(
             f'<li><a href="{href}">{title}</a></li>'
-            for title, href in scenario_links
+            for title, href in sorted(
+                scenario_links,
+                key=lambda item: item[1] != 'design_size_evolution/summary.html',
+            )
         )
         timing_intro = (
             '<p>The partial in vivo timing comparison plans exactly one new '
