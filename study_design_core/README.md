@@ -530,14 +530,14 @@ omitted requirements. `max_search_states` continues to limit each feasibility
 check in the information search. If that later search stops, the already
 verified complete schedule is retained with a separate optimization status.
 
-Existing one-point policies and POC examples retain their behavior. The new
-mixed-requirements POC and input-mode reporting remain a separate integration
-step.
+Existing one-point policies and POC examples retain their behavior. The mixed
+POC below composes these functions after reference construction in all four
+input modes.
 
 ## Proof-of-concept runner
 
 `examples/study_design_proof_of_concept.py` composes the refactored IVIVC core,
-local information optimizer, and simulation evaluator into six backend-only
+local information optimizer, and simulation evaluator into seven backend-only
 examples:
 
 - measured in vivo data used as the reference;
@@ -548,7 +548,9 @@ examples:
   synthetic transition region;
 - a next-time comparison using incomplete in vivo data alone, with unrestricted
   central I-optimality, direct early-quantile timing, and deadline-constrained
-  central I-optimality.
+  central I-optimality;
+- one mixed-requirements example with selectable prospective or adaptive input
+  mode, early window coverage, and multiple latest-before points.
 
 Run a small demonstration from the repository root with:
 
@@ -617,8 +619,9 @@ python examples/study_design_proof_of_concept.py \
 ```
 
 `--timing-degraded-fraction` selects the degradation milestone; the separate
-`--timing-quantile` selects its early crossing-time percentile. These settings
-affect only the timing-comparison scenario. Use
+`--timing-quantile` selects its early crossing-time percentile. They also
+control the mixed example described below, and do not affect the other
+examples. Use
 `--analysis-model stretched_exponential` to try another model family. The
 ordinary unnormalized one-phase fit to partial data can produce an unsuitable
 reference or fail to reach the milestone within the supported horizon; the
@@ -631,9 +634,87 @@ table and the HTML/JSON summaries, but are omitted from Monte Carlo performance
 rows. The reference plot marks the deadline and eligible sampling region. The
 five original examples retain their existing schedule generation and outputs.
 
+### Mixed requirements across input modes
+
+Run the single mixed-requirements example with incomplete in vivo data:
+
+```bash
+python examples/study_design_proof_of_concept.py --quick \
+    --scenario mixed_timing_requirements \
+    --analysis-model mass_loss_one_phase_normalized \
+    --planning-input-mode adaptive-in-vivo
+```
+
+Change only `--planning-input-mode` to select the source:
+
+| Mode | Reference and study being planned |
+| --- | --- |
+| `prospective-measured` | Historical full in vivo data; plan a new study |
+| `prospective-ivivc` | IVIVC-predicted in vivo reference; plan a new study |
+| `adaptive-in-vivo` | Incomplete target-study in vivo data; add future times |
+| `adaptive-ivivc` | IVIVC reference updated using completed target-study data; add future times |
+
+The example defaults to at least one new nonbaseline time before the 10th
+percentile of T50, plus distinct latest-before points for the 10th percentiles
+of T70 and T90. All targets use complete reference trajectories and their
+original or updated weights. Set `--timing-degraded-fraction` to change the
+coverage milestone and `--timing-quantile` to change the common crossing-time
+quantile. Repeat `--planning-latest-fraction` to replace the default list of
+latest-before milestones, for example `--planning-latest-fraction 0.8
+--planning-latest-fraction 0.95`. `--planning-search-limit` controls the search
+budget for this example.
+
+With the two default latest-before requests, prospective runs plan total N=4
+and N=5; adaptive runs retain times 0, 10, and 20 and add three or four future
+times (total N=6 and N=7). The existing maximum-design-size setting can limit
+the number of sizes. Each size is solved independently. A reserved point can
+also satisfy window coverage; the remaining times are optimized around all
+requirements. Baseline never counts toward milestone coverage. Historical and
+calibration measurements are never treated as completed target-study data.
+
+The example compares an unrestricted central I-optimal benchmark with the
+mixed-requirements schedule, using the same Monte Carlo trajectories and
+errors. The benchmark retains baseline, completed times, spacing, and future
+eligibility; it does not apply the milestone requirements. This example fixes
+future-only sampling independently of `--adaptive-candidate-policy`.
+
+The example adds three output files:
+
+- `schedule_status.csv`: every requested size and design, feasibility and
+  optimization status, complete/new schedules, experimental units, and
+  information diagnostics;
+- `timing_requirements.csv`: target definitions, resolved bounds, counting
+  scope, qualifying times, achieved counts, and reference crossing status;
+- `latest_before_points.csv`: priority, selected time, latest eligible grid
+  time, displacement, slack, and status for each requested point.
+
+Metadata retains the planning specification, central parameters and evaluation
+grid, and all results. The HTML page shows the reference envelope, coverage
+windows, deadlines, selected points, status tables, and Monte Carlo recovery.
+Selected times distinguish planned baseline, completed observations, fixed
+future commitments, reserved points, and other new sampling. Unavailable or
+limited searches remain visible and do not receive fabricated Monte Carlo
+performance rows. A deadline that has elapsed or lies beyond the reference
+horizon is reported rather than moved. With the exponential model and completed
+times 0, 10, and 20, later targets may be needed; for example:
+
+```bash
+python examples/study_design_proof_of_concept.py --quick \
+    --scenario mixed_timing_requirements --analysis-model exponential \
+    --timing-degraded-fraction 0.9 --timing-quantile 0.5 \
+    --planning-latest-fraction 0.93 --planning-latest-fraction 0.97
+```
+
+For custom requirements, attach a `SchedulePlanningSpec` from
+`examples.study_design_mixed_workflow` to any POC
+`ScenarioDefinition`. Its common run path accepts the existing reference,
+observation model, constraints, and actual completed observations. The input
+mode chooses reference construction; it does not select a different optimizer.
+The six existing examples retain their individual output formats and calculations.
+
 The built-in demonstration currently defines explicit example parameter presets
-for `mass_loss_one_phase`, `mass_loss_one_phase_normalized`, `exponential`, and
-`mass_loss_surface_erosion`. A model without a preset is rejected rather than
+for `mass_loss_one_phase`, `mass_loss_one_phase_normalized`, `exponential`,
+`stretched_exponential`, and `mass_loss_surface_erosion`. A model without a preset is rejected rather than
 silently replaced by a one-phase curve.
 The Approach 1 IVIVC scenario samples the in vitro and in vivo calibration
 profiles at separate fixed time grids, adds configurable absolute response noise to

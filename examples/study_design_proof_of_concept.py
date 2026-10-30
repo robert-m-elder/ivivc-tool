@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run reproducible proof-of-concept degradation study-design examples.
 
-The runner demonstrates six backend-only scenarios:
+The runner demonstrates seven backend-only scenarios:
 
 1. fit measured in vivo data and optimize a prospective time course;
 2. generate an uncertain in vivo trajectory through the IVIVC core and optimize
@@ -13,6 +13,8 @@ The runner demonstrates six backend-only scenarios:
    region between completed observations;
 6. compare an unrestricted next-time design with direct and I-optimal
    crossing-time deadline policies using incomplete in vivo data alone.
+7. mix window coverage and multiple latest-before points, with a selectable
+   prospective or adaptive reference/input mode.
 
 Each scenario uses the same downstream workflow:
 
@@ -58,7 +60,19 @@ from examples.study_design_poc_models import (  # noqa: E402
     get_synthetic_model_preset,
     supported_synthetic_models,
 )
+from examples.study_design_mixed_workflow import (  # noqa: E402
+    PLANNING_DESIGN_LABELS,
+    PLANNING_INPUT_MODES,
+    SchedulePlanningSpec,
+    decorate_planning_times,
+    empty_performance_tables,
+    planning_json_safe,
+    planning_metadata,
+    planning_summary_html,
+    planning_tables,
+)
 from study_design_core import (  # noqa: E402
+    CrossingTimeTarget,
     CrossingTimeSummary,
     DesignConstraints,
     DesignInformationScore,
@@ -68,6 +82,10 @@ from study_design_core import (  # noqa: E402
     ObservationModel,
     ReferenceModelEnsemble,
     ReferenceTrajectoryEnsemble,
+    LatestBefore,
+    PlanningContext,
+    SamplingWindow,
+    WindowDesignOptimizationResult,
     compare_designs_by_simulation,
     create_simulation_plan,
     equal_response_spaced_design,
@@ -78,10 +96,12 @@ from study_design_core import (  # noqa: E402
     latest_time_before_deadline,
     optimize_next_time_before_deadline,
     optimize_local_i_optimal_designs,
+    optimize_timing_constrained_designs,
     reference_from_profile_fit,
     reference_from_trajectory_ensemble,
     reference_crossing_time_summary,
     reweight_reference_ensemble,
+    resolve_timing_requirements,
     threshold_crossing_time,
 )
 
@@ -93,6 +113,7 @@ SCENARIO_NAMES = (
     'adaptive_ivivc_prediction',
     'adaptive_gap_filling',
     'adaptive_timing_comparison',
+    'mixed_timing_requirements',
 )
 LEGACY_SCENARIO_NAMES = ('adaptive_refinement',)
 
@@ -210,6 +231,9 @@ class ProofOfConceptSettings:
     adaptive_candidate_policy: str = 'future_only'
     timing_degraded_fraction: float = 0.50
     timing_quantile: float = 0.10
+    planning_input_mode: str = 'adaptive-in-vivo'
+    planning_latest_fractions: tuple[float, ...] = (0.70, 0.90)
+    planning_search_limit: int = 100000
 
     def __post_init__(self) -> None:
         if int(self.n_reference_draws) != self.n_reference_draws or self.n_reference_draws < 2:
@@ -257,6 +281,17 @@ class ProofOfConceptSettings:
             if not np.isfinite(value) or not 0 < value < 1:
                 raise ValueError(f'{name} must be finite and strictly between zero and one.')
             object.__setattr__(self, name, value)
+        if self.planning_input_mode not in PLANNING_INPUT_MODES:
+            raise ValueError('planning_input_mode must be one of: ' + ', '.join(PLANNING_INPUT_MODES))
+        fractions = tuple(float(value) for value in self.planning_latest_fractions)
+        if not fractions or any(not np.isfinite(value) or not 0 < value < 1 for value in fractions):
+            raise ValueError('planning_latest_fractions must contain fractions strictly between zero and one.')
+        object.__setattr__(self, 'planning_latest_fractions', fractions)
+        if (isinstance(self.planning_search_limit, bool)
+                or not isinstance(self.planning_search_limit, (int, np.integer))
+                or self.planning_search_limit < 1):
+            raise ValueError('planning_search_limit must be a positive integer.')
+        object.__setattr__(self, 'planning_search_limit', int(self.planning_search_limit))
 
 
 @dataclass
@@ -278,6 +313,7 @@ class ScenarioDefinition:
     existing_observations: ExistingObservations | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
     reference_model_initial_parameters: Mapping[str, float] | None = None
+    planning: SchedulePlanningSpec | None = None
 
     def __post_init__(self) -> None:
         if self.name not in SCENARIO_NAMES:
@@ -286,6 +322,11 @@ class ScenarioDefinition:
         if self.preprocessed_data is not None:
             self.preprocessed_data = self.preprocessed_data.copy()
         self.metadata = dict(self.metadata)
+        if self.planning is not None:
+            completed = (() if self.existing_observations is None
+                         else self.existing_observations.unique_times)
+            if tuple(map(float, completed)) != self.planning.context.completed_times:
+                raise ValueError('Planning completed_times must match the actual target-study observations.')
         if self.ground_truth is not None:
             self.ground_truth = TimeCourse(
                 self.ground_truth.time,
@@ -330,12 +371,16 @@ class ScenarioResult:
 
     definition: ScenarioDefinition
     reference_model: ReferenceModelEnsemble
-    optimization: DesignOptimizationResult
+    optimization: DesignOptimizationResult | WindowDesignOptimizationResult
     comparisons_by_n: Mapping[int, DesignSimulationComparison]
     performance_table: pd.DataFrame
     selected_times_table: pd.DataFrame
     timing_summary: CrossingTimeSummary | None = None
     timing_policy_table: pd.DataFrame | None = None
+    planning_optimization: WindowDesignOptimizationResult | None = None
+    schedule_status_table: pd.DataFrame | None = None
+    requirement_table: pd.DataFrame | None = None
+    anchor_table: pd.DataFrame | None = None
 
     def __post_init__(self) -> None:
         self.comparisons_by_n = dict(self.comparisons_by_n)
@@ -343,6 +388,9 @@ class ScenarioResult:
         self.selected_times_table = self.selected_times_table.copy()
         if self.timing_policy_table is not None:
             self.timing_policy_table = self.timing_policy_table.copy()
+        for name in ('schedule_status_table', 'requirement_table', 'anchor_table'):
+            if getattr(self, name) is not None:
+                setattr(self, name, getattr(self, name).copy())
 
 
 @dataclass
@@ -1210,6 +1258,54 @@ def build_adaptive_timing_comparison_scenario(
 
 
 
+def build_mixed_timing_requirements_scenario(
+    settings: ProofOfConceptSettings,
+) -> ScenarioDefinition:
+    """One example with selectable input source and a shared planning policy."""
+    builders = {
+        'prospective-measured': build_measured_in_vivo_scenario,
+        'prospective-ivivc': build_ivivc_prediction_scenario,
+        'adaptive-in-vivo': build_adaptive_in_vivo_only_scenario,
+        'adaptive-ivivc': build_adaptive_ivivc_scenario,
+    }
+    scenario = builders[settings.planning_input_mode](
+        replace(settings, adaptive_candidate_policy='future_only')
+    )
+    baseline = float(scenario.constraints.fixed_times[0])
+    completed = (() if scenario.existing_observations is None
+                 else scenario.existing_observations.unique_times)
+    start = float(max(completed)) if len(completed) else scenario.constraints.min_time
+    context = PlanningContext([baseline], completed, start)
+    def target(fraction):
+        return CrossingTimeTarget(fraction, settings.timing_quantile, baseline)
+    requirements = (
+        SamplingWindow(baseline, target(settings.timing_degraded_fraction),
+                       label='Early curve coverage'),
+        *(LatestBefore(target(fraction), label=f'Milestone {index}: {100 * fraction:g}% degraded')
+          for index, fraction in enumerate(settings.planning_latest_fractions, start=1)),
+    )
+    minimum = len(scenario.constraints.fixed_times) + len(requirements)
+    maximum = _scenario_max_n(minimum, minimum + 1, settings)
+    return replace(
+        scenario, name='mixed_timing_requirements',
+        title='Mixed timing requirements',
+        description=(
+            'The same reference is used for an unrestricted central I-optimal '
+            'benchmark and a schedule with early curve coverage and distinct '
+            'latest-before milestone points. Each total study size is planned '
+            'independently; feasible schedules share Monte Carlo trajectories '
+            'and observation errors.'
+        ),
+        constraints=replace(scenario.constraints, min_number_of_times=minimum,
+                            max_number_of_times=maximum),
+        planning=SchedulePlanningSpec(context, requirements, settings.planning_input_mode,
+                                      settings.planning_search_limit),
+        metadata={**scenario.metadata, 'example_purpose': 'mixed_timing_requirements',
+                  'planning_input_mode': settings.planning_input_mode,
+                  'adaptive_candidate_policy_source': 'fixed_future_planning_demonstration'},
+    )
+
+
 SCENARIO_BUILDERS: Mapping[
     str,
     Callable[[ProofOfConceptSettings], ScenarioDefinition],
@@ -1220,6 +1316,7 @@ SCENARIO_BUILDERS: Mapping[
     'adaptive_ivivc_prediction': build_adaptive_ivivc_scenario,
     'adaptive_gap_filling': build_adaptive_gap_filling_scenario,
     'adaptive_timing_comparison': build_adaptive_timing_comparison_scenario,
+    'mixed_timing_requirements': build_mixed_timing_requirements_scenario,
     # Backward-compatible runner alias retained for existing scripts/tests.
     'adaptive_refinement': build_adaptive_refinement_scenario,
 }
@@ -1251,6 +1348,8 @@ def _baseline_designs(
 
 def _design_label(design_code: str) -> str:
     """Return a concise user-facing label for one machine-readable design code."""
+    if design_code in PLANNING_DESIGN_LABELS:
+        return PLANNING_DESIGN_LABELS[design_code]
     return TIMING_POLICY_LABELS.get(
         str(design_code),
         DESIGN_LABELS.get(str(design_code), str(design_code).replace('_', ' ')),
@@ -1298,6 +1397,8 @@ def _adaptive_candidate_summary(
     """Return earliest overall and later-than-completed candidate times."""
     candidates = definition.constraints.available_candidates()
     if len(candidates) == 0:
+        if definition.planning is not None:
+            return np.nan, np.nan
         raise ValueError('No candidate time satisfies the current design constraints.')
     earliest = float(np.min(candidates))
     if definition.existing_observations is None:
@@ -1392,9 +1493,21 @@ def _simulation_endpoint_metrics(simulation_result) -> dict[str, float]:
 
 
 def _information_lookup(
-    optimization: DesignOptimizationResult,
+    optimization: DesignOptimizationResult | WindowDesignOptimizationResult,
 ) -> dict[tuple[int, str], dict[str, Any]]:
     lookup: dict[tuple[int, str], dict[str, Any]] = {}
+    if isinstance(optimization, WindowDesignOptimizationResult):
+        for design in optimization.designs:
+            if design.status == 'feasible':
+                lookup[(design.number_of_times, 'central_schedule')] = {
+                    'criterion': design.score.criterion,
+                    'full_rank_fraction': design.score.full_rank_fraction,
+                    'rank': design.score.min_rank,
+                    'parameter_count': design.score.parameter_count,
+                    'log_pseudodeterminant': design.score.mean_log_pseudodeterminant,
+                    'selection_rule': design.metadata.get('selection_rule'),
+                }
+        return lookup
     for label, steps in (
         ('optimized_nested', optimization.nested_steps),
         ('optimized_refined', optimization.refined_steps),
@@ -1414,13 +1527,17 @@ def _information_lookup(
 
 def _performance_tables(
     definition: ScenarioDefinition,
-    optimization: DesignOptimizationResult,
+    optimization: DesignOptimizationResult | WindowDesignOptimizationResult,
     comparisons: Mapping[int, DesignSimulationComparison],
     *,
     timing_policy_table: pd.DataFrame | None = None,
+    planning_optimization: WindowDesignOptimizationResult | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Create Monte Carlo-first performance tables with transparent schedule roles."""
     information = _information_lookup(optimization)
+    if planning_optimization is not None:
+        for (size, _code), values in _information_lookup(planning_optimization).items():
+            information[(size, 'timing_schedule')] = values
     if timing_policy_table is not None:
         for row in timing_policy_table.to_dict(orient='records'):
             if row['status'] != 'available':
@@ -1688,6 +1805,8 @@ def run_scenario(
         model_name=definition.analysis_model,
         initial_parameters=definition.reference_model_initial_parameters,
     )
+    if definition.planning is not None:
+        return _run_planning_scenario(definition, settings, reference_model, seed)
     optimization = optimize_local_i_optimal_designs(
         reference_model,
         definition.observation_model,
@@ -1752,6 +1871,60 @@ def run_scenario(
         timing_policy_table=timing_policy_table,
     )
 
+
+
+def _run_planning_scenario(definition, settings, reference_model, seed):
+    """Apply the same planning specification after any reference-input mode."""
+    spec = definition.planning
+    resolved = resolve_timing_requirements(
+        spec.requirements, definition.reference, definition.constraints, context=spec.context,
+    )
+    unrestricted = resolve_timing_requirements(
+        (), definition.reference, definition.constraints, context=spec.context,
+    )
+    kwargs = dict(refine=settings.refine, max_search_states=spec.search_limit,
+                  max_anchor_search_states=spec.search_limit)
+    benchmark = optimize_timing_constrained_designs(
+        reference_model, definition.observation_model, definition.constraints, unrestricted, **kwargs,
+    )
+    constrained = optimize_timing_constrained_designs(
+        reference_model, definition.observation_model, definition.constraints, resolved, **kwargs,
+    )
+    statuses, requirements, anchors = planning_tables(definition, benchmark, constrained)
+    comparisons = {}
+    plan = None
+    for base in benchmark.designs:
+        restricted = constrained.result_for_n(base.number_of_times)
+        designs = {code: outcome.times for code, outcome in
+                   (('central_schedule', base), ('timing_schedule', restricted))
+                   if outcome.status == 'feasible'}
+        if not designs:
+            continue
+        if plan is None:
+            plan = create_simulation_plan(
+                definition.reference, definition.observation_model,
+                definition.constraints.all_available_times,
+                n_simulations=settings.n_simulations, random_state=seed,
+            )
+        comparisons[base.number_of_times] = compare_designs_by_simulation(
+            definition.reference, designs, definition.observation_model,
+            model_name=definition.analysis_model, constraints=definition.constraints,
+            reference_model=reference_model, existing_observations=definition.existing_observations,
+            simulation_plan=plan, target_response=definition.target_response,
+            target_direction=definition.target_direction, fit_initialization=settings.fit_initialization,
+        )
+    if comparisons:
+        performance, selected = _performance_tables(
+            definition, benchmark, comparisons, planning_optimization=constrained,
+        )
+    else:
+        performance, selected = empty_performance_tables()
+    selected = decorate_planning_times(selected, definition, constrained)
+    return ScenarioResult(
+        definition, reference_model, benchmark, comparisons, performance, selected,
+        planning_optimization=constrained, schedule_status_table=statuses,
+        requirement_table=requirements, anchor_table=anchors,
+    )
 
 
 def run_proof_of_concept(
@@ -2031,6 +2204,26 @@ def _scenario_metadata(result: ScenarioResult) -> dict[str, Any]:
                 'deadline_i_optimal': 'Central I-optimality over future times at or before the deadline.',
             },
         })
+    if result.planning_optimization is not None:
+        metadata['planning'] = planning_metadata(result)
+        has_targets = any(
+            isinstance(bound, CrossingTimeTarget)
+            for row in result.planning_optimization.resolved_requirements.requirements
+            for bound in (row.request.lower_bound,
+                          row.request.deadline if row.kind == 'latest_before' else row.request.upper_bound)
+        )
+        metadata['output_interpretation'].update({
+            'schedule_generator': 'central_i_optimality_with_mixed_timing_requirements',
+            'reference_uncertainty_used_for_local_schedule_generation': has_targets,
+            'reference_uncertainty_used_for_timing_deadline': has_targets,
+            'reference_uncertainty_averaged_into_information_criterion': False,
+            'central_information_parameter_source': 'central_reference_fit',
+            'design_labels': PLANNING_DESIGN_LABELS,
+            'optimized_design_explanations': {
+                'central_schedule': 'Independent central I-optimal benchmark without timing requirements.',
+                'timing_schedule': 'Joint latest-before points followed by central I-optimality preserving all coverage windows.',
+            },
+        })
     return metadata
 
 
@@ -2052,6 +2245,10 @@ def _plotly_summary_html(result: ScenarioResult) -> str:
     except ImportError as exception:  # pragma: no cover - project requirements include Plotly
         raise RuntimeError('Plotly is required to write proof-of-concept HTML output.') from exception
 
+    if result.planning_optimization is not None:
+        return planning_summary_html(
+            result, _reference_table(result.definition.reference, result.definition.ground_truth), go, to_html,
+        )
     if result.timing_summary is not None:
         return _timing_comparison_html(result, go, to_html)
 
@@ -2592,6 +2789,11 @@ def write_proof_of_concept_outputs(
     for name, result in run.scenarios.items():
         scenario_directory = output_directory / name
         scenario_directory.mkdir(parents=True, exist_ok=True)
+        if result.planning_optimization is not None:
+            if result.definition.preprocessed_data is None:
+                (scenario_directory / 'ivivc_preprocessed_pairs.csv').unlink(missing_ok=True)
+            if not run.settings.write_html:
+                (scenario_directory / 'summary.html').unlink(missing_ok=True)
         result.definition.observed_data.to_csv(
             scenario_directory / 'observed_or_calibration_data.csv',
             index=False,
@@ -2624,13 +2826,19 @@ def write_proof_of_concept_outputs(
             result.timing_policy_table.to_csv(
                 scenario_directory / 'timing_policies.csv', index=False,
             )
+        if result.planning_optimization is not None:
+            for filename, table in (
+                ('schedule_status.csv', result.schedule_status_table),
+                ('timing_requirements.csv', result.requirement_table),
+                ('latest_before_points.csv', result.anchor_table),
+            ):
+                table.to_csv(scenario_directory / filename, index=False)
         with (scenario_directory / 'metadata.json').open('w', encoding='utf-8') as handle:
-            json.dump(
-                _jsonable(_scenario_metadata(result)),
-                handle,
-                indent=2,
-                sort_keys=True,
-            )
+            if result.planning_optimization is not None:
+                json.dump(planning_json_safe(_scenario_metadata(result)), handle,
+                          indent=2, sort_keys=True, allow_nan=False)
+            else:
+                json.dump(_jsonable(_scenario_metadata(result)), handle, indent=2, sort_keys=True)
         if run.settings.write_html:
             (scenario_directory / 'summary.html').write_text(
                 _plotly_summary_html(result),
@@ -2687,6 +2895,32 @@ def write_proof_of_concept_outputs(
             'timing_comparison_scenarios': timing_scenarios,
             'timing_policy_labels': TIMING_POLICY_LABELS,
         })
+    planning_scenarios = {name: result.definition.planning.input_mode
+                          for name, result in run.scenarios.items()
+                          if result.planning_optimization is not None}
+    if planning_scenarios:
+        manifest['settings'].update({
+            'planning_input_mode': run.settings.planning_input_mode,
+            'planning_latest_fractions': run.settings.planning_latest_fractions,
+            'planning_search_limit': run.settings.planning_search_limit,
+            'timing_degraded_fraction': run.settings.timing_degraded_fraction,
+            'timing_quantile': run.settings.timing_quantile,
+        })
+        manifest['output_interpretation'].update({
+            'schedule_generator': 'central_i_optimality_and_timing_requirements',
+            'planning_input_modes': planning_scenarios,
+            'planning_design_labels': PLANNING_DESIGN_LABELS,
+            'design_labels': {**DESIGN_LABELS,
+                              **(TIMING_POLICY_LABELS if timing_scenarios else {}),
+                              **PLANNING_DESIGN_LABELS},
+        })
+        manifest['files']['planning_by_scenario'] = {
+            name: {key: f'{name}/{filename}' for key, filename in (
+                ('schedule_status', 'schedule_status.csv'),
+                ('timing_requirements', 'timing_requirements.csv'),
+                ('latest_before_points', 'latest_before_points.csv'),
+            )} for name in planning_scenarios
+        }
     with (output_directory / 'manifest.json').open('w', encoding='utf-8') as handle:
         json.dump(manifest, handle, indent=2, sort_keys=True)
 
@@ -2708,6 +2942,15 @@ def write_proof_of_concept_outputs(
             'Each scenario uses local I-optimality to generate candidate schedules '
             'from the central reference trajectory. '
         )
+        if planning_scenarios:
+            generation_intro = (
+                'Schedules use central I-optimality for free sampling times. '
+                'The mixed-requirements example also reserves joint latest-before '
+                'points and enforces coverage windows; its status tables retain '
+                'unavailable schedules. '
+                + ('The one-point timing comparison includes a direct timing rule. '
+                   if timing_scenarios else '')
+            )
         index_html = f'''<!doctype html>
 <html lang="en">
 <head><meta charset="utf-8"><title>Study-design proof of concept</title></head>
@@ -2732,6 +2975,31 @@ def write_proof_of_concept_outputs(
 def _print_console_summary(run: ProofOfConceptRun) -> None:
     for name, result in run.scenarios.items():
         print(f'\n{name}: {result.definition.title}')
+        if result.planning_optimization is not None:
+            context = result.planning_optimization.resolved_requirements.context
+            print(f'  Input mode: {result.definition.planning.input_mode}; '
+                  f'completed=[{_format_times(context.completed_times)}]; '
+                  f'baseline=[{_format_times(context.baseline_times)}]')
+            for row in result.schedule_status_table.itertuples(index=False):
+                if row.status != 'feasible':
+                    print(f'  N={row.number_of_times} {row.design_label}: {row.status} — {row.message}')
+                    continue
+                performance = result.performance_table.loc[
+                    (result.performance_table['number_of_times'] == row.number_of_times)
+                    & (result.performance_table['design'] == row.design)
+                ].iloc[0]
+                print(f'  N={row.number_of_times} {row.design_label}: new=[{row.new_times}] '
+                      f'full=[{row.complete_schedule}], optimization={row.optimization_status}, '
+                      f'MC penalized normalized IRMSE={performance.penalized_mean_normalized_irmse:.4g}, '
+                      f'failure rate={performance.failure_rate:.1%}')
+            for point in result.anchor_table.itertuples(index=False):
+                if point.status == 'selected':
+                    print(f'    N={point.number_of_times} {point.label}: deadline={point.deadline:g}, '
+                          f'time={point.selected_time:g}, priority={point.priority:g}, '
+                          f'slack={point.deadline_slack:g}, displacement={point.displacement:g}')
+                else:
+                    print(f'    N={point.number_of_times} {point.label}: {point.status}')
+            continue
         if result.timing_summary is not None:
             summary = result.timing_summary
             deadline = 'unavailable' if summary.deadline is None else f'{summary.deadline:g}'
@@ -2881,13 +3149,25 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         '--timing-degraded-fraction',
         type=float,
         default=0.50,
-        help='Fraction degraded defining the timing-comparison milestone (default: 0.50).',
+        help='Degraded fraction for the timing comparison or mixed-example coverage deadline (default: 0.50).',
     )
     parser.add_argument(
         '--timing-quantile',
         type=float,
         default=0.10,
-        help='Weighted crossing-time quantile for the timing comparison (default: 0.10).',
+        help='Crossing-time quantile for the timing comparison and all mixed-example targets (default: 0.10).',
+    )
+    parser.add_argument(
+        '--planning-input-mode', choices=PLANNING_INPUT_MODES, default='adaptive-in-vivo',
+        help='Reference/input mode for the mixed_timing_requirements example.',
+    )
+    parser.add_argument(
+        '--planning-latest-fraction', action='append', type=float,
+        help='Latest-before degradation fraction for the mixed example; repeat for multiple points (default: 0.70 and 0.90).',
+    )
+    parser.add_argument(
+        '--planning-search-limit', type=int, default=100000,
+        help='Joint-selection and per-information-check state limit for the mixed example.',
     )
     parser.add_argument(
         '--quick',
@@ -2921,6 +3201,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         adaptive_candidate_policy=args.adaptive_candidate_policy.replace('-', '_'),
         timing_degraded_fraction=args.timing_degraded_fraction,
         timing_quantile=args.timing_quantile,
+        planning_input_mode=args.planning_input_mode,
+        planning_latest_fractions=(tuple(args.planning_latest_fraction)
+                                   if args.planning_latest_fraction is not None else (0.70, 0.90)),
+        planning_search_limit=args.planning_search_limit,
     )
     scenario_names = SCENARIO_NAMES if args.scenario == 'all' else (args.scenario,)
     run = run_proof_of_concept(scenario_names, settings=settings)
