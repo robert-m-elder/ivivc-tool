@@ -124,13 +124,20 @@ def test_multiple_study_sizes_share_one_simulation_plan():
 def test_planning_specification_drives_the_run_without_a_special_scenario_name():
     settings = _settings(n_reference_draws=8)
     original = poc.build_measured_in_vivo_scenario(settings)
-    definition = replace(original, planning=SchedulePlanningSpec(
-        PlanningContext([0.0]), (SamplingWindow(0.0, 30.0), LatestBefore(30.0)),
-        'prospective-measured',
-    ))
+    # This dispatch test needs a feasible study, independently of the POC's
+    # exploratory default minimum (which may contain only the baseline).
+    definition = replace(
+        original,
+        constraints=replace(original.constraints, min_number_of_times=3, max_number_of_times=3),
+        planning=SchedulePlanningSpec(
+            PlanningContext([0.0]), (SamplingWindow(0.0, 30.0), LatestBefore(30.0)),
+            'prospective-measured',
+        ),
+    )
     result = poc.run_scenario(definition, settings)
     assert result.definition.name == 'measured_in_vivo'
     assert result.planning_optimization is not None
+    assert set(result.schedule_status_table['status']) == {'feasible'}
     assert set(result.performance_table['design']) == {'central_schedule', 'timing_schedule'}
 
 

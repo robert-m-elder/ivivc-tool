@@ -28,14 +28,14 @@ def test_evolution_reuses_reference_and_requires_time_zero():
     original = poc.build_measured_in_vivo_scenario(settings)
     evolution = poc.build_design_size_evolution_scenario(settings)
     assert original.constraints.fixed_times.tolist() == [0.0]
-    assert original.constraints.min_number_of_times == 3
-    assert original.constraints.max_number_of_times == 7
+    assert original.constraints.min_number_of_times == poc.POC_PROSPECTIVE_MINIMUM_N
+    assert original.constraints.max_number_of_times == poc.POC_DEFAULT_MAXIMUM_N
     assert evolution.constraints.fixed_times.tolist() == [0.0]
     assert evolution.constraints.min_number_of_times == 1
-    assert evolution.constraints.max_number_of_times == 5
+    assert evolution.constraints.max_number_of_times == 6
     assert 0.0 in evolution.constraints.candidate_times
     assert evolution.existing_observations is None
-    assert evolution.metadata['requested_design_sizes'] == [1, 2, 3, 4, 5]
+    assert evolution.metadata['requested_design_sizes'] == list(range(1, 7))
     assert evolution.metadata['required_sampling_times'] == [0.0]
     assert evolution.metadata['underdetermined_fit_statistics_retained']
     pd.testing.assert_frame_equal(original.observed_data, evolution.observed_data)
@@ -54,7 +54,8 @@ def test_evolution_is_separate_and_cli_accepts_it():
 
 def test_all_sizes_and_actual_optimizer_choices_are_retained(evolution_run):
     result = evolution_run.scenarios['design_size_evolution']
-    assert list(result.comparisons_by_n) == [1, 2, 3, 4, 5]
+    requested_sizes = result.definition.metadata['requested_design_sizes']
+    assert list(result.comparisons_by_n) == requested_sizes
     assert result.reference_model.n_parameters == 4
     for comparison in result.comparisons_by_n.values():
         for simulation in comparison.results.values():
@@ -74,8 +75,12 @@ def test_all_sizes_and_actual_optimizer_choices_are_retained(evolution_run):
     assert set(optimized['information_selection_rule']) == {'rank_pseudodeterminant_fallback'}
     assert np.all(np.isinf(optimized['information_criterion']))
     tables = poc._t50_recovery_table(result)
-    assert len(tables) == 15
-    assert set(tables['number_of_times']) == {1, 2, 3, 4, 5}
+    expected_rows = {
+        (size, design) for size in requested_sizes
+        for design in ('optimized_nested', 'optimized_refined', 'equal_time')
+    }
+    assert len(tables) == len(expected_rows)
+    assert set(zip(tables['number_of_times'], tables['design'])) == expected_rows
     assert tables.loc[tables.number_of_times < 4, 'fewer_times_than_parameters'].all()
     assert not tables.loc[tables.number_of_times >= 4, 'fewer_times_than_parameters'].any()
 
@@ -138,7 +143,9 @@ def test_endpoint_csv_and_metadata_include_underdetermined_sizes(evolution_run, 
     assert metadata['constraints']['fixed_times'] == [0.0]
     assert metadata['scenario_metadata']['required_sampling_times'] == [0.0]
     assert metadata['constraints']['min_number_of_times'] == 1
-    assert metadata['constraints']['max_number_of_times'] == 5
+    assert metadata['constraints']['max_number_of_times'] == (
+        evolution_run.scenarios['design_size_evolution'].definition.constraints.max_number_of_times
+    )
     assert metadata['scenario_metadata']['underdetermined_fit_statistics_retained'] is True
 
 
@@ -164,7 +171,7 @@ def test_four_panel_html_uses_returned_data_and_unclipped_axes(evolution_run, mo
         assert getattr(figure.layout, axis).range is None
     # N=1 remains visible even when it has no returned T50.
     assert figure.layout.xaxis4.range[0] < 1
-    assert figure.layout.xaxis4.range[1] > 5
+    assert figure.layout.xaxis4.range[1] > max(result.comparisons_by_n)
     for design, group in result.performance_table.groupby('design', sort=False):
         trace = next(t for t in figure.data if t.xaxis == 'x3' and t.name == poc._design_label(design))
         np.testing.assert_array_equal(trace.y, group.sort_values('number_of_times')['penalized_mean_irmse'])
