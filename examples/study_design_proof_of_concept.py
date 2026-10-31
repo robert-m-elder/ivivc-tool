@@ -34,6 +34,7 @@ from __future__ import annotations
 import argparse
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
+from html import escape
 import json
 from pathlib import Path
 import sys
@@ -50,11 +51,12 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from ivivc_core import (  # noqa: E402
+    DEFAULT_PREDICTION_METHODS,
     TimeCourse,
     fit_ivivc,
     fit_time_course,
-    generate_trajectory_ensembles,
     get_model_spec,
+    iter_model_specs,
     prepare_data,
 )
 from examples.study_design_poc_models import (  # noqa: E402
@@ -100,7 +102,7 @@ from study_design_core import (  # noqa: E402
     optimize_local_i_optimal_designs,
     optimize_timing_constrained_designs,
     reference_from_profile_fit,
-    reference_from_trajectory_ensemble,
+    reference_from_ivivc,
     reference_crossing_time_summary,
     reweight_reference_ensemble,
     resolve_timing_requirements,
@@ -231,6 +233,9 @@ class ProofOfConceptSettings:
     observation_sd: float = 0.05
     fit_initialization: str = 'data_driven'
     ivivc_calibration_response_sd: float = 0.05
+    ivivc_approach: str = 'approach1'
+    ivivc_model: str | None = None
+    ivivc_method: str | None = None
     adaptive_candidate_policy: str = 'future_only'
     timing_degraded_fraction: float = 0.50
     timing_quantile: float = 0.10
@@ -256,6 +261,19 @@ class ProofOfConceptSettings:
             raise ValueError(
                 f'No proof-of-concept synthetic preset is defined for '
                 f'{self.analysis_model!r}. Supported models: {supported}.'
+            )
+        if self.ivivc_approach not in ('approach1', 'approach2'):
+            raise ValueError('ivivc_approach must be approach1 or approach2.')
+        calibration_spec = get_model_spec(self.resolved_ivivc_model)
+        if self.ivivc_approach not in calibration_spec.approaches:
+            raise ValueError(
+                f'ivivc_model {self.resolved_ivivc_model!r} is not registered for '
+                f'{self.ivivc_approach}.'
+            )
+        if self.resolved_ivivc_method not in DEFAULT_PREDICTION_METHODS[self.ivivc_approach]:
+            raise ValueError(
+                f'ivivc_method {self.resolved_ivivc_method!r} is not supported for '
+                f'{self.ivivc_approach}.'
             )
         if not np.isfinite(self.observation_sd) or self.observation_sd <= 0:
             raise ValueError('observation_sd must be finite and positive.')
@@ -295,6 +313,18 @@ class ProofOfConceptSettings:
                 or self.planning_search_limit < 1):
             raise ValueError('planning_search_limit must be a positive integer.')
         object.__setattr__(self, 'planning_search_limit', int(self.planning_search_limit))
+
+    @property
+    def resolved_ivivc_model(self) -> str:
+        if self.ivivc_model is not None:
+            return self.ivivc_model
+        return 'linear_zero_intercept' if self.ivivc_approach == 'approach1' else self.analysis_model
+
+    @property
+    def resolved_ivivc_method(self) -> str:
+        if self.ivivc_method is not None:
+            return self.ivivc_method
+        return 'time_mapping' if self.ivivc_approach == 'approach1' else 'value_ratio'
 
 
 @dataclass
@@ -725,9 +755,13 @@ def _ivivc_preprocessed_pairs(prepared) -> pd.DataFrame:
 def build_ivivc_prediction_scenario(
     settings: ProofOfConceptSettings,
 ) -> ScenarioDefinition:
-    """Build an Approach 1 prediction from noisy fixed-time calibration profiles."""
+    """Build the selected IVIVC prediction from noisy calibration profiles."""
     in_vitro_min_time, in_vitro_max_time = IVIVC_IN_VITRO_TIME_RANGE
     future_replicates = POC_FUTURE_REPLICATES_PER_TIME
+    approach = settings.ivivc_approach
+    model_name = settings.resolved_ivivc_model
+    method = settings.resolved_ivivc_method
+    selection = f'{approach}:{model_name}'
 
     in_vitro_time = np.asarray(IVIVC_CALIBRATION_IN_VITRO_TIMES, dtype=float)
     in_vivo_time = np.asarray(IVIVC_CALIBRATION_IN_VIVO_TIMES, dtype=float)
@@ -763,16 +797,18 @@ def build_ivivc_prediction_scenario(
         in_vitro_response,
         in_vivo_time,
         in_vivo_response,
-        selected_interpolation=[IVIVC_INTERPOLATION_METHOD],
+        selected_interpolation=[IVIVC_INTERPOLATION_METHOD if approach == 'approach1' else 'none'],
     )
-    preprocessed_data = _ivivc_preprocessed_pairs(prepared)
-    if not np.any(preprocessed_data['used_for_approach1_fit']):
-        raise RuntimeError('IVIVC preprocessing produced no overlapping response-aligned pairs.')
+    preprocessed_data = None
+    if approach == 'approach1':
+        preprocessed_data = _ivivc_preprocessed_pairs(prepared)
+        if not np.any(preprocessed_data['used_for_approach1_fit']):
+            raise RuntimeError('IVIVC preprocessing produced no overlapping response-aligned pairs.')
 
     with _quiet_expected_numerical_warnings():
         analysis = fit_ivivc(
             prepared,
-            selections='approach1:linear_zero_intercept',
+            selections=selection,
             selected_metrics=['rmse'],
             analysis_config=_analysis_config(settings.random_seed + 202),
         )
@@ -781,13 +817,14 @@ def build_ivivc_prediction_scenario(
             'IVIVC example fit failed: '
             + '; '.join(f'{key}: {error.message}' for key, error in analysis.errors.items())
         )
-    mapping_fit = analysis['approach1:linear_zero_intercept'].time_mapping_fit
-    if mapping_fit is None:  # pragma: no cover - Approach 1 invariant
-        raise RuntimeError('Approach 1 did not return a time-mapping fit.')
+    model_fit = analysis[selection]
 
     prediction_time = _reference_grid(
         in_vitro_min_time,
-        in_vitro_max_time,
+        # Value ratios retain these times as in vivo times. Supply the full
+        # intended study horizon, including adaptive completed time 40. The
+        # existing IVIVC diagnostics identify calibration-range extrapolation.
+        POC_IN_VIVO_TIME_RANGE[1] if method == 'value_ratio' else in_vitro_max_time,
         target_step=IVIVC_PREDICTION_GRID_STEP,
     )
     prediction_response = preset.evaluate(prediction_time)
@@ -796,24 +833,13 @@ def build_ivivc_prediction_scenario(
         prediction_response,
         label='in_vitro_prediction',
     )
-    ensemble_batch = generate_trajectory_ensembles(
-        analysis,
-        prediction,
-        methods={'approach1': 'time_mapping'},
-        n_samples=settings.n_reference_draws,
-        random_state=settings.random_seed + 203,
-    )
-    if ensemble_batch.errors:
-        raise RuntimeError(
-            'IVIVC trajectory generation failed: '
-            + '; '.join(f'{key}: {error.message}' for key, error in ensemble_batch.errors.items())
+    with _quiet_expected_numerical_warnings():
+        reference = reference_from_ivivc(
+            analysis, prediction, selection=selection, method=method,
+            n_samples=settings.n_reference_draws,
+            random_state=settings.random_seed + 203,
+            grid_size=193, interpolation='pchip', required_times=[0.0],
         )
-    trajectory_ensemble = ensemble_batch['approach1:linear_zero_intercept:time_mapping']
-    reference = reference_from_trajectory_ensemble(
-        trajectory_ensemble,
-        grid_size=193,
-        interpolation='pchip',
-    )
     ground_truth = TimeCourse(
         reference.time_grid,
         in_vivo_preset.evaluate(reference.time_grid),
@@ -827,7 +853,7 @@ def build_ivivc_prediction_scenario(
         step=IVIVC_CANDIDATE_STEP,
         include_zero=True,
     )
-    fixed = np.array([0.0]) if np.any(np.isclose(candidates, 0.0)) else np.array([candidates[0]])
+    fixed = np.array([0.0])
     minimum_n = POC_PROSPECTIVE_MINIMUM_N
     maximum_n = _scenario_max_n(minimum_n, POC_DEFAULT_MAXIMUM_N, settings)
     constraints = DesignConstraints(
@@ -869,13 +895,21 @@ def build_ivivc_prediction_scenario(
     )
     return ScenarioDefinition(
         name='ivivc_prediction',
-        title='IVIVC-predicted in vivo reference trajectory',
+        title=('IVIVC-predicted in vivo reference trajectory' if approach == 'approach1'
+               else f'Approach 2 {method.replace("_", " ")} in vivo reference'),
         description=(
             'Noisy in vitro and in vivo calibration response profiles are observed at '
             'fixed study times and passed through the same response-aligned interpolation '
             'pipeline used by the IVIVC app. An Approach 1 time mapping is then fitted, '
             'and joint mapping-parameter draws are propagated across the target in vitro '
             'prediction profile.'
+            if approach == 'approach1' else
+            'Noisy in vitro and in vivo calibration profiles are fitted directly '
+            f'with {model_name}. Approach 2 {method.replace("_", " ")} prediction '
+            'propagates fitted parameter uncertainty across the target in vitro '
+            'profile. The study analysis model is selected independently. '
+            'Reference support and calibration-range extrapolation are reported '
+            'alongside the schedules and Monte Carlo curve-recovery results.'
         ),
         reference=reference,
         observation_model=ObservationModel(
@@ -892,11 +926,13 @@ def build_ivivc_prediction_scenario(
         ground_truth=ground_truth,
         reference_model_initial_parameters=in_vivo_preset.parameter_mapping,
         metadata={
-            'reference_source': 'ivivc_approach1_prediction',
-            'ivivc_selection': 'approach1:linear_zero_intercept',
-            'ivivc_preprocessing_interpolation': IVIVC_INTERPOLATION_METHOD,
-            'prediction_method': 'time_mapping',
+            'reference_source': f'ivivc_{approach}_prediction',
+            'ivivc_approach': approach,
+            'ivivc_calibration_model': model_name,
+            'ivivc_selection': selection,
+            'prediction_method': method,
             'in_vitro_prediction_points': len(prediction_time),
+            'ivivc_prediction_time_range': (float(prediction_time[0]), float(prediction_time[-1])),
             'future_observation_sd': settings.observation_sd,
             'future_replicates_per_time': future_replicates,
             'ivivc_time_scale': time_scale,
@@ -905,11 +941,24 @@ def build_ivivc_prediction_scenario(
             'ivivc_in_vivo_noise_generation_attempts': in_vivo_noise_attempts,
             'ivivc_in_vitro_calibration_times': in_vitro_time.tolist(),
             'ivivc_in_vivo_calibration_times': in_vivo_time.tolist(),
-            'ivivc_preprocessed_pair_count': int(
-                np.sum(preprocessed_data['used_for_approach1_fit'])
-            ),
-            'ivivc_fitted_time_mapping_parameters': mapping_fit.parameters,
-            'ivivc_time_mapping_rmse': mapping_fit.fit_metrics.get('rmse'),
+            **({
+                'ivivc_preprocessing_interpolation': IVIVC_INTERPOLATION_METHOD,
+                'ivivc_preprocessed_pair_count': int(
+                    np.sum(preprocessed_data['used_for_approach1_fit'])
+                ),
+                'ivivc_fitted_time_mapping_parameters': model_fit.time_mapping_fit.parameters,
+                'ivivc_time_mapping_rmse': model_fit.time_mapping_fit.fit_metrics.get('rmse'),
+            } if approach == 'approach1' else {
+                'ivivc_calibration_fits': planning_json_safe({
+                    component: {
+                        'parameters': fit.parameters,
+                        'rmse': fit.fit_metrics.get('rmse'),
+                        'tau': fit.tau_estimate,
+                        'tau_diagnostics': fit.tau_diagnostics,
+                    }
+                    for component, fit in model_fit.profile_fits.items()
+                }),
+            }),
             'candidate_time_step': IVIVC_CANDIDATE_STEP,
             'minimum_spacing': POC_MINIMUM_SPACING,
             'generating_model': in_vivo_preset.model_name,
@@ -2312,6 +2361,40 @@ def _timing_json_safe(value: Any) -> Any:
     return _jsonable(value)
 
 
+def _ivivc_summary_html(definition: ScenarioDefinition) -> str:
+    """Describe the selected Approach 2 reference in ordinary and planning pages."""
+    metadata = definition.metadata
+    if metadata.get('ivivc_approach') != 'approach2':
+        return ''
+    reference = definition.reference
+    lower, upper = reference.supported_time_range
+    auxiliary = reference.metadata.get('ivivc_prediction_auxiliary', {})
+    extrapolated = np.asarray(auxiliary.get('extrapolated', []), dtype=bool)
+    rows = []
+    for component, fit in metadata['ivivc_calibration_fits'].items():
+        parameters = '; '.join(f'{name}={value:.6g}' for name, value in fit['parameters'].items())
+        tau = fit['tau']
+        rows.append({
+            'Calibration profile': component.replace('_', ' '),
+            'Parameters': parameters,
+            'RMSE': fit['rmse'],
+            'Integral time constant': 'unavailable' if tau is None else f'{tau:.6g}',
+        })
+    table = pd.DataFrame(rows).to_html(index=False, escape=True, na_rep='—')
+    return (
+        '<h2>IVIVC reference input</h2><p><strong>IVIVC approach:</strong> Approach 2; '
+        f'<strong>calibration model:</strong> <code>{escape(metadata["ivivc_calibration_model"])}</code>; '
+        f'<strong>prediction method:</strong> <code>{escape(metadata["prediction_method"])}</code>. '
+        'The calibration profiles are fitted directly; response-aligned time pairs are not used.</p>'
+        f'<p><strong>Reference time range:</strong> {lower:g} to {upper:g}; '
+        f'<strong>usable reference draws:</strong> {reference.n_valid_draws} of {reference.n_draws}; '
+        '<strong>nominal prediction points outside calibration ranges:</strong> '
+        f'{int(np.count_nonzero(extrapolated))} of {len(extrapolated)}. '
+        'Per-point support, extrapolation reasons, and calibration ranges are retained in metadata.json.</p>'
+        + table
+    )
+
+
 def _plotly_summary_html(result: ScenarioResult) -> str:
     try:
         import plotly.graph_objects as go
@@ -2322,6 +2405,7 @@ def _plotly_summary_html(result: ScenarioResult) -> str:
     if result.planning_optimization is not None:
         return planning_summary_html(
             result, _reference_table(result.definition.reference, result.definition.ground_truth), go, to_html,
+            reference_summary_html=_ivivc_summary_html(result.definition),
         )
     if result.timing_summary is not None:
         return _timing_comparison_html(result, go, to_html)
@@ -2697,6 +2781,7 @@ def _plotly_summary_html(result: ScenarioResult) -> str:
      <strong>future observation model:</strong> <code>{definition.observation_model.kind}={definition.observation_model.value:g}</code>;
      <strong>future replicates/time:</strong> {definition.constraints.replicates_per_time}.</p>
   {extra_summary_html}
+  {_ivivc_summary_html(definition)}
   <p><strong>Schedule generation:</strong> local I-optimality is evaluated at the fitted central reference trajectory. Reference-trajectory uncertainty is used in the Monte Carlo evaluation rather than averaged into the schedule generator.</p>
   <p><strong>{DESIGN_LABELS['optimized_nested']}:</strong> {DESIGN_EXPLANATIONS['optimized_nested']} <strong>{DESIGN_LABELS['optimized_refined']}:</strong> {DESIGN_EXPLANATIONS['optimized_refined']} Both schedules are information-based; Monte Carlo simulation evaluates their finite-sample curve-recovery performance.</p>
   <p><strong>Synthetic ground truth:</strong> shown only for validation and never used to select the schedules.</p>
@@ -3018,11 +3103,10 @@ def write_proof_of_concept_outputs(
     for name, result in run.scenarios.items():
         scenario_directory = output_directory / name
         scenario_directory.mkdir(parents=True, exist_ok=True)
-        if result.planning_optimization is not None:
-            if result.definition.preprocessed_data is None:
-                (scenario_directory / 'ivivc_preprocessed_pairs.csv').unlink(missing_ok=True)
-            if not run.settings.write_html:
-                (scenario_directory / 'summary.html').unlink(missing_ok=True)
+        if result.definition.preprocessed_data is None:
+            (scenario_directory / 'ivivc_preprocessed_pairs.csv').unlink(missing_ok=True)
+        if not run.settings.write_html:
+            (scenario_directory / 'summary.html').unlink(missing_ok=True)
         result.definition.observed_data.to_csv(
             scenario_directory / 'observed_or_calibration_data.csv',
             index=False,
@@ -3067,7 +3151,8 @@ def write_proof_of_concept_outputs(
             ):
                 table.to_csv(scenario_directory / filename, index=False)
         with (scenario_directory / 'metadata.json').open('w', encoding='utf-8') as handle:
-            if result.planning_optimization is not None:
+            if (result.planning_optimization is not None
+                    or result.definition.metadata.get('ivivc_approach') == 'approach2'):
                 json.dump(planning_json_safe(_scenario_metadata(result)), handle,
                           indent=2, sort_keys=True, allow_nan=False)
             else:
@@ -3089,6 +3174,8 @@ def write_proof_of_concept_outputs(
         output_directory / 'combined_selected_times.csv',
         index=False,
     )
+    if not run.settings.write_html:
+        (output_directory / 'index.html').unlink(missing_ok=True)
     manifest = {
         'settings': {
             'n_reference_draws': run.settings.n_reference_draws,
@@ -3101,6 +3188,9 @@ def write_proof_of_concept_outputs(
             'observation_sd': run.settings.observation_sd,
             'fit_initialization': run.settings.fit_initialization,
             'ivivc_calibration_response_sd': run.settings.ivivc_calibration_response_sd,
+            'ivivc_approach': run.settings.ivivc_approach,
+            'ivivc_model': run.settings.resolved_ivivc_model,
+            'ivivc_method': run.settings.resolved_ivivc_method,
             'adaptive_candidate_policy': run.settings.adaptive_candidate_policy,
         },
         'scenarios': list(run.scenarios),
@@ -3211,6 +3301,13 @@ def write_proof_of_concept_outputs(
 def _print_console_summary(run: ProofOfConceptRun) -> None:
     for name, result in run.scenarios.items():
         print(f'\n{name}: {result.definition.title}')
+        if result.definition.metadata.get('ivivc_approach') == 'approach2':
+            metadata = result.definition.metadata
+            lower, upper = result.definition.reference.supported_time_range
+            print(f'  IVIVC: {metadata["ivivc_selection"]}; method={metadata["prediction_method"]}; '
+                  f'reference range=[{lower:g}; {upper:g}]; '
+                  f'usable draws={result.definition.reference.n_valid_draws}/'
+                  f'{result.definition.reference.n_draws}')
         if result.planning_optimization is not None:
             context = result.planning_optimization.resolved_requirements.context
             print(f'  Input mode: {result.definition.planning.input_mode}; '
@@ -3340,9 +3437,23 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         choices=supported_synthetic_models(),
         default='mass_loss_one_phase',
         help=(
-            'Registered Approach 2 model used to analyze simulated in vivo studies '
+            'Model used to generate synthetic curves and analyze simulated in vivo studies, '
+            'independently of the IVIVC calibration model '
             '(default: mass_loss_one_phase).'
         ),
+    )
+    parser.add_argument(
+        '--ivivc-approach', choices=('approach1', 'approach2'), default='approach1',
+        help='IVIVC reference approach for prospective/adaptive IVIVC examples (default: approach1).',
+    )
+    parser.add_argument(
+        '--ivivc-model', choices=tuple(spec.key for spec in iter_model_specs()),
+        help='IVIVC calibration model (default: linear_zero_intercept for Approach 1; analysis model for Approach 2).',
+    )
+    parser.add_argument(
+        '--ivivc-method',
+        choices=DEFAULT_PREDICTION_METHODS['approach1'] + DEFAULT_PREDICTION_METHODS['approach2'],
+        help='IVIVC prediction method (default: time_mapping for Approach 1; value_ratio for Approach 2).',
     )
     parser.add_argument(
         '--ivivc-calibration-response-sd',
@@ -3434,6 +3545,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         observation_sd=args.observation_sd,
         fit_initialization=args.fit_initialization,
         ivivc_calibration_response_sd=args.ivivc_calibration_response_sd,
+        ivivc_approach=args.ivivc_approach,
+        ivivc_model=args.ivivc_model,
+        ivivc_method=args.ivivc_method,
         adaptive_candidate_policy=args.adaptive_candidate_policy.replace('-', '_'),
         timing_degraded_fraction=args.timing_degraded_fraction,
         timing_quantile=args.timing_quantile,

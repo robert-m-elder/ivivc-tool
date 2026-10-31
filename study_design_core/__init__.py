@@ -13,6 +13,7 @@ from .information import (
     score_information_matrices,
     trapezoidal_integration_weights,
 )
+from .ivivc_reference import reference_from_ivivc
 from .metrics import (
     approximate_mean_curve_interval_width,
     integrated_root_mean_square_error,
@@ -162,6 +163,7 @@ __all__ = [
     'simulate_design',
     'summarize_simulation',
     'reference_from_profile_fit',
+    'reference_from_ivivc',
     'reference_from_time_course',
     'reference_from_trajectory_ensemble',
     'score_information_matrices',

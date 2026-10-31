@@ -277,7 +277,7 @@ def _html_table(table, columns=None):
     ) + '</div>'
 
 
-def planning_summary_html(result, reference_table, go, to_html):
+def planning_summary_html(result, reference_table, go, to_html, *, reference_summary_html=''):
     """Show timing requirements, complete schedules, and paired MC recovery."""
     definition = result.definition
     resolved = result.planning_optimization.resolved_requirements
@@ -337,6 +337,7 @@ def planning_summary_html(result, reference_table, go, to_html):
 <strong>analysis model:</strong> {escape(definition.analysis_model)};
 <strong>completed target-study times:</strong> {_times(resolved.context.completed_times) or 'none'};
 <strong>baseline times:</strong> {_times(resolved.context.baseline_times)}.</p>
+{reference_summary_html}
 <p>Baseline does not count toward milestone coverage. Historical and calibration data provide the reference;
 completed target-study observations remain fixed. New sampling includes fixed future commitments.</p>
 <p>Green shading marks coverage windows; dotted lines mark latest-before deadlines; diamonds mark reserved points.

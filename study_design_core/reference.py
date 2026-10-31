@@ -246,6 +246,10 @@ def reference_from_trajectory_ensemble(
         )
         central_source = 'weighted_draw_mean'
 
+    # A caller may request a narrower grid than the source intersection. The
+    # reference can only evaluate within that grid, even if the original draws
+    # covered a longer horizon.
+    common_supported_range = (float(common_grid[0]), float(common_grid[-1]))
     metadata = dict(ensemble.metadata)
     metadata.update({
         'source_approach': ensemble.central.source_approach,
@@ -254,7 +258,8 @@ def reference_from_trajectory_ensemble(
         'source_draw_count': ensemble.n_draws,
         'source_valid_draw_count': ensemble.n_valid_draws,
         'common_valid_draw_count': int(np.count_nonzero(valid_draws)),
-        'common_supported_time_range': supported_range,
+        'source_shared_supported_time_range': supported_range,
+        'common_supported_time_range': common_supported_range,
         'common_grid_interpolation': interpolation,
         'duplicate_time_policy': duplicate_time_policy,
         'duplicate_time_counts': duplicate_counts,
@@ -268,7 +273,7 @@ def reference_from_trajectory_ensemble(
         valid_draws=valid_draws,
         draw_weights=draw_weights,
         central_curve=central_curve,
-        supported_time_range=supported_range,
+        supported_time_range=common_supported_range,
         interpolation=interpolation,
         metadata=metadata,
     )

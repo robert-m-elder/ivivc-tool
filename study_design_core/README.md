@@ -23,6 +23,93 @@ intersection of the valid draw domains, and does not extrapolate.
 `reference_from_profile_fit()` supports a fitted measured in vivo profile, and
 `reference_from_time_course()` supports a deterministic external trajectory.
 
+## Selecting a fitted IVIVC reference
+
+`reference_from_ivivc()` connects one fitted IVIVC selection and prediction
+method to the same reference representation. It accepts an existing
+`IVIVCAnalysis` from `ivivc_core.fit_ivivc()` and a target in vitro
+`TimeCourse`; it does not refit the calibration data or choose a method.
+
+```python
+from ivivc_core import TimeCourse, fit_ivivc
+from study_design_core import reference_from_ivivc
+
+analysis = fit_ivivc(
+    prepared_calibration_data,
+    selections='approach2:exponential',
+    selected_metrics=['rmse'],
+)
+target_in_vitro = TimeCourse(target_time, target_response)
+reference = reference_from_ivivc(
+    analysis,
+    target_in_vitro,
+    selection='approach2:exponential',
+    method='tau_ratio',
+    n_samples=200,
+    random_state=123,
+    required_times=[0.0],
+)
+```
+
+Approach 2 methods retain their existing IVIVC meanings:
+
+| Method | Reference prediction |
+| --- | --- |
+| `value_ratio` | Multiply the target responses by the fitted IVV/IV response ratio at the target times. |
+| `tau_ratio` | Multiply the target times by the fitted IVV/IV time-constant ratio, retaining the target responses. |
+| `observed_response_inverse` | Map the target responses to times on the fitted in vivo curve. |
+
+Approach 1's `time_mapping` and the existing Approach 3 methods can also be
+selected through this adapter. Only the requested fit is sampled, so adding
+other fits to an analysis does not alter its seeded reference draws. A failed
+selection or unavailable nominal prediction raises `ValueError`; another
+method is never substituted. In particular, tau-ratio prediction needs finite,
+positive integral time constants. An unsupported or nonconvergent tau does not
+prevent use of another explicitly selected prediction method.
+
+The target data must use the analysis's response normalization and compatible
+time units. The adapter rejects applied `log_x` or `log_y` preprocessing because
+the IVIVC APIs return predictions on those transformed axes; this adapter does
+not convert them back to study time/response coordinates. Normalized response
+data remain supported.
+
+The shared supported domain is the intersection of usable draw domains.
+Partial inverse-response predictions may therefore supply a shorter reference;
+the nominal prediction must contain at least two distinct finite times.
+An explicit `time_grid` must lie entirely inside that domain. `required_times`
+checks mandatory baseline, fixed, or completed times without changing the
+grid; unsupported times cause an error rather than moving or inventing a
+baseline. Existing method-specific model extrapolation can occur while
+generating predictions, but conversion adds no extrapolation. Source point
+statuses, support masks, calibration-range/extrapolation diagnostics, and
+preprocessing details are retained in reference metadata under `ivivc_*` keys.
+The central reference uses the nominal trajectory when it covers the output
+grid; otherwise the existing converter uses the weighted draw mean and records
+`central_curve_source='weighted_draw_mean'`.
+Numerical support does not establish transferability to a different system.
+
+The IVIVC calibration model and study analysis model are independent. For
+example, an exponential IVIVC can supply the reference for a study analyzed
+using `stretched_exponential`:
+
+```python
+from study_design_core import fit_reference_model_ensemble
+
+reference_model = fit_reference_model_ensemble(
+    reference, model_name='stretched_exponential',
+)
+```
+
+Use the resulting reference and reference model with the existing local
+I-optimal optimization, timing requirements, and Monte Carlo simulation APIs.
+For adaptive planning, reweight the original reference with
+`reweight_reference_ensemble(reference, completed, observation_model)`, then
+fit the analysis model to `update.reference`. For successive updates, supply
+the cumulative completed observations and the original prior, avoiding repeated
+use of earlier observations in the likelihood. Keep those same completed
+observations fixed in subsequent simulation and schedule constraints.
+Calibration observations are reference inputs, not completed target-study data.
+
 ## Future-study variability
 
 `ObservationModel` is separate from uncertainty in the reference trajectory.
@@ -541,7 +628,8 @@ local information optimizer, and simulation evaluator into eight backend-only
 examples:
 
 - measured in vivo data used as the reference;
-- an IVIVC-derived predicted in vivo trajectory;
+- an IVIVC-derived predicted in vivo trajectory, with selectable Approach 1 or
+  Approach 2 prediction;
 - adaptive refinement from incomplete in vivo data alone;
 - IVIVC-informed adaptive refinement using completed target in vivo data;
 - IVIVC-informed gap filling after completed times 0, 10, and 40 miss the
@@ -562,6 +650,75 @@ python examples/study_design_proof_of_concept.py --quick
 
 The default output directory, `study_design_poc_output/`, contains transparent
 CSV and JSON files for each scenario and optional static Plotly HTML summaries.
+
+### Approach 2 reference demonstration
+
+The existing `ivivc_prediction` example is also the focused Approach 2
+demonstration. Run the same example with the new selection controls:
+
+```bash
+python examples/study_design_proof_of_concept.py \
+    --scenario ivivc_prediction \
+    --ivivc-approach approach2 \
+    --ivivc-model exponential_normalized \
+    --ivivc-method tau_ratio \
+    --analysis-model exponential \
+    --ivivc-calibration-response-sd 0.01 \
+    --reference-draws 100 --simulations 100
+```
+
+Change only `--ivivc-method` to `value_ratio` or
+`observed_response_inverse` to exercise the other Approach 2 predictions.
+The example uses a normalized exponential calibration model, which fixes its
+initial response at one and keeps time zero supported by inverse prediction.
+The separate `exponential` study analysis model estimates both amplitude and
+rate. `--analysis-model` continues to control the synthetic generating curve
+as well as the study analysis; `--ivivc-model` controls only IVIVC calibration.
+
+The same controls apply to `adaptive_ivivc_prediction`,
+`adaptive_gap_filling`, and the mixed example's `prospective-ivivc` and
+`adaptive-ivivc` input modes. For a future mixed-requirement design after the
+exponential example's completed times 0, 10, and 20:
+
+```bash
+python examples/study_design_proof_of_concept.py --quick \
+    --scenario mixed_timing_requirements --planning-input-mode adaptive-ivivc \
+    --ivivc-approach approach2 --ivivc-model exponential_normalized \
+    --ivivc-method tau_ratio --analysis-model exponential \
+    --ivivc-calibration-response-sd 0.01 \
+    --timing-degraded-fraction 0.85 --timing-quantile 0.25 \
+    --planning-latest-fraction 0.90 --planning-latest-fraction 0.95
+```
+
+Earlier exponential milestones can already precede the completed observations;
+the mixed example reports those deadlines as elapsed rather than replacing
+the requested fractions. Other curve shapes can require different milestones.
+
+Without the new controls, the existing Approach 1 settings remain
+`linear_zero_intercept` and `time_mapping`. Selecting Approach 2 alone defaults
+to the study analysis model for calibration and `value_ratio` prediction.
+Explicit model choices must be registered for the selected approach. One-phase
+mass-loss models do not support the current tau calculation; unavailable tau
+or inverse predictions raise an error rather than switching methods or moving
+the required time-zero baseline.
+
+Approach 2 fits the calibration profiles directly, without response-aligned
+Approach 1 pairs. Its HTML summary and JSON metadata identify the calibration
+model and parameters, prediction method, usable draw count, retained time
+domain, and calibration-range extrapolation diagnostics. Missing numerical
+metadata are written as JSON null. The study's whole-curve I-optimal criterion,
+timing requirements, and Monte Carlo assessment retain their existing meanings.
+
+Value-ratio prediction keeps input times as in vivo times, so its target
+prediction profile spans the full 0–52 study horizon, including gap filling
+after completed time 40. Time-mapping methods use the original in vitro
+prediction range and retain the shared mapped domain. These domains need not
+be identical across methods. Model evaluations outside calibration ranges are
+reported, while reference conversion adds no extrapolation. Unsupported
+completed times remain an explicit error.
+
+Rerunning the same output folder with Approach 2 removes a previous
+`ivivc_preprocessed_pairs.csv`; no such pair table was used for that fit.
 
 The `design_size_evolution` example appears first in `index.html`, while the
 existing examples retain their order of simulation seeds and calculations.
