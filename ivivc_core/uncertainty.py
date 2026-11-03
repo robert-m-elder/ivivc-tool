@@ -350,10 +350,17 @@ def sample_value_ratio_trajectories(
     n_samples: int = 1000,
     random_state=None,
 ) -> TrajectoryEnsemble:
-    """Generate complete Approach 2 response-value-ratio trajectory draws."""
-    from .predictions import _require_fixed_prediction_input, predict_value_ratio
+    """Generate complete Approach 2 response-value-ratio trajectory draws.
 
-    _require_fixed_prediction_input(prediction)
+    Supplied input responses are sampled once per row and multiplied by the
+    joint calibration ratio; the reported responses remain the central values.
+    """
+    from .predictions import predict_value_ratio
+    from .prediction_inputs import (
+        prediction_uncertainty, sample_prediction_responses, prediction_input_metadata,
+    )
+
+    input_uncertainty = prediction_uncertainty(prediction)
     spec = get_model_spec(model_name)
     random_states = _split_random_state(random_state, 2)
     in_vitro_samples = sample_parameter_sets(
@@ -385,9 +392,10 @@ def sample_value_ratio_trajectories(
     numerator = in_vivo_draws.values
     ratio_draws = np.full(denominator.shape, np.nan, dtype=float)
     supported = np.isfinite(denominator) & np.isfinite(numerator) & (denominator != 0)
+    response_draws = sample_prediction_responses(prediction, len(ratio_draws), random_state)
     with np.errstate(over='ignore', divide='ignore', invalid='ignore'):
         np.divide(numerator, denominator, out=ratio_draws, where=supported)
-        value_draws = prediction.value.reshape(1, -1) * ratio_draws
+        value_draws = response_draws * ratio_draws
     # Keep partially valid rows for pointwise intervals. Design callers still
     # use valid_draws to select complete finite trajectories.
     valid = np.all(np.isfinite(value_draws), axis=1)
@@ -398,6 +406,10 @@ def sample_value_ratio_trajectories(
         in_vitro_parameters=in_vitro_parameters,
         in_vivo_parameters=in_vivo_parameters,
     )
+    input_metadata = prediction_input_metadata(prediction, propagated=True)
+    central.auxiliary.update(input_metadata)
+    if input_uncertainty is not None:
+        input_metadata['prediction_response_draws'] = response_draws
     return TrajectoryEnsemble(
         central=central,
         time_draws=np.broadcast_to(
@@ -407,6 +419,7 @@ def sample_value_ratio_trajectories(
         value_draws=value_draws,
         valid_draws=valid,
         metadata={
+            **input_metadata,
             'in_vitro_model_draws': in_vitro_draws.values,
             'in_vitro_parameter_names': in_vitro_samples.parameter_names,
             'in_vitro_parameter_samples': in_vitro_samples.values,
@@ -436,10 +449,15 @@ def sample_tau_ratio_trajectories(
     n_samples: int = 1000,
     random_state=None,
 ) -> TrajectoryEnsemble:
-    """Generate complete time-scaling draws from sampled fitted time constants."""
-    from .predictions import _require_fixed_prediction_input
+    """Generate complete time-scaling draws from sampled fitted time constants.
 
-    _require_fixed_prediction_input(prediction)
+    Input-response errors affect the value axis, not the fitted tau ratio.
+    """
+    from .prediction_inputs import (
+        prediction_uncertainty, sample_prediction_responses, prediction_input_metadata,
+    )
+
+    input_uncertainty = prediction_uncertainty(prediction)
     spec = get_model_spec(model_name)
     random_states = _split_random_state(random_state, 2)
     in_vitro_samples = sample_parameter_sets(
@@ -478,8 +496,10 @@ def sample_tau_ratio_trajectories(
     ratio_draws = np.full(int(n_samples), np.nan, dtype=float)
     ratio_draws[valid] = in_vivo_tau[valid] / in_vitro_tau[valid]
     time_draws = prediction.time.reshape(1, -1) * ratio_draws.reshape(-1, 1)
-    value_draws = np.broadcast_to(prediction.value, time_draws.shape).copy()
+    value_draws = sample_prediction_responses(prediction, len(time_draws), random_state)
     valid &= np.all(np.isfinite(time_draws), axis=1)
+    if input_uncertainty is not None:
+        valid &= np.all(np.isfinite(value_draws), axis=1)
 
     nominal_in_vitro_tau = _tau_from_parameter_vector(
         spec.model_function,
@@ -526,12 +546,17 @@ def sample_tau_ratio_trajectories(
             skip_reason='Time-constant ratio prediction is unavailable for the fitted parameter values.',
         )
 
+    input_metadata = prediction_input_metadata(prediction, propagated=True)
+    central.auxiliary.update(input_metadata)
+    if input_uncertainty is not None:
+        input_metadata['prediction_response_draws'] = value_draws
     return TrajectoryEnsemble(
         central=central,
         time_draws=time_draws,
         value_draws=value_draws,
         valid_draws=valid,
         metadata={
+            **input_metadata,
             'in_vitro_parameter_samples': in_vitro_samples.values,
             'in_vivo_parameter_samples': in_vivo_samples.values,
             'in_vitro_tau_draws': in_vitro_tau,
@@ -557,10 +582,17 @@ def sample_inverse_response_trajectories(
     allow_extrapolation: bool = True,
     max_expansions: int = DEFAULT_INVERSE_EXPANSIONS,
 ) -> TrajectoryEnsemble:
-    """Generate complete inverse response-to-time mapping draws."""
-    from .predictions import _require_fixed_prediction_input, inverse_response_times
+    """Generate complete inverse response-to-time mapping draws.
 
-    _require_fixed_prediction_input(prediction)
+    Each supplied response draw is retained as the value coordinate and mapped
+    through the same trajectory's sampled in vivo curve for its time coordinate.
+    """
+    from .predictions import inverse_response_times
+    from .prediction_inputs import (
+        prediction_uncertainty, sample_prediction_responses, prediction_input_metadata,
+    )
+
+    input_uncertainty = prediction_uncertainty(prediction)
     spec = get_model_spec(model_name)
     central_time, status, skip_reason = inverse_response_times(
         spec.model_function,
@@ -600,33 +632,46 @@ def sample_inverse_response_trajectories(
         np.nan,
         dtype=float,
     )
+    response_draws = sample_prediction_responses(prediction, parameter_samples.n_samples, random_state)
     valid = np.zeros(parameter_samples.n_samples, dtype=bool)
     for draw_index, sample in enumerate(parameter_samples.values):
         sample_parameters = dict(zip(parameter_samples.parameter_names, sample))
         mapped_time, _, draw_reason = inverse_response_times(
             spec.model_function,
             sample_parameters,
-            prediction.value,
+            (np.where(central_supported, response_draws[draw_index], np.nan)
+             if input_uncertainty is not None else prediction.value),
             calibration_time_range,
             observed_responses=observed_responses,
             grid_points=grid_points, minimum_time=minimum_time,
             allow_extrapolation=allow_extrapolation, max_expansions=max_expansions,
         )
         mapped_time = np.asarray(mapped_time, dtype=float)
+        if input_uncertainty is not None:
+            # Perturbation cannot supply a nominal prediction where the entered
+            # response has no supported inverse. Keep the central support mask.
+            mapped_time[~central_supported] = np.nan
         time_draws[draw_index] = mapped_time
         if draw_reason is not None or not np.any(central_supported):
             continue
-        valid[draw_index] = bool(np.all(np.isfinite(mapped_time[central_supported])))
+        if input_uncertainty is not None:
+            valid[draw_index] = bool(
+                np.all(np.isfinite(mapped_time)) & np.all(np.isfinite(response_draws[draw_index]))
+            )
+        else:
+            valid[draw_index] = bool(np.all(np.isfinite(mapped_time[central_supported])))
 
+    input_metadata = prediction_input_metadata(prediction, propagated=True)
+    central.auxiliary.update(input_metadata)
+    if input_uncertainty is not None:
+        input_metadata['prediction_response_draws'] = response_draws
     return TrajectoryEnsemble(
         central=central,
         time_draws=time_draws,
-        value_draws=np.broadcast_to(
-            prediction.value,
-            time_draws.shape,
-        ).copy(),
+        value_draws=response_draws,
         valid_draws=valid,
         metadata={
+            **input_metadata,
             'inverse_minimum_time': minimum_time,
             'inverse_max_expansions': max_expansions,
             'inverse_allow_extrapolation': allow_extrapolation,

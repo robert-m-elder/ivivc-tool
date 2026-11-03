@@ -327,15 +327,102 @@ assumption. No additional calibration residual noise is added.
 
 When either source has supplied errors, prediction auxiliary data and complete
 ensemble metadata include each source's `calibration_uncertainty` and covariance
-scale, `prediction_inputs_fixed=True`, and
+scale, `prediction_inputs_fixed=True` when no input errors are supplied, and
 `future_observation_variability_included=False`. Applicable fixed normalization
 records are retained under `fixed_normalization_constants`. The metadata is
 provenance, not an extra uncertainty contribution. Outputs without supplied
 errors retain their existing metadata shape.
 
-Prediction methods, complete prediction samplers, and high-level prediction APIs
-still reject attached prediction-input uncertainty until the next propagation
-extension. No future-observation variability, model discrepancy, model-selection
-uncertainty, or variable normalization references are added. Browser/CLI controls
-remain unchanged. The existing `uncertainties` dependency is loaded only when the
-high-level tau-prediction compatibility wrapper needs its nominal/SD value type.
+## Prediction-input uncertainty (Approach 2)
+
+`prepare_time_course` accepts the same SD/SEM representation for a new in vitro
+prediction dataset. Its responses and errors must be on the analyzed scale used
+by calibration. Preprocessing uses the established fixed-reference normalization
+convention; logarithmic response scaling remains unsupported with supplied errors.
+
+```python
+from ivivc_core import (
+    ObservationUncertainty, prepare_time_course,
+    predict_in_vivo, generate_trajectory_ensembles,
+)
+
+prediction, input_preprocessing = prepare_time_course(
+    [1.0, 2.0, 3.0], [0.8, 0.65, 0.5],
+    observation_uncertainty=ObservationUncertainty(
+        [0.03, 0.04, 0.04], response_kind="mean", replicate_counts=4,
+    ),
+)
+methods = {"approach2": ("value_ratio", "observed_response_inverse")}
+predictions = predict_in_vivo(analysis, prediction, methods=methods)
+ensembles = generate_trajectory_ensembles(
+    analysis, prediction, methods=methods, n_samples=1000, random_state=12345,
+)
+```
+
+Each input response is sampled once per trajectory from a normal distribution
+centered on its entered value with its supplied standard uncertainty. An
+individual response uses SD; a reported mean uses SEM. Counts are metadata and
+never divide SEM again or generate extra replicates. Input times, supplied error
+estimates, and normalization constants are held fixed. No prediction-profile
+refitting or additional calibration residual perturbation is performed.
+
+| Method | Input-response contribution |
+| --- | --- |
+| Response-value ratio | Multiply the sampled response once by that trajectory's fitted in vivo/in vitro ratio. Response intervals combine calibration and input uncertainty. |
+| Time-constant ratio | Carry the sampled response on the response axis. The time coordinate depends only on the shared calibration tau ratio, so response error does not widen time intervals. |
+| Observed-response inverse | Map the sampled response through the sampled in vivo curve and retain that same response as the output value. Time and response coordinates remain dependent. |
+
+Full parameter covariance and one shared source vector per trajectory are
+retained. Separate input rows are independent, including distinct observations
+at equal times. Prediction measurements must also be independent of calibration
+measurements. The high-level APIs reject direct reuse of the same calibration
+`TimeCourse` object as an uncertain prediction input. Copies cannot establish
+independence: reusing calibration measurements, overlapping means, or shared
+experimental errors requires a joint error model and is not supported.
+
+Central predictions remain the nominal-input, fitted-parameter calculations.
+The sampled mean does not replace them. Response draws are never clipped to
+positive values or a normalized range, nor retried until an inverse is possible.
+An unsupported nominal inverse remains unavailable even if some perturbed
+responses can be mapped. All requested draws must be usable at a point for its
+Monte Carlo interval to be displayed. Denominator safeguards and inverse-domain
+checks remain active, with failed and extrapolated inverse draws counted.
+
+Primary response-ratio and inverse-time intervals record
+`interval_kind="parameter_and_input_uncertainty"`. Tau time intervals retain
+`interval_kind="parameter_uncertainty"`. Tau and inverse methods also provide
+`value_lower`/`value_upper` from the exact marginal normal quantiles of the
+entered response and SD/SEM, with
+`value_interval_kind="prediction_input_uncertainty"` and
+`value_interval_method="normal"`. These analytical marginal bounds need not
+match finite-sample percentiles of the response draws exactly; they do not
+describe a joint confidence region or simultaneous band. Time bounds remain
+joint Monte Carlo percentiles. Vertical input bounds can remain available when
+parameter covariance prevents calculating horizontal uncertainty.
+
+Input metadata records the resolved error representation under
+`prediction_input_uncertainty`, the normal-distribution and independence
+assumptions, fixed times, propagation status, and `prediction_inputs_fixed=False`.
+This information is supplied even when calibration has no entered errors.
+The point-only `predict_value_ratio` operation records
+`prediction_input_uncertainty_propagated=False`; use its uncertainty wrapper for
+intervals. Complete ensembles retain `prediction_response_draws`, paired output
+draws, and separate complete-trajectory validity masks. Their input draws apply
+only at supplied rows, never at the denser model plotting grid or unmeasured
+candidate times.
+
+Integer seeds leave the existing calibration streams unchanged and use a
+separate input stream. A supplied Generator/RandomState is consumed sequentially;
+omitted uncertainty consumes no extra random values and preserves legacy outputs.
+
+Approach 1/3 prediction methods and their samplers still reject attached input
+errors. Mixed high-level batches retain successful Approach 2 predictions and
+record unsupported methods as errors, unless `fail_fast=True`.
+
+No future in vivo measurement variability, model discrepancy, model-selection
+uncertainty, or variable normalization references are added. Input uncertainty
+describes the existing prediction measurements. Future study-design simulation
+must use a separate measurement-error assumption for future times and must not
+count these entered input errors again. Browser/CLI controls remain unchanged.
+The existing `uncertainties` dependency is loaded only when the high-level
+tau-prediction compatibility wrapper needs its nominal/SD value type.

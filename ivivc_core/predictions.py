@@ -20,6 +20,10 @@ from .inverse import inverse_response_times, DEFAULT_INVERSE_EXPANSIONS
 from .extrapolation import annotate_prediction_domain
 from .registry import get_model_spec
 from .types import PredictedTrajectory, TimeCourse
+from .prediction_inputs import (
+    prediction_uncertainty, sample_prediction_responses,
+    prediction_input_metadata, attach_input_response_interval,
+)
 from .intervals import (
     DEFAULT_INTERVAL_SAMPLES, DEFAULT_INTERVAL_SEED,
     validate_interval_settings, parameter_interval_summary,
@@ -28,7 +32,7 @@ from .intervals import (
 
 
 def _require_fixed_prediction_input(prediction: TimeCourse) -> None:
-    """Reject attached input uncertainty until prediction propagation supports it."""
+    """Reject supplied input uncertainty for the unsupported approaches."""
     if getattr(prediction, 'observation_uncertainty', None) is not None:
         raise ValueError(
             'This method does not support supplied prediction-response uncertainty; '
@@ -53,18 +57,28 @@ def inverse_response_prediction_intervals(
     grid_points=101, random_state=DEFAULT_INTERVAL_SEED,
     inverse_mapper=inverse_response_times, *, minimum_time=0.0,
     allow_extrapolation=True, max_expansions=DEFAULT_INVERSE_EXPANSIONS,
+    observation_uncertainty=None,
 ):
-    """Parameter-only intervals for fixed responses under the current mapper.
+    """Propagate fitted parameters and optional supplied response SD/SEM.
 
     ``residuals`` is retained for compatibility but is not used. Central and
     sampled calculations use the same monotonic-branch search and time domain.
     Outside responses are never clipped to calibration endpoints.
-    No response noise is generated and no failed draws are silently discarded.
+    Supplied response errors are independent normal perturbations on the input
+    scale. Residual/future-observation noise is never added, and no failed draws
+    are silently discarded or retried to obtain supported inverse mappings.
     """
     from .uncertainty import sample_parameter_sets
 
     confidence_level, n_samples = validate_interval_settings(confidence_level, n_samples)
     targets = np.asarray(target_responses, dtype=float)
+    input_course = None
+    if observation_uncertainty is not None:
+        input_course = TimeCourse(
+            np.arange(targets.size, dtype=float), targets,
+            observation_uncertainty=observation_uncertainty,
+        )
+        prediction_uncertainty(input_course)
     mapper_options = dict(minimum_time=minimum_time, allow_extrapolation=allow_extrapolation,
                           max_expansions=max_expansions)
     failed_reasons = [{} for _ in range(targets.size)]
@@ -84,20 +98,30 @@ def inverse_response_prediction_intervals(
             sampling_error = str(exc)
         else:
             draws = np.full((samples.n_samples, targets.size), np.nan)
+            response_draws = (
+                None if input_course is None else sample_prediction_responses(
+                    input_course, samples.n_samples, random_state,
+                )
+            )
             for index, sample in enumerate(samples.values):
                 try:
                     mapped, draw_status, draw_reason = inverse_mapper(
                         model_function, dict(zip(samples.parameter_names, sample)),
-                        targets, time_range, observed_responses=observed_responses,
+                        targets if response_draws is None else response_draws[index],
+                        time_range, observed_responses=observed_responses,
                         grid_points=grid_points, **mapper_options,
                     )
                     mapped = np.asarray(mapped, dtype=float).reshape(-1)
                     if draw_reason is None:
+                        if input_course is not None:
+                            mapped = np.where(np.isfinite(central), mapped, np.nan)
                         draws[index] = mapped
                         extrapolated_counts += (np.isfinite(mapped) &
                             ((mapped < time_range[0]) | (mapped > time_range[1])))
                     for column in np.flatnonzero(~np.isfinite(draws[index])):
                         message = draw_reason or str(np.asarray(draw_status).reshape(-1)[column])
+                        if input_course is not None and not np.isfinite(central[column]):
+                            message = 'nominal inverse unavailable'
                         failed_reasons[column][message] = failed_reasons[column].get(message, 0) + 1
                 except (ValueError, TypeError, RuntimeError, OverflowError, FloatingPointError) as exc:
                     for reasons in failed_reasons:
@@ -107,7 +131,13 @@ def inverse_response_prediction_intervals(
         draws, central, confidence_level=confidence_level, n_samples=n_samples,
         random_state=random_state, sampling_error=sampling_error,
     )
-    # Legacy field now explicitly indicates that no response perturbation is used.
+    if input_course is not None:
+        interval.update(prediction_input_metadata(
+            input_course, propagated=sampling_error is None and len(draws) > 0,
+        ))
+        interval['interval_kind'] = 'parameter_and_input_uncertainty'
+        interval['interval_method'] = 'covariance_and_input_monte_carlo'
+    # No fitted residual noise is added; supplied input SD/SEM is separate.
     interval['residual_std'] = 0.0
     interval['inverse_failed_draw_reasons'] = failed_reasons
     interval['inverse_extrapolated_samples'] = extrapolated_counts.reshape(targets.shape)
@@ -123,6 +153,12 @@ def inverse_response_prediction_intervals(
             note = (
                 'Uncertainty intervals could not be calculated because parameter '
                 'uncertainty could not be evaluated.'
+            )
+        elif input_course is not None:
+            note = (
+                f'Uncertainty intervals could not be calculated for {unavailable} of '
+                f'{targets.size} predictions because some sampled input responses or '
+                'parameter estimates did not produce unique inverse mappings.'
             )
         elif unavailable == 1:
             note = (
@@ -180,8 +216,8 @@ def predict_value_ratio(
     in_vivo_parameters: Mapping[str, float],
     minimum_plot_points: int = 50,
 ) -> PredictedTrajectory:
-    """Predict in vivo responses by the fitted response-value ratio."""
-    _require_fixed_prediction_input(prediction)
+    """Return nominal response-ratio predictions; intervals use the wrapper."""
+    prediction_uncertainty(prediction)
     model_function = get_model_spec(model_name).model_function
     in_vitro_model_value = np.asarray(
         model_function(prediction.time, **in_vitro_parameters)
@@ -228,6 +264,7 @@ def predict_value_ratio(
             'plot_time': plot_time,
             'in_vitro_model_plot': in_vitro_model_plot,
             'in_vivo_model_plot': in_vivo_model_plot,
+            **prediction_input_metadata(prediction, propagated=False),
         },
     )
 
@@ -244,11 +281,12 @@ def predict_value_ratio_with_uncertainty(
     n_samples: int = 1000,
     random_state=DEFAULT_INTERVAL_SEED,
 ) -> PredictedTrajectory:
-    """Add pointwise parameter-uncertainty intervals to response-ratio predictions.
+    """Add pointwise calibration/input intervals to response-ratio predictions.
 
     Both calibration parameter vectors are sampled independently, preserving
-    covariance within each vector. Supplied prediction times/responses are
-    fixed. No residual noise, observation error, or model discrepancy is added.
+    covariance within each vector. Prediction times are fixed; supplied response
+    SD/SEM contributes independent normal input draws. No residual noise,
+    future-observation variability, or model discrepancy is added.
     The fitted-parameter prediction, not the sampled mean, remains the center.
 
     A bounded interval is withheld at a point if any requested draw is unusable
@@ -256,7 +294,7 @@ def predict_value_ratio_with_uncertainty(
     is a conservative display safeguard, not a formal ratio-confidence method.
     Nothing is clipped or silently conditioned on successful evaluations.
     """
-    _require_fixed_prediction_input(prediction)
+    uncertainty = prediction_uncertainty(prediction)
     from .uncertainty import sample_value_ratio_trajectories, summarize_draws
 
     confidence_level = float(confidence_level)
@@ -323,7 +361,8 @@ def predict_value_ratio_with_uncertainty(
     trajectory.value_lower = lower
     trajectory.value_upper = upper
     trajectory.auxiliary.update({
-        'interval_kind': 'parameter_uncertainty',
+        'interval_kind': ('parameter_uncertainty' if uncertainty is None
+                          else 'parameter_and_input_uncertainty'),
         'interval_confidence_level': confidence_level,
         'interval_status': interval_status,
         'interval_valid_samples': valid_counts,
@@ -333,11 +372,16 @@ def predict_value_ratio_with_uncertainty(
         'interval_sampling_error': sampling_error,
         'denominator_lower': denominator_lower,
         'denominator_upper': denominator_upper,
+        **prediction_input_metadata(prediction, propagated=sampling_error is None),
     })
+    if uncertainty is not None:
+        trajectory.auxiliary['value_interval_kind'] = 'parameter_and_input_uncertainty'
+        trajectory.auxiliary['interval_method'] = 'covariance_and_input_monte_carlo'
     unavailable = int(np.count_nonzero(interval_status != 'available'))
     if unavailable:
+        interval_label = 'parameter-uncertainty' if uncertainty is None else 'propagated-uncertainty'
         trajectory.note = (
-            f'{unavailable} of {count} response-ratio parameter-uncertainty intervals '
+            f'{unavailable} of {count} response-ratio {interval_label} intervals '
             'are unavailable. See the prediction data table for pointwise reasons.'
         )
         if sampling_error is not None:
@@ -361,7 +405,7 @@ def predict_tau_ratio(
     random_state=DEFAULT_INTERVAL_SEED,
 ) -> PredictedTrajectory:
     """Predict in vivo times using the ratio of fitted time constants."""
-    _require_fixed_prediction_input(prediction)
+    uncertainty = prediction_uncertainty(prediction)
     confidence_level, n_samples = validate_interval_settings(confidence_level, n_samples)
     skip_reason = describe_tau_prediction_skip_reason(tau_values)
     if skip_reason is not None:
@@ -382,6 +426,7 @@ def predict_tau_ratio(
             in_vivo_value=prediction.value,
             available=False,
             skip_reason=skip_reason,
+            auxiliary=prediction_input_metadata(prediction, propagated=False),
         )
 
     tau1, tau2 = tau_values
@@ -395,6 +440,7 @@ def predict_tau_ratio(
             in_vivo_time=np.full(prediction.time.shape, np.nan),
             in_vivo_value=prediction.value, available=False,
             skip_reason='Time-constant rescaling was not performed because a valid time-constant ratio could not be calculated.',
+            auxiliary=prediction_input_metadata(prediction, propagated=False),
         )
     trajectory = PredictedTrajectory(
         source_approach='approach2', source_method='tau_ratio', model_name=model_name,
@@ -425,7 +471,11 @@ def predict_tau_ratio(
         draws, in_vivo_time, confidence_level=confidence_level, n_samples=n_samples,
         random_state=random_state, sampling_error=sampling_error,
     )
-    return attach_parameter_interval(trajectory, interval, output_kind='time')
+    attach_parameter_interval(trajectory, interval, output_kind='time')
+    if uncertainty is not None:
+        trajectory.auxiliary['time_interval_kind'] = 'parameter_uncertainty'
+        attach_input_response_interval(trajectory, prediction, confidence_level=confidence_level)
+    return trajectory
 
 
 def predict_inverse_response(
@@ -446,8 +496,8 @@ def predict_inverse_response(
     allow_extrapolation: bool = True,
     max_expansions: int = DEFAULT_INVERSE_EXPANSIONS,
 ) -> PredictedTrajectory:
-    """Map fixed responses and propagate only fitted in vivo parameter uncertainty."""
-    _require_fixed_prediction_input(prediction)
+    """Map nominal responses, propagating in vivo parameters and input SD/SEM."""
+    uncertainty = prediction_uncertainty(prediction)
     confidence_level, n_samples = validate_interval_settings(confidence_level, n_samples)
     function = get_model_spec(model_name).model_function
     mapper_options = dict(minimum_time=minimum_time, allow_extrapolation=allow_extrapolation,
@@ -464,12 +514,13 @@ def predict_inverse_response(
     )
     interval_note = None
     if skip_reason is None and np.any(supported):
+        input_options = {} if uncertainty is None else {'observation_uncertainty': uncertainty}
         interval, interval_note = interval_estimator(
             function, parameters, covariance, residuals,
             np.where(supported, prediction.value, np.nan), calibration_time_range,
             observed_responses=observed_responses, confidence_level=confidence_level,
             n_samples=n_samples, random_state=random_state, inverse_mapper=inverse_mapper,
-            **mapper_options,
+            **mapper_options, **input_options,
         )
     elif skip_reason is None:
         skip_reason = (
@@ -483,12 +534,14 @@ def predict_inverse_response(
         available=bool(skip_reason is None and np.any(supported)),
         skip_reason=skip_reason, status=status,
     )
+    if uncertainty is not None:
+        interval['interval_kind'] = 'parameter_and_input_uncertainty'
     attach_parameter_interval(trajectory, interval, output_kind='time')
     # Inverse mapping has more specific user-facing messages below; keep the
     # generic interval diagnostics in auxiliary metadata rather than duplicating them.
     trajectory.note = None
     trajectory.auxiliary.update({
-        'assumed_response_sd': 0.0,
+        'assumed_response_sd': 0.0 if uncertainty is None else uncertainty.sigma.copy(),
         'interval_note': interval_note,
         'inverse_minimum_time': minimum_time,
         'inverse_max_expansions': max_expansions,
@@ -496,6 +549,9 @@ def predict_inverse_response(
         'inverse_failed_draw_reasons': interval.get('inverse_failed_draw_reasons', [{} for _ in times]),
         'inverse_extrapolated_samples': interval.get('inverse_extrapolated_samples', np.zeros(len(times), dtype=int)),
     })
+    if uncertainty is not None:
+        trajectory.auxiliary['time_interval_kind'] = 'parameter_and_input_uncertainty'
+        attach_input_response_interval(trajectory, prediction, confidence_level=confidence_level)
     if interval_note:
         trajectory.note = interval_note
     missing = int(np.count_nonzero(~supported))
