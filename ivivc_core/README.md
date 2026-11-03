@@ -25,6 +25,10 @@ All arrays passed to fitting and prediction functions are assumed to be on the
 same analyzed scale. The public API does not silently apply or reverse
 normalization, scaling, or interpolation.
 
+The experimental-uncertainty input foundation is documented in
+[Supplied observation uncertainty](OBSERVATION_UNCERTAINTY.md). It is not yet
+connected to fitting, preprocessing, or prediction.
+
 Preprocessing accepts `one_minus` to apply `1 - response` after the selected
 normalizations and before logarithmic scaling or interpolation. It applies to
 each supplied profile and records its fixed reference value of 1 in preprocessing
