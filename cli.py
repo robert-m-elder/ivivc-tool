@@ -1,6 +1,8 @@
 from pathlib import Path
 import argparse
 import glob
+import json
+import math
 import warnings
 
 import pandas as pd
@@ -12,10 +14,12 @@ from engine import (
     num_points_for_grid_search,
     preprocess_data,
     process_data,
+    process_predictions,
 )
 from metrics import metrics
 from models import approaches, models
 from preprocessing import preprocessing_options
+from utilities.uncertainty_inputs import uncertainty_from_options, validate_uncertainty_options
 
 def parse_sheet_spec(spec: str | None, sheet_names: list[str]) -> list[tuple[int, str]]:
     """
@@ -103,8 +107,90 @@ def load_fit_dataframes(path, sheet_spec=None):
 
 def extract_fit_columns(df):
     # Same convention as the web app: first 4 columns are t1, m1, t2, m2
-    t1, m1, t2, m2 = df.iloc[:, :4].to_numpy().T
-    return t1, m1, t2, m2
+    if len(df.columns) < 4:
+        raise ValueError('Fitting data require four columns: in vitro time/value, then in vivo time/value.')
+    return tuple(pd.to_numeric(df.iloc[:, index], errors='raise').to_numpy() for index in range(4))
+
+
+def _json_values(value):
+    def clean(item):
+        if hasattr(item, 'tolist'):
+            item = item.tolist()
+        if isinstance(item, dict):
+            return {key: clean(value) for key, value in item.items()}
+        if isinstance(item, (list, tuple)):
+            return [clean(value) for value in item]
+        if isinstance(item, float) and not math.isfinite(item):
+            return None
+        return item
+    return json.dumps(clean(value), separators=(',', ':'), allow_nan=False)
+
+
+def _uncertainty_columns(raw, analyzed, preprocessing_metadata=None):
+    """Record supplied and analyzed precision without converting SEM again."""
+    row = {'uncertainty_mode': raw.get('mode', 'none') if raw else 'none'}
+    if analyzed:
+        row.update({
+            'response_kind': analyzed['response_kind'],
+            'uncertainty_kind': analyzed['uncertainty_kind'],
+            'standard_uncertainty': _json_values(analyzed['standard_uncertainty']),
+            'replicate_counts': _json_values(analyzed.get('replicate_counts')),
+            'uncertainty_column': raw.get('column') if raw else None,
+            'replicate_column': raw.get('replicate_column') if raw else None,
+            'entered_standard_uncertainty': _json_values(raw.get('standard_uncertainty')) if raw else None,
+            'uncertainty_interpretation': 'SD for individual values; SEM for means; supplied absolute scale',
+            'independent_errors_confirmed': True,
+            'normalization_constants_fixed': True,
+        })
+        if preprocessing_metadata:
+            row['normalization_records'] = _json_values(preprocessing_metadata.get('normalization_records', []))
+    return row
+
+
+def _prediction_rows(data, frame, results, approach, model, base, *, interpolation,
+                     scalings, normalizations, options):
+    supplied, record = uncertainty_from_options(frame, 'prediction', options)
+    if len(frame.columns) < 2:
+        raise ValueError('Prediction data require time and response in the first two columns.')
+    time, response = (pd.to_numeric(frame.iloc[:, index], errors='raise').to_numpy() for index in range(2))
+    preparation_options = ({} if supplied is None else
+                           dict(return_prepared=True, in_vitro_uncertainty=supplied))
+    prediction_data = preprocess_data(
+        time, response, None, None, selected_interpolation=[interpolation],
+        selected_scalings=scalings, selected_normalizations=normalizations,
+        **preparation_options,
+    )
+    retained_rows = None
+    if supplied is not None:
+        retained_rows = next(iter(prediction_data.preprocessing.sources.values())).retained_rows
+        prediction_data = prediction_data.in_vitro
+    predictions = process_predictions(data, prediction_data, results, [approach],
+                                      interpolated_data=data, selected_scalings=scalings)
+    payload = predictions.get(approach, {}).get(model, {})
+    if 'error' in payload:
+        return [base | {'error': payload['error']}]
+    if not payload.get('prediction_tables'):
+        return [base | {'error': 'No prediction result was produced for this model.'}]
+    rows = []
+    for method, values in payload['prediction_tables'].items():
+        metadata = payload.get('uncertainty_metadata', {}).get(method, {})
+        for index, value in enumerate(values):
+            row = base | {'method': method} | value
+            for key in ('prediction_inputs_fixed', 'prediction_times_fixed',
+                        'prediction_input_uncertainty_propagated',
+                        'prediction_calibration_independence_assumed',
+                        'future_observation_variability_included'):
+                if key in metadata:
+                    row[key] = metadata[key]
+            for source, description in metadata.get('calibration_uncertainty', {}).items():
+                row[source + '_covariance_scaling'] = description.get('covariance_scaling')
+            if record:
+                row.update(prediction_uncertainty_mode=record['mode'],
+                           prediction_uncertainty_column=record.get('column'),
+                           entered_input_standard_uncertainty=record['standard_uncertainty'][retained_rows[index]],
+                           independent_errors_confirmed=True, normalization_constants_fixed=True)
+            rows.append(row)
+    return rows
 
 def rows_from_result(file_path, sheet_idx, sheet_name, model_key, result):
     base = {
@@ -153,7 +239,9 @@ def build_analysis_config(args):
 
 
 def run_one_df(file_path, sheet_idx, sheet_name, df, approach, model, metrics,
-               interpolation, scalings, normalizations, analysis_config):
+               interpolation, scalings, normalizations, analysis_config, *,
+               uncertainty_options=None, prediction_frame=None, prediction_file=None,
+               prediction_rows=None):
     if approach == "approach3":
         raise ValueError(
             "approach3 currently returns plots, not numeric fit stats. "
@@ -163,6 +251,18 @@ def run_one_df(file_path, sheet_idx, sheet_name, df, approach, model, metrics,
     if model not in approaches[approach]["models"]:
         raise ValueError(f"Model {model!r} is not available for {approach}.")
 
+    options = uncertainty_options or {}
+    if uncertainty_options is not None:
+        validate_uncertainty_options(options, [approach], scalings,
+                                     has_prediction=prediction_frame is not None)
+    vitro_uncertainty, vitro_record = uncertainty_from_options(df, 'in_vitro', options)
+    vivo_uncertainty, vivo_record = uncertainty_from_options(df, 'in_vivo', options)
+    supplied_calibration = vitro_uncertainty is not None or vivo_uncertainty is not None
+    preparation_options = {}
+    if supplied_calibration:
+        preparation_options = dict(return_prepared=True, return_metadata=True,
+                                   in_vitro_uncertainty=vitro_uncertainty,
+                                   in_vivo_uncertainty=vivo_uncertainty)
     t1, m1, t2, m2 = extract_fit_columns(df)
     data = preprocess_data(
         t1,
@@ -172,7 +272,11 @@ def run_one_df(file_path, sheet_idx, sheet_name, df, approach, model, metrics,
         selected_interpolation=[interpolation],
         selected_scalings=scalings,
         selected_normalizations=normalizations,
+        **preparation_options,
     )
+    preprocessing_metadata = None
+    if supplied_calibration:
+        data, preprocessing_metadata = data
 
     model_key = f"{approach}:{model}"
 
@@ -188,7 +292,35 @@ def run_one_df(file_path, sheet_idx, sheet_name, df, approach, model, metrics,
             analysis_config=analysis_config,
         )
 
-    return rows_from_result(file_path, sheet_idx, sheet_name, model_key, results[model_key])
+    result = results[model_key]
+    rows = rows_from_result(file_path, sheet_idx, sheet_name, model_key, result)
+    if supplied_calibration and 'error' not in result:
+        analyzed = result.get('observation_uncertainty', [None, None])
+        for row in rows:
+            index = row['dataset'] - 1
+            row.update(_uncertainty_columns((vitro_record, vivo_record)[index], analyzed[index],
+                                           preprocessing_metadata))
+            row['covariance_scaling'] = result['fit_metadata'][index].get('covariance_scaling', 'residual_scaled')
+            row['information_criteria_note'] = result['fit_metadata'][index].get('information_criteria_note')
+
+    if prediction_frame is not None and prediction_rows is not None:
+        base = dict(file=str(file_path), sheet_index='' if sheet_idx is None else sheet_idx,
+                    sheet_name='' if sheet_name is None else sheet_name, model_key=model_key,
+                    prediction_file=str(prediction_file or ''))
+        if 'error' in result:
+            prediction_rows.append(base | {'error': result['error']})
+        else:
+            try:
+                prediction_rows.extend(_prediction_rows(
+                    data, prediction_frame, results, approach, model, base,
+                    interpolation=interpolation, scalings=scalings,
+                    normalizations=normalizations, options=options,
+                ))
+            except Exception as exc:
+                # Preserve completed fitting summaries when a prediction input
+                # fails, while recording the failure in the prediction output.
+                prediction_rows.append(base | {'error': str(exc)})
+    return rows
 
 
 def print_results(df: pd.DataFrame):
@@ -205,7 +337,7 @@ def print_results(df: pd.DataFrame):
         print(df.to_string(index=False))
 
 
-def main():
+def build_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("inputs", nargs="+", help="Files or glob patterns")
     parser.add_argument(
@@ -241,7 +373,43 @@ def main():
         "--out",
         help="Optional output CSV path. If omitted, results are printed to stdout."
     )
+    for prefix, label in (('in_vitro', 'in vitro calibration'), ('in_vivo', 'in vivo calibration'),
+                          ('prediction', 'prediction input')):
+        flag = prefix.replace('_', '-')
+        parser.add_argument(f'--{flag}-uncertainty-mode', choices=['none', 'constant', 'column'], default='none',
+                            help=f'Absolute response uncertainty for {label}; default: none.')
+        parser.add_argument(f'--{flag}-uncertainty-value', type=float,
+                            help='Positive constant SD (individual values) or SEM (means).')
+        parser.add_argument(f'--{flag}-uncertainty-column', help='Exact header of the SD/SEM column.')
+        parser.add_argument(f'--{flag}-response-kind', choices=['individual', 'mean'], default='individual',
+                            help='individual uses SD; mean uses SEM without dividing it again.')
+        parser.add_argument(f'--{flag}-replicate-column',
+                            help='Optional replicate-count column for means; recorded without rescaling SEM.')
+    parser.add_argument('--independent-errors', action='store_true',
+                        dest='uncertainty_independence_confirmed',
+                        help='Confirm independent original observations and prediction measurements separate from calibration.')
+    parser.add_argument('--prediction', help='Optional prediction CSV/Excel file; first two columns are time and response.')
+    parser.add_argument('--prediction-sheet', help='Zero-based worksheet selector for prediction Excel input; select exactly one sheet.')
+    parser.add_argument('--prediction-out', help='Optional prediction CSV path; otherwise predictions are printed separately.')
+    return parser
+
+
+def main():
+    parser = build_parser()
     args = parser.parse_args()
+    if args.prediction_out and not args.prediction:
+        parser.error('--prediction-out requires --prediction.')
+    try:
+        validate_uncertainty_options(vars(args), [args.approach], args.scalings,
+                                     has_prediction=bool(args.prediction))
+        prediction_frame = None
+        if args.prediction:
+            prediction_frames = load_fit_dataframes(args.prediction, sheet_spec=args.prediction_sheet)
+            if len(prediction_frames) != 1:
+                raise ValueError('Select exactly one prediction worksheet with --prediction-sheet.')
+            prediction_frame = prediction_frames[0][2]
+    except (ValueError, TypeError, OSError) as exc:
+        parser.error(str(exc))
     analysis_config = build_analysis_config(args)
 
     files = []
@@ -249,7 +417,7 @@ def main():
         matches = glob.glob(pattern)
         files.extend(matches if matches else [pattern])
 
-    rows = []
+    rows, prediction_rows = [], []
     for file_path in files:
         path = Path(file_path)
         try:
@@ -268,16 +436,23 @@ def main():
                         scalings=args.scalings,
                         normalizations=args.normalizations,
                         analysis_config=analysis_config,
+                        uncertainty_options=vars(args),
+                        prediction_frame=prediction_frame,
+                        prediction_file=args.prediction,
+                        prediction_rows=prediction_rows,
                     )
                 )
         except Exception as e:
-            rows.append({
+            error_row = {
                 "file": str(path),
                 "sheet_index": "",
                 "sheet_name": "",
                 "model_key": f"{args.approach}:{args.model}",
                 "error": str(e),
-            })
+            }
+            rows.append(error_row)
+            if args.prediction:
+                prediction_rows.append(error_row | {'prediction_file': str(args.prediction)})
 
     out_df = pd.DataFrame(rows)
 
@@ -285,6 +460,13 @@ def main():
         out_df.to_csv(args.out, index=False)
     else:
         print_results(out_df)
+    if args.prediction:
+        prediction_df = pd.DataFrame(prediction_rows)
+        if args.prediction_out:
+            prediction_df.to_csv(args.prediction_out, index=False)
+        else:
+            print('\nPrediction results:')
+            print_results(prediction_df)
 
 
 if __name__ == "__main__":
