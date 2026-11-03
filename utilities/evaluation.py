@@ -7,6 +7,7 @@ import sklearn.model_selection
 from sklearn.metrics import r2_score, mean_squared_error, root_mean_squared_error
 import scipy as sp
 import inspect
+from numbers import Real
 from metrics import calculate_metric
 
 from joblib import Parallel, delayed
@@ -163,7 +164,36 @@ def _sample_log_uniform_real_space(param_min, param_max, size, rng):
     return starts
 
 
-def auto_grid_search(func, x, y, param_min=-1e6, param_max=1e6, num_points=100, num_cores=None, random_state=12345, initial_points=None):
+def _validated_observation_sigma(sigma, n_observations):
+    """Resolve a positive scalar/vector for low-level fitting helpers.
+
+    This module is imported by ``ivivc_core`` itself, so validation here must
+    remain independent of the core's public-package imports.
+    """
+    if sigma is None:
+        return None
+    original = np.asarray(sigma)
+    values = np.asarray(sigma, dtype=object)
+    if (
+        values.ndim not in (0, 1)
+        or original.dtype.kind in ('b', 'c', 'M', 'm')
+        or any(isinstance(value, (bool, np.bool_)) or not isinstance(value, Real)
+               for value in values.flat)
+    ):
+        raise ValueError('sigma must be a real numeric scalar or one-dimensional array.')
+    values = np.array(values, dtype=float, copy=True)
+    if np.any(~np.isfinite(values)) or np.any(values <= 0):
+        raise ValueError('sigma must be finite and strictly positive.')
+    if values.ndim == 0:
+        return np.full(n_observations, values.item(), dtype=float)
+    if len(values) != n_observations:
+        raise ValueError('sigma must contain one value per observation.')
+    return values
+
+
+def auto_grid_search(func, x, y, param_min=-1e6, param_max=1e6, num_points=100, num_cores=None, random_state=12345, initial_points=None, *, sigma=None):
+    """Search for starting values using the same residual weights as fitting."""
+    sigma = _validated_observation_sigma(sigma, len(y))
     num_params = len(inspect.signature(func).parameters) - 1  # subtract 1 for 'x'
     rng = np.random.default_rng(None if random_state in (None, '') else int(random_state))
     
@@ -175,7 +205,10 @@ def auto_grid_search(func, x, y, param_min=-1e6, param_max=1e6, num_points=100, 
                 pred = func(x, *params)
                 if np.any(np.isnan(pred)) or np.any(np.isinf(pred)):
                     return np.inf
-                return np.sum((y - pred)**2)
+                residuals = y - pred
+                if sigma is not None:
+                    residuals = residuals / sigma
+                return np.sum(residuals**2)
             except Exception:
                 return np.inf
     
@@ -226,6 +259,9 @@ def cross_validation_curve_fit(
     kwargs={},
     return_fit_params=False,
     return_diagnostics=False,
+    *,
+    sigma=None,
+    absolute_sigma=False,
 ):
     """Run cross-validation and optionally retain each split's fitted parameters.
 
@@ -234,7 +270,30 @@ def cross_validation_curve_fit(
     test prediction failed so the plot can report how many CV fits contributed.
     When requested, diagnostics wrap the existing return value as
     ``(existing_result, diagnostics)`` without changing scores or split behavior.
+
+    Supplied uncertainties are sliced to each training set. Metrics still use
+    the existing unweighted test-response definitions. For compatibility a
+    legacy ``kwargs['sigma']`` is accepted, but not alongside explicit sigma.
+    Invalid uncertainty is rejected before the split loop, not counted as
+    fitting failures. The caller's kwargs dictionary is never modified.
+    Existing RSS-based information criteria are withheld for weighted fits;
+    likelihood-aware criteria require a separate implementation.
     """
+    fit_kwargs = dict(kwargs)
+    explicit_sigma = sigma is not None
+    if 'sigma' in fit_kwargs:
+        if explicit_sigma:
+            raise ValueError('Supply sigma either explicitly or in kwargs, not both.')
+        sigma = fit_kwargs.pop('sigma')
+    sigma = _validated_observation_sigma(sigma, len(y_data))
+    if sigma is not None:
+        if explicit_sigma and 'absolute_sigma' in fit_kwargs and fit_kwargs['absolute_sigma'] != absolute_sigma:
+            raise ValueError('Conflicting absolute_sigma values in explicit arguments and kwargs.')
+        fit_kwargs.setdefault('absolute_sigma', absolute_sigma)
+    elif absolute_sigma:
+        if 'absolute_sigma' in fit_kwargs and fit_kwargs['absolute_sigma'] != absolute_sigma:
+            raise ValueError('Conflicting absolute_sigma values in explicit arguments and kwargs.')
+        fit_kwargs['absolute_sigma'] = absolute_sigma
     num_params = len(inspect.signature(model_function).parameters) - 1  # subtract 1 for 'x'
     scores = {metric: [] for metric in selected_metrics}
     fit_params = []
@@ -267,12 +326,19 @@ def cross_validation_curve_fit(
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore', category=RuntimeWarning)
-                popt, pcov = sp.optimize.curve_fit(model_function, x_train, y_train, p0, **kwargs)
+                training_kwargs = dict(fit_kwargs)
+                if sigma is not None:
+                    training_kwargs['sigma'] = sigma[train_index]
+                popt, pcov = sp.optimize.curve_fit(model_function, x_train, y_train, p0, **training_kwargs)
             y_pred = model_function(x_test, *popt)
             if not np.all(np.isfinite(y_pred)):
                 raise ValueError('Cross-validation prediction contains nonfinite values.')
             fit_succeeded = True
-            tmp_scores = {metric: calculate_metric(metric, y_test, y_pred, num_params) for metric in selected_metrics}
+            tmp_scores = {
+                metric: np.nan if sigma is not None and metric in ('aic', 'aicc', 'bic')
+                else calculate_metric(metric, y_test, y_pred, num_params)
+                for metric in selected_metrics
+            }
         except Exception:
             popt = None
             tmp_scores = {metric: np.nan for metric in selected_metrics}

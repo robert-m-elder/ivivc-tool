@@ -15,9 +15,22 @@ approaches = {
 # Get the directory of the current file
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
-def generic_fit_model(model_function, x, y, p0=None, kwargs={}):
+def generic_fit_model(model_function, x, y, p0=None, kwargs=None, *, sigma=None, absolute_sigma=False):
+    """Fit a registered model without mutating its optimizer configuration."""
+    fit_kwargs = dict(kwargs or {})
+    if sigma is not None:
+        if 'sigma' in fit_kwargs:
+            raise ValueError('Supply sigma either explicitly or in kwargs, not both.')
+        if 'absolute_sigma' in fit_kwargs and fit_kwargs['absolute_sigma'] != absolute_sigma:
+            raise ValueError('Conflicting absolute_sigma values in explicit arguments and kwargs.')
+        fit_kwargs['sigma'] = sigma
+        fit_kwargs['absolute_sigma'] = absolute_sigma
+    elif absolute_sigma:
+        if 'absolute_sigma' in fit_kwargs and fit_kwargs['absolute_sigma'] != absolute_sigma:
+            raise ValueError('Conflicting absolute_sigma values in explicit arguments and kwargs.')
+        fit_kwargs['absolute_sigma'] = absolute_sigma
     param_names = list(inspect.signature(model_function).parameters.keys())[1:]
-    popt, pcov = curve_fit(model_function, x, y, p0, **kwargs)
+    popt, pcov = curve_fit(model_function, x, y, p0, **fit_kwargs)
     
     return {
         'params': dict(zip(param_names, popt)),
@@ -51,7 +64,7 @@ for filename in os.listdir(current_dir):
                 models[module_name].update({'fit_kwargs':module.fit_kwargs})
             else:
                 models[module_name].update({'fit_kwargs':{}})
-            fit_model = lambda x, y, p0=None, model_function=module.model_function, kwargs=models[module_name]['fit_kwargs']: generic_fit_model(model_function, x, y, p0, kwargs)
+            fit_model = lambda x, y, p0=None, model_function=module.model_function, kwargs=models[module_name]['fit_kwargs'], *, sigma=None, absolute_sigma=False: generic_fit_model(model_function, x, y, p0, kwargs, sigma=sigma, absolute_sigma=absolute_sigma)
             models[module_name].update({'fit_model': fit_model})
 
             # Assign models to approaches

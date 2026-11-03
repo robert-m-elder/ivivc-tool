@@ -16,6 +16,7 @@ from utilities.evaluation import (
 )
 
 from .registry import get_model_spec
+from .observations import ObservationUncertainty, resolve_observation_uncertainty
 from .types import ProfileFit
 
 
@@ -61,6 +62,7 @@ def fit_profile(
     approach_id: str | None = None,
     calculate_tau: bool = False,
     config_defaults: Mapping[str, object] | None = None,
+    observation_uncertainty: ObservationUncertainty | None = None,
 ) -> ProfileFit:
     """Fit one response-versus-time profile using the current IVIVC machinery.
 
@@ -71,6 +73,17 @@ def fit_profile(
     Missing-value handling mirrors the existing app: paired rows containing a
     NaN in either the time or response are removed, while other nonfinite values
     continue to reach the fitting routines and are handled as before.
+
+    Supplied uncertainty is absolute SD for individuals or SEM for means, on
+    the same response scale as these arrays. It controls initialization, CV
+    training fits, and the final fit. No residual rescaling is applied to its
+    covariance. The optional approach identifier must be absent or Approach 2
+    when uncertainty is supplied. High-level preprocessing and app integration
+    are separate operations; this function does not transform uncertainty.
+
+    Descriptive metrics retain their existing unweighted definitions. The
+    legacy RSS-based information criteria are withheld for weighted fits until
+    a likelihood-consistent implementation is available.
     """
     config = _resolved_config(analysis_config, config_defaults)
     spec = get_model_spec(model_name)
@@ -82,7 +95,19 @@ def fit_profile(
     if len(x) != len(y):
         raise ValueError('Profile time and response arrays must have the same length.')
 
+    if observation_uncertainty is not None and approach_id not in (None, 'approach2'):
+        raise ValueError('Supplied experimental uncertainty is supported only for Approach 2 profile fitting.')
+
     mask = ~np.isnan(x) & ~np.isnan(y)
+    resolved_uncertainty = resolve_observation_uncertainty(
+        observation_uncertainty, len(y), row_mask=mask,
+    )
+    weighted = resolved_uncertainty is not None
+    sigma = None if resolved_uncertainty is None else resolved_uncertainty.sigma
+    unavailable_metrics = [
+        metric for metric in selected_metrics
+        if weighted and metric in ('aic', 'aicc', 'bic')
+    ]
     x = x[mask]
     y = y[mask]
 
@@ -101,6 +126,12 @@ def fit_profile(
     if spec.initial_guess is not None:
         initial_points = spec.initial_guess(x, y)
 
+    # Keep the no-uncertainty call contract unchanged for existing adapters.
+    search_options = {} if not weighted else {'sigma': sigma}
+    fit_options = {} if not weighted else {'sigma': sigma, 'absolute_sigma': True}
+    if weighted and any(key in spec.fit_kwargs for key in ('sigma', 'absolute_sigma')):
+        raise ValueError('Registered fit options must not override the supplied observation uncertainty.')
+
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', category=RuntimeWarning)
         p0 = auto_grid_search(
@@ -113,6 +144,7 @@ def fit_profile(
             num_cores=grid_search_num_cores,
             random_state=grid_search_random_state,
             initial_points=initial_points,
+            **search_options,
         )
 
     cv_output, cv_diagnostics = cross_validation_curve_fit(
@@ -125,26 +157,50 @@ def fit_profile(
         kwargs=spec.fit_kwargs,
         return_fit_params=include_cv_fit_variability,
         return_diagnostics=True,
+        **fit_options,
     )
     if include_cv_fit_variability:
         cv_scores, cv_parameter_sets = cv_output
     else:
         cv_scores, cv_parameter_sets = cv_output, []
     cv_means = {
-        metric: _finite_cv_mean(values)
+        metric: np.nan if metric in unavailable_metrics else _finite_cv_mean(values)
         for metric, values in cv_scores.items()
     }
 
-    model_result = spec.fit_function(x, y, p0=p0)
+    model_result = spec.fit_function(x, y, p0=p0, **fit_options)
     fitted_values = np.asarray(model_result['predict'](x))
     parameters = dict(model_result['params'])
     covariance = np.asarray(model_result['pcov'])
     residuals = y - fitted_values
 
     fit_metrics = {
-        metric: calculate_metric(metric, y, fitted_values, len(p0))
+        metric: np.nan if metric in unavailable_metrics else calculate_metric(metric, y, fitted_values, len(p0))
         for metric in selected_metrics
     }
+
+    fit_diagnostics = {
+        'objective': 'weighted_least_squares' if weighted else 'unweighted_least_squares',
+        'covariance_scaling': 'absolute' if weighted else 'residual_scaled',
+        'absolute_sigma': weighted,
+        'covariance_finite': bool(np.all(np.isfinite(covariance))),
+        'n_observations': int(len(y)),
+        'n_parameters': len(parameters),
+        'metric_weighting': 'unweighted',
+        'unavailable_metrics': unavailable_metrics,
+    }
+    if weighted:
+        with np.errstate(over='ignore', divide='ignore', invalid='ignore'):
+            chi_squared = float(np.sum((residuals / sigma) ** 2))
+        fit_diagnostics.update({
+            'chi_squared': chi_squared,
+            'reduced_chi_squared': chi_squared / (len(y) - len(parameters))
+            if len(y) > len(parameters) else np.nan,
+            'information_criteria_note': (
+                'AIC, AICc, and BIC are unavailable for supplied-uncertainty fits '
+                'until likelihood-aware information criteria are implemented.'
+            ),
+        })
 
     tau_estimate = None
     tau_sd = None
@@ -177,4 +233,6 @@ def fit_profile(
         tau_estimate=tau_estimate,
         tau_sd=tau_sd,
         tau_diagnostics=tau_diagnostics,
+        observation_uncertainty=resolved_uncertainty,
+        fit_diagnostics=fit_diagnostics,
     )

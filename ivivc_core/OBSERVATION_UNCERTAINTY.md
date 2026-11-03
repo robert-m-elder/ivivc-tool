@@ -1,4 +1,4 @@
-# Supplied observation uncertainty (foundation only)
+# Supplied observation uncertainty and profile fitting
 
 `ObservationUncertainty` represents the absolute standard uncertainty of each
 entered response, in that response's units. For individual measurements, supply
@@ -55,9 +55,70 @@ objects can be subset again with `.subset(keep)`. Arrays are defensive read-only
 copies, and `.to_metadata()` returns a separate JSON-compatible record of the
 resolved values, interpretation, provenance, units, and assumptions.
 
-This first patch only defines and validates the shared representation. It does
-not attach uncertainty to `TimeCourse`, change fitting/prediction behavior,
-estimate residual uncertainty, or add browser/CLI controls. Subsequent patches
-will explicitly connect it to Approach 2 fitting and prediction; existing
-Approaches 1 and 3 remain unchanged. Keeping the types in `observations.py`
-also avoids modifying the design branch's parameter-sampling extensions.
+## Standalone weighted profile fitting
+
+`fit_profile` accepts optional `observation_uncertainty` on the same analyzed
+response scale as the supplied time/response arrays:
+
+```python
+from ivivc_core import ObservationUncertainty, fit_profile
+
+fit = fit_profile(
+    [0.0, 1.0, 2.0, 3.0, 4.0],
+    [1.0, 0.83, 0.66, 0.57, 0.45],
+    model_name="exponential_normalized",
+    selected_metrics=["rmse"],
+    approach_id="approach2",
+    analysis_config={"cv_scheme": "none", "grid_search_num_cores": 1},
+    observation_uncertainty=ObservationUncertainty(
+        [0.03, 0.04, 0.03, 0.06, 0.08], response_kind="mean",
+    ),
+)
+
+sigma = fit.observation_uncertainty.sigma
+method = fit.fit_diagnostics["covariance_scaling"]  # "absolute"
+```
+
+The supplied uncertainties control the starting-value search, each CV training
+fit, and the final fit through the sum of squared standardized residuals,
+`sum(((response - fitted_response) / sigma)**2)`. Final and CV fits use
+`absolute_sigma=True`; the supplied error scale is not estimated again from
+residual scatter. A perfect fit therefore need not have zero parameter
+covariance. Multiplying every supplied SD/SEM by a common factor leaves the
+objective's minimizer unchanged while scaling covariance by that factor squared.
+The covariance remains a local approximation around the fitted parameters.
+
+Time/response NaN rows are removed with the same explicit mask applied to
+original-row-aligned uncertainties and optional counts. Supplied SEMs are not
+divided by counts again. Uncertainty omitted as `None` preserves the existing
+unweighted fitting and residual-scaled covariance behavior. Model optimizer
+settings, including bounds, are preserved without modifying registry options.
+
+`ProfileFit` retains the resolved uncertainty and `fit_diagnostics`, including
+the objective, covariance convention, finite-covariance flag, retained observation
+and parameter counts, and (for weighted fits) chi-squared and reduced chi-squared.
+Reduced chi-squared is diagnostic only; it never rescales absolute covariance.
+The retained observation count, not the sum of replicate counts, determines the
+reported residual degrees of freedom.
+
+RMSE, R-squared, and other descriptive metrics retain their existing unweighted
+definitions. AIC/AICc/BIC are returned as NaN for supplied-uncertainty fits and CV
+scores until likelihood-aware evidence is implemented. The reason is retained in
+`fit_diagnostics`; the legacy unweighted-RSS formulas must not be presented as
+evidence for the weighted statistical model.
+
+Low-level `auto_grid_search` accepts optional scalar/pointwise `sigma`.
+`cross_validation_curve_fit` accepts `sigma` and `absolute_sigma`, validates
+uncertainty before splitting (including when CV is disabled), and subsets it to
+each training fold. Existing fold construction and full-data starting vectors are
+unchanged; training-only initialization and rebuilding data-dependent preprocessing
+inside CV are later validation work. Low-level helper metrics remain descriptive.
+
+This patch does not attach uncertainty to `TimeCourse`, transform it, or expose
+it through `fit_time_course`, `fit_ivivc`, browser, or CLI inputs. Later patches
+will perform that integration. Callers of the standalone fitter must already
+supply time, response, and uncertainty on the same analyzed scale; uncertainty
+in normalization or transformation parameters is not handled here. Supplied
+uncertainty is rejected with explicit `approach_id="approach1"` or `"approach3"`;
+the generic standalone fitter also accepts `approach_id=None`. Existing Approach 1
+and 3 application calculations and prediction displays remain unchanged.
