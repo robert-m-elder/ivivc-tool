@@ -332,26 +332,19 @@ def test_mixed_pair_normalizes_supplied_errors_only_where_they_are_present(norma
 
 @pytest.mark.parametrize('method,options', [
     ('predict_time_mapping', {'model_name': 'linear_zero_intercept', 'parameters': {'a': 1.0}}),
-    ('predict_value_ratio', {'model_name': 'exponential', 'in_vitro_parameters': {}, 'in_vivo_parameters': {}}),
-    ('predict_value_ratio_with_uncertainty', {'model_name': 'exponential', 'in_vitro_parameters': {},
-                                            'in_vivo_parameters': {}, 'in_vitro_covariance': None,
-                                            'in_vivo_covariance': None}),
-    ('predict_tau_ratio', {'model_name': 'exponential', 'tau_values': None}),
-    ('predict_inverse_response', {'model_name': 'exponential', 'parameters': {}, 'covariance': None,
-                                 'residuals': None, 'calibration_time_range': (0.0, 1.0)}),
     ('predict_direct_value_scaling', {'time_grid': [], 'in_vitro_response_on_time_grid': [],
                                     'in_vivo_response_on_time_grid': []}),
     ('predict_direct_time_scaling', {'response_grid': [], 'in_vitro_time_at_response': [],
                                    'in_vivo_time_at_response': []}),
 ])
-def test_prediction_entry_points_reject_attached_uncertainty_until_propagation_is_implemented(method, options):
+def test_approach1_and_3_prediction_entry_points_reject_attached_uncertainty(method, options):
     from ivivc_core import predictions
     course, _ = prepare_time_course([0.0, 1.0], [1.0, 0.5], observation_uncertainty=_sem(0.05))
     with pytest.raises(ValueError, match='prediction-response uncertainty'):
         getattr(predictions, method)(course, **options)
 
 
-def test_high_level_apis_accept_approach2_calibration_but_reject_prediction_input_uncertainty(fast_analysis_config):
+def test_high_level_apis_accept_approach2_calibration_and_prediction_input_uncertainty(fast_analysis_config):
     from ivivc_core import fit_ivivc, generate_trajectory_ensembles, predict_in_vivo
 
     prepared = prepare_data(
@@ -368,23 +361,20 @@ def test_high_level_apis_accept_approach2_calibration_but_reject_prediction_inpu
         [0.0, 1.0], [1.0, 0.5], observation_uncertainty=_sem(0.05),
     )
     for operation in (predict_in_vivo, generate_trajectory_ensembles):
-        with pytest.raises(ValueError, match='prediction-response uncertainty'):
-            operation(None, prediction)
+        batch = operation(analysis, prediction, methods={'approach2': ('value_ratio',)}, n_samples=12)
+        assert batch.errors == {}
+        output = batch['approach2:exponential_normalized:value_ratio']
+        if operation is generate_trajectory_ensembles:
+            assert output.metadata['prediction_input_uncertainty_propagated'] is True
+            output = output.central
+        assert output.auxiliary['prediction_input_uncertainty_propagated'] is True
 
 
 @pytest.mark.parametrize('method,options', [
     ('sample_time_mapping_trajectories', {'model_name': 'linear_zero_intercept',
                                         'parameters': {'a': 1.0}, 'covariance': None}),
-    ('sample_value_ratio_trajectories', {'model_name': 'exponential',
-                                       'in_vitro_parameters': {}, 'in_vivo_parameters': {},
-                                       'in_vitro_covariance': None, 'in_vivo_covariance': None}),
-    ('sample_tau_ratio_trajectories', {'model_name': 'exponential',
-                                     'in_vitro_parameters': {}, 'in_vivo_parameters': {},
-                                     'in_vitro_covariance': None, 'in_vivo_covariance': None}),
-    ('sample_inverse_response_trajectories', {'model_name': 'exponential', 'parameters': {},
-                                            'covariance': None, 'calibration_time_range': (0.0, 1.0)}),
 ])
-def test_trajectory_samplers_reject_attached_uncertainty_before_sampling(method, options):
+def test_approach1_trajectory_sampler_rejects_attached_uncertainty_before_sampling(method, options):
     from ivivc_core import uncertainty
 
     course, _ = prepare_time_course([0.0, 1.0], [1.0, 0.5], observation_uncertainty=_sem(0.05))

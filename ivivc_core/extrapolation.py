@@ -112,9 +112,14 @@ def annotate_prediction_domain(
                         'See the prediction data for ranges and reasons. Model-based intervals do not establish reliability outside calibration.'),
         })
     if n_intervals:
+        interval_label = (
+            'propagated-uncertainty'
+            if trajectory.auxiliary.get('interval_kind') == 'parameter_and_input_uncertainty'
+            else 'parameter-uncertainty'
+        )
         warnings.append({
             'label': 'Interval extends beyond calibration',
-            'message': (f'{n_intervals} parameter-uncertainty intervals extend beyond calibration although '
+            'message': (f'{n_intervals} {interval_label} intervals extend beyond calibration although '
                         'their central points are within the checked ranges.'),
         })
     trajectory.auxiliary.update({

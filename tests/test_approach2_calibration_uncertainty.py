@@ -421,12 +421,19 @@ def test_legacy_predictions_do_not_gain_weighted_calibration_metadata(fast_analy
     assert 'calibration_uncertainty' not in ensemble.metadata
 
 
-def test_prediction_input_uncertainty_remains_guarded_after_calibration_integration(fast_analysis_config):
+def test_prediction_input_uncertainty_is_propagated_after_calibration_integration(fast_analysis_config):
     analysis = _analysis(fast_analysis_config)
     prediction = _prediction()
     prediction.observation_uncertainty = resolve_observation_uncertainty(
         ObservationUncertainty(0.02, response_kind='mean'), len(prediction.time),
     )
     for operation in (predict_in_vivo, generate_trajectory_ensembles):
-        with pytest.raises(ValueError, match='prediction-response uncertainty'):
-            operation(analysis, prediction, methods={'approach2': ('value_ratio',)})
+        batch = operation(analysis, prediction, methods={'approach2': ('value_ratio',)}, n_samples=12)
+        assert batch.errors == {}
+        output = batch[SELECTION + ':value_ratio']
+        if operation is generate_trajectory_ensembles:
+            assert output.metadata['prediction_input_uncertainty_propagated'] is True
+            output = output.central
+        assert output.auxiliary['prediction_input_uncertainty_propagated'] is True
+        assert output.auxiliary['prediction_inputs_fixed'] is False
+        assert output.auxiliary['calibration_uncertainty']['in_vitro']['covariance_scaling'] == 'absolute'

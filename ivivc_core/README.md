@@ -26,9 +26,10 @@ same analyzed scale. The public API does not silently apply or reverse
 normalization, scaling, or interpolation.
 
 The experimental-uncertainty representation, preprocessing transport, weighted
-Approach 2 calibration, and fitted uncertainty summaries are documented in
-[Supplied observation uncertainty](OBSERVATION_UNCERTAINTY.md). Prediction inputs
-remain fixed; their uncertainty and browser/CLI controls are later steps.
+Approach 2 calibration, fitted uncertainty summaries, and prediction-input
+propagation are documented in
+[Supplied observation uncertainty](OBSERVATION_UNCERTAINTY.md). Browser/CLI input
+controls remain a later step.
 
 Preprocessing accepts `one_minus` to apply `1 - response` after the selected
 normalizations and before logarithmic scaling or interpolation. It applies to
@@ -137,9 +138,11 @@ one-draw ensemble.
 `value_lower`/`value_upper` and per-point diagnostics in `auxiliary`. It samples
 the two parameter vectors independently from their fitted normal covariance
 approximations and takes pointwise percentiles of **input response times ratio**.
-Input times and responses are fixed; no residual or observation noise is added.
+Input times are fixed. Optional supplied response SD/SEM contributes independent
+normal input draws once per original row. No residual or future-observation
+noise is added.
 The center is the fitted-parameter prediction, not the Monte Carlo mean. These
-are approximate parameter-uncertainty intervals, not future-observation
+are approximate propagated-uncertainty intervals, not future-observation
 prediction intervals or simultaneous bands. Model choice, preprocessing, and
 transferability of the fitted relationship are not included.
 
@@ -155,6 +158,14 @@ errors are retained, rather than silently conditioning on valid draws.
 The ratio ensemble preserves partially finite rows for these pointwise checks.
 Its `valid_draws` mask still identifies **complete** finite trajectories for
 study-design callers; observation-noise simulation remains separate.
+
+Approach 2 time-constant scaling carries input-response uncertainty on the
+response axis; its time intervals still depend only on calibration. Inverse
+mapping uses the same sampled response for its mapped time and response value.
+Both methods report input-only response-axis bounds analytically from the
+supplied normal SD/SEM. Prediction measurements must be independent of the
+calibration measurements. Approach 1 and 3 reject supplied input errors per
+selected method, retaining successful Approach 2 results in mixed batches.
 
 ## Error handling
 
@@ -193,7 +204,8 @@ the shared percentile convention below.
 `ivivc_core.intervals.curve_parameter_intervals` and `parameter_interval_summary`
 provide pointwise equal-tailed bounds and diagnostics. App fitting plots and
 parametric predictions use 1,000 covariance-aware normal parameter draws, seed
-12345, and no added residual/measurement noise. Separate fits are sampled
+12345, and no added residual/future-measurement noise. Supplied prediction-input
+SD/SEM is propagated separately as described above. Separate fits are sampled
 independently. The center remains the fitted-parameter calculation; percentile
 bounds can exclude it and are never moved to fit error-bar geometry.
 

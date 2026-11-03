@@ -18,8 +18,8 @@ from numpy.typing import ArrayLike
 from .extrapolation import annotate_prediction_domain
 from .fitting import fit_profile
 from .observations import ObservationUncertainty, ResolvedObservationUncertainty
+from .prediction_inputs import prediction_uncertainty
 from .predictions import (
-    _require_fixed_prediction_input,
     predict_direct_time_scaling,
     predict_direct_value_scaling,
     predict_inverse_response,
@@ -341,7 +341,7 @@ def _tau_uncertain_value(fit: ProfileFit):
 
 
 def _calibration_uncertainty_metadata(
-    analysis: IVIVCAnalysis, model_fit: IVIVCModelFit,
+    analysis: IVIVCAnalysis, model_fit: IVIVCModelFit, prediction: TimeCourse | None = None,
 ) -> dict[str, Any]:
     """Describe supplied calibration precision without adding another noise layer.
 
@@ -364,7 +364,7 @@ def _calibration_uncertainty_metadata(
         }
     metadata = {
         'calibration_uncertainty': sources,
-        'prediction_inputs_fixed': True,
+        'prediction_inputs_fixed': prediction_uncertainty(prediction) is None,
         'future_observation_variability_included': False,
     }
     normalizations = []
@@ -384,6 +384,19 @@ def _calibration_uncertainty_metadata(
     return metadata
 
 
+def _validate_prediction_measurements(analysis: IVIVCAnalysis, prediction: TimeCourse) -> None:
+    """Validate input errors and reject known reuse of calibration measurements."""
+    if prediction_uncertainty(prediction) is None:
+        return
+    prepared = analysis.prepared_data
+    if prediction is prepared.in_vitro or prediction is prepared.in_vivo:
+        raise ValueError(
+            'Prediction measurements with supplied uncertainty must be independent '
+            'of calibration measurements. Reusing the same calibration time course '
+            'requires joint error propagation, which is not supported.'
+        )
+
+
 def predict_in_vivo(
     analysis: IVIVCAnalysis,
     prediction: TimeCourse,
@@ -399,11 +412,11 @@ def predict_in_vivo(
     The prediction time course must already be on the same preprocessed scale as
     ``analysis.prepared_data``.  Use ``methods`` to restrict the default method
     set; for example ``{'approach2': ('value_ratio', 'tau_ratio')}``.
-    All parametric methods propagate fitted-parameter uncertainty only, with
-    fixed prediction inputs, pointwise percentile bounds, and a reproducible
-    default uncertainty seed independent of CV and initialization seeds.
+    Approach 2 also propagates supplied prediction-response SD/SEM, assuming
+    independent prediction and calibration measurements. Input times remain
+    fixed. Future in vivo observation variability is not added.
     """
-    _require_fixed_prediction_input(prediction)
+    _validate_prediction_measurements(analysis, prediction)
     selected_methods = _resolved_prediction_methods(methods)
     trajectories: dict[str, PredictedTrajectory] = {}
     errors: dict[str, AnalysisError] = {}
@@ -510,7 +523,7 @@ def predict_in_vivo(
                     paired_in_vitro_time=mapping.time if mapping is not None else None,
                     paired_in_vivo_time=mapping.response if mapping is not None else None,
                 )
-                trajectory.auxiliary.update(_calibration_uncertainty_metadata(analysis, model_fit))
+                trajectory.auxiliary.update(_calibration_uncertainty_metadata(analysis, model_fit, prediction))
                 trajectories[key] = trajectory
             except Exception as exception:
                 _record_failure(
@@ -538,7 +551,7 @@ def generate_trajectory_ensembles(
     prediction grid. Approach 3 has no fitted covariance and is therefore
     returned as a deterministic one-draw ensemble when requested.
     """
-    _require_fixed_prediction_input(prediction)
+    _validate_prediction_measurements(analysis, prediction)
     n_samples = int(n_samples)
     if n_samples < 1:
         raise ValueError('n_samples must be at least one.')
@@ -654,8 +667,8 @@ def generate_trajectory_ensembles(
                 paired_in_vitro_time=mapping.time if mapping is not None else None,
                 paired_in_vivo_time=mapping.response if mapping is not None else None,
             )
-            ensemble.metadata.update(_calibration_uncertainty_metadata(analysis, model_fit))
-            ensemble.central.auxiliary.update(_calibration_uncertainty_metadata(analysis, model_fit))
+            ensemble.metadata.update(_calibration_uncertainty_metadata(analysis, model_fit, prediction))
+            ensemble.central.auxiliary.update(_calibration_uncertainty_metadata(analysis, model_fit, prediction))
             ensembles[key] = ensemble
         except Exception as exception:
             _record_failure(
