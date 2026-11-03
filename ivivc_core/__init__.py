@@ -8,6 +8,11 @@ from .api import (
     predict_in_vivo,
 )
 from .fitting import fit_profile
+from .observations import (
+    ObservationUncertainty,
+    ResolvedObservationUncertainty,
+    resolve_observation_uncertainty,
+)
 from .predictions import (
     inverse_response_prediction_intervals,
     inverse_response_times,
@@ -69,6 +74,8 @@ __all__ = [
     'IntervalSummary',
     'ModelSpec',
     'NormalizationRecord',
+    'ObservationUncertainty',
+    'ResolvedObservationUncertainty',
     'ParameterSamples',
     'PreparedIVIVCData',
     'PredictedTrajectory',
@@ -100,6 +107,7 @@ __all__ = [
     'prepare_data',
     'prepare_ivivc_data',
     'prepare_time_course',
+    'resolve_observation_uncertainty',
     'sample_inverse_response_trajectories',
     'sample_parameter_sets',
     'sample_profile_trajectory',
