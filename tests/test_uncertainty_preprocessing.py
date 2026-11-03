@@ -115,7 +115,7 @@ def test_log_time_changes_time_without_changing_response_uncertainty():
     assert metadata.applied_scalings == ('log_x',)
 
 
-@pytest.mark.parametrize('normalization', ['initial_value', 'min_max', 'custom_normalization'])
+@pytest.mark.parametrize('normalization', ['custom_normalization'])
 @pytest.mark.parametrize('fallback', [False, True])
 def test_unsupported_response_normalization_is_rejected_with_supplied_uncertainty(
     normalization, fallback,
@@ -316,12 +316,18 @@ def test_preprocessing_does_not_fill_or_drop_invalid_retained_uncertainty(sigma)
 
 
 @pytest.mark.parametrize('normalization', ['initial_value', 'min_max'])
-def test_mixed_pair_cannot_normalize_supplied_errors_on_only_one_side(normalization):
-    with pytest.raises(ValueError):
-        prepare_data(
-            [0.0, 1.0], [1.0, 0.5], [0.0, 2.0], [1.0, 0.5],
-            selected_normalizations=[normalization], in_vivo_uncertainty=_sem(0.05),
-        )
+def test_mixed_pair_normalizes_supplied_errors_only_where_they_are_present(normalization):
+    prepared = prepare_data(
+        [0.0, 1.0], [10.0, 5.0], [0.0, 2.0], [20.0, 10.0],
+        selected_normalizations=[normalization], in_vivo_uncertainty=_sem(1.0),
+    )
+
+    assert prepared.in_vitro.observation_uncertainty is None
+    divisor = 20.0 if normalization == 'initial_value' else 10.0
+    np.testing.assert_allclose(prepared.in_vivo.observation_uncertainty.sigma, [1.0 / divisor] * 2)
+    record = prepared.preprocessing.normalizations[0]
+    assert record.in_vitro_parameters['constants_treated_as_fixed'] is True
+    assert record.in_vivo_parameters['constants_treated_as_fixed'] is True
 
 
 @pytest.mark.parametrize('method,options', [
