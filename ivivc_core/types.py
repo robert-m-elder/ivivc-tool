@@ -13,6 +13,8 @@ from typing import Any, Generic, Iterator, Mapping, TypeVar
 
 import numpy as np
 
+from .observations import ResolvedObservationUncertainty
+
 
 @dataclass
 class TimeCourse:
@@ -166,6 +168,8 @@ class ProfileFit:
     tau_estimate: float | None = None
     tau_sd: float | None = None
     tau_diagnostics: Mapping[str, Any] = field(default_factory=dict)
+    observation_uncertainty: ResolvedObservationUncertainty | None = None
+    fit_diagnostics: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.time = np.asarray(self.time).copy()
@@ -184,6 +188,12 @@ class ProfileFit:
         self.cv_means = dict(self.cv_means)
         self.cv_diagnostics = dict(self.cv_diagnostics)
         self.tau_diagnostics = dict(self.tau_diagnostics)
+        self.fit_diagnostics = dict(self.fit_diagnostics)
+        if self.observation_uncertainty is not None:
+            if not isinstance(self.observation_uncertainty, ResolvedObservationUncertainty):
+                raise TypeError('ProfileFit observation_uncertainty must be resolved or None.')
+            if self.observation_uncertainty.n_observations != len(self.response):
+                raise ValueError('ProfileFit uncertainty must align with the fitted responses.')
         self.cv_parameter_sets = [
             None if values is None else np.asarray(values).copy()
             for values in self.cv_parameter_sets
