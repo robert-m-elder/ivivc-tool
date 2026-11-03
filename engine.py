@@ -5,7 +5,7 @@ from html import escape
 from uuid import uuid4
 
 import numpy as np
-from ivivc_core.intervals import curve_parameter_intervals
+from ivivc_core.intervals import curve_parameter_intervals, profile_parameter_intervals
 from ivivc_core.extrapolation import annotate_prediction_domain
 from utilities.prediction_validity import tau_estimate_is_available, tau_uncertainty_is_available
 import pandas as pd
@@ -32,6 +32,7 @@ from ivivc_core.preprocessing import prepare_data
 from ivivc_core.types import TimeCourse
 from utilities.misc import hex_to_rgba
 from utilities.parameter_diagnostics import (
+    _diagnostic_unavailable as _parameter_diagnostics_unavailable,
     build_parameter_diagnostics_html,
     extract_parameter_diagnostic_badges_html,
 )
@@ -431,12 +432,20 @@ def preprocess_data(t1, m1, t2, m2, selected_interpolation=None, selected_scalin
 def _profile_fit_to_legacy_components(profile_fit, *, include_tau=False):
     """Convert a numerical ``ProfileFit`` into current app-facing components."""
     parameter_values = profile_fit.parameter_vector
-    uncertain_parameters = unc.correlated_values(parameter_values, profile_fit.covariance)
-    uncertain_parameters = dict(zip(profile_fit.parameter_names, uncertain_parameters))
-    parameter_ci_multiplier = _ci_multiplier_95(
-        len(profile_fit.response),
-        profile_fit.n_parameters,
+    parameter_summary = profile_parameter_intervals(profile_fit)
+    weighted_invalid_covariance = (
+        profile_fit.observation_uncertainty is not None
+        and parameter_summary['covariance_status'] != 'available'
     )
+    if weighted_invalid_covariance:
+        uncertain_parameters = {
+            name: unc.ufloat(value, np.nan)
+            for name, value in zip(profile_fit.parameter_names, parameter_values)
+        }
+    else:
+        uncertain_parameters = unc.correlated_values(parameter_values, profile_fit.covariance)
+        uncertain_parameters = dict(zip(profile_fit.parameter_names, uncertain_parameters))
+    parameter_ci_multiplier = parameter_summary['multiplier']
     parameter_intervals = _interval_rows_from_uparams(
         uncertain_parameters,
         parameter_ci_multiplier,
@@ -478,9 +487,13 @@ def _profile_fit_to_legacy_components(profile_fit, *, include_tau=False):
             'n_params': int(profile_fit.n_parameters),
         },
         'stats_table': stats_table,
-        'parameter_diagnostics_html': build_parameter_diagnostics_html(
-            profile_fit.parameters,
-            profile_fit.covariance,
+        'parameter_diagnostics_html': (
+            _parameter_diagnostics_unavailable(
+                'Parameter-uncertainty diagnostics are unavailable because the fitted '
+                'covariance is not a valid joint uncertainty matrix.'
+            ) if weighted_invalid_covariance else build_parameter_diagnostics_html(
+                profile_fit.parameters, profile_fit.covariance,
+            )
         ),
         'cv_diagnostics': dict(profile_fit.cv_diagnostics),
         'cv_comparison': {
@@ -507,6 +520,24 @@ def _profile_fit_to_legacy_components(profile_fit, *, include_tau=False):
             'ci_multiplier_95': float(parameter_ci_multiplier),
         },
     }
+
+    if profile_fit.observation_uncertainty is not None:
+        # RSS-based evidence does not describe the supplied-variance likelihood.
+        # Keep its legacy shape, but prevent downstream criteria reconstruction.
+        components['evidence_data']['rss'] = np.nan
+        components['fit_metadata'].update({
+            'parameter_interval_method': parameter_summary['method'],
+            'parameter_interval_distribution': parameter_summary['distribution'],
+            'parameter_interval_degrees_of_freedom': parameter_summary['degrees_of_freedom'],
+            'covariance_scaling': parameter_summary['covariance_scaling'],
+            'uncertainty_scale_source': parameter_summary['scale_source'],
+            'parameter_interval_covariance_status': parameter_summary['covariance_status'],
+            'information_criteria_available': False,
+            'information_criteria_note': profile_fit.fit_diagnostics.get(
+                'information_criteria_note',
+                'Likelihood-aware information criteria are not available for supplied-uncertainty fits.',
+            ),
+        })
 
     if include_tau:
         tau = unc.ufloat(

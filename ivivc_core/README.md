@@ -25,10 +25,10 @@ All arrays passed to fitting and prediction functions are assumed to be on the
 same analyzed scale. The public API does not silently apply or reverse
 normalization, scaling, or interpolation.
 
-The experimental-uncertainty representation, preprocessing transport, and
-standalone weighted profile fitting are documented in
-[Supplied observation uncertainty](OBSERVATION_UNCERTAINTY.md). High-level fitting,
-prediction, browser, and CLI integration remain separate steps.
+The experimental-uncertainty representation, preprocessing transport, weighted
+Approach 2 calibration, and fitted uncertainty summaries are documented in
+[Supplied observation uncertainty](OBSERVATION_UNCERTAINTY.md). Prediction inputs
+remain fixed; their uncertainty and browser/CLI controls are later steps.
 
 Preprocessing accepts `one_minus` to apply `1 - response` after the selected
 normalizations and before logarithmic scaling or interpolation. It applies to

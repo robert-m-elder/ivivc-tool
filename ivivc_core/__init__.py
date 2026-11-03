@@ -8,6 +8,7 @@ from .api import (
     predict_in_vivo,
 )
 from .fitting import fit_profile
+from .intervals import profile_curve_intervals, profile_parameter_intervals
 from .observations import (
     ObservationUncertainty,
     ResolvedObservationUncertainty,
@@ -91,6 +92,8 @@ __all__ = [
     'fit_ivivc',
     'fit_time_course',
     'fit_profile',
+    'profile_curve_intervals',
+    'profile_parameter_intervals',
     'generate_trajectory_ensembles',
     'predict_in_vivo',
     'get_approach_spec',

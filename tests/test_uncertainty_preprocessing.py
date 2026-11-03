@@ -351,15 +351,19 @@ def test_prediction_entry_points_reject_attached_uncertainty_until_propagation_i
         getattr(predictions, method)(course, **options)
 
 
-def test_high_level_apis_reject_attached_uncertainty_before_dispatch():
+def test_high_level_apis_accept_approach2_calibration_but_reject_prediction_input_uncertainty(fast_analysis_config):
     from ivivc_core import fit_ivivc, generate_trajectory_ensembles, predict_in_vivo
 
     prepared = prepare_data(
-        [0.0, 1.0], [1.0, 0.5], [0.0, 2.0], [1.0, 0.5],
+        [0.0, 1.0, 2.0], [1.0, 0.7, 0.5], [0.0, 2.0, 4.0], [1.0, 0.7, 0.5],
         in_vitro_uncertainty=_sem(0.05),
     )
-    with pytest.raises(ValueError, match='supplied source-profile uncertainty'):
-        fit_ivivc(prepared, selections=['approach2:exponential'], selected_metrics=['rmse'])
+    analysis = fit_ivivc(
+        prepared, selections=['approach1:linear', 'approach2:exponential_normalized', 'approach3'],
+        selected_metrics=['rmse'], analysis_config=fast_analysis_config,
+    )
+    assert analysis.successful_keys == ('approach2:exponential_normalized',)
+    assert analysis.failed_keys == ('approach1:linear', 'approach3')
     prediction, _ = prepare_time_course(
         [0.0, 1.0], [1.0, 0.5], observation_uncertainty=_sem(0.05),
     )

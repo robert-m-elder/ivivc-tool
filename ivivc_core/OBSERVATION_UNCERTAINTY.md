@@ -238,10 +238,104 @@ does not create new independent observations or interpolate error bars.
 Legacy positional-array and legacy-metadata adapters reject these objects rather
 than drop their uncertainty. Existing no-uncertainty adapter shapes are unchanged.
 
-`fit_ivivc` rejects supplied source uncertainty until Approach 2 integration is
-implemented; use the standalone source-profile fitter above in the meantime.
+`fit_time_course` accepts optional supplied or resolved `observation_uncertainty`
+for a batch of source-profile fits. The same-scale, missing-row, and absolute-error
+rules used by `fit_profile` apply to every candidate model. Successful models and
+independent model errors retain the existing `ResultBatch` behavior.
+
+`fit_ivivc` consumes each prepared source profile's uncertainty independently for
+Approach 2. One profile may use supplied absolute errors while the other uses
+the existing residual-scaled fit. Uncertainty retained in provenance but missing
+from the processed source profile is an error, not permission to fit unweighted.
+
+```python
+from ivivc_core import (
+    ObservationUncertainty, fit_ivivc, prepare_data,
+    profile_curve_intervals, profile_parameter_intervals,
+)
+
+prepared = prepare_data(
+    [0.0, 1.0, 2.0, 3.0], [1.0, 0.82, 0.67, 0.55],
+    [0.0, 2.0, 4.0, 6.0], [1.0, 0.81, 0.68, 0.54],
+    in_vitro_uncertainty=ObservationUncertainty(0.03, response_kind="mean"),
+    in_vivo_uncertainty=ObservationUncertainty(0.05, response_kind="mean"),
+)
+analysis = fit_ivivc(
+    prepared, selections=["approach2:exponential_normalized"],
+    selected_metrics=["rmse"],
+    analysis_config={"cv_scheme": "none", "grid_search_num_cores": 1},
+)
+fit = analysis["approach2:exponential_normalized"].in_vivo_fit
+coefficients = profile_parameter_intervals(fit)
+curve = profile_curve_intervals(fit, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+```
+
+With supplied calibration errors, Approach 1 and 3 selections are returned as
+explicit selection errors. Successful Approach 2 fits remain available in the
+same batch; `fail_fast=True` raises on the first failure. Without supplied errors,
+the existing approach-selection behavior and numerical results are unchanged.
+
+## Fitted parameter and curve uncertainty
+
+`profile_parameter_intervals` returns numeric estimates, standard errors, bounds,
+availability flags, and the interval convention. It does not produce HTML or
+change the fit's covariance:
+
+| Source-profile covariance | Approximate parameter interval |
+| --- | --- |
+| Supplied absolute SD/SEM | Normal-Wald interval using the supplied covariance scale |
+| Unspecified observation uncertainty | Existing residual-df Student-t convention |
+| Unspecified uncertainty with unavailable/nonpositive residual df | Existing normal fallback, retaining exactly 1.96 for 95% intervals |
+
+Supplied SDs/SEMs are treated as error estimates given to the analysis; uncertainty
+in those error estimates is not modeled. The normal-Wald interval is a local
+approximation, not a claim of exact finite-sample coverage. Optional replicate
+counts neither change its multiplier nor add observations/degrees of freedom.
+Fixed normalization constants remain fixed as described above.
+
+The summary records `confidence_level`, `multiplier`, `distribution`,
+`degrees_of_freedom`, `covariance_scaling`, `scale_source`, and `method`, alongside
+`parameter_names`, `estimate`, `standard_error`, `lower`, `upper`, and `available`.
+Invalid joint covariance makes interval uncertainty unavailable while retaining
+central estimates. Singular valid covariance is allowed; negative variances or
+invalid covariance are not clipped into apparent certainty.
+
+`profile_curve_intervals` reuses the existing complete multivariate-normal
+parameter draws and pointwise Monte Carlo bounds. These curve intervals retain
+the normal-covariance approximation even when the coefficient table uses a
+Student-t multiplier; they are distinct established summaries. Full covariance,
+pointwise failure handling, fitted-parameter centers, confidence settings, and
+reproducible seeds are preserved. Provenance identifies absolute versus residual
+scaling, the covariance Monte Carlo method, and the absence of observation noise.
+
+The app-facing fit adapter uses the same parameter multiplier for coefficient
+and approximate symmetric tau tables. Its existing tau SD comes from sampled
+fitted parameters; tau-ratio prediction intervals continue to use the existing
+nonlinear parameter-draw percentiles. Weighted table metadata records the method
+and scale source. RSS-based model evidence remains unavailable for supplied-error
+fits until likelihood-aware criteria are implemented; the adapter cannot rebuild
+those criteria from its unweighted RSS.
+
+## Calibration uncertainty in existing predictions
+
+For fixed prediction inputs, Approach 2 value-ratio, time-constant-ratio, and
+inverse-response calculations now inherit the weighted calibration covariances.
+Existing complete source parameter vectors are reused across each trajectory,
+preserving dependence across times and within vectors. In vitro and in vivo
+source vectors are sampled independently under the declared source independence
+assumption. No additional calibration residual noise is added.
+
+When either source has supplied errors, prediction auxiliary data and complete
+ensemble metadata include each source's `calibration_uncertainty` and covariance
+scale, `prediction_inputs_fixed=True`, and
+`future_observation_variability_included=False`. Applicable fixed normalization
+records are retained under `fixed_normalization_constants`. The metadata is
+provenance, not an extra uncertainty contribution. Outputs without supplied
+errors retain their existing metadata shape.
+
 Prediction methods, complete prediction samplers, and high-level prediction APIs
-also reject attached prediction-input uncertainty until supported propagation is
-implemented. Fitted calibration-parameter uncertainty continues to be propagated
-as before. Browser/CLI controls remain unchanged, as do existing Approach 1 and 3
-calculations and prediction displays without supplied-error inputs.
+still reject attached prediction-input uncertainty until the next propagation
+extension. No future-observation variability, model discrepancy, model-selection
+uncertainty, or variable normalization references are added. Browser/CLI controls
+remain unchanged. The existing `uncertainties` dependency is loaded only when the
+high-level tau-prediction compatibility wrapper needs its nominal/SD value type.
