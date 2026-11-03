@@ -23,9 +23,10 @@ unspecified = resolve_observation_uncertainty(None, n_observations=3)  # None
 ```
 
 Original experimental errors are assumed independent within and across time
-points. This does not imply that normalized responses, fitted curves, or other
-derived quantities are independent. A later transformation must preserve any
-dependence it introduces. Separate experiments must be independent for later
+points. Initial-value and min-max normalization use the fixed-reference working
+model described below: their observed constants are held fixed, and uncertainty
+in those constants is excluded. Fitted curves and other derived quantities can
+still be dependent. Separate experiments must be independent for later
 independent-input propagation; reuse of calibration measurements is not a new
 independent experiment.
 
@@ -179,8 +180,9 @@ additional uncertainty keyword for that same profile instead of overwriting it.
 | --- | --- |
 | No response transformation | Retain the original absolute SD/SEM |
 | `one_minus` | Apply `1 - response`; absolute SD/SEM, counts, and response units remain unchanged |
+| `initial_value` | Divide responses by the observed initial value and SD/SEM by its absolute value; treat that reference as fixed |
+| `min_max` | Subtract the observed minimum and divide responses and SD/SEM by the observed range; treat both constants as fixed |
 | `log_x` | Transform known times; response uncertainty is unchanged |
-| `initial_value` or `min_max` | Reject: shared measured constants introduce dependencies and can produce deterministic normalized endpoints |
 | `log_y` | Reject: requires an explicitly supported transformed observation-error model |
 | Unknown/custom transformations | Reject until uncertainty handling is explicitly verified |
 
@@ -190,11 +192,40 @@ is zero or negative and fallback is requested, both profiles keep their current
 times and record the existing warning. Unsupported response transformations are
 rejected BEFORE fallback; requesting fallback cannot bypass this restriction.
 
-Data already expressed on an externally fixed response scale may be supplied
-with matching SD/SEM in those units. Converting values alone is insufficient.
-Normalizing by a noisy measured baseline outside the app is not a workaround:
-the resulting errors are still dependent and are outside this independent-error
-transport model.
+### Fixed normalization constants
+
+Each profile's initial value, minimum, maximum, and range are calculated from its
+current cleaned responses at the relevant normalization step. Those constants
+are then treated as fixed. For `initial_value`, `sigma_new = sigma / abs(initial)`;
+for `min_max`, `sigma_new = sigma / range`. A fixed subtracted minimum does not
+add uncertainty. Chained normalizations apply these conversions sequentially;
+`one_minus` remains last and is applied once.
+
+This convention excludes uncertainty in estimating the reference values and
+does not introduce covariance from a random denominator or random extrema.
+Subsequent fitted-parameter, curve, and prediction uncertainty is conditional on
+the chosen constants. Normalized baseline/extreme observations retain their
+rescaled positive SD/SEM; their uncertainties are not forced to zero. Fixing a
+model's amplitude or asymptotes remains a separate model choice.
+
+Applicable `NormalizationRecord` parameter dictionaries include
+`constants_treated_as_fixed: True`, together with the existing observed constants
+and `applied` flag. With paired profiles, each uses its own constants, including
+when only one profile has supplied uncertainty. Raw source snapshots, original
+uncertainties, counts, and provenance remain unchanged. Rescaled uncertainties
+retain SD/SEM interpretation, source, counts, and supplied input format; their
+response units become `dimensionless` after an applied normalization.
+
+The existing zero-initial-value convention is preserved: normalization is not
+applied, and response values, uncertainty, and units stay unchanged. With supplied
+uncertainty, an initial reference must be finite and min-max normalization
+requires a finite, strictly positive range. Invalid or unrepresentable rescaled
+uncertainties raise an error. Analyses without supplied uncertainty preserve
+their existing behavior and normalization record shapes.
+
+Already-normalized data must have SD/SEM on that same scale. Converting only the
+response values is insufficient. Source snapshots describe the inputs received
+by this preprocessing call, including any earlier caller-applied normalization.
 
 The registered interpolation methods preserve observed source rows. The returned
 source `TimeCourse` objects retain only their observed-row uncertainties. Derived

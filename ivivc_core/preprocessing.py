@@ -46,12 +46,11 @@ def _course_uncertainty(course, supplied):
 def _check_uncertainty_transforms(normalizations, scalings, interpolations=()):
     """Require explicit support rather than guessing a transformed error model."""
     for name in normalizations:
-        if name != 'one_minus':
+        if name not in ('one_minus', 'initial_value', 'min_max'):
             raise ValueError(
                 f'Normalization {name!r} is not supported with supplied uncertainty. '
-                'Measured-baseline and min-max normalization need joint uncertainty '
-                'handling. Use unnormalized data or data already expressed on a fixed '
-                'response scale with matching SD/SEM.'
+                'Use initial-value, min-max, or one-minus normalization, '
+                'or leave the response unnormalized.'
             )
     for name in scalings:
         if name != 'log_x':
@@ -109,6 +108,40 @@ def _normalization_parameters(values: np.ndarray, name: str) -> dict[str, float 
     return {'applied': True}
 
 
+def _fixed_normalization_uncertainty(course, name, parameters):
+    """Rescale SD/SEM conditional on the observed normalization constants.
+
+    References are calculated once from the current cleaned values and held
+    fixed. Their own uncertainty is excluded; this is not joint propagation
+    through a random denominator or random extrema.
+    """
+    uncertainty = course.observation_uncertainty
+    if name not in ('initial_value', 'min_max'):
+        return uncertainty
+    parameters['constants_treated_as_fixed'] = True
+    if name == 'initial_value':
+        divisor = parameters['initial_value']
+        if not np.isfinite(divisor):
+            raise ValueError('Initial-value normalization requires a finite initial value with supplied uncertainty.')
+        if not parameters['applied']:
+            # Preserve the existing zero-initial-value no-op and original units.
+            return uncertainty
+    else:
+        divisor = parameters['range']
+        if not np.isfinite(divisor) or divisor <= 0:
+            raise ValueError('Min-max normalization requires a finite, strictly positive response range with supplied uncertainty.')
+    if uncertainty is None:
+        return None
+    with np.errstate(over='ignore', under='ignore', invalid='ignore', divide='ignore'):
+        sigma = uncertainty.sigma / abs(divisor)
+    return ResolvedObservationUncertainty(
+        sigma, response_kind=uncertainty.response_kind,
+        input_form=uncertainty.input_form,
+        replicate_counts=uncertainty.replicate_counts,
+        source=uncertainty.source, response_units='dimensionless',
+    )
+
+
 def _apply_normalizations(
     in_vitro: TimeCourse,
     in_vivo: TimeCourse | None,
@@ -117,23 +150,43 @@ def _apply_normalizations(
     records: list[NormalizationRecord] = []
     current_in_vitro = in_vitro
     current_in_vivo = in_vivo
+    fixed_reference_mode = (
+        in_vitro.observation_uncertainty is not None
+        or (in_vivo is not None and in_vivo.observation_uncertainty is not None)
+    )
 
     for normalization_name in selected_normalizations:
+        if fixed_reference_mode and normalization_name in ('initial_value', 'min_max'):
+            if len(current_in_vitro.value) == 0 or (
+                current_in_vivo is not None and len(current_in_vivo.value) == 0
+            ):
+                raise ValueError('Normalization with supplied uncertainty requires at least one retained response per profile.')
         in_vitro_parameters = _normalization_parameters(
             current_in_vitro.value,
             normalization_name,
         )
+        in_vitro_uncertainty = current_in_vitro.observation_uncertainty
+        if fixed_reference_mode:
+            in_vitro_uncertainty = _fixed_normalization_uncertainty(
+                current_in_vitro, normalization_name, in_vitro_parameters,
+            )
         normalized_in_vitro = preprocessing_options['normalization'][normalization_name](
             current_in_vitro.value
         )
 
         in_vivo_parameters = None
         normalized_in_vivo = None
+        in_vivo_uncertainty = None
         if current_in_vivo is not None:
             in_vivo_parameters = _normalization_parameters(
                 current_in_vivo.value,
                 normalization_name,
             )
+            in_vivo_uncertainty = current_in_vivo.observation_uncertainty
+            if fixed_reference_mode:
+                in_vivo_uncertainty = _fixed_normalization_uncertainty(
+                    current_in_vivo, normalization_name, in_vivo_parameters,
+                )
             normalized_in_vivo = preprocessing_options['normalization'][normalization_name](
                 current_in_vivo.value
             )
@@ -142,14 +195,14 @@ def _apply_normalizations(
             current_in_vitro.time,
             normalized_in_vitro,
             label=current_in_vitro.label,
-            observation_uncertainty=current_in_vitro.observation_uncertainty,
+            observation_uncertainty=in_vitro_uncertainty,
         )
         if current_in_vivo is not None:
             current_in_vivo = TimeCourse(
                 current_in_vivo.time,
                 normalized_in_vivo,
                 label=current_in_vivo.label,
-                observation_uncertainty=current_in_vivo.observation_uncertainty,
+                observation_uncertainty=in_vivo_uncertainty,
             )
 
         records.append(
