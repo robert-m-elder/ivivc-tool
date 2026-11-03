@@ -114,11 +114,103 @@ each training fold. Existing fold construction and full-data starting vectors ar
 unchanged; training-only initialization and rebuilding data-dependent preprocessing
 inside CV are later validation work. Low-level helper metrics remain descriptive.
 
-This patch does not attach uncertainty to `TimeCourse`, transform it, or expose
-it through `fit_time_course`, `fit_ivivc`, browser, or CLI inputs. Later patches
-will perform that integration. Callers of the standalone fitter must already
-supply time, response, and uncertainty on the same analyzed scale; uncertainty
-in normalization or transformation parameters is not handled here. Supplied
-uncertainty is rejected with explicit `approach_id="approach1"` or `"approach3"`;
-the generic standalone fitter also accepts `approach_id=None`. Existing Approach 1
-and 3 application calculations and prediction displays remain unchanged.
+The standalone fitter accepts either supplied or already-resolved uncertainty.
+Callers must supply time, response, and uncertainty on the same analyzed scale.
+Uncertainty is rejected with explicit `approach_id="approach1"` or `"approach3"`;
+the generic standalone fitter also accepts `approach_id=None`.
+
+## Preprocessing transport
+
+`prepare_time_course` accepts `observation_uncertainty` and returns a `TimeCourse`
+with aligned, resolved `.observation_uncertainty`. It can feed the standalone
+fitter directly:
+
+```python
+from ivivc_core import ObservationUncertainty, prepare_time_course, fit_profile
+
+course, preprocessing = prepare_time_course(
+    [0.0, 1.0, float("nan"), 3.0],
+    [1.0, 0.8, 0.5, 0.4],
+    observation_uncertainty=ObservationUncertainty(
+        [0.03, 0.04, float("nan"), 0.06], response_kind="mean",
+        source="reported SEM", response_units="fraction remaining",
+    ),
+)
+fit = fit_profile(
+    course.time, course.value,
+    model_name="exponential_normalized", selected_metrics=["rmse"],
+    approach_id="approach2",
+    analysis_config={"cv_scheme": "none", "grid_search_num_cores": 1},
+    observation_uncertainty=course.observation_uncertainty,
+)
+source = preprocessing.sources["profile"]
+# source.time / source.value retain all four original rows.
+# source.retained_rows is [0, 1, 3], linking analyzed rows to the original rows.
+```
+
+`prepare_data` and `prepare_ivivc_data` accept optional `in_vitro_uncertainty`
+and `in_vivo_uncertainty` keywords. They can differ in format, SD/SEM meaning,
+counts, or whether supplied at all. Paired source records are stored under
+`preprocessing.sources["in_vitro"]` and `["in_vivo"]`. The uncertainty values
+are never aligned between environments or assigned to interpolation grids.
+Replicates at duplicate source times remain distinct source rows.
+
+When any uncertainty is supplied, cleaning removes rows with missing time OR
+response independently for each profile, using that same mask for uncertainty
+and optional counts. Missing errors on retained rows are errors; they are not
+filled or silently dropped. Original zero times are preserved. Without supplied
+uncertainty the existing cleaning and numerical preprocessing behavior is
+unchanged, and no additional source snapshots are created.
+
+`PreprocessingSource` stores defensive read-only copies of original time/response
+arrays, original uncertainty, a label, and the retained original-row indices.
+Original missing rows and the input scale remain available for provenance.
+These snapshots describe the inputs to this preprocessing call, not necessarily
+an earlier experiment before caller-applied transformations.
+
+`TimeCourse` accepts only already-resolved, row-aligned uncertainty. Raw uncertainty
+should be passed to preprocessing so cleaning can precede numerical validation.
+Paired preprocessing can consume attached resolved uncertainty, but rejects an
+additional uncertainty keyword for that same profile instead of overwriting it.
+
+### Supported transformations
+
+| Control with supplied uncertainty | Treatment |
+| --- | --- |
+| No response transformation | Retain the original absolute SD/SEM |
+| `one_minus` | Apply `1 - response`; absolute SD/SEM, counts, and response units remain unchanged |
+| `log_x` | Transform known times; response uncertainty is unchanged |
+| `initial_value` or `min_max` | Reject: shared measured constants introduce dependencies and can produce deterministic normalized endpoints |
+| `log_y` | Reject: requires an explicitly supported transformed observation-error model |
+| Unknown/custom transformations | Reject until uncertainty handling is explicitly verified |
+
+`one_minus` retains its existing interpretation for fractional responses.
+Log-time fallback remains atomic across paired datasets: if an applicable time
+is zero or negative and fallback is requested, both profiles keep their current
+times and record the existing warning. Unsupported response transformations are
+rejected BEFORE fallback; requesting fallback cannot bypass this restriction.
+
+Data already expressed on an externally fixed response scale may be supplied
+with matching SD/SEM in those units. Converting values alone is insufficient.
+Normalizing by a noisy measured baseline outside the app is not a workaround:
+the resulting errors are still dependent and are outside this independent-error
+transport model.
+
+The registered interpolation methods preserve observed source rows. The returned
+source `TimeCourse` objects retain only their observed-row uncertainties. Derived
+time/response grids have no supplied uncertainty model; increasing grid density
+does not create new independent observations or interpolate error bars.
+
+### Integration boundaries
+
+`PreparedIVIVCData.has_observation_uncertainty` identifies supplied-error input.
+Legacy positional-array and legacy-metadata adapters reject these objects rather
+than drop their uncertainty. Existing no-uncertainty adapter shapes are unchanged.
+
+`fit_ivivc` rejects supplied source uncertainty until Approach 2 integration is
+implemented; use the standalone source-profile fitter above in the meantime.
+Prediction methods, complete prediction samplers, and high-level prediction APIs
+also reject attached prediction-input uncertainty until supported propagation is
+implemented. Fitted calibration-parameter uncertainty continues to be propagated
+as before. Browser/CLI controls remain unchanged, as do existing Approach 1 and 3
+calculations and prediction displays without supplied-error inputs.

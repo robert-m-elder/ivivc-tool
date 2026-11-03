@@ -303,8 +303,9 @@ def sample_time_mapping_trajectories(
     random_state=None,
 ) -> TrajectoryEnsemble:
     """Generate complete Approach 1 time-mapping trajectory draws."""
-    from .predictions import predict_time_mapping
+    from .predictions import _require_fixed_prediction_input, predict_time_mapping
 
+    _require_fixed_prediction_input(prediction)
     spec = get_model_spec(model_name)
     central = predict_time_mapping(
         prediction,
@@ -350,8 +351,9 @@ def sample_value_ratio_trajectories(
     random_state=None,
 ) -> TrajectoryEnsemble:
     """Generate complete Approach 2 response-value-ratio trajectory draws."""
-    from .predictions import predict_value_ratio
+    from .predictions import _require_fixed_prediction_input, predict_value_ratio
 
+    _require_fixed_prediction_input(prediction)
     spec = get_model_spec(model_name)
     random_states = _split_random_state(random_state, 2)
     in_vitro_samples = sample_parameter_sets(
@@ -435,6 +437,9 @@ def sample_tau_ratio_trajectories(
     random_state=None,
 ) -> TrajectoryEnsemble:
     """Generate complete time-scaling draws from sampled fitted time constants."""
+    from .predictions import _require_fixed_prediction_input
+
+    _require_fixed_prediction_input(prediction)
     spec = get_model_spec(model_name)
     random_states = _split_random_state(random_state, 2)
     in_vitro_samples = sample_parameter_sets(
@@ -553,8 +558,9 @@ def sample_inverse_response_trajectories(
     max_expansions: int = DEFAULT_INVERSE_EXPANSIONS,
 ) -> TrajectoryEnsemble:
     """Generate complete inverse response-to-time mapping draws."""
-    from .predictions import inverse_response_times
+    from .predictions import _require_fixed_prediction_input, inverse_response_times
 
+    _require_fixed_prediction_input(prediction)
     spec = get_model_spec(model_name)
     central_time, status, skip_reason = inverse_response_times(
         spec.model_function,

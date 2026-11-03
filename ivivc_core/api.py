@@ -19,6 +19,7 @@ from uncertainties import ufloat
 from .extrapolation import annotate_prediction_domain
 from .fitting import fit_profile
 from .predictions import (
+    _require_fixed_prediction_input,
     predict_direct_time_scaling,
     predict_direct_value_scaling,
     predict_inverse_response,
@@ -205,6 +206,12 @@ def fit_ivivc(
     records that the prepared interpolation mapping is available but performs
     no parametric fit.
     """
+    if prepared_data.has_observation_uncertainty:
+        raise ValueError(
+            'fit_ivivc does not yet consume supplied source-profile uncertainty. '
+            'Fit each source profile with fit_profile and its observation_uncertainty '
+            'until uncertainty-aware IVIVC fitting is available.'
+        )
     if not prepared_data.has_in_vivo:
         raise ValueError('Paired in vitro and in vivo data are required for IVIVC fitting.')
 
@@ -314,6 +321,7 @@ def predict_in_vivo(
     fixed prediction inputs, pointwise percentile bounds, and a reproducible
     default uncertainty seed independent of CV and initialization seeds.
     """
+    _require_fixed_prediction_input(prediction)
     selected_methods = _resolved_prediction_methods(methods)
     trajectories: dict[str, PredictedTrajectory] = {}
     errors: dict[str, AnalysisError] = {}
@@ -447,6 +455,7 @@ def generate_trajectory_ensembles(
     prediction grid. Approach 3 has no fitted covariance and is therefore
     returned as a deterministic one-draw ensemble when requested.
     """
+    _require_fixed_prediction_input(prediction)
     n_samples = int(n_samples)
     if n_samples < 1:
         raise ValueError('n_samples must be at least one.')

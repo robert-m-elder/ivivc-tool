@@ -27,6 +27,15 @@ from .intervals import (
 )
 
 
+def _require_fixed_prediction_input(prediction: TimeCourse) -> None:
+    """Reject attached input uncertainty until prediction propagation supports it."""
+    if getattr(prediction, 'observation_uncertainty', None) is not None:
+        raise ValueError(
+            'This method does not support supplied prediction-response uncertainty; '
+            'fixed prediction inputs are required.'
+        )
+
+
 def safe_ratio(numerator, denominator):
     """Return an elementwise ratio with zero-denominator values as NaN."""
     numerator = np.asarray(numerator, dtype=float)
@@ -141,6 +150,7 @@ def predict_time_mapping(
     random_state=DEFAULT_INTERVAL_SEED,
 ) -> PredictedTrajectory:
     """Predict in vivo times from in vitro times using an Approach 1 fit."""
+    _require_fixed_prediction_input(prediction)
     model_function = get_model_spec(model_name).model_function
     in_vivo_time = np.asarray(model_function(prediction.time, **parameters))
     trajectory = PredictedTrajectory(
@@ -171,6 +181,7 @@ def predict_value_ratio(
     minimum_plot_points: int = 50,
 ) -> PredictedTrajectory:
     """Predict in vivo responses by the fitted response-value ratio."""
+    _require_fixed_prediction_input(prediction)
     model_function = get_model_spec(model_name).model_function
     in_vitro_model_value = np.asarray(
         model_function(prediction.time, **in_vitro_parameters)
@@ -245,6 +256,7 @@ def predict_value_ratio_with_uncertainty(
     is a conservative display safeguard, not a formal ratio-confidence method.
     Nothing is clipped or silently conditioned on successful evaluations.
     """
+    _require_fixed_prediction_input(prediction)
     from .uncertainty import sample_value_ratio_trajectories, summarize_draws
 
     confidence_level = float(confidence_level)
@@ -349,6 +361,7 @@ def predict_tau_ratio(
     random_state=DEFAULT_INTERVAL_SEED,
 ) -> PredictedTrajectory:
     """Predict in vivo times using the ratio of fitted time constants."""
+    _require_fixed_prediction_input(prediction)
     confidence_level, n_samples = validate_interval_settings(confidence_level, n_samples)
     skip_reason = describe_tau_prediction_skip_reason(tau_values)
     if skip_reason is not None:
@@ -434,6 +447,7 @@ def predict_inverse_response(
     max_expansions: int = DEFAULT_INVERSE_EXPANSIONS,
 ) -> PredictedTrajectory:
     """Map fixed responses and propagate only fitted in vivo parameter uncertainty."""
+    _require_fixed_prediction_input(prediction)
     confidence_level, n_samples = validate_interval_settings(confidence_level, n_samples)
     function = get_model_spec(model_name).model_function
     mapper_options = dict(minimum_time=minimum_time, allow_extrapolation=allow_extrapolation,
@@ -510,6 +524,7 @@ def predict_direct_value_scaling(
     in_vivo_response_on_time_grid,
 ) -> PredictedTrajectory:
     """Predict in vivo responses using the Approach 3 response ratio."""
+    _require_fixed_prediction_input(prediction)
     mapping_ratio = safe_ratio(
         in_vivo_response_on_time_grid,
         in_vitro_response_on_time_grid,
@@ -543,6 +558,7 @@ def predict_direct_time_scaling(
     in_vivo_time_at_response,
 ) -> PredictedTrajectory:
     """Predict in vivo times using the Approach 3 time ratio."""
+    _require_fixed_prediction_input(prediction)
     order = np.argsort(response_grid)
     mapping_ratio = safe_ratio(in_vivo_time_at_response, in_vitro_time_at_response)
     scaling_factor = np.interp(

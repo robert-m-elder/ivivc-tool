@@ -16,7 +16,9 @@ from utilities.evaluation import (
 )
 
 from .registry import get_model_spec
-from .observations import ObservationUncertainty, resolve_observation_uncertainty
+from .observations import (
+    ObservationUncertainty, ResolvedObservationUncertainty, resolve_observation_uncertainty,
+)
 from .types import ProfileFit
 
 
@@ -62,7 +64,7 @@ def fit_profile(
     approach_id: str | None = None,
     calculate_tau: bool = False,
     config_defaults: Mapping[str, object] | None = None,
-    observation_uncertainty: ObservationUncertainty | None = None,
+    observation_uncertainty: ObservationUncertainty | ResolvedObservationUncertainty | None = None,
 ) -> ProfileFit:
     """Fit one response-versus-time profile using the current IVIVC machinery.
 
