@@ -14,10 +14,10 @@ from typing import Any
 
 import numpy as np
 from numpy.typing import ArrayLike
-from uncertainties import ufloat
 
 from .extrapolation import annotate_prediction_domain
 from .fitting import fit_profile
+from .observations import ObservationUncertainty, ResolvedObservationUncertainty
 from .predictions import (
     _require_fixed_prediction_input,
     predict_direct_time_scaling,
@@ -153,15 +153,21 @@ def fit_time_course(
     calculate_tau: bool = False,
     config_defaults: Mapping[str, object] | None = None,
     fail_fast: bool = False,
+    observation_uncertainty: ObservationUncertainty | ResolvedObservationUncertainty | None = None,
 ) -> ResultBatch[ProfileFit]:
     """Fit one measured time course with one or more registered models.
 
     This is the primary entry point for an in vivo-only design-assessment
     workflow.  Models are fitted independently; by default one failed model is
     returned in ``errors`` without discarding the successful fits.
+    Optional absolute SD/SEM must be on the same analyzed response scale.
     """
     fits: dict[str, ProfileFit] = {}
     errors: dict[str, AnalysisError] = {}
+    uncertainty_options = (
+        {} if observation_uncertainty is None
+        else {'observation_uncertainty': observation_uncertainty}
+    )
 
     for model_name in _as_string_tuple(model_names):
         try:
@@ -176,6 +182,7 @@ def fit_time_course(
                 approach_id=approach_id,
                 calculate_tau=calculate_tau,
                 config_defaults=config_defaults,
+                **uncertainty_options,
             )
         except Exception as exception:
             _record_failure(
@@ -186,6 +193,20 @@ def fit_time_course(
             )
 
     return ResultBatch(results=fits, errors=errors)
+
+
+def _validate_calibration_uncertainty_transport(prepared_data: PreparedIVIVCData) -> None:
+    """Do not silently fit without uncertainty retained only in provenance."""
+    for name, source in prepared_data.preprocessing.sources.items():
+        if source.observation_uncertainty is None:
+            continue
+        course = getattr(prepared_data, name, None) if name in ('in_vitro', 'in_vivo') else None
+        if course is None or course.observation_uncertainty is None:
+            raise ValueError(
+                f'Calibration uncertainty recorded for {name!r} is missing from '
+                'the corresponding processed source profile. Re-run preprocessing '
+                'with its supplied uncertainty instead of discarding it.'
+            )
 
 
 def fit_ivivc(
@@ -205,15 +226,15 @@ def fit_ivivc(
     independently fits the observed in vitro and in vivo profiles. Approach 3
     records that the prepared interpolation mapping is available but performs
     no parametric fit.
+
+    Supplied calibration uncertainty is used by Approach 2 only. With mixed
+    selections, unsupported approaches are returned as selection errors while
+    successful Approach 2 fits are retained, unless ``fail_fast`` is requested.
     """
-    if prepared_data.has_observation_uncertainty:
-        raise ValueError(
-            'fit_ivivc does not yet consume supplied source-profile uncertainty. '
-            'Fit each source profile with fit_profile and its observation_uncertainty '
-            'until uncertainty-aware IVIVC fitting is available.'
-        )
     if not prepared_data.has_in_vivo:
         raise ValueError('Paired in vitro and in vivo data are required for IVIVC fitting.')
+    _validate_calibration_uncertainty_transport(prepared_data)
+    has_calibration_uncertainty = prepared_data.has_observation_uncertainty
 
     results: dict[str, IVIVCModelFit] = {}
     errors: dict[str, AnalysisError] = {}
@@ -222,6 +243,11 @@ def fit_ivivc(
         try:
             approach_id, model_name = _selection_parts(selection)
             _validate_selection(approach_id, model_name)
+            if has_calibration_uncertainty and approach_id != 'approach2':
+                raise ValueError(
+                    'Supplied calibration uncertainty is supported only for Approach 2; '
+                    f'{approach_id} cannot consume it.'
+                )
 
             if approach_id == 'approach1':
                 assert model_name is not None
@@ -249,6 +275,14 @@ def fit_ivivc(
                 )
             elif approach_id == 'approach2':
                 assert model_name is not None
+                in_vitro_uncertainty = prepared_data.in_vitro.observation_uncertainty
+                in_vivo_uncertainty = prepared_data.in_vivo.observation_uncertainty
+                in_vitro_options = {} if in_vitro_uncertainty is None else {
+                    'observation_uncertainty': in_vitro_uncertainty,
+                }
+                in_vivo_options = {} if in_vivo_uncertainty is None else {
+                    'observation_uncertainty': in_vivo_uncertainty,
+                }
                 in_vitro_fit = fit_profile(
                     prepared_data.in_vitro.time,
                     prepared_data.in_vitro.value,
@@ -258,6 +292,7 @@ def fit_ivivc(
                     approach_id=approach_id,
                     calculate_tau=True,
                     config_defaults=config_defaults,
+                    **in_vitro_options,
                 )
                 in_vivo_fit = fit_profile(
                     prepared_data.in_vivo.time,
@@ -268,6 +303,7 @@ def fit_ivivc(
                     approach_id=approach_id,
                     calculate_tau=True,
                     config_defaults=config_defaults,
+                    **in_vivo_options,
                 )
                 result = IVIVCModelFit(
                     approach_id=approach_id,
@@ -297,9 +333,55 @@ def fit_ivivc(
 
 
 def _tau_uncertain_value(fit: ProfileFit):
+    from uncertainties import ufloat
+
     estimate = np.nan if fit.tau_estimate is None else fit.tau_estimate
     sd = np.nan if fit.tau_sd is None else fit.tau_sd
     return ufloat(estimate, sd)
+
+
+def _calibration_uncertainty_metadata(
+    analysis: IVIVCAnalysis, model_fit: IVIVCModelFit,
+) -> dict[str, Any]:
+    """Describe supplied calibration precision without adding another noise layer.
+
+    Older fit-like objects may omit the optional uncertainty/diagnostic fields.
+    """
+    if model_fit.approach_id != 'approach2':
+        return {}
+    fits = {'in_vitro': model_fit.in_vitro_fit, 'in_vivo': model_fit.in_vivo_fit}
+    if not any(getattr(fit, 'observation_uncertainty', None) is not None for fit in fits.values()):
+        return {}
+    sources = {}
+    for name, fit in fits.items():
+        assert fit is not None
+        uncertainty = getattr(fit, 'observation_uncertainty', None)
+        sources[name] = {
+            'observation_uncertainty': None if uncertainty is None else uncertainty.to_metadata(),
+            'covariance_scaling': getattr(fit, 'fit_diagnostics', {}).get(
+                'covariance_scaling', 'residual_scaled' if uncertainty is None else 'absolute',
+            ),
+        }
+    metadata = {
+        'calibration_uncertainty': sources,
+        'prediction_inputs_fixed': True,
+        'future_observation_variability_included': False,
+    }
+    normalizations = []
+    for record in analysis.prepared_data.preprocessing.normalizations:
+        if record.in_vitro_parameters.get('constants_treated_as_fixed', False) or (
+            record.in_vivo_parameters is not None
+            and record.in_vivo_parameters.get('constants_treated_as_fixed', False)
+        ):
+            normalizations.append({
+                'name': record.name,
+                'in_vitro_parameters': dict(record.in_vitro_parameters),
+                'in_vivo_parameters': None if record.in_vivo_parameters is None
+                else dict(record.in_vivo_parameters),
+            })
+    if normalizations:
+        metadata['fixed_normalization_constants'] = normalizations
+    return metadata
 
 
 def predict_in_vivo(
@@ -428,6 +510,7 @@ def predict_in_vivo(
                     paired_in_vitro_time=mapping.time if mapping is not None else None,
                     paired_in_vivo_time=mapping.response if mapping is not None else None,
                 )
+                trajectory.auxiliary.update(_calibration_uncertainty_metadata(analysis, model_fit))
                 trajectories[key] = trajectory
             except Exception as exception:
                 _record_failure(
@@ -571,6 +654,8 @@ def generate_trajectory_ensembles(
                 paired_in_vitro_time=mapping.time if mapping is not None else None,
                 paired_in_vivo_time=mapping.response if mapping is not None else None,
             )
+            ensemble.metadata.update(_calibration_uncertainty_metadata(analysis, model_fit))
+            ensemble.central.auxiliary.update(_calibration_uncertainty_metadata(analysis, model_fit))
             ensembles[key] = ensemble
         except Exception as exception:
             _record_failure(
