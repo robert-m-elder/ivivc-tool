@@ -140,6 +140,27 @@ def ic_from_residuals(residuals, n_params):
     return ic_from_n_rss_k(len(residuals), float(np.sum(residuals ** 2)), n_params)
 
 
+def _criteria_from_evidence_data(evidence_data):
+    """Use supplied-error criteria when present; retain the legacy RSS path."""
+    if "information_criteria" not in evidence_data:
+        return ic_from_n_rss_k(
+            evidence_data.get("n"), evidence_data.get("rss"), evidence_data.get("n_params"),
+        )
+    values = ic_from_n_rss_k(evidence_data.get("n"), np.nan, evidence_data.get("n_params"))
+    supplied = evidence_data.get("information_criteria")
+    if not isinstance(supplied, dict) or values["n"] <= 0 or values["k"] < 0:
+        return values
+    for criterion in CRITERION_LABELS:
+        values[criterion] = _as_float(supplied.get(criterion))
+    values["aicc_defined"] = bool(
+        supplied.get("aicc_defined", False) and _finite(values["aicc"])
+        and values["n"] > values["k"] + 1
+    )
+    if not values["aicc_defined"]:
+        values["aicc"] = np.nan
+    return values
+
+
 def add_relative_evidence(rows, criterion):
     """Add delta, weight, and evidence ratio fields for one criterion."""
     value_key = criterion
@@ -257,11 +278,7 @@ def _model_key_parts(model_key):
 
 
 def _row_from_evidence_data(model_key, model_display, evidence_data, dataset_label, values=None):
-    values = values or ic_from_n_rss_k(
-        evidence_data.get("n"),
-        evidence_data.get("rss"),
-        evidence_data.get("n_params"),
-    )
+    values = values or _criteria_from_evidence_data(evidence_data)
     return {
         "model_key": model_key,
         "model": model_display,
@@ -400,8 +417,8 @@ def _approach2_rows(results, models_registry, criteria):
             continue
 
         display = models_registry.get(model_name, {}).get("display_name", model_name)
-        in_vitro_values = ic_from_n_rss_k(in_vitro.get("n"), in_vitro.get("rss"), in_vitro.get("n_params"))
-        in_vivo_values = ic_from_n_rss_k(in_vivo.get("n"), in_vivo.get("rss"), in_vivo.get("n_params"))
+        in_vitro_values = _criteria_from_evidence_data(in_vitro)
+        in_vivo_values = _criteria_from_evidence_data(in_vivo)
         in_vitro_rows.append(_row_from_evidence_data(model_key, display, in_vitro, "In vitro fit", in_vitro_values))
         in_vivo_rows.append(_row_from_evidence_data(model_key, display, in_vivo, "In vivo fit", in_vivo_values))
 

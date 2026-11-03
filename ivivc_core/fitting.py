@@ -8,6 +8,7 @@ import warnings
 import numpy as np
 
 from metrics import calculate_metric
+from metrics.likelihood import gaussian_information_criteria
 from utilities.evaluation import (
     auto_grid_search,
     calculate_tau_with_uncertainty,
@@ -83,9 +84,9 @@ def fit_profile(
     when uncertainty is supplied. High-level preprocessing and app integration
     are separate operations; this function does not transform uncertainty.
 
-    Descriptive metrics retain their existing unweighted definitions. The
-    legacy RSS-based information criteria are withheld for weighted fits until
-    a likelihood-consistent implementation is available.
+    Descriptive metrics retain their existing unweighted definitions. Supplied
+    errors use the normal likelihood for AIC/BIC, retaining the application's
+    conventional AICc correction and its existing sample-size threshold.
     """
     config = _resolved_config(analysis_config, config_defaults)
     spec = get_model_spec(model_name)
@@ -106,10 +107,6 @@ def fit_profile(
     )
     weighted = resolved_uncertainty is not None
     sigma = None if resolved_uncertainty is None else resolved_uncertainty.sigma
-    unavailable_metrics = [
-        metric for metric in selected_metrics
-        if weighted and metric in ('aic', 'aicc', 'bic')
-    ]
     x = x[mask]
     y = y[mask]
 
@@ -166,7 +163,7 @@ def fit_profile(
     else:
         cv_scores, cv_parameter_sets = cv_output, []
     cv_means = {
-        metric: np.nan if metric in unavailable_metrics else _finite_cv_mean(values)
+        metric: np.nan if weighted and metric in ('aic', 'aicc', 'bic') else _finite_cv_mean(values)
         for metric, values in cv_scores.items()
     }
 
@@ -175,9 +172,17 @@ def fit_profile(
     parameters = dict(model_result['params'])
     covariance = np.asarray(model_result['pcov'])
     residuals = y - fitted_values
+    information_criteria = (
+        gaussian_information_criteria(residuals, sigma, len(parameters)) if weighted else None
+    )
+    unavailable_metrics = [
+        metric for metric in selected_metrics
+        if weighted and metric in ('aic', 'aicc', 'bic') and not np.isfinite(information_criteria[metric])
+    ]
 
     fit_metrics = {
-        metric: np.nan if metric in unavailable_metrics else calculate_metric(metric, y, fitted_values, len(p0))
+        metric: (information_criteria[metric] if weighted and metric in ('aic', 'aicc', 'bic')
+                 else calculate_metric(metric, y, fitted_values, len(p0)))
         for metric in selected_metrics
     }
 
@@ -193,15 +198,15 @@ def fit_profile(
     }
     if weighted:
         with np.errstate(over='ignore', divide='ignore', invalid='ignore'):
-            chi_squared = float(np.sum((residuals / sigma) ** 2))
+            standardized_residuals = residuals / sigma
+            chi_squared = float(np.sum(standardized_residuals ** 2))
         fit_diagnostics.update({
+            'standardized_residuals': standardized_residuals.tolist(),
             'chi_squared': chi_squared,
             'reduced_chi_squared': chi_squared / (len(y) - len(parameters))
             if len(y) > len(parameters) else np.nan,
-            'information_criteria_note': (
-                'AIC, AICc, and BIC are unavailable for supplied-uncertainty fits '
-                'until likelihood-aware information criteria are implemented.'
-            ),
+            'information_criteria': information_criteria,
+            'information_criteria_note': 'Supplied-error Gaussian likelihood; AICc uses the existing conventional correction.',
         })
 
     tau_estimate = None

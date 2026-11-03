@@ -34,7 +34,14 @@ def test_weighted_app_parameter_and_tau_tables_use_absolute_covariance_multiplie
     assert result['parameter_intervals'][0]['half_width'] == f'{expected:.4f}'
     assert result['tau_interval']['half_width'] == f'{multiplier * fit.tau_sd:.4f}'
     assert np.isnan(result['evidence_data']['rss'])
-    assert result['fit_metadata']['information_criteria_available'] is False
+    assert result['fit_metadata']['information_criteria_available'] is True
+    criteria = result['evidence_data']['information_criteria']
+    log_likelihood = np.sum(norm.logpdf(fit.response, loc=fit.fitted_values, scale=0.04))
+    np.testing.assert_allclose(criteria['aic'], -2. * log_likelihood + 2. * fit.n_parameters)
+    np.testing.assert_allclose(criteria['bic'], -2. * log_likelihood + fit.n_parameters * np.log(len(fit.response)))
+    np.testing.assert_allclose(criteria['aicc'], criteria['aic'] +
+                               2. * fit.n_parameters * (fit.n_parameters + 1) /
+                               (len(fit.response) - fit.n_parameters - 1))
 
 
 def test_legacy_app_interval_metadata_retains_its_existing_schema(fast_analysis_config):
@@ -66,3 +73,12 @@ def test_weighted_invalid_joint_covariance_keeps_estimates_but_withholds_table_i
     assert result['fit_metadata']['parameter_interval_covariance_status'] != 'available'
     assert 'Parameter uncertainty unavailable' in result['parameter_diagnostics_html']
     assert 'not a valid joint uncertainty matrix' in result['parameter_diagnostics_html']
+
+
+def test_weighted_adapter_without_criteria_does_not_reconstruct_rss_evidence(fast_analysis_config):
+    from engine import _profile_fit_to_legacy_components
+
+    result = _profile_fit_to_legacy_components(replace(_fit(fast_analysis_config), fit_diagnostics={}))
+    assert np.isnan(result['evidence_data']['rss'])
+    assert result['evidence_data']['information_criteria'] == {}
+    assert result['fit_metadata']['information_criteria_available'] is False

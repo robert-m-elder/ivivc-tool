@@ -255,7 +255,7 @@ def test_experimental_uncertainty_does_not_enable_other_ivivc_approaches(
              ObservationUncertainty(0.2, response_kind='mean'), approach_id=approach_id)
 
 
-def test_weighted_information_criteria_are_withheld_until_likelihood_support(fast_analysis_config):
+def test_weighted_information_criteria_remain_available_with_the_conventional_aicc_correction(fast_analysis_config):
     fit = fit_profile(
         np.arange(1.0, 6.0), np.array([1.1, 2.0, 2.8, 4.2, 5.3]),
         model_name='linear_zero_intercept',
@@ -266,8 +266,11 @@ def test_weighted_information_criteria_are_withheld_until_likelihood_support(fas
 
     assert np.isfinite(fit.fit_metrics['rmse'])
     for metric in ('aic', 'aicc', 'bic'):
-        assert np.isnan(fit.fit_metrics[metric])
-        assert metric in fit.fit_diagnostics['unavailable_metrics']
+        assert np.isfinite(fit.fit_metrics[metric])
+        assert metric not in fit.fit_diagnostics['unavailable_metrics']
+        assert np.isnan(fit.cv_means[metric])
+    correction = 2. * fit.n_parameters * (fit.n_parameters + 1) / (len(fit.response) - fit.n_parameters - 1)
+    np.testing.assert_allclose(fit.fit_metrics['aicc'], fit.fit_metrics['aic'] + correction)
 
 
 def test_weighted_generic_fit_preserves_nonlinear_model_bounds_and_options():

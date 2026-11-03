@@ -523,8 +523,10 @@ def _profile_fit_to_legacy_components(profile_fit, *, include_tau=False):
 
     if profile_fit.observation_uncertainty is not None:
         # RSS-based evidence does not describe the supplied-variance likelihood.
-        # Keep its legacy shape, but prevent downstream criteria reconstruction.
+        # Pass explicit criteria while preventing RSS-based reconstruction.
         components['evidence_data']['rss'] = np.nan
+        information_criteria = dict(profile_fit.fit_diagnostics.get('information_criteria') or {})
+        components['evidence_data']['information_criteria'] = information_criteria
         components['fit_metadata'].update({
             'parameter_interval_method': parameter_summary['method'],
             'parameter_interval_distribution': parameter_summary['distribution'],
@@ -532,10 +534,13 @@ def _profile_fit_to_legacy_components(profile_fit, *, include_tau=False):
             'covariance_scaling': parameter_summary['covariance_scaling'],
             'uncertainty_scale_source': parameter_summary['scale_source'],
             'parameter_interval_covariance_status': parameter_summary['covariance_status'],
-            'information_criteria_available': False,
+            'information_criteria_available': bool(
+                np.isfinite(information_criteria.get('aic', np.nan))
+                and np.isfinite(information_criteria.get('bic', np.nan))
+            ),
             'information_criteria_note': profile_fit.fit_diagnostics.get(
                 'information_criteria_note',
-                'Likelihood-aware information criteria are not available for supplied-uncertainty fits.',
+                'Information criteria use the supplied-error normal likelihood and the conventional AICc correction.',
             ),
         })
 

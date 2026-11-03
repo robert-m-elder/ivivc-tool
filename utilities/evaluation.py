@@ -276,8 +276,9 @@ def cross_validation_curve_fit(
     legacy ``kwargs['sigma']`` is accepted, but not alongside explicit sigma.
     Invalid uncertainty is rejected before the split loop, not counted as
     fitting failures. The caller's kwargs dictionary is never modified.
-    Existing RSS-based information criteria are withheld for weighted fits;
-    likelihood-aware criteria require a separate implementation.
+    Information criteria are not evaluated on held-out weighted responses.
+    Absolute errors additionally provide pooled supplied-error RMSE and normal
+    observation likelihood, conditional on the existing preprocessing and p0.
     """
     fit_kwargs = dict(kwargs)
     explicit_sigma = sigma is not None
@@ -308,6 +309,14 @@ def cross_validation_curve_fit(
         'min_test_observations': None,
         'max_test_observations': None,
     }
+    absolute_error = sigma is not None and bool(fit_kwargs.get('absolute_sigma', False))
+    if absolute_error:
+        diagnostics['observation_error'] = {
+            'n_test': 0, 'successful_splits': 0, 'complete': False,
+            'standardized_rmse': np.nan, 'negative_log_likelihood': np.nan,
+            'mean_negative_log_likelihood': np.nan,
+        }
+        chi_squared_total = nll_total = 0.
     if cv is None:
         scores = {metric: np.array([np.nan]) for metric in selected_metrics}
         result = (scores, fit_params) if return_fit_params else scores
@@ -342,6 +351,18 @@ def cross_validation_curve_fit(
         except Exception:
             popt = None
             tmp_scores = {metric: np.nan for metric in selected_metrics}
+        if absolute_error:
+            summary = diagnostics['observation_error']
+            summary['n_test'] += len(test_index)
+            if fit_succeeded and len(test_index):
+                with np.errstate(over='ignore', divide='ignore', invalid='ignore'):
+                    standardized = (y_test - y_pred) / sigma[test_index]
+                    chi_squared = float(np.sum(standardized ** 2))
+                    nll = .5 * (chi_squared + np.sum(np.log(2. * np.pi) + 2. * np.log(sigma[test_index])))
+                if np.isfinite(chi_squared) and np.isfinite(nll):
+                    summary['successful_splits'] += 1
+                    chi_squared_total += chi_squared
+                    nll_total += float(nll)
         diagnostics['successful_fits'] += int(fit_succeeded)
         diagnostics['fitting_failure_count'] += int(not fit_succeeded)
         for k,v in tmp_scores.items():
@@ -349,6 +370,19 @@ def cross_validation_curve_fit(
             diagnostics['finite_scores'][k] += int(np.isfinite(v))
         if return_fit_params:
             fit_params.append(None if popt is None else np.asarray(popt, dtype=float))
+    if absolute_error:
+        summary = diagnostics['observation_error']
+        # Count held-out occurrences, including repeated rows; never average
+        # fold RMSEs or silently compare only a model's successful folds.
+        complete = (summary['n_test'] > 0 and
+                    summary['successful_splits'] == diagnostics['total_splits'])
+        if complete and np.isfinite([chi_squared_total, nll_total]).all():
+            summary.update({
+                'complete': True,
+                'standardized_rmse': float(np.sqrt(chi_squared_total / summary['n_test'])),
+                'negative_log_likelihood': nll_total,
+                'mean_negative_log_likelihood': nll_total / summary['n_test'],
+            })
     scores = {k:np.array(scores[k]) for k in scores}
     result = (scores, fit_params) if return_fit_params else scores
     return (result, diagnostics) if return_diagnostics else result
