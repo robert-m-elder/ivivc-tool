@@ -9,10 +9,16 @@ import pandas as pd
 
 from preprocessing import preprocessing_options
 
+from .observations import (
+    ObservationUncertainty,
+    ResolvedObservationUncertainty,
+    resolve_observation_uncertainty,
+)
 from .types import (
     NormalizationRecord,
     PreparedIVIVCData,
     PreprocessingMetadata,
+    PreprocessingSource,
     PreprocessingWarning,
     TimeCourse,
 )
@@ -31,10 +37,54 @@ def _normalization_order(selection: Iterable[str] | None) -> list[str]:
     )
 
 
-def _clean_time_course(course: TimeCourse) -> TimeCourse:
-    """Remove rows with missing responses while preserving true zero times."""
+def _course_uncertainty(course, supplied):
+    if supplied is not None and course.observation_uncertainty is not None:
+        raise ValueError('Supply uncertainty either on the TimeCourse or as a preprocessing keyword, not both.')
+    return course.observation_uncertainty if supplied is None else supplied
+
+
+def _check_uncertainty_transforms(normalizations, scalings, interpolations=()):
+    """Require explicit support rather than guessing a transformed error model."""
+    for name in normalizations:
+        if name != 'one_minus':
+            raise ValueError(
+                f'Normalization {name!r} is not supported with supplied uncertainty. '
+                'Measured-baseline and min-max normalization need joint uncertainty '
+                'handling. Use unnormalized data or data already expressed on a fixed '
+                'response scale with matching SD/SEM.'
+            )
+    for name in scalings:
+        if name != 'log_x':
+            raise ValueError(
+                f'Scaling {name!r} is not supported with supplied uncertainty. '
+                'Log-response scaling needs a transformed observation-error model; '
+                'use the unscaled response with matching SD/SEM.'
+            )
+    if any(name not in ('none', 'default', 'alternative') for name in interpolations):
+        raise ValueError('This interpolation has not been verified to preserve uncertainty-bearing source rows.')
+
+
+def _clean_time_course(
+    course: TimeCourse, *, observation_uncertainty=None, clean_missing_time=False,
+) -> tuple[TimeCourse, np.ndarray]:
+    """Mask observations and uncertainty together; preserve legacy cleaning by default."""
     mask = ~pd.isna(course.value)
-    return TimeCourse(course.time[mask], course.value[mask], label=course.label)
+    if clean_missing_time:
+        mask &= ~pd.isna(course.time)
+    uncertainty = resolve_observation_uncertainty(
+        observation_uncertainty, len(course.value), row_mask=mask,
+    )
+    return TimeCourse(
+        course.time[mask], course.value[mask], label=course.label,
+        observation_uncertainty=uncertainty,
+    ), np.flatnonzero(mask)
+
+
+def _source_record(course, uncertainty, retained_rows):
+    return PreprocessingSource(
+        course.time, course.value, retained_rows,
+        observation_uncertainty=uncertainty, label=course.label,
+    )
 
 
 def _normalization_parameters(values: np.ndarray, name: str) -> dict[str, float | bool]:
@@ -92,12 +142,14 @@ def _apply_normalizations(
             current_in_vitro.time,
             normalized_in_vitro,
             label=current_in_vitro.label,
+            observation_uncertainty=current_in_vitro.observation_uncertainty,
         )
         if current_in_vivo is not None:
             current_in_vivo = TimeCourse(
                 current_in_vivo.time,
                 normalized_in_vivo,
                 label=current_in_vivo.label,
+                observation_uncertainty=current_in_vivo.observation_uncertainty,
             )
 
         records.append(
@@ -138,12 +190,14 @@ def _apply_scalings(
                     scaled_t1,
                     current_in_vitro.value,
                     label=current_in_vitro.label,
+                    observation_uncertainty=current_in_vitro.observation_uncertainty,
                 )
                 if two_datasets:
                     current_in_vivo = TimeCourse(
                         scaled_t2,
                         current_in_vivo.value,
                         label=current_in_vivo.label,
+                        observation_uncertainty=current_in_vivo.observation_uncertainty,
                     )
             elif scaling_name == 'log_y':
                 scaled_m1 = preprocessing_options['scaling'][scaling_name](current_in_vitro.value)
@@ -227,12 +281,20 @@ def prepare_time_course(
     selected_normalizations: Iterable[str] | None = None,
     fallback_invalid_log_scaling: bool = False,
     label: str | None = None,
+    observation_uncertainty: ObservationUncertainty | ResolvedObservationUncertainty | None = None,
 ) -> tuple[TimeCourse, PreprocessingMetadata]:
     """Clean and transform one time course without performing interpolation."""
     scaling_names = _as_selection_list(selected_scalings)
     normalization_names = _normalization_order(selected_normalizations)
 
-    cleaned = _clean_time_course(TimeCourse(time, value, label=label))
+    has_uncertainty = observation_uncertainty is not None
+    if has_uncertainty:
+        _check_uncertainty_transforms(normalization_names, scaling_names)
+    original = TimeCourse(time, value, label=label)
+    cleaned, retained_rows = _clean_time_course(
+        original, observation_uncertainty=observation_uncertainty,
+        clean_missing_time=has_uncertainty,
+    )
     normalized, _, normalization_records = _apply_normalizations(
         cleaned,
         None,
@@ -251,6 +313,8 @@ def prepare_time_course(
         selected_normalizations=tuple(normalization_names),
         normalizations=normalization_records,
         warnings=preprocessing_warnings,
+        sources={'profile': _source_record(original, observation_uncertainty, retained_rows)}
+        if has_uncertainty else {},
     )
     return scaled, metadata
 
@@ -263,14 +327,25 @@ def prepare_ivivc_data(
     selected_scalings: Iterable[str] | None = None,
     selected_normalizations: Iterable[str] | None = None,
     fallback_invalid_log_scaling: bool = False,
+    in_vitro_uncertainty: ObservationUncertainty | ResolvedObservationUncertainty | None = None,
+    in_vivo_uncertainty: ObservationUncertainty | ResolvedObservationUncertainty | None = None,
 ) -> PreparedIVIVCData:
     """Prepare paired in vitro and in vivo time courses for IVIVC analysis."""
     interpolation_names = _as_selection_list(selected_interpolation)
     scaling_names = _as_selection_list(selected_scalings)
     normalization_names = _normalization_order(selected_normalizations)
 
-    cleaned_in_vitro = _clean_time_course(in_vitro)
-    cleaned_in_vivo = _clean_time_course(in_vivo)
+    vitro_uncertainty = _course_uncertainty(in_vitro, in_vitro_uncertainty)
+    vivo_uncertainty = _course_uncertainty(in_vivo, in_vivo_uncertainty)
+    has_uncertainty = vitro_uncertainty is not None or vivo_uncertainty is not None
+    if has_uncertainty:
+        _check_uncertainty_transforms(normalization_names, scaling_names, interpolation_names)
+    cleaned_in_vitro, vitro_rows = _clean_time_course(
+        in_vitro, observation_uncertainty=vitro_uncertainty, clean_missing_time=has_uncertainty,
+    )
+    cleaned_in_vivo, vivo_rows = _clean_time_course(
+        in_vivo, observation_uncertainty=vivo_uncertainty, clean_missing_time=has_uncertainty,
+    )
     normalized_in_vitro, normalized_in_vivo, normalization_records = _apply_normalizations(
         cleaned_in_vitro,
         cleaned_in_vivo,
@@ -294,6 +369,14 @@ def prepare_ivivc_data(
         )
 
     t1, m1, t2, m2, mm, tt, ti1, ti2, mi1, mi2 = data
+    if has_uncertainty and any(
+        not np.array_equal(returned, observed)
+        for returned, observed in (
+            (t1, scaled_in_vitro.time), (m1, scaled_in_vitro.value),
+            (t2, scaled_in_vivo.time), (m2, scaled_in_vivo.value),
+        )
+    ):
+        raise ValueError('Interpolation changed original source rows; supplied uncertainty cannot be transported.')
     metadata = PreprocessingMetadata(
         selected_interpolation=tuple(interpolation_names),
         interpolation=interpolation_choices[-1],
@@ -302,11 +385,17 @@ def prepare_ivivc_data(
         selected_normalizations=tuple(normalization_names),
         normalizations=normalization_records,
         warnings=preprocessing_warnings,
+        sources={
+            'in_vitro': _source_record(in_vitro, vitro_uncertainty, vitro_rows),
+            'in_vivo': _source_record(in_vivo, vivo_uncertainty, vivo_rows),
+        } if has_uncertainty else {},
     )
 
     return PreparedIVIVCData(
-        in_vitro=TimeCourse(t1, m1, label=scaled_in_vitro.label),
-        in_vivo=TimeCourse(t2, m2, label=scaled_in_vivo.label),
+        in_vitro=TimeCourse(t1, m1, label=scaled_in_vitro.label,
+                           observation_uncertainty=scaled_in_vitro.observation_uncertainty),
+        in_vivo=TimeCourse(t2, m2, label=scaled_in_vivo.label,
+                          observation_uncertainty=scaled_in_vivo.observation_uncertainty),
         response_grid=mm,
         time_grid=tt,
         in_vitro_time_at_response=ti1,
@@ -327,10 +416,16 @@ def prepare_data(
     selected_scalings: Iterable[str] | None = None,
     selected_normalizations: Iterable[str] | None = None,
     fallback_invalid_log_scaling: bool = False,
+    in_vitro_uncertainty: ObservationUncertainty | ResolvedObservationUncertainty | None = None,
+    in_vivo_uncertainty: ObservationUncertainty | ResolvedObservationUncertainty | None = None,
 ) -> PreparedIVIVCData:
     """Convenience entry point matching the existing four-array workflow."""
     two_datasets = (t2 is not None) and (m2 is not None)
     if not two_datasets:
+        if in_vivo_uncertainty is not None or (
+            in_vitro_uncertainty is not None and (t2 is not None or m2 is not None)
+        ):
+            raise ValueError('In vivo uncertainty or partial paired input requires both in vivo time and response arrays.')
         in_vitro, metadata = prepare_time_course(
             t1,
             m1,
@@ -338,6 +433,7 @@ def prepare_data(
             selected_normalizations=selected_normalizations,
             fallback_invalid_log_scaling=fallback_invalid_log_scaling,
             label='in_vitro',
+            observation_uncertainty=in_vitro_uncertainty,
         )
         return PreparedIVIVCData(
             in_vitro=in_vitro,
@@ -352,4 +448,6 @@ def prepare_data(
         selected_scalings=selected_scalings,
         selected_normalizations=selected_normalizations,
         fallback_invalid_log_scaling=fallback_invalid_log_scaling,
+        in_vitro_uncertainty=in_vitro_uncertainty,
+        in_vivo_uncertainty=in_vivo_uncertainty,
     )

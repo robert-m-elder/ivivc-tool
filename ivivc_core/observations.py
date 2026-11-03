@@ -1,4 +1,4 @@
-"""Absolute uncertainty of supplied responses, before fitting or transformation.
+"""Shared absolute response uncertainty on the supplied data's current scale.
 
 An individual response uses its SD; a reported mean uses its SEM. Both resolve
 to ``sigma``, the standard uncertainty of the actual supplied value. Optional
@@ -236,7 +236,7 @@ class ResolvedObservationUncertainty:
 
 
 def resolve_observation_uncertainty(
-    uncertainty: ObservationUncertainty | None,
+    uncertainty: ObservationUncertainty | ResolvedObservationUncertainty | None,
     n_observations: int,
     *,
     row_mask=None,
@@ -248,13 +248,19 @@ def resolve_observation_uncertainty(
     Pointwise arrays must match the original row count, even when a mask is
     supplied. Only retained values must be finite and positive; this permits
     missing entries on rows removed for missing time/response values.
+    Already-resolved uncertainty is checked against the same original count
+    and subset without changing its interpretation or supplied-format metadata.
     """
     count = _observation_count(n_observations)
     mask = _selection(row_mask, count)
     if uncertainty is None:
         return None
+    if isinstance(uncertainty, ResolvedObservationUncertainty):
+        if uncertainty.n_observations != count:
+            raise ValueError('Resolved uncertainty must match the original observations before row masking.')
+        return uncertainty.subset(mask)
     if not isinstance(uncertainty, ObservationUncertainty):
-        raise TypeError('uncertainty must be an ObservationUncertainty instance or None.')
+        raise TypeError('uncertainty must be supplied/resolved observation uncertainty or None.')
     sigma = _selected_values(
         uncertainty.standard_uncertainty, count, mask,
         'standard_uncertainty', _validated_sigma,

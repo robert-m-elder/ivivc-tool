@@ -9,11 +9,12 @@ current browser or CLI contracts.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Any, Generic, Iterator, Mapping, TypeVar
 
 import numpy as np
 
-from .observations import ResolvedObservationUncertainty
+from .observations import ObservationUncertainty, ResolvedObservationUncertainty
 
 
 @dataclass
@@ -28,6 +29,7 @@ class TimeCourse:
     time: np.ndarray
     value: np.ndarray
     label: str | None = None
+    observation_uncertainty: ResolvedObservationUncertainty | None = None
 
     def __post_init__(self) -> None:
         time = np.asarray(self.time)
@@ -38,6 +40,51 @@ class TimeCourse:
             raise ValueError('Time-course time and response arrays must have the same length.')
         self.time = time.copy()
         self.value = value.copy()
+        if self.observation_uncertainty is not None:
+            if not isinstance(self.observation_uncertainty, ResolvedObservationUncertainty):
+                raise TypeError('TimeCourse uncertainty must be resolved; pass raw uncertainty to preprocessing.')
+            if self.observation_uncertainty.n_observations != len(value):
+                raise ValueError('TimeCourse uncertainty must align with its response rows.')
+
+
+@dataclass(frozen=True, eq=False)
+class PreprocessingSource:
+    """Original inputs and the rows retained by one preprocessing call.
+
+    These snapshots are populated for supplied-uncertainty analyses. Original
+    arrays can contain missing values; uncertainty is recorded before cleaning
+    or transformation. Read-only copies preserve the original row/scale record.
+    """
+
+    time: np.ndarray
+    value: np.ndarray
+    retained_rows: np.ndarray
+    observation_uncertainty: ObservationUncertainty | ResolvedObservationUncertainty | None = None
+    label: str | None = None
+
+    def __post_init__(self) -> None:
+        time = np.array(self.time, copy=True)
+        value = np.array(self.value, copy=True)
+        rows = np.asarray(self.retained_rows)
+        if time.ndim != 1 or value.ndim != 1 or len(time) != len(value):
+            raise ValueError('Preprocessing source time and response must be aligned one-dimensional arrays.')
+        if rows.ndim != 1 or (rows.size and rows.dtype.kind not in ('i', 'u')):
+            raise ValueError('Retained source rows must be a one-dimensional integer array.')
+        if np.any(rows < 0) or np.any(rows >= len(value)) or np.any(np.diff(rows.astype(object)) <= 0):
+            raise ValueError('Retained source rows must be increasing unique indices within the original data.')
+        rows = np.array(rows, dtype=np.intp, copy=True)
+        uncertainty = self.observation_uncertainty
+        if uncertainty is not None and not isinstance(
+            uncertainty, (ObservationUncertainty, ResolvedObservationUncertainty),
+        ):
+            raise TypeError('Preprocessing source uncertainty must be supplied/resolved uncertainty or None.')
+        if isinstance(uncertainty, ResolvedObservationUncertainty) and uncertainty.n_observations != len(value):
+            raise ValueError('Resolved source uncertainty must align with the original source rows.')
+        for array in (time, value, rows):
+            array.setflags(write=False)
+        object.__setattr__(self, 'time', time)
+        object.__setattr__(self, 'value', value)
+        object.__setattr__(self, 'retained_rows', rows)
 
 
 @dataclass(frozen=True)
@@ -77,9 +124,24 @@ class PreprocessingMetadata:
     selected_normalizations: tuple[str, ...] = ()
     normalizations: tuple[NormalizationRecord, ...] = ()
     warnings: tuple[PreprocessingWarning, ...] = ()
+    sources: Mapping[str, PreprocessingSource] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        sources = dict(self.sources)
+        if any(not isinstance(name, str) or not name or not isinstance(source, PreprocessingSource)
+               for name, source in sources.items()):
+            raise TypeError('Preprocessing sources must map names to PreprocessingSource records.')
+        # Preserve legacy deepcopy/asdict behavior when no source snapshots exist.
+        object.__setattr__(self, 'sources', MappingProxyType(sources) if sources else {})
+
+    @property
+    def has_observation_uncertainty(self) -> bool:
+        return any(source.observation_uncertainty is not None for source in self.sources.values())
 
     def to_legacy_dict(self) -> dict[str, Any]:
         """Return the exact metadata shape currently used by the IVIVC app."""
+        if self.has_observation_uncertainty:
+            raise ValueError('Legacy preprocessing metadata cannot retain supplied uncertainty; use the structured metadata.')
         return {
             'applied_scalings': list(self.applied_scalings),
             'warnings': [warning.to_legacy_dict() for warning in self.warnings],
@@ -117,6 +179,14 @@ class PreparedIVIVCData:
     def has_in_vivo(self) -> bool:
         return self.in_vivo is not None
 
+    @property
+    def has_observation_uncertainty(self) -> bool:
+        return (
+            self.in_vitro.observation_uncertainty is not None
+            or (self.in_vivo is not None and self.in_vivo.observation_uncertainty is not None)
+            or self.preprocessing.has_observation_uncertainty
+        )
+
     def to_legacy_data(self) -> list[np.ndarray] | tuple[np.ndarray, ...]:
         """Return the positional data structure expected by ``engine.py``.
 
@@ -124,6 +194,8 @@ class PreparedIVIVCData:
         historically return the ten-item tuple produced by the interpolation
         functions. Both distinctions are retained for compatibility.
         """
+        if self.has_observation_uncertainty:
+            raise ValueError('Legacy data arrays cannot retain supplied uncertainty; use PreparedIVIVCData directly.')
         if self.in_vivo is None:
             return [self.in_vitro.time.copy(), self.in_vitro.value.copy()]
 
