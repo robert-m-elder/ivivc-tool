@@ -162,6 +162,26 @@
             </table>
             <h3>Analysis Settings:</h3>
             {{ render_analysis_settings_table(analysis_config_rows) }}
+            {% if uncertainty_sections %}
+            <section class="uncertainty-summary" aria-label="Supplied experimental uncertainty">
+                {% for item in uncertainty_sections %}
+                    {% if item.type == 'heading' %}
+                        <h3>{{ item.text }}</h3>
+                    {% elif item.type == 'paragraph' %}
+                        <p>{{ item.text }}</p>
+                    {% elif item.type == 'table' %}
+                        <h4>{{ item.title }}</h4>
+                        <div class="report-table-scroll" role="region" aria-label="{{ item.title }}" tabindex="0">
+                            <table class="dataframe table table-striped" data-table-context="{{ item.title }}">
+                                <caption>{{ item.description }}</caption>
+                                <thead><tr>{% for cell in item.rows[0] %}<th scope="col">{{ cell }}</th>{% endfor %}</tr></thead>
+                                <tbody>{% for row in item.rows[1:] %}<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+                            </table>
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            </section>
+            {% endif %}
             <!--
             <h4>Grid-search initialization</h4>
             {{ grid_search_description_html | safe }}

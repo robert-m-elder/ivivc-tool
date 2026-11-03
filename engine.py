@@ -17,6 +17,7 @@ import uncertainties as unc
 from metrics import metrics
 from models import approaches, models
 from ivivc_core.fitting import fit_profile
+from ivivc_core.api import _validate_calibration_uncertainty_transport
 from ivivc_core.predictions import (
     inverse_response_prediction_intervals as core_inverse_response_prediction_intervals,
     inverse_response_times as core_inverse_response_times,
@@ -29,7 +30,7 @@ from ivivc_core.predictions import (
     safe_ratio as core_safe_ratio,
 )
 from ivivc_core.preprocessing import prepare_data
-from ivivc_core.types import TimeCourse
+from ivivc_core.types import TimeCourse, PreparedIVIVCData
 from utilities.misc import hex_to_rgba
 from utilities.parameter_diagnostics import (
     _diagnostic_unavailable as _parameter_diagnostics_unavailable,
@@ -349,9 +350,29 @@ def _tau_interval_row(tau_value, multiplier, label='Tau', diagnostics=None):
     }
 
 
+def data_for_display(data):
+    """Return presentation arrays while retaining uncertainty on structured data."""
+    if not isinstance(data, PreparedIVIVCData):
+        return data
+    if data.in_vivo is None:
+        return [data.in_vitro.time.copy(), data.in_vitro.value.copy()]
+    return tuple(None if values is None else np.asarray(values).copy() for values in (
+        data.in_vitro.time, data.in_vitro.value, data.in_vivo.time, data.in_vivo.value,
+        data.response_grid, data.time_grid, data.in_vitro_time_at_response,
+        data.in_vivo_time_at_response, data.in_vitro_response_on_time_grid,
+        data.in_vivo_response_on_time_grid,
+    ))
+
+
 def preprocess_data(t1, m1, t2, m2, selected_interpolation=None, selected_scalings=None, selected_normalizations=None,
-                    fallback_invalid_log_scaling=False, return_metadata=False):
+                    fallback_invalid_log_scaling=False, return_metadata=False, *,
+                    in_vitro_uncertainty=None, in_vivo_uncertainty=None, return_prepared=False):
     """Backward-compatible adapter over structured core preprocessing."""
+    supplied = {}
+    if in_vitro_uncertainty is not None:
+        supplied['in_vitro_uncertainty'] = in_vitro_uncertainty
+    if in_vivo_uncertainty is not None:
+        supplied['in_vivo_uncertainty'] = in_vivo_uncertainty
     prepared = prepare_data(
         t1,
         m1,
@@ -361,11 +382,15 @@ def preprocess_data(t1, m1, t2, m2, selected_interpolation=None, selected_scalin
         selected_scalings=selected_scalings,
         selected_normalizations=selected_normalizations,
         fallback_invalid_log_scaling=fallback_invalid_log_scaling,
+        **supplied,
     )
-    data = prepared.to_legacy_data()
+    data = prepared if return_prepared else prepared.to_legacy_data()
 
     if return_metadata:
-        metadata = prepared.preprocessing.to_legacy_dict()
+        metadata = {
+            'applied_scalings': list(prepared.preprocessing.applied_scalings),
+            'warnings': [warning.to_legacy_dict() for warning in prepared.preprocessing.warnings],
+        }
         metadata['requested_scalings'] = list(
             prepared.preprocessing.selected_scalings
         )
@@ -391,6 +416,8 @@ def preprocess_data(t1, m1, t2, m2, selected_interpolation=None, selected_scalin
                     'applied': bool(parameters.get('applied', True)),
                     'note': '',
                 }
+                if parameters.get('constants_treated_as_fixed', False):
+                    record['constants_treated_as_fixed'] = True
 
                 if normalization.name == 'initial_value':
                     reference = parameters.get('initial_value')
@@ -425,6 +452,15 @@ def preprocess_data(t1, m1, t2, m2, selected_interpolation=None, selected_scalin
                 normalization_records.append(record)
 
         metadata['normalization_records'] = normalization_records
+        if prepared.has_observation_uncertainty:
+            sources = [('in_vitro' if prepared.has_in_vivo else 'prediction', prepared.in_vitro)]
+            if prepared.has_in_vivo:
+                sources.append(('in_vivo', prepared.in_vivo))
+            metadata['observation_uncertainty'] = {
+                name: (course.observation_uncertainty.to_metadata()
+                       if course.observation_uncertainty is not None else None)
+                for name, course in sources
+            }
         return data, metadata
 
     return data
@@ -527,6 +563,8 @@ def _profile_fit_to_legacy_components(profile_fit, *, include_tau=False):
         components['evidence_data']['rss'] = np.nan
         information_criteria = dict(profile_fit.fit_diagnostics.get('information_criteria') or {})
         components['evidence_data']['information_criteria'] = information_criteria
+        components['observation_uncertainty'] = profile_fit.observation_uncertainty.to_metadata()
+        components['fit_diagnostics'] = dict(profile_fit.fit_diagnostics)
         components['fit_metadata'].update({
             'parameter_interval_method': parameter_summary['method'],
             'parameter_interval_distribution': parameter_summary['distribution'],
@@ -559,6 +597,13 @@ def _profile_fit_to_legacy_components(profile_fit, *, include_tau=False):
 
 
 def process_data(data, selected_models, selected_approaches, selected_metrics, analysis_config=None):
+    prepared = data if isinstance(data, PreparedIVIVCData) else None
+    if prepared is not None:
+        if prepared.in_vivo is None:
+            raise ValueError('Paired calibration data are required for IVIVC fitting.')
+        _validate_calibration_uncertainty_transport(prepared)
+    in_vitro_uncertainty = prepared.in_vitro.observation_uncertainty if prepared is not None else None
+    in_vivo_uncertainty = prepared.in_vivo.observation_uncertainty if prepared is not None else None
     analysis_config = analysis_config or {}
     grid_search_num_points = int(analysis_config.get('grid_search_num_points', num_points_for_grid_search))
     grid_search_num_cores = analysis_config.get('grid_search_num_cores', num_cores_for_grid_search)
@@ -580,7 +625,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
         'grid_search_param_max': 1e6,
         'grid_search_random_state': 12345,
     }
-    t1,m1,t2,m2,mm,tt,ti1,ti2,mi1,mi2 = data
+    t1,m1,t2,m2,mm,tt,ti1,ti2,mi1,mi2 = data_for_display(data)
 
     results = {}
 
@@ -591,6 +636,8 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
             approach_id = model_key
 
         try:
+            if (in_vitro_uncertainty is not None or in_vivo_uncertainty is not None) and approach_id != 'approach2':
+                raise ValueError('Supplied calibration uncertainty is supported only for Approach 2.')
             if approach_id == 'approach1':
                 profile_fit = fit_profile(
                     ti1,
@@ -645,6 +692,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                     approach_id=approach_id,
                     calculate_tau=True,
                     config_defaults=fit_config_defaults,
+                    **({'observation_uncertainty': in_vitro_uncertainty} if in_vitro_uncertainty is not None else {}),
                 )
                 legacy1 = _profile_fit_to_legacy_components(profile_fit1, include_tau=True)
 
@@ -657,6 +705,7 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                     approach_id=approach_id,
                     calculate_tau=True,
                     config_defaults=fit_config_defaults,
+                    **({'observation_uncertainty': in_vivo_uncertainty} if in_vivo_uncertainty is not None else {}),
                 )
                 legacy2 = _profile_fit_to_legacy_components(profile_fit2, include_tau=True)
 
@@ -675,6 +724,10 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                         'residuals1': profile_fit1.residuals,
                         'residuals2': profile_fit2.residuals,
                         'approach': approaches[approach_id]['display_name'],
+                        **({'observation_uncertainty1': legacy1['observation_uncertainty']}
+                           if 'observation_uncertainty' in legacy1 else {}),
+                        **({'observation_uncertainty2': legacy2['observation_uncertainty']}
+                           if 'observation_uncertainty' in legacy2 else {}),
                     },
                 )
                 results[model_key] = {
@@ -731,6 +784,13 @@ def process_data(data, selected_models, selected_approaches, selected_metrics, a
                         legacy2['fit_metadata'],
                     ],
                 }
+                if in_vitro_uncertainty is not None or in_vivo_uncertainty is not None:
+                    results[model_key]['observation_uncertainty'] = [
+                        legacy1.get('observation_uncertainty'), legacy2.get('observation_uncertainty'),
+                    ]
+                    results[model_key]['fit_diagnostics'] = [
+                        dict(profile_fit1.fit_diagnostics), dict(profile_fit2.fit_diagnostics),
+                    ]
             elif approach_id == 'approach3':
                 plot_image_v = create_plotly_a3(tt,mi1,mi2,ptype='v')
                 plot_image_t = create_plotly_a3(mm,ti1,ti2,ptype='t')
@@ -762,14 +822,52 @@ def _safe_ratio(numerator, denominator):
 
 def process_predictions(data, prediction_data, results, selected_approaches, interpolated_data=None, *, selected_scalings=None):
     """Process predictions using fitted models on a new dataset."""
+    prepared = data if isinstance(data, PreparedIVIVCData) else None
+    if isinstance(prediction_data, PreparedIVIVCData):
+        if prediction_data.in_vivo is not None:
+            raise ValueError('Prediction input must contain one time course.')
+        prediction_data = prediction_data.in_vitro
+    if isinstance(prediction_data, TimeCourse):
+        prediction_course = prediction_data
+        t_pred, m_pred = prediction_course.time, prediction_course.value
+    else:
+        t_pred, m_pred = prediction_data
+        prediction_course = TimeCourse(t_pred, m_pred, label='prediction_input')
+    if prepared is not None and prediction_course.observation_uncertainty is not None:
+        if prediction_course is prepared.in_vitro or prediction_course is prepared.in_vivo:
+            raise ValueError('Prediction measurements with supplied uncertainty must be independent of calibration measurements.')
+    data = data_for_display(data)
+    interpolated_data = data_for_display(interpolated_data)
     t1, m1, t2, m2, mm, tt, ti1, ti2, mi1, mi2 = data
-    t_pred, m_pred = prediction_data
-    prediction_course = TimeCourse(t_pred, m_pred, label='prediction_input')
     prediction_results = {}
     minimum_inverse_time = (None if 'log_x' in (selected_scalings or ())
                             else min(0.0, float(np.nanmin(t2))))
 
     def annotate(trajectory, model_results):
+        source_uncertainty = model_results.get('observation_uncertainty') or [None, None]
+        if trajectory.source_approach == 'approach2' and (
+            prediction_course.observation_uncertainty is not None or any(item is not None for item in source_uncertainty)
+        ):
+            trajectory.auxiliary['calibration_uncertainty'] = {
+                name: {
+                    'observation_uncertainty': source_uncertainty[index],
+                    'covariance_scaling': 'absolute' if source_uncertainty[index] is not None else 'residual_scaled',
+                }
+                for index, name in enumerate(('in_vitro', 'in_vivo'))
+            }
+            trajectory.auxiliary['prediction_inputs_fixed'] = prediction_course.observation_uncertainty is None
+            trajectory.auxiliary['future_observation_variability_included'] = False
+            if prepared is not None:
+                fixed = [{
+                    'name': record.name,
+                    'in_vitro_parameters': dict(record.in_vitro_parameters),
+                    'in_vivo_parameters': (dict(record.in_vivo_parameters)
+                                           if record.in_vivo_parameters is not None else None),
+                } for record in prepared.preprocessing.normalizations
+                    if record.in_vitro_parameters.get('constants_treated_as_fixed', False)
+                    or (record.in_vivo_parameters or {}).get('constants_treated_as_fixed', False)]
+                if fixed:
+                    trajectory.auxiliary['fixed_normalization_constants'] = fixed
         if trajectory.source_method == 'time_mapping':
             pairs_x = np.asarray(model_results.get('residual_x', ti1), dtype=float)
             pairs_y = np.asarray(model_results.get('residual_y', ti2), dtype=float)
@@ -1021,6 +1119,26 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                                 'status': inverse_prediction.status,
                             },
                         }
+                        if prediction_course.observation_uncertainty is not None or any(
+                            item is not None for item in (model_results.get('observation_uncertainty') or [])
+                        ):
+                            metadata_keys = {
+                                'calibration_uncertainty', 'fixed_normalization_constants',
+                                'prediction_input_uncertainty', 'prediction_inputs_fixed',
+                                'prediction_times_fixed', 'prediction_input_distribution',
+                                'prediction_input_errors_independent', 'prediction_calibration_independence_assumed',
+                                'prediction_input_uncertainty_propagated', 'future_observation_variability_included',
+                                'interval_kind', 'time_interval_kind', 'value_interval_kind',
+                                'interval_method', 'value_interval_method', 'interval_confidence_level',
+                            }
+                            approach_predictions[model_name]['uncertainty_metadata'] = {
+                                method: {key: value for key, value in trajectory.auxiliary.items()
+                                         if key in metadata_keys}
+                                for method, trajectory in (
+                                    ('value_ratio', value_prediction), ('tau_ratio', tau_prediction),
+                                    ('observed_response_inverse', inverse_prediction),
+                                ) if trajectory is not None
+                            }
 
                     elif approach == 'approach3' and interpolated_data is not None:
                         (
@@ -2412,6 +2530,23 @@ def extract_plotly_data_for_table(fig):
                 ('interval_requested_samples', 'Requested draws'),
             ):
                 columns[f'{label} ({trace_name})'] = [row.get(key) for row in records]
+            if any('input_standard_uncertainty' in row for row in records):
+                for key, label in (
+                    ('interval_kind', 'Primary interval interpretation'),
+                    ('input_standard_uncertainty', 'Input standard uncertainty'),
+                    ('input_uncertainty_kind', 'Input error type'),
+                    ('input_response_kind', 'Input response type'),
+                    ('input_replicate_count', 'Input replicate count'),
+                    ('value_interval_kind', 'Response interval interpretation'),
+                    ('value_interval_status', 'Response interval status'),
+                ):
+                    if any(key in row for row in records):
+                        columns[f'{label} ({trace_name})'] = [row.get(key) for row in records]
+                if trace_metadata.get('prediction_output_kind') == 'time':
+                    for bound in ('lower', 'upper'):
+                        columns[_plot_table_column_label(y_title, trace_name, bound)] = [
+                            row.get(f'response_{bound}_95') for row in records
+                        ]
 
         trace_data.append(columns)
 
@@ -2610,6 +2745,15 @@ def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
         ),
         zorder=10
     )
+    observation_limits = []
+    for index, (trace, response) in enumerate(((trace1, y1), (trace2, y2)), start=1):
+        uncertainty = model_info.get(f'observation_uncertainty{index}')
+        if uncertainty is not None:
+            sigma = np.asarray(uncertainty['standard_uncertainty'], dtype=float)
+            trace.error_y = dict(type='data', array=sigma, symmetric=True, visible=True,
+                                 color=trace.marker.color, thickness=2, width=5)
+            trace.name += ' (± ' + uncertainty['uncertainty_kind'].upper() + ')'
+            observation_limits.extend((np.asarray(response) - sigma, np.asarray(response) + sigma))
 
     # Create smooth lines for model fits
     x_smooth = np.linspace(min(np.concatenate([x1,x2])), max(np.concatenate([x1,x2])), 200)
@@ -2618,7 +2762,7 @@ def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
 
     # Manual axis ranges: observed data + final fits, with 10% padding.
     x_range = _padded_axis_range(x1, x2, x_smooth)
-    y_range = _padded_axis_range(y1, y2, y_smooth1, y_smooth2)
+    y_range = _padded_axis_range(y1, y2, y_smooth1, y_smooth2, *observation_limits)
 
     traces = [trace1, trace2]
     uncertainty_warnings = []
@@ -3016,6 +3160,21 @@ def _parameter_prediction_records(trajectory, output_kind):
         if 'denominator_lower' in metadata:
             row['denominator_lower_95'] = finite_value(metadata['denominator_lower'], index)
             row['denominator_upper_95'] = finite_value(metadata['denominator_upper'], index)
+        input_uncertainty = metadata.get('prediction_input_uncertainty')
+        if input_uncertainty is not None:
+            row['input_standard_uncertainty'] = input_uncertainty['standard_uncertainty'][index]
+            row['input_uncertainty_kind'] = input_uncertainty['uncertainty_kind']
+            row['input_response_kind'] = input_uncertainty['response_kind']
+            counts = input_uncertainty.get('replicate_counts')
+            row['input_replicate_count'] = counts[index] if counts is not None else None
+            row['prediction_inputs_fixed'] = False
+            row['future_observation_variability_included'] = False
+            if output_kind == 'time':
+                row['response_lower_95'] = finite_value(trajectory.value_lower, index)
+                row['response_upper_95'] = finite_value(trajectory.value_upper, index)
+                row['value_interval_kind'] = metadata.get('value_interval_kind')
+                row['value_interval_status'] = str(metadata['value_interval_status'][index]) if (
+                    'value_interval_status' in metadata) else 'not calculated'
     return rows
 
 
@@ -3030,6 +3189,9 @@ def _add_parameter_prediction_trace(fig, t_pred, m_pred, centers, records, outpu
     if not include_bands:
         for row in records:
             row.update(lower_95=None, upper_95=None, interval_status='not displayed (disabled)')
+            if 'response_lower_95' in row:
+                row.update(response_lower_95=None, response_upper_95=None,
+                           value_interval_status='not displayed (disabled)')
     lower = np.asarray([row['lower_95'] for row in records], dtype=float)
     upper = np.asarray([row['upper_95'] for row in records], dtype=float)
     center = np.asarray(centers, dtype=float)
@@ -3042,6 +3204,22 @@ def _add_parameter_prediction_trace(fig, t_pred, m_pred, centers, records, outpu
         visible=bool(np.any(contains)), color=colors['prediction_output'], thickness=2, width=8,
     )
     is_time = output_kind == 'time'
+    errors = {'error_x' if is_time else 'error_y': error}
+    response_outside = []
+    if is_time and any('response_lower_95' in row for row in records):
+        response_lower = np.asarray([row.get('response_lower_95') for row in records], dtype=float)
+        response_upper = np.asarray([row.get('response_upper_95') for row in records], dtype=float)
+        response_center = np.asarray(m_pred, dtype=float)
+        response_bounded = (np.isfinite(response_lower) & np.isfinite(response_upper)
+                            & np.isfinite(response_center) & np.isfinite(center))
+        response_contains = response_bounded & (response_lower <= response_center) & (response_center <= response_upper)
+        errors['error_y'] = dict(
+            type='data', symmetric=False,
+            array=np.where(response_contains, response_upper - response_center, np.nan),
+            arrayminus=np.where(response_contains, response_center - response_lower, np.nan),
+            visible=bool(np.any(response_contains)), color=colors['prediction_output'], thickness=2, width=8,
+        )
+        response_outside = np.flatnonzero(response_bounded & ~response_contains)
     fig.add_trace(go.Scatter(
         x=center if is_time else t_pred, y=m_pred if is_time else center,
         mode='markers', name='In Vivo (Predicted)',
@@ -3051,7 +3229,7 @@ def _add_parameter_prediction_trace(fig, t_pred, m_pred, centers, records, outpu
               if row.get(key)) for row in records],
         hovertemplate='Time: %{x}<br>Response: %{y}<br>%{text}<extra>%{fullData.name}</extra>',
         marker=dict(color=colors['prediction_output'], size=15, line=dict(color='white', width=2)),
-        **{'error_x' if is_time else 'error_y': error},
+        **errors,
     ))
     outside = np.flatnonzero(bounded & ~contains)
     if len(outside):
@@ -3060,7 +3238,17 @@ def _add_parameter_prediction_trace(fig, t_pred, m_pred, centers, records, outpu
         coordinates = [v for i in outside for v in (fixed[i], fixed[i], None)]
         fig.add_trace(go.Scatter(
             x=limits if is_time else coordinates, y=coordinates if is_time else limits,
-            mode='lines', name='95% parameter-uncertainty interval',
+            mode='lines', name=('95% propagated-uncertainty interval' if any(
+                row.get('interval_kind') == 'parameter_and_input_uncertainty' for row in records)
+                else '95% parameter-uncertainty interval'),
+            meta={'exclude_from_data_table': True},
+            line=dict(color=colors['prediction_output'], width=2), connectgaps=False,
+        ))
+    if len(response_outside):
+        limits = [v for i in response_outside for v in (response_lower[i], response_upper[i], None)]
+        times = [v for i in response_outside for v in (center[i], center[i], None)]
+        fig.add_trace(go.Scatter(
+            x=times, y=limits, mode='lines', name='95% input-response uncertainty interval',
             meta={'exclude_from_data_table': True},
             line=dict(color=colors['prediction_output'], width=2), connectgaps=False,
         ))

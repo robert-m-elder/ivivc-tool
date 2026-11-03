@@ -31,8 +31,11 @@ from utilities.descriptions import (
     format_selected_preprocessing_summary,
 )
 from utilities.reporting import build_final_model_options
-from utilities.report_content import build_report_sections
+from utilities.report_content import build_report_sections, build_uncertainty_sections
 from utilities.model_evidence import build_relative_evidence_tables
+from utilities.uncertainty_inputs import (
+    make_uncertainty_record, uncertainty_from_options, validate_uncertainty_options,
+)
 from utilities.word_report import build_word_report, safe_report_filename, WORD_MIME_TYPE
 from utilities.excel_export import build_accessible_excel, EXCEL_MIME_TYPE
 from utilities.app_info import get_app_info
@@ -49,6 +52,7 @@ from engine import (
     preprocess_data,
     process_data,
     process_predictions,
+    data_for_display,
 )
 
 app = Flask(__name__)
@@ -149,6 +153,15 @@ def index():
             ], status=400)
 
         validation_errors = []
+        has_prediction_dataset = bool(prediction_file and prediction_file.filename)
+        try:
+            uncertainty_active = validate_uncertainty_options(
+                request.form, selected_approaches, selected_scalings,
+                has_prediction=has_prediction_dataset,
+            )
+        except ValueError as exc:
+            uncertainty_active = False
+            validation_errors.append({'message': str(exc), 'field_id': 'uncertainty-group'})
         if not file or not file.filename:
             validation_errors.append({'message': 'Upload a fitting dataset.', 'field_id': 'file'})
         if not selected_approaches:
@@ -195,22 +208,50 @@ def index():
             return _render_index([
                 {'message': 'The fitting dataset could not be read. Check the file format and selected worksheet.', 'field_id': 'file'}
             ], status=400)
-        t1,m1,t2,m2 = df.values.T
+        try:
+            if len(df.columns) < 4:
+                raise ValueError('The fitting dataset requires at least four columns: Time1, Value1, Time2, Value2.')
+            t1, m1, t2, m2 = [pd.to_numeric(df.iloc[:, index], errors='raise').to_numpy(dtype=float)
+                              for index in range(4)]
+        except (TypeError, ValueError) as exc:
+            return _render_index([{'message': str(exc), 'field_id': 'file'}], status=400)
+
+        source_uncertainties, raw_uncertainty, observation_uncertainty = {}, {}, {}
+        if uncertainty_active:
+            try:
+                for source in ('in_vitro', 'in_vivo'):
+                    supplied, record = uncertainty_from_options(df, source, request.form)
+                    if supplied is not None:
+                        source_uncertainties[source + '_uncertainty'] = supplied
+                        raw_uncertainty[source] = record
+            except ValueError as exc:
+                return _render_index([{'message': str(exc), 'field_id': 'uncertainty-group'}], status=400)
         
         # Apply preprocessing after the uploaded data have been read. If a
         # selected Log10 scaling is incompatible with the processed values,
         # continue with that axis unscaled and report the fallback in results.
         try:
-            data, preprocessing_metadata = preprocess_data(
+            preparation_options = ({'return_prepared': True, **source_uncertainties}
+                                   if source_uncertainties else {})
+            calculation_data, preprocessing_metadata = preprocess_data(
                 t1, m1, t2, m2,
                 selected_interpolation=selected_interpolation,
                 selected_scalings=selected_scalings,
                 selected_normalizations=selected_normalizations,
                 fallback_invalid_log_scaling=True,
                 return_metadata=True,
+                **preparation_options,
             )
+            data = data_for_display(calculation_data) if source_uncertainties else calculation_data
+            if source_uncertainties:
+                for source, record in raw_uncertainty.items():
+                    observation_uncertainty[source] = make_uncertainty_record(
+                        record, getattr(calculation_data, source), calculation_data.preprocessing,
+                        source_name=source,
+                    )
         except ValueError as exc:
-            return _render_index([{'message': str(exc)}], status=400)
+            return _render_index([{'message': str(exc),
+                                   'field_id': 'uncertainty-group' if source_uncertainties else None}], status=400)
         selected_scalings = preprocessing_metadata['applied_scalings']
         preprocessing_warnings = preprocessing_metadata['warnings']
         t1_scale,m1_scale,t2_scale,m2_scale,mm,tt,ti1,ti2,mi1,mi2 = data
@@ -224,7 +265,7 @@ def index():
             warnings.filterwarnings("ignore", category=OptimizeWarning)
             warnings.filterwarnings("ignore", category=UndefinedMetricWarning)
             warnings.filterwarnings("ignore", category=RuntimeWarning)
-            results = process_data(data, selected_models, selected_approaches, selected_metrics, analysis_config=analysis_config)
+            results = process_data(calculation_data, selected_models, selected_approaches, selected_metrics, analysis_config=analysis_config)
         for model_key in results:
             # special for approach3
             if len(model_key.split(':'))>1:
@@ -272,7 +313,6 @@ def index():
         pred_df = None
         prediction_data = None
         prediction_preprocessing_metadata = None
-        has_prediction_dataset = bool(prediction_file and prediction_file.filename)
         if has_prediction_dataset:
             try:
                 # Read prediction data
@@ -285,22 +325,41 @@ def index():
                     pred_sheet_name = request.form.get('prediction_sheet')
                     pred_df = pd.read_excel(prediction_file, sheet_name=pred_sheet_name)
                 
-                # Assuming prediction file has 2 columns: time, value
-                t_pred, m_pred = pred_df.values.T[:2]
+                if len(pred_df.columns) < 2:
+                    raise ValueError('The prediction dataset requires at least two columns: Time, Value.')
+                t_pred, m_pred = [pd.to_numeric(pred_df.iloc[:, index], errors='raise').to_numpy(dtype=float)
+                                  for index in range(2)]
+                prediction_uncertainty, prediction_uncertainty_record = uncertainty_from_options(
+                    pred_df, 'prediction', request.form,
+                ) if uncertainty_active else (None, None)
+                prediction_options = ({'return_prepared': True, 'in_vitro_uncertainty': prediction_uncertainty}
+                                      if prediction_uncertainty is not None else {})
                 
-                prediction_data, prediction_preprocessing_metadata = preprocess_data(
+                calculation_prediction, prediction_preprocessing_metadata = preprocess_data(
                     t_pred, m_pred, None, None,
                     selected_interpolation=selected_interpolation,
                     selected_scalings=selected_scalings,
                     selected_normalizations=selected_normalizations,
                     return_metadata=True,
+                    **prediction_options,
                 )
+                if prediction_uncertainty is not None:
+                    prediction_data = data_for_display(calculation_prediction)
+                    observation_uncertainty['prediction'] = make_uncertainty_record(
+                        prediction_uncertainty_record, calculation_prediction.in_vitro,
+                        calculation_prediction.preprocessing, source_name='profile',
+                    )
+                    calculation_prediction = calculation_prediction.in_vitro
+                else:
+                    prediction_data = calculation_prediction
 
                 prediction_interpolation_info = create_prediction_interpolation_plotly(*prediction_data)
 
-                prediction_results = process_predictions(data, prediction_data, results, selected_approaches, interpolated_data=data, selected_scalings=selected_scalings)
+                prediction_results = process_predictions(calculation_data, calculation_prediction, results, selected_approaches, interpolated_data=data, selected_scalings=selected_scalings)
 
             except Exception as e:
+                if request.form.get('prediction_uncertainty_mode', 'none') != 'none':
+                    return _render_index([{'message': str(e), 'field_id': 'uncertainty-group'}], status=400)
                 print(f"Error processing prediction file: {e}")
                 prediction_results = {'error': str(e)}
 
@@ -316,11 +375,27 @@ def index():
         analysis_timestamp = datetime.now(timezone.utc).isoformat(timespec='seconds')
 
         def source_record(upload_name, worksheet, frame):
-            return {
+            record = {
                 'filename': upload_name.replace('\\', '/').rsplit('/', 1)[-1],
                 'worksheet': worksheet or 'Not applicable (CSV)',
                 'columns': [str(column) for column in frame.columns] if frame is not None else [],
             }
+            roles = {}
+            sources = ('prediction',) if frame is pred_df else ('in_vitro', 'in_vivo')
+            labels = {'in_vitro': 'In vitro calibration', 'in_vivo': 'In vivo calibration',
+                      'prediction': 'Prediction input'}
+            for source in sources:
+                source_uncertainty = observation_uncertainty.get(source, {})
+                for key in ('column', 'replicate_column'):
+                    if source_uncertainty.get(key):
+                        column = source_uncertainty[key]
+                        role = ('replicate count' if key == 'replicate_column'
+                                else source_uncertainty['uncertainty_kind'].upper())
+                        role = labels[source] + ' ' + role
+                        roles[column] = roles[column] + '; ' + role if column in roles else role
+            if roles:
+                record['column_roles'] = roles
+            return record
 
         # These records describe this calculation. Report export never refits a
         # model, repeats CV, or resamples the uncertainty calculations.
@@ -352,6 +427,9 @@ def index():
             'evidence_tables': evidence_tables,
             'models_registry': models,
         }
+        if observation_uncertainty:
+            report_context['observation_uncertainty'] = observation_uncertainty
+            report_context['uncertainty_independence_confirmed'] = True
         final_report_sections = {
             option['id']: build_report_sections(report_context, option)
             for option in final_model_options
@@ -383,6 +461,8 @@ def index():
                                has_prediction_dataset=has_prediction_dataset,
                                evidence_tables=evidence_tables, evidence_lookup=evidence_lookup,
                                include_prediction_methods=include_prediction_methods,
+                               observation_uncertainty=observation_uncertainty,
+                               uncertainty_sections=build_uncertainty_sections(report_context),
                                approach_descriptions=APPROACH_DESCRIPTIONS)
     return _render_index()
 

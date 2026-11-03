@@ -9,6 +9,7 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="{{ url_for('static', filename='js/accessibility.js') }}" defer></script>
     <script src="{{ url_for('static', filename='js/index.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/uncertainty-inputs.js') }}" defer></script>
     <link rel="shortcut icon" href="{{ url_for('static', filename='images/favicon-32.ico') }}">
 </head>
 <body>
@@ -82,6 +83,7 @@
                 </div>
                 <select name="sheet" id="sheet"{% if 'sheet' in error_field_ids %} aria-invalid="true" aria-describedby="sheet-error"{% endif %}>
                     <option value="">Select a sheet...</option>
+                    {% if request.form.get('sheet') %}<option value="{{ request.form.get('sheet') }}" selected>{{ request.form.get('sheet') }}</option>{% endif %}
                 </select>
                 {% for error in form_errors if error.field_id == 'sheet' %}<p id="sheet-error" class="field-error">{{ error.message }}</p>{% endfor %}
             </div>
@@ -103,10 +105,62 @@
                 </div>
                 <select name="prediction_sheet" id="sheet2"{% if 'sheet2' in error_field_ids %} aria-invalid="true" aria-describedby="sheet2-error"{% endif %}>
                     <option value="">Select a sheet...</option>
+                    {% if request.form.get('prediction_sheet') %}<option value="{{ request.form.get('prediction_sheet') }}" selected>{{ request.form.get('prediction_sheet') }}</option>{% endif %}
                 </select>
                 {% for error in form_errors if error.field_id == 'sheet2' %}<p id="sheet2-error" class="field-error">{{ error.message }}</p>{% endfor %}
             </div>
 </div>
+
+        <details class="form-section" id="uncertainty-options"{% if 'uncertainty-group' in error_field_ids %} open{% endif %}>
+            <summary><strong>Measurement uncertainty (optional; Approach 2)</strong></summary>
+            <fieldset id="uncertainty-group" class="semantic-fieldset" tabindex="-1" aria-describedby="uncertainty-input-help{% if 'uncertainty-group' in error_field_ids %} uncertainty-group-error{% endif %}"{% if 'uncertainty-group' in error_field_ids %} aria-invalid="true"{% endif %}>
+                <legend class="sr-only">Supplied measurement uncertainty</legend>
+                <p id="uncertainty-input-help">Enter absolute SD for individual observations or SEM for reported means, in the response's original units. If means are accompanied by replicate SD, convert SD to SEM before entry. The first four fitting columns and first two prediction columns keep their usual time/value order; additional columns may contain uncertainty and replicate counts.</p>
+                <div class="option-group-grid">
+                {% for prefix, label in [('in_vitro', 'In vitro calibration'), ('in_vivo', 'In vivo calibration'), ('prediction', 'In vitro prediction input')] %}
+                {% set mode = request.form.get(prefix + '_uncertainty_mode', 'none') %}
+                {% set kind = request.form.get(prefix + '_response_kind', 'individual') %}
+                <fieldset class="option-group" data-uncertainty-prefix="{{ prefix }}">
+                    <legend>{{ label }}</legend>
+                    <div class="form-group">
+                        <label for="{{ prefix }}_uncertainty_mode">Uncertainty input</label>
+                        <select id="{{ prefix }}_uncertainty_mode" name="{{ prefix }}_uncertainty_mode">
+                            {% for value, text in [('none', 'Not supplied'), ('constant', 'Constant SD or SEM'), ('column', 'SD or SEM column')] %}
+                            <option value="{{ value }}"{% if mode == value %} selected{% endif %}>{{ text }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group" data-uncertainty-field="kind"{% if mode == 'none' %} hidden{% endif %}>
+                        <label for="{{ prefix }}_response_kind">Entered response values are</label>
+                        <select id="{{ prefix }}_response_kind" name="{{ prefix }}_response_kind"{% if mode == 'none' %} disabled{% endif %}>
+                            <option value="individual"{% if kind == 'individual' %} selected{% endif %}>Individual observations — supply SD</option>
+                            <option value="mean"{% if kind == 'mean' %} selected{% endif %}>Reported means — supply SEM</option>
+                        </select>
+                    </div>
+                    <div class="form-group" data-uncertainty-field="constant"{% if mode != 'constant' %} hidden{% endif %}>
+                        <label for="{{ prefix }}_uncertainty_value">Constant absolute SD or SEM</label>
+                        <input type="number" step="any" min="0" id="{{ prefix }}_uncertainty_value" name="{{ prefix }}_uncertainty_value" value="{{ request.form.get(prefix + '_uncertainty_value', '') }}"{% if mode != 'constant' %} disabled{% endif %}>
+                    </div>
+                    <div class="form-group" data-uncertainty-field="column"{% if mode != 'column' %} hidden{% endif %}>
+                        <label for="{{ prefix }}_uncertainty_column">SD or SEM column header</label>
+                        <input type="text" id="{{ prefix }}_uncertainty_column" name="{{ prefix }}_uncertainty_column" value="{{ request.form.get(prefix + '_uncertainty_column', '') }}"{% if mode != 'column' %} disabled{% endif %}>
+                    </div>
+                    <div class="form-group" data-uncertainty-field="counts"{% if mode == 'none' or kind != 'mean' %} hidden{% endif %}>
+                        <label for="{{ prefix }}_replicate_column">Replicate-count column header (optional)</label>
+                        <input type="text" id="{{ prefix }}_replicate_column" name="{{ prefix }}_replicate_column" value="{{ request.form.get(prefix + '_replicate_column', '') }}"{% if mode == 'none' or kind != 'mean' %} disabled{% endif %}>
+                        <p class="evidence-note">Counts are recorded as metadata. The supplied SEM is used directly.</p>
+                    </div>
+                </fieldset>
+                {% endfor %}
+                </div>
+                <label class="stacked-option-label" id="uncertainty-independence-row">
+                    <input type="checkbox" id="uncertainty_independence_confirmed" name="uncertainty_independence_confirmed"{% if request.form.get('uncertainty_independence_confirmed') == 'on' %} checked{% endif %}>
+                    I confirm that errors are independent across entered rows and that prediction measurements are independent of calibration measurements.
+                </label>
+                <p class="evidence-note">Normalization reference values are held fixed. Reported intervals describe fitted-parameter and supplied-input uncertainty; future in vivo measurement variability is excluded.</p>
+                {% for error in form_errors if error.field_id == 'uncertainty-group' %}<p id="uncertainty-group-error" class="field-error">{{ error.message }}</p>{% endfor %}
+            </fieldset>
+        </details>
 
         <div class="form-section">
             <h3>
@@ -123,7 +177,7 @@
                         <button type="button" class="help-btn-small" data-modal="{{ approach_id }}-help" aria-label="Help for {{ approach.display_name }}" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button>
                     </legend>
                     <label class="approach-option-label">
-                        <input type="checkbox" name="approaches" value="{{ approach_id }}" aria-controls="{{ approach_id }}-models">
+                        <input type="checkbox" name="approaches" value="{{ approach_id }}" aria-controls="{{ approach_id }}-models"{% if approach_id in request.form.getlist('approaches') %} checked{% endif %}>
                         Include {{ approach.display_name }}
                     </label>
                     <fieldset id="{{ approach_id }}-models" class="model-fieldset">
@@ -138,7 +192,7 @@
                             {% for variant, variant_label in [('standard', 'Standard'), ('normalized', 'Normalized')] %}
                             {% if family[variant] %}
                             <label class="model-option-label model-variant-option">
-                                <input type="checkbox" name="models" value="{{ approach_id }}:{{ family[variant] }}" aria-label="{{ family.display_name }} — {{ variant_label }}">
+                                <input type="checkbox" name="models" value="{{ approach_id }}:{{ family[variant] }}" aria-label="{{ family.display_name }} — {{ variant_label }}"{% if approach_id + ':' + family[variant] in request.form.getlist('models') %} checked{% endif %}>
                                 <span class="model-variant-label" aria-hidden="true">{{ variant_label }}</span>
                             </label>
                             {% else %}<span class="model-variant-unavailable" aria-label="{{ variant_label }} variant unavailable">—</span>{% endif %}
@@ -149,7 +203,7 @@
                         {% else %}
                         {% for model_name in approach.models %}
                         <label class="model-option-label">
-                            <input type="checkbox" name="models" value="{{ approach_id }}:{{ model_name }}">
+                            <input type="checkbox" name="models" value="{{ approach_id }}:{{ model_name }}"{% if approach_id + ':' + model_name in request.form.getlist('models') %} checked{% endif %}>
                             {{ models[model_name].display_name }}
                         </label>
                         {% endfor %}
@@ -176,7 +230,7 @@
                     <legend>Normalization <button type="button" class="help-btn-small" data-modal="normalization-help" aria-label="Help for normalization options" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button></legend>
                     {% for norm_name, norm_func in preprocessing_options['normalization'].items() %}
                     {% set norm_meta = preprocessing_descriptions['normalization'].get(norm_name, {}) %}
-                    <label class="stacked-option-label"><input type="checkbox" name="normalizations" value="{{ norm_name }}"> {{ norm_meta.get('display_name', norm_name) }}</label>
+                    <label class="stacked-option-label"><input type="checkbox" name="normalizations" value="{{ norm_name }}"{% if norm_name in request.form.getlist('normalizations') %} checked{% endif %}> {{ norm_meta.get('display_name', norm_name) }}</label>
                     {% endfor %}
                     <!--<p class="evidence-note">Response reversal is applied after any selected normalization.</p>--!>
                 </fieldset>
@@ -184,14 +238,14 @@
                     <legend>Scaling <button type="button" class="help-btn-small" data-modal="scaling-help" aria-label="Help for scaling options" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button></legend>
                     {% for scale_name, scale_func in preprocessing_options['scaling'].items() %}
                     {% set scale_meta = preprocessing_descriptions['scaling'].get(scale_name, {}) %}
-                    <label class="stacked-option-label"><input type="checkbox" name="scalings" value="{{ scale_name }}"> {{ scale_meta.get('display_name', scale_name) }}</label>
+                    <label class="stacked-option-label"><input type="checkbox" name="scalings" value="{{ scale_name }}"{% if scale_name in request.form.getlist('scalings') %} checked{% endif %}> {{ scale_meta.get('display_name', scale_name) }}</label>
                     {% endfor %}
                 </fieldset>
                 <fieldset class="option-group">
                     <legend>Interpolation <button type="button" class="help-btn-small" data-modal="interpolation-help" aria-label="Help for interpolation options" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button></legend>
                     {% for interp_name, interp_func in preprocessing_options['interpolation'].items() %}
                     {% set interp_meta = preprocessing_descriptions['interpolation'].get(interp_name, {}) %}
-                    <label class="stacked-option-label"><input type="radio" name="interpolation" value="{{ interp_name }}" {% if interp_name == "default" %}checked{% endif %} required> {{ interp_meta.get('display_name', interp_name) }}</label>
+                    <label class="stacked-option-label"><input type="radio" name="interpolation" value="{{ interp_name }}" {% if interp_name in request.form.getlist('interpolation') or (request.method != 'POST' and interp_name == 'default') %}checked{% endif %} required> {{ interp_meta.get('display_name', interp_name) }}</label>
                     {% endfor %}
                 </fieldset>
             </div>
@@ -209,7 +263,7 @@
                 <div class="checkbox-grid">
                     {% for metric_name, metric_info in metrics.items() %}
                     <label class="checkbox-item">
-                        <input type="checkbox" name="metrics" value="{{ metric_name }}" {% if metric_name in ["r_squared", "rmse", "aicc"] %}checked{% endif %}>
+                        <input type="checkbox" name="metrics" value="{{ metric_name }}" {% if metric_name in request.form.getlist('metrics') or (request.method != 'POST' and metric_name in ['r_squared', 'rmse', 'aicc']) %}checked{% endif %}>
                         <span>{{ metric_info.display_name }}</span>
                     </label>
                     {% endfor %}
@@ -232,23 +286,23 @@
                 <div class="advanced-field">
                     <label for="cv_scheme">Scheme</label>
                     <select name="cv_scheme" id="cv_scheme">
-                        <option value="shuffle_split" selected>Shuffle split</option>
-                        <option value="leave_one_timepoint_out">Leave-one-timepoint-out</option>
-                        <option value="leave_contiguous_block_out">Leave-contiguous-block-out</option>
-                        <option value="none">None</option>
+                        <option value="shuffle_split"{% if request.form.get('cv_scheme', 'shuffle_split') == 'shuffle_split' %} selected{% endif %}>Shuffle split</option>
+                        <option value="leave_one_timepoint_out"{% if request.form.get('cv_scheme') == 'leave_one_timepoint_out' %} selected{% endif %}>Leave-one-timepoint-out</option>
+                        <option value="leave_contiguous_block_out"{% if request.form.get('cv_scheme') == 'leave_contiguous_block_out' %} selected{% endif %}>Leave-contiguous-block-out</option>
+                        <option value="none"{% if request.form.get('cv_scheme') == 'none' %} selected{% endif %}>None</option>
                     </select>
                 </div>
                 <div class="advanced-field">
                     <label for="cv_n_splits" id="cv_n_splits_label">Splits/block size</label>
-                    <input type="number" name="cv_n_splits" id="cv_n_splits" value="20" min="2">
+                    <input type="number" name="cv_n_splits" id="cv_n_splits" value="{{ request.form.get('cv_n_splits', '20') }}" min="2">
                 </div>
                 <div class="advanced-field">
                     <label for="cv_test_size">Test size</label>
-                    <input type="number" name="cv_test_size" id="cv_test_size" value="0.25" min="0.05" max="0.95" step="0.05">
+                    <input type="number" name="cv_test_size" id="cv_test_size" value="{{ request.form.get('cv_test_size', '0.25') }}" min="0.05" max="0.95" step="0.05">
                 </div>
                 <div class="advanced-field">
                     <label for="cv_random_state">Random seed</label>
-                    <input type="number" name="cv_random_state" id="cv_random_state" value="12345">
+                    <input type="number" name="cv_random_state" id="cv_random_state" value="{{ request.form.get('cv_random_state', '12345') }}">
                 </div>
             </fieldset>
 
@@ -257,19 +311,19 @@
                 <div class="advanced-row-label">Grid search <button type="button" class="help-btn-small" data-modal="grid-search-help" aria-label="Help for grid-search initialization settings" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button></div>
                 <div class="advanced-field">
                     <label for="grid_search_num_points">Random starts</label>
-                    <input type="number" name="grid_search_num_points" id="grid_search_num_points" value="{{ default_grid_search_num_points }}" min="1">
+                    <input type="number" name="grid_search_num_points" id="grid_search_num_points" value="{{ request.form.get('grid_search_num_points', default_grid_search_num_points) }}" min="1">
                 </div>
                 <div class="advanced-field">
                     <label for="grid_search_param_min">Parameter min</label>
-                    <input type="number" name="grid_search_param_min" id="grid_search_param_min" value="{{ default_grid_search_param_min }}" step="any">
+                    <input type="number" name="grid_search_param_min" id="grid_search_param_min" value="{{ request.form.get('grid_search_param_min', default_grid_search_param_min) }}" step="any">
                 </div>
                 <div class="advanced-field">
                     <label for="grid_search_param_max">Parameter max</label>
-                    <input type="number" name="grid_search_param_max" id="grid_search_param_max" value="{{ default_grid_search_param_max }}" step="any">
+                    <input type="number" name="grid_search_param_max" id="grid_search_param_max" value="{{ request.form.get('grid_search_param_max', default_grid_search_param_max) }}" step="any">
                 </div>
                 <div class="advanced-field">
                     <label for="grid_search_random_state">Random seed</label>
-                    <input type="number" name="grid_search_random_state" id="grid_search_random_state" value="{{ default_grid_search_random_state }}">
+                    <input type="number" name="grid_search_random_state" id="grid_search_random_state" value="{{ request.form.get('grid_search_random_state', default_grid_search_random_state) }}">
                 </div>
             </fieldset>
 
@@ -279,18 +333,18 @@
                 <div class="diagnostic-option-group">
                     <div class="diagnostic-option-heading">Cross-validation <button type="button" class="help-btn-small" data-modal="cross-validation-help" aria-label="Help for cross-validation diagnostic display settings" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button></div>
                     <label class="checkbox-item advanced-checkbox-option">
-                        <input type="checkbox" name="include_cv_fit_variability_plot" id="include_cv_fit_variability_plot">
+                        <input type="checkbox" name="include_cv_fit_variability_plot" id="include_cv_fit_variability_plot"{% if request.form.get('include_cv_fit_variability_plot') == 'on' %} checked{% endif %}>
                         <span>Fit variability (mean ± SD)</span>
                     </label>
                 </div>
                 <div class="diagnostic-option-group">
                     <div class="diagnostic-option-heading">Residuals <button type="button" class="help-btn-small" data-modal="residual-diagnostics-help" aria-label="Help for residual diagnostic display settings" aria-haspopup="dialog" aria-controls="help-modal"><span aria-hidden="true">?</span></button></div>
                     <label class="checkbox-item advanced-checkbox-option">
-                        <input type="checkbox" name="include_raw_residual_plots">
+                        <input type="checkbox" name="include_raw_residual_plots"{% if request.form.get('include_raw_residual_plots') == 'on' %} checked{% endif %}>
                         <span>Raw residuals</span>
                     </label>
                     <label class="checkbox-item advanced-checkbox-option">
-                        <input type="checkbox" name="include_residual_qq_plots">
+                        <input type="checkbox" name="include_residual_qq_plots"{% if request.form.get('include_residual_qq_plots') == 'on' %} checked{% endif %}>
                         <span>Quantile-quantile (Q-Q)</span>
                     </label>
                 </div>
@@ -333,7 +387,7 @@
             <p>Upload a file containing your in vitro and in vivo data for model fitting.</p>
             <p><strong>Required format:</strong></p>
             <ul>
-                <li>4 columns: Time1, Value1, Time2, Value2</li>
+                <li>First 4 columns: Time1, Value1, Time2, Value2; additional uncertainty columns may follow.</li>
                 <li>Time1/Value1: In vitro time and response value</li>
                 <li>Time2/Value2: In vivo time and response value</li>
             </ul>
@@ -350,7 +404,7 @@
             <p>Optional: Upload a file containing new in vitro data for prediction.</p>
             <p><strong>Format:</strong></p>
             <ul>
-                <li>2 columns: Time, Value</li>
+                <li>First 2 columns: Time, Value; additional uncertainty columns may follow.</li>
                 <li>Contains in vitro data for which you want to predict in vivo outcomes</li>
             </ul>
             <p><strong>Value</strong> means the in vitro response value measured at each time point.</p>

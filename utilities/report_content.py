@@ -85,6 +85,14 @@ def _fmt(value):
     return f'{number:.6g}' if math.isfinite(number) else 'N/A'
 
 
+def _precise_fmt(value):
+    if isinstance(value, (float, np.floating)):
+        return repr(float(value)) if math.isfinite(float(value)) else 'N/A'
+    if isinstance(value, (int, np.integer)) and not isinstance(value, (bool, np.bool_)):
+        return str(int(value))
+    return _fmt(value)
+
+
 def _vector(values):
     try:
         return np.asarray([] if values is None else values, dtype=float).reshape(-1)
@@ -120,10 +128,11 @@ def _range(values):
     return f'{_fmt(np.min(values))} to {_fmt(np.max(values))}' if len(values) else 'N/A'
 
 
-def _table(title, headers, rows, description=None):
+def _table(title, headers, rows, description=None, *, precise_columns=()):
     return {'type': 'table', 'title': title,
             'description': description or title + '. All rows are included.',
-            'header_rows': 1, 'rows': [[str(x) for x in headers]] + [[_fmt(x) for x in row] for row in rows]}
+            'header_rows': 1, 'rows': [[str(x) for x in headers]] +
+            [[_precise_fmt(x) if index in precise_columns else _fmt(x) for index, x in enumerate(row)] for row in rows]}
 
 
 def _paragraph(text, **metadata):
@@ -178,7 +187,8 @@ def _source_rows(label, source):
     roles = (('In vitro time', 'In vitro response', 'In vivo time', 'In vivo response')
              if label == 'Calibration' else ('In vitro prediction time', 'In vitro prediction response'))
     columns = source.get('columns') or []
-    rows.extend([label + f' column {index + 1}', str(column) + ' — ' + (roles[index] if index < len(roles) else 'Not used')]
+    column_roles = source.get('column_roles') or {}
+    rows.extend([label + f' column {index + 1}', str(column) + ' — ' + column_roles.get(str(column), column_roles.get(str(column).strip(), roles[index] if index < len(roles) else 'Not used'))]
                 for index, column in enumerate(columns))
     if not columns:
         rows.append([label + ' columns', 'Not recorded'])
@@ -187,11 +197,137 @@ def _source_rows(label, source):
     return rows
 
 
-def _observation_rows(raw):
+def _observation_rows(raw, uncertainty=None):
     x = np.asarray([] if raw.get('time') is None else raw['time'], dtype=object).reshape(-1)
     y = np.asarray([] if raw.get('response') is None else raw['response'], dtype=object).reshape(-1)
-    return [[i + 1, x[i] if i < len(x) else None, y[i] if i < len(y) else None]
+    rows = [[i + 1, x[i] if i < len(x) else None, y[i] if i < len(y) else None]
             for i in range(max(len(x), len(y)))]
+    if uncertainty:
+        for index, row in enumerate(rows):
+            row.append(_uncertainty_at(uncertainty.get('standard_uncertainty'), index))
+            if uncertainty.get('replicate_counts') is not None:
+                row.append(_uncertainty_at(uncertainty['replicate_counts'], index))
+    return rows
+
+
+def _uncertainty_at(values, index):
+    if values is None:
+        return None
+    values = np.asarray(values, dtype=object)
+    if values.ndim == 0:
+        return values.item()
+    return values[index] if index < len(values) else None
+
+
+def _uncertainty_records(context):
+    return {key: record for key, record in (context.get('observation_uncertainty') or {}).items()
+            if record and record.get('mode') in ('constant', 'column')}
+
+
+def _uncertainty_label(record):
+    return str(record.get('uncertainty_kind') or ('sem' if record.get('response_kind') == 'mean' else 'sd')).upper()
+
+
+def build_uncertainty_sections(context):
+    """Use the same interpretation and row-aligned error tables in page/export/report."""
+    records = _uncertainty_records(context)
+    if not records:
+        return []
+    labels = {'in_vitro': 'In vitro calibration', 'in_vivo': 'In vivo calibration',
+              'prediction': 'In vitro prediction input'}
+    sections = [_heading('Experimental uncertainty', 2)]
+    settings = []
+    for key, label in labels.items():
+        record = records.get(key)
+        raw = ((context.get('raw_prediction_data') or {}) if key == 'prediction' else
+               (context.get('raw_fitting_data') or {}).get(key, {}))
+        if not record:
+            if raw:
+                settings.append([label, 'Not supplied', 'Fixed prediction responses' if key == 'prediction'
+                                 else 'Existing residual-based covariance', 'Not supplied'])
+            continue
+        kind = _uncertainty_label(record)
+        source = ('Constant ' + _precise_fmt(record.get('constant', record.get('standard_uncertainty')))
+                  if record['mode'] == 'constant' else 'Column ' + str(record.get('column') or 'Not recorded'))
+        interpretation = kind + (' of the reported mean' if record.get('response_kind') == 'mean'
+                                 else ' of individual measurements')
+        settings.append([label, source, interpretation, record.get('replicate_column') or 'Not supplied'])
+    sections.append(_table('Supplied uncertainty interpretation',
+                           ['Dataset', 'Uncertainty input', 'Interpretation', 'Replicate-count column'], settings))
+    confirmation = ('Confirmed by the user.' if context.get('uncertainty_independence_confirmed')
+                    else 'User confirmation was not recorded.')
+    sections.append(_paragraph('Measurement errors at the entered rows are assumed independent within and across times; '
+                               'prediction measurements are assumed independent of calibration measurements. ' + confirmation))
+    sections.append(_paragraph('Individual measurements use SD and reported means use SEM. Replicate counts are optional metadata; '
+                               'SEM is not divided by counts again. Supplied errors use the entered response scale and are transformed '
+                               'with the responses. Time coordinates and normalization constants are held fixed; uncertainty in those constants is excluded.'))
+    sections.append(_paragraph('Observed-data error bars, where displayed, show one supplied SD or SEM. They are separate from the '
+                               'approximate 95% fitted-curve bands and propagated prediction intervals.'))
+    if any(key in records for key in ('in_vitro', 'in_vivo')):
+        sections.append(_paragraph('Approach 2 uses each calibration source\'s supplied errors for absolute-variance weighted fitting, '
+                                   'cross-validation training fits and fitted covariance. A source without entered errors retains residual-scaled covariance. '
+                                   'Coefficient intervals for supplied-error fits use a normal multiplier conditional on those errors. '
+                                   'AIC/BIC use the supplied-error normal likelihood where applicable; AICc retains the existing conventional correction.'))
+    if 'prediction' in records:
+        sections.append(_paragraph('Approach 2 propagates input-response uncertainty using independent normal errors at the entered rows. '
+                                   'Response-ratio intervals combine input and calibration uncertainty; inverse mapping retains the dependence '
+                                   'between sampled response and mapped time. Time-constant scaling carries input uncertainty on the response axis '
+                                   'without changing its calibration-based time intervals. Axis bounds are marginal intervals, not a joint 95% '
+                                   'region or simultaneous band. Future in vivo measurement variability is not included.'))
+    for key, label in labels.items():
+        record = records.get(key)
+        if not record:
+            continue
+        raw = ((context.get('raw_prediction_data') or {}) if key == 'prediction' else
+               (context.get('raw_fitting_data') or {}).get(key, {}))
+        retained = record.get('retained_rows') or []
+        raw_values = np.asarray(record.get('standard_uncertainty'), dtype=object)
+        count = max(len(_vector(raw.get('time'))), len(_vector(raw.get('response'))),
+                    int(record.get('source_row_count') or 0), len(raw_values) if raw_values.ndim else 0,
+                    max(retained, default=-1) + 1)
+        retained_lookup = {source_row: analyzed_row for analyzed_row, source_row in enumerate(retained)}
+        analyzed = record.get('analyzed') or {}
+        kind = _uncertainty_label(record)
+        headers = ['Source row', 'Entered ' + kind, 'Analyzed ' + kind, 'Retained observation']
+        has_counts = record.get('replicate_counts') is not None
+        if has_counts:
+            headers.insert(3, 'Replicate count (metadata)')
+        rows = []
+        for source_row in range(count):
+            analyzed_row = retained_lookup.get(source_row)
+            row = [source_row + 1, _uncertainty_at(record.get('standard_uncertainty'), source_row),
+                   _uncertainty_at(analyzed.get('standard_uncertainty'), analyzed_row) if analyzed_row is not None else None]
+            if has_counts:
+                row.append(_uncertainty_at(record.get('replicate_counts'), source_row))
+            row.append('Yes' if analyzed_row is not None else 'No')
+            rows.append(row)
+        sections.append(_table(label + ' uncertainty values', headers, rows,
+                               'Entered and analyzed uncertainty values aligned by original source row. Removed rows have no analyzed uncertainty.'
+                               + (' Analyzed error units: ' + str(analyzed['response_units']) + '.' if analyzed.get('response_units') else ''),
+                               precise_columns=range(1, len(headers))))
+    return sections
+
+
+def _method_uncertainty_text(method, prediction_uncertainty):
+    text = _METHODS[method][2]
+    if not prediction_uncertainty:
+        return text
+    if method == 'value_ratio':
+        return ('Vertical intervals combine supplied input-response uncertainty and fitted calibration-parameter uncertainty. '
+                'Each sampled input response multiplies its sampled in vivo/in vitro fitted-curve ratio once. '
+                'The nominal-input, fitted-parameter result remains the center. Bounds are pointwise Monte Carlo percentiles; '
+                'any unusable requested draw or a denominator interval including zero makes that interval unavailable. '
+                'No future in vivo measurement variability, residual noise, model-selection uncertainty or model inadequacy is added.')
+    if method == 'tau_ratio':
+        return text + (' Response-axis bounds separately show the supplied input SD/SEM as normal marginal intervals. '
+                       'Input-response errors do not widen the calibration-based time intervals. Future in vivo measurement variability is excluded.')
+    if method == 'observed_response_inverse':
+        return text.replace(
+            'Horizontal parameter-uncertainty intervals invert sampled in vivo curves at the fixed supplied response. No response perturbations or residual noise are added.',
+            'Horizontal intervals jointly propagate supplied input-response errors and fitted in vivo parameters. The same sampled response determines its mapped time and response value. '
+            'Response-axis bounds show the input-only normal marginal interval; no future in vivo measurement variability or residual noise is added.',
+        ).replace('up to 16 doubling extensions', 'the configured number of doubling extensions')
+    return text
 
 
 def _stats_rows(stats, selected_metrics, finite_scores=None, fit_cv_ratios=None, cv_comparison=None):
@@ -361,6 +497,8 @@ def build_report_sections(context, option):
     if result.get('error'):
         raise ValueError('A report cannot describe a failed fit as a completed model.')
     approach, method = option['approach_id'], option.get('method_id')
+    uncertainty_records = _uncertainty_records(context)
+    prediction_uncertainty = approach == 'approach2' and 'prediction' in uncertainty_records
     sections = [_heading('Analysis summary')]
     for key, label in REPORT_DETAIL_FIELDS:
         sections.append(_paragraph(label + ': Not provided', detail_key=key, detail_label=label))
@@ -418,6 +556,7 @@ def build_report_sections(context, option):
     if any(record.get('operation') == 'one_minus' for record in references):
         sections.append(_paragraph('Response reversal applied 1 - response after the selected normalizations and before scaling or interpolation. For fractional inputs, this can convert fraction lost to fraction remaining. Values were not clipped to 0-1.'))
     sections.append(_paragraph('Calculations use the preprocessed time and response scales. Normalization and any response reversal precede log10 scaling. Predictions are reported on those analyzed scales; these response transformations and logarithmic transformations are not automatically reversed.'))
+    sections.extend(build_uncertainty_sections(context))
     if approach == 'approach2':
         sections.append(_paragraph('The in vitro and in vivo models use preprocessed observed points independently. Interpolation does not add fitting observations for this approach.'))
     else:
@@ -487,14 +626,23 @@ def build_report_sections(context, option):
     for warning in (result.get('plot') or {}).get('uncertainty_warnings', []):
         sections.append(_paragraph('Fitting-plot warning: ' + str(warning.get('message', '')) + (' ' + str(warning['detail']) if warning.get('detail') else '')))
     if approach != 'approach3':
-        sections.append(_paragraph('Shading and error bars show uncertainty in fitted or calculated values because the model parameters were estimated from data. They are approximate pointwise 95% parameter-uncertainty intervals, with the selected model, preprocessing, and prediction inputs held fixed. They exclude the additional scatter of future observations, uncertainty about model choice, and errors from an unsuitable model. These are not prediction intervals for future observations or a 95% envelope for the whole curve. Calibration variability still affects fitted covariance. Parameter tables separately report approximate local 95% confidence intervals for individual coefficients; the half-width is the amount added to or subtracted from the estimate.'))
-        sections.append(_paragraph('Fitting and parametric prediction intervals use 1,000 parameter draws and uncertainty seed 12345, independently of the CV/initialization seeds. Parameter sets are sampled from the fitted multivariate normal covariance approximation, preserving correlations within each fit; separate fits are sampled independently. Bounds are the pointwise 2.5th and 97.5th percentiles. Central values use fitted parameters. An invalid sampled calculation makes the interval unavailable at that point; a missing interval does not mean zero uncertainty. Plots, downloads, and reports use the same calculated bounds.'))
+        if prediction_uncertainty:
+            sections.append(_paragraph('Fitted-curve shading shows approximate pointwise 95% parameter uncertainty. Prediction intervals additionally propagate supplied input-response uncertainty according to the selected method; time coordinates, the model and preprocessing are held fixed. Future in vivo measurement variability, uncertainty about model choice and model inadequacy are excluded. These are not future-observation prediction intervals or a simultaneous envelope for the whole curve. Parameter tables separately report approximate local 95% coefficient intervals; the half-width is added to or subtracted from the estimate.'))
+            sections.append(_paragraph('Fitted curves use covariance-aware multivariate normal parameter draws, preserving correlations within each fit and dependence across times. Separate calibration fits and prediction-input errors are sampled independently. Prediction draw counts and seeds are recorded below; centers use the nominal inputs and fitted parameters. Tau and inverse response-axis bounds are normal marginal input intervals, while time bounds use joint Monte Carlo propagation. Failed requested calculations make the affected interval unavailable; missing bounds do not mean zero uncertainty. Plots, downloads and reports reuse the same calculated results.'))
+        elif uncertainty_records:
+            sections.append(_paragraph('Fitted-curve shading and calculated-prediction intervals show approximate pointwise 95% parameter uncertainty, with the selected model, preprocessing and prediction inputs held fixed. Observed-data error bars separately show one supplied SD/SEM. Future-observation variability, model-selection uncertainty and model inadequacy are excluded. These are not future-observation prediction intervals or a simultaneous envelope for the whole curve. Parameter tables report approximate local 95% coefficient intervals.'))
+            sections.append(_paragraph('Fitted curves and parametric predictions propagate complete multivariate normal parameter vectors with covariance retained within each fit; separate calibration fits are sampled independently. Centers use fitted parameters. Bounds use pointwise Monte Carlo percentiles, with prediction draw counts and seeds recorded below. Failed requested calculations make the affected interval unavailable; missing bounds do not mean zero uncertainty. Plots, downloads and reports reuse the same calculated results.'))
+        else:
+            sections.append(_paragraph('Shading and error bars show uncertainty in fitted or calculated values because the model parameters were estimated from data. They are approximate pointwise 95% parameter-uncertainty intervals, with the selected model, preprocessing, and prediction inputs held fixed. They exclude the additional scatter of future observations, uncertainty about model choice, and errors from an unsuitable model. These are not prediction intervals for future observations or a 95% envelope for the whole curve. Calibration variability still affects fitted covariance. Parameter tables separately report approximate local 95% confidence intervals for individual coefficients; the half-width is the amount added to or subtracted from the estimate.'))
+            sections.append(_paragraph('Fitting and parametric prediction intervals use 1,000 parameter draws and uncertainty seed 12345, independently of the CV/initialization seeds. Parameter sets are sampled from the fitted multivariate normal covariance approximation, preserving correlations within each fit; separate fits are sampled independently. Bounds are the pointwise 2.5th and 97.5th percentiles. Central values use fitted parameters. An invalid sampled calculation makes the interval unavailable at that point; a missing interval does not mean zero uncertainty. Plots, downloads, and reports use the same calculated bounds.'))
         for index, label in enumerate(('In vitro', 'In vivo') if approach == 'approach2' else ('Time correlation',)):
             metadata = _fit_metadata(result, index)
             sections.append(_heading(label, 2))
             sections.append(_table(label + ' fitting data and degrees of freedom', ['Quantity', 'Value'], [[key.replace('_', ' '), metadata[key]] for key in ('n_observations', 'n_parameters', 'residual_df')]))
             if metadata['residual_df'] <= 0:
-                sections.append(_paragraph('Residual degrees of freedom are not positive. Where the app still reports a local interval, it uses its normal-multiplier fallback; that interval warrants particular caution.'))
+                sections.append(_paragraph('Residual degrees of freedom are not positive. Supplied absolute-error covariance uses a normal multiplier, but limited observations relative to parameters warrant particular caution.'
+                                           if metadata.get('covariance_scaling') == 'absolute' else
+                                           'Residual degrees of freedom are not positive. Where the app still reports a local interval, it uses its normal-multiplier fallback; that interval warrants particular caution.'))
             sections.append(_parameter_table(result, index, metadata, label))
             cv = _at(result.get('cv_diagnostics'), index) or {}
             if cv:
@@ -504,6 +652,16 @@ def build_report_sections(context, option):
                     if cv.get(key) is not None:
                         cv_rows.append([title, cv[key]])
                 sections.append(_table(label + ' cross-validation outcomes', ['Outcome', 'Count'], cv_rows))
+                error_summary = cv.get('observation_error')
+                if error_summary:
+                    sections.append(_table(label + ' supplied-error cross-validation summary', ['Quantity', 'Value'], [
+                        ['All requested splits usable', error_summary.get('complete')],
+                        ['Held-out observation occurrences', error_summary.get('n_test')],
+                        ['Successful supplied-error scores', error_summary.get('successful_splits')],
+                        ['Pooled standardized RMSE', error_summary.get('standardized_rmse')],
+                        ['Observation negative log likelihood', error_summary.get('negative_log_likelihood')],
+                        ['Mean observation negative log likelihood', error_summary.get('mean_negative_log_likelihood')],
+                    ]))
             stats_rows = _stats_rows(_at(result.get('stats'), index), context.get('selected_metrics') or [], cv.get('finite_scores'),
                                      _at(result.get('fit_cv_ratios'), index), _at(result.get('cv_comparison'), index))
             sections.append(_table(label + ' performance metrics', ['Metric', 'Full-data fit', 'Mean finite CV score', 'Finite CV splits', 'Final/CV ratio', 'CV comparison'], stats_rows))
@@ -537,7 +695,7 @@ def build_report_sections(context, option):
                                        'A prediction dataset was supplied, but no prediction method is active for this report.'))
         else:
             if method in _METHODS:
-                sections.append(_paragraph(_METHODS[method][2]))
+                sections.append(_paragraph(_method_uncertainty_text(method, prediction_uncertainty)))
             records, error = _prediction_records(context, option)
             if error:
                 sections.append(_paragraph('Prediction status: ' + error))
@@ -549,6 +707,20 @@ def build_report_sections(context, option):
                                  row.get(output_key), row.get('lower_95'), row.get('upper_95'), row.get('status', ''), row.get('interval_status', '')])
                 sections.append(_table('Predictions and displayed uncertainty bounds', ['Row', 'Input time', 'Input response', 'Predicted in vivo response' if output_key.endswith('value') else 'Predicted in vivo time', 'Lower 95%', 'Upper 95%', 'Mapping status', 'Interval status'], rows))
                 sections.append(_paragraph('Inputs and predictions in this table are preprocessed quantities. N/A denotes an unavailable value or interval, not a zero. Bounds match the displayed intervals; a numerical point can be available when its interval is unavailable.'))
+                if prediction_uncertainty:
+                    headers = ['Row', 'Input standard uncertainty', 'SD or SEM', 'Replicate count (metadata)']
+                    uncertainty_rows = [[i + 1, row.get('input_standard_uncertainty'), str(row.get('input_uncertainty_kind', '')).upper(),
+                                         row.get('input_replicate_count')] for i, row in enumerate(records)]
+                    if method in ('tau_ratio', 'observed_response_inverse'):
+                        headers.extend(['Response lower 95%', 'Response upper 95%', 'Response interval status'])
+                        for values, row in zip(uncertainty_rows, records):
+                            values.extend([row.get('response_lower_95'), row.get('response_upper_95'),
+                                           row.get('value_interval_status', row.get('response_interval_status'))])
+                    sections.append(_table('Prediction input and response uncertainty', headers, uncertainty_rows, precise_columns=range(1, len(headers))))
+                    interval_kind = next((row.get('interval_kind') for row in records if row.get('interval_kind')), 'Not recorded')
+                    sections.append(_paragraph('Primary interval interpretation: ' + str(interval_kind).replace('_', ' ') + '. '
+                                               'Response-axis bounds for tau/inverse methods describe entered-input uncertainty; they do not include future in vivo measurement variability. '
+                                               'Axis bounds are marginal intervals and do not form a joint 95% region or simultaneous band.'))
                 domain_rows = [
                     [i + 1, row.get('extrapolation_status'), row.get('extrapolation_reason'),
                      row.get('interval_extrapolation_status')]
@@ -561,7 +733,9 @@ def build_report_sections(context, option):
                     if ranges:
                         sections.append(_paragraph('Calibration ranges on analyzed scales: ' + ranges))
                     if any(row.get('extrapolated') or row.get('interval_extrapolated') for row in records):
-                        sections.append(_paragraph('Extrapolation caution: one or more calculated points or interval bounds are outside relevant calibration ranges. Narrow parameter-uncertainty intervals do not establish reliability outside calibration.'))
+                        sections.append(_paragraph('Extrapolation caution: one or more calculated points or interval bounds are outside relevant calibration ranges. Narrow '
+                                                   + ('propagated-uncertainty' if prediction_uncertainty else 'parameter-uncertainty')
+                                                   + ' intervals do not establish reliability outside calibration.'))
                     sections.append(_paragraph('Range checks use the quantities used by the selected method, not unused prediction inputs. Within-range status does not establish scientific transferability or independent validation.'))
                 if method == 'observed_response_inverse':
                     inverse_rows = [[i + 1, row.get('inverse_extrapolated_samples'),
@@ -592,7 +766,7 @@ def build_report_sections(context, option):
                                   row.get('interval_requested_samples'), row.get('interval_random_seed')]
                                  for i, row in enumerate(records) if 'interval_requested_samples' in row]
                     if draw_rows:
-                        sections.append(_table('Parameter-uncertainty diagnostics',
+                        sections.append(_table('Propagated-uncertainty diagnostics' if prediction_uncertainty and method == 'observed_response_inverse' else 'Parameter-uncertainty diagnostics',
                             ['Row', 'Usable draws', 'Generated draws', 'Requested draws', 'Random seed'], draw_rows))
                 if method == 'observed_response_inverse':
                     extra = [[i + 1, row.get('calculated_lower_95'), row.get('calculated_upper_95'), row.get('interval_valid_samples'), row.get('interval_total_samples', row.get('total_samples'))]
@@ -614,6 +788,10 @@ def build_report_sections(context, option):
                            'Predicted in vivo times from the supplied analyzed in vitro responses; horizontal intervals show available approximate 95% parameter uncertainty conditional on the fixed response.' if method == 'observed_response_inverse' else
                            'Predicted in vivo times from the supplied analyzed in vitro times; horizontal intervals show available approximate 95% parameter uncertainty conditional on fixed inputs.' if method in ('direct_time_correlation', 'tau_ratio') else
                            'Predictions from the selected deterministic mapping on the analyzed scales; no formal uncertainty bars are available.')
+                if prediction_uncertainty:
+                    caption = ('Predicted in vivo responses with pointwise intervals combining calibration and supplied input uncertainty.' if method == 'value_ratio' else
+                               'Predicted in vivo times with joint calibration/input time intervals and separate normal input-response bounds.' if method == 'observed_response_inverse' else
+                               'Predicted in vivo times with calibration-based horizontal intervals and input-only response-axis bounds.')
                 sections.append(_image(source['source_id'], source['title'], caption))
     else:
         sections.append(_paragraph('No prediction dataset was supplied. This report describes calibration fitting or mapping only.'))
@@ -624,14 +802,58 @@ def build_report_sections(context, option):
 
     sections.append(_heading('Numerical data appendix'))
     for key, label in (('in_vitro', 'In vitro calibration source observations'), ('in_vivo', 'In vivo calibration source observations')):
-        sections.append(_table(label, ['Source row', 'Time', 'Response'], _observation_rows(raw.get(key) or {})))
+        record = uncertainty_records.get(key)
+        headers = ['Source row', 'Time', 'Response']
+        if record:
+            headers.append('Entered ' + _uncertainty_label(record))
+            if record.get('replicate_counts') is not None:
+                headers.append('Replicate count (metadata)')
+        sections.append(_table(label, headers, _observation_rows(raw.get(key) or {}, record), precise_columns=range(3, len(headers))))
     if pred_raw is not None:
-        sections.append(_table('Prediction source observations', ['Source row', 'Time', 'Response'], _observation_rows(pred_raw)))
+        record = uncertainty_records.get('prediction')
+        headers = ['Source row', 'Time', 'Response']
+        if record:
+            headers.append('Entered ' + _uncertainty_label(record))
+            if record.get('replicate_counts') is not None:
+                headers.append('Replicate count (metadata)')
+        sections.append(_table('Prediction source observations', headers, _observation_rows(pred_raw, record), precise_columns=range(3, len(headers))))
     if approach != 'approach3':
         for index, label in enumerate(('In vitro', 'In vivo') if approach == 'approach2' else ('Derived paired-time',)):
             x, y = _vector(_at(result.get('residual_x'), index)), _vector(_at(result.get('residual_y'), index))
             headers = ['Fitting row', 'Analyzed in vitro time', 'Analyzed in vivo time'] if approach == 'approach1' else ['Fitting row', 'Analyzed time', 'Analyzed response']
-            sections.append(_table(label + ' data actually fitted', headers, [[i + 1, x[i], y[i]] for i in range(min(len(x), len(y)))]))
+            rows = [[i + 1, x[i], y[i]] for i in range(min(len(x), len(y)))]
+            record = uncertainty_records.get('in_vitro' if index == 0 else 'in_vivo') if approach == 'approach2' else None
+            if record:
+                analyzed_uncertainty = record.get('analyzed') or {}
+                headers.extend(['Source row', 'Analyzed ' + _uncertainty_label(record)])
+                retained = record.get('retained_rows') or []
+                for i, row in enumerate(rows):
+                    row.extend([retained[i] + 1 if i < len(retained) else None,
+                                _uncertainty_at(analyzed_uncertainty.get('standard_uncertainty'), i)])
+                if analyzed_uncertainty.get('replicate_counts') is not None:
+                    headers.append('Replicate count (metadata)')
+                    for i, row in enumerate(rows):
+                        row.append(_uncertainty_at(analyzed_uncertainty['replicate_counts'], i))
+            sections.append(_table(label + ' data actually fitted', headers, rows, precise_columns=range(3, len(headers))))
+        if prediction_uncertainty:
+            processed_prediction = context.get('processed_prediction_data')
+            if processed_prediction is not None:
+                if hasattr(processed_prediction, 'time'):
+                    pred_time, pred_value = processed_prediction.time, processed_prediction.value
+                else:
+                    pred_time, pred_value = processed_prediction[:2]
+                record = uncertainty_records['prediction']
+                analyzed_uncertainty = record.get('analyzed') or {}
+                retained = record.get('retained_rows') or []
+                headers = ['Source row', 'Analyzed time', 'Analyzed response', 'Analyzed ' + _uncertainty_label(record)]
+                rows = [[retained[i] + 1 if i < len(retained) else None, time, value,
+                         _uncertainty_at(analyzed_uncertainty.get('standard_uncertainty'), i)]
+                        for i, (time, value) in enumerate(zip(pred_time, pred_value))]
+                if analyzed_uncertainty.get('replicate_counts') is not None:
+                    headers.append('Replicate count (metadata)')
+                    for i, row in enumerate(rows):
+                        row.append(_uncertainty_at(analyzed_uncertainty['replicate_counts'], i))
+                sections.append(_table('Prediction data used for calculations', headers, rows, precise_columns=range(3, len(headers))))
     else:
         data = context.get('processed_data')
         if data is not None and len(data) >= 10:
