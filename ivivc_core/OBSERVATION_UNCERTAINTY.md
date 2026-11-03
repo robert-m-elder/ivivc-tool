@@ -103,10 +103,12 @@ The retained observation count, not the sum of replicate counts, determines the
 reported residual degrees of freedom.
 
 RMSE, R-squared, and other descriptive metrics retain their existing unweighted
-definitions. AIC/AICc/BIC are returned as NaN for supplied-uncertainty fits and CV
-scores until likelihood-aware evidence is implemented. The reason is retained in
-`fit_diagnostics`; the legacy unweighted-RSS formulas must not be presented as
-evidence for the weighted statistical model.
+definitions. Supplied-error full fits calculate AIC/BIC from the normal likelihood
+and retain the application's conventional AICc correction and sample-size cutoff.
+Their criteria are forwarded explicitly to the existing source-wise evidence
+calculations, including mixed supplied-error/residual-scaled sources. Weighted
+CV information criteria remain unavailable; its compact `observation_error`
+summary instead records pooled standardized RMSE and observation likelihood.
 
 Low-level `auto_grid_search` accepts optional scalar/pointwise `sigma`.
 `cross_validation_curve_fit` accepts `sigma` and `absolute_sigma`, validates
@@ -312,9 +314,10 @@ The app-facing fit adapter uses the same parameter multiplier for coefficient
 and approximate symmetric tau tables. Its existing tau SD comes from sampled
 fitted parameters; tau-ratio prediction intervals continue to use the existing
 nonlinear parameter-draw percentiles. Weighted table metadata records the method
-and scale source. RSS-based model evidence remains unavailable for supplied-error
-fits until likelihood-aware criteria are implemented; the adapter cannot rebuild
-those criteria from its unweighted RSS.
+and scale source. The adapter forwards supplied-error information criteria
+explicitly and preserves the existing source-wise combined-evidence convention;
+it does not rebuild weighted criteria from unweighted RSS. Guide recommendations
+for interpreting these criteria will be updated separately.
 
 ## Calibration uncertainty in existing predictions
 
