@@ -66,7 +66,7 @@ def test_extrapolation_can_be_disabled_without_restoring_endpoint_clipping():
 @pytest.mark.parametrize('time_range', [(0., 5.), (0., 10.), (0., 20.)])
 def test_surface_erosion_plateau_is_not_a_unique_or_first_passage_inverse(time_range):
     result, status, _ = inverse_response_times(
-        erosion, {'y0': 1., 'k': .1, 'n': 1.}, [0., .5], time_range)
+        erosion, {'y0': 1., 'k': .1, 'n': 1., 'A':0.}, [0., .5], time_range)
     assert np.isnan(result[0])
     assert 'flat' in status[0]
     assert result[1] == pytest.approx(5.)
