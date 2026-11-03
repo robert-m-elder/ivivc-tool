@@ -45,7 +45,7 @@ def test_evolution_reuses_reference_and_requires_time_zero():
 
 def test_evolution_is_separate_and_cli_accepts_it():
     assert poc.SCENARIO_NAMES[0] == 'measured_in_vivo'
-    assert poc.SCENARIO_NAMES[-1] == 'design_size_evolution'
+    assert poc.SCENARIO_NAMES.index('design_size_evolution') < poc.SCENARIO_NAMES.index('empirical_time_scaling')
     assert poc.SCENARIO_BUILDERS['measured_in_vivo'] is poc.build_measured_in_vivo_scenario
     assert poc._parse_args(['--scenario', 'design_size_evolution']).scenario == 'design_size_evolution'
     short = poc.build_design_size_evolution_scenario(_settings(max_design_sizes=2))

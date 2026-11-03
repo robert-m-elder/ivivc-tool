@@ -110,6 +110,176 @@ use of earlier observations in the likelihood. Keep those same completed
 observations fixed in subsequent simulation and schedule constraints.
 Calibration observations are reference inputs, not completed target-study data.
 
+## Empirical time-scale reference
+
+`EmpiricalTimeScaleDistribution` and `reference_from_time_scaling()` provide
+an alternative reference when a target in vitro profile is available but the
+target system has no paired IV/IVV calibration data. Supply positive ratios
+from comparable systems, defined consistently as
+`r = tau_in_vivo / tau_in_vitro`. Each complete reference curve is
+`f_in_vivo(t) = f_in_vitro(t / r)`: a ratio of four makes the same degradation
+take four times as long in vivo.
+
+For an existing in vitro `ProfileFit` spanning days 0–40:
+
+```python
+from study_design_core import (
+    EmpiricalTimeScaleDistribution,
+    reference_from_time_scaling,
+)
+
+scales = EmpiricalTimeScaleDistribution(
+    ratios=[1.5, 2.0, 3.0],
+    weights=[1.0, 2.0, 1.0],
+    source_ids=['paired-system-A', 'paired-system-B', 'paired-system-C'],
+    metadata={
+        'material_group': 'user-selected comparable systems',
+        'time_unit': 'days',
+        'tau_definition': 'exponential decay time constant',
+    },
+)
+reference = reference_from_time_scaling(
+    in_vitro_fit, scales,
+    time_grid=np.linspace(0.0, 60.0, 241),
+    required_times=[0.0],
+)
+```
+
+These ratios are illustrative inputs, not supplied estimates for a material
+class. A plain sequence can be passed directly to the constructor for equal
+weights. The distribution preserves original records and source identifiers;
+duplicate ratios contribute their combined mass to `scales.ecdf()`.
+`scales.cdf(values)` returns cumulative probabilities and
+`scales.quantile(probabilities)` uses the inverse weighted ECDF without
+smoothing or interpolation. Zero-weight records remain traceable but do not
+restrict the horizon or generate trajectories. Source identifiers are labels,
+not automatic grouping rules: record weights determine the relative influence
+of the historical systems.
+
+The default fixes the supplied fitted parameters and propagates only the
+empirical scale distribution. A usable fitted covariance is not required.
+Set `n_parameter_draws=K` and `random_state=123` to propagate in vitro fitting
+uncertainty using the existing covariance-aware joint parameter sampler. Each
+of the K complete parameter vectors is paired with every positive-weight ratio,
+giving `active_ratio_count * K` trajectories with weights `ratio_weight / K`.
+This explicitly assumes independent source-fit and transferred-scale
+uncertainty. Increasing K does not resample or narrow the ratio distribution.
+Parameter and ratio indices are retained so later updates can be traced back
+to their source records. Reference construction never adds observation noise.
+
+The source may instead be a deterministic `ivivc_core.TimeCourse`, interpolated
+using the chosen `linear` or `pchip` method. Duplicate source times use the
+explicit `duplicate_time_policy` (default `mean`). Parameter uncertainty
+requires a `ProfileFit`. The target model need not support the integral tau
+calculation: historical ratios are already supplied, and no target tau is
+computed or refitted by this constructor.
+
+Every requested in vivo time must map inside the observed source domain for
+every positive-weight ratio by default. A fitted source can explicitly permit
+`allow_extrapolation=True`; external `TimeCourse` data remain bounded even
+when that flag is supplied. No unsupported time is silently removed and no
+failed positive-weight curve is dropped to renormalize the distribution.
+Required baseline or completed times must fall within the requested reference
+grid. The returned reference domain is that numerical grid; explicit model
+extrapolation is separately recorded in metadata and does not imply observed
+coverage.
+
+The central trajectory is the weighted mean of complete scaled curves and
+may differ in shape from an individual scaled trajectory. The returned object
+uses the existing `ReferenceTrajectoryEnsemble` contract. Its metadata records
+ratios, weights, identifiers, source model/parameters, propagated covariance,
+parameter draws, source and required time ranges, and extrapolation masks.
+The ordinary analysis-model fit, local I-optimal criterion, timing functions,
+and Monte Carlo APIs can consume it directly.
+
+Ratios must use compatible time-constant definitions and units on both sides;
+source and study times must share a unit and elapsed-time origin. This is a
+horizontal scaling assumption that preserves the source curve's response
+scale, shape, and final plateau. The empirical envelope describes variation
+implied by the selected systems, rather than uncertainty in their mean ratio.
+The prospective/adaptive composition is described below. The POC runner's
+`empirical_time_scaling` example exposes both modes and CSV ratio input.
+
+### Prospective and adaptive planning from empirical scales
+
+Prospective planning uses the reference from `reference_from_time_scaling()`
+directly. Fit the selected study analysis model with
+`fit_reference_model_ensemble(reference, model_name=...)`, then use the existing
+local optimizer, or resolve timing requests and call
+`optimize_timing_constrained_designs()`. The source in vitro model and study
+analysis model can differ. Historical source observations and ratio records
+construct the reference; they are not completed observations in the new study.
+
+`time_scaling_weight_summary(reference)` reports this input as
+`prospective-time-scaling`, including original and current record weights.
+It can also summarize an updated reference. For adaptive planning, keep the
+original prior and supply all completed target-study measurements:
+
+```python
+from study_design_core import (
+    ExistingObservations,
+    ObservationModel,
+    reweight_time_scaled_reference,
+    time_scaling_weight_summary,
+)
+
+prior = reference
+completed = ExistingObservations(completed_times, completed_responses)
+observation = ObservationModel(
+    kind='constant_sd', value=0.05, replicates_per_time=3,
+)
+update = reweight_time_scaled_reference(prior, completed, observation)
+reference_for_design = update.reference
+weights = time_scaling_weight_summary(reference_for_design)
+```
+
+The update reuses `reweight_reference_ensemble()` and reports
+`adaptive-time-scaling`. It changes weights, retaining the original curves and
+scale values. The posterior central trajectory is the weighted mean of those
+curves. Fit the study analysis model to `reference_for_design` and resolve
+milestone deadlines from that same updated reference. The local information
+criterion is unchanged; the updated weights also govern Monte Carlo truth
+sampling and crossing-time quantiles.
+
+For a successive update, call the helper again with `prior` and the cumulative
+observations. Passing an already-updated reference is rejected, including one
+updated with the generic helper, to prevent accidental repeated use of earlier
+measurements. The original prior is not modified, so each cumulative dataset
+is applied once. In simulations pass the same `ExistingObservations` object
+using `existing_observations=completed`, and include its unique times in
+`DesignConstraints.fixed_times`. Completed values are retained rather than
+resimulated. Total design size includes those fixed times; it can request one
+or multiple new sampling times.
+
+Candidate grids retain the existing eligibility rules. Ordinary local
+optimization can use a future-only grid or a grid of any unobserved elapsed
+times, including earlier gaps. Timing-requirement planning uses the existing
+`PlanningContext` convention of new points strictly after `planning_start`;
+set completed and baseline roles explicitly. Both prospective and adaptive
+references support sampling windows and multiple distinct latest-before
+anchors through these common APIs, without introducing a source-specific
+optimization criterion.
+
+The weight summary preserves record order and zero-weight entries in
+`ratios`, `source_ids`, `prior_weights`, and `current_weights`. Its
+`unique_ratios`, `prior_unique_weights`, and `current_unique_weights` additionally
+aggregate duplicate numerical ratios, including zero-mass entries for
+traceability. This differs from the ECDF, whose support excludes zero mass.
+Draw, record, and unique-scale effective sample sizes are named separately.
+Parameter-draw expansion can increase draw ESS without adding independent
+historical evidence; none of these ESS values is a historical-study count.
+
+Adaptive results and their reference metadata contain
+`time_scaling_weight_summary` and `observation_agreement`. The latter records
+per-draw response RMSE and standardized residual RMS, the best complete-draw
+standardized RMS, and prior/posterior weighted RMS values. Standardization uses
+the individual replicate observation SD, not the future mean's standard error.
+Weighted RMS is the square root of the weighted mean squared residual, not
+the mean of per-draw RMS values. These continuous diagnostics show agreement
+even when all supplied trajectories fit poorly and one merely receives the
+largest posterior weight. No adequacy threshold, automatic distribution
+widening, or alternative-method fallback is applied.
+
 ## Future-study variability
 
 `ObservationModel` is separate from uncertainty in the reference trajectory.
@@ -618,13 +788,13 @@ check in the information search. If that later search stops, the already
 verified complete schedule is retained with a separate optimization status.
 
 Existing one-point policies and POC examples retain their behavior. The mixed
-POC below composes these functions after reference construction in all four
+POC below composes these functions after reference construction in all six
 input modes.
 
 ## Proof-of-concept runner
 
 `examples/study_design_proof_of_concept.py` composes the refactored IVIVC core,
-local information optimizer, and simulation evaluator into eight backend-only
+local information optimizer, and simulation evaluator into nine backend-only
 examples:
 
 - measured in vivo data used as the reference;
@@ -640,7 +810,9 @@ examples:
 - one mixed-requirements example with selectable prospective or adaptive input
   mode, early window coverage, and multiple latest-before points;
 - a separate `design_size_evolution` example that reuses the measured reference
-  with N=1–5 and a required time-zero baseline.
+  with N=1–6 and a required time-zero baseline;
+- one `empirical_time_scaling` example, selectable as prospective or adaptive,
+  using target in vitro data and illustrative or user-supplied scale ratios.
 
 Run a small demonstration from the repository root with:
 
@@ -650,6 +822,87 @@ python examples/study_design_proof_of_concept.py --quick
 
 The default output directory, `study_design_poc_output/`, contains transparent
 CSV and JSON files for each scenario and optional static Plotly HTML summaries.
+
+### Empirical time-scale POC example
+
+Run the focused example with its illustrative synthetic ratios:
+
+```bash
+python examples/study_design_proof_of_concept.py --quick \
+    --scenario empirical_time_scaling \
+    --analysis-model mass_loss_one_phase_normalized
+```
+
+The target in vitro observations are fitted over times 0–40, and the in vivo
+study horizon is 0–52. The default ratios are 1.6, 1.8, 2.0, 2.2, and 2.4, with
+equal record weights. These are illustrative values, not estimates for an
+implant or polymer class. No paired IV/IVV calibration dataset is constructed.
+Use `--time-scaling-mode adaptive` to condition the same original prior on
+completed target-study observations at times 0, 10, and 20. Ordinary adaptive
+eligibility follows `--adaptive-candidate-policy`.
+
+The new scenario is appended to `--scenario all`, retaining the existing
+scenarios' seed order. `design_size_evolution` remains first in `index.html`.
+
+A user-supplied CSV can contain:
+
+```csv
+ratio,weight,source_id,group
+1.6,1,system-A,polymer-X
+2.0,2,system-B,polymer-X
+2.4,1,system-C,polymer-Y
+```
+
+Pass its path with `--time-scaling-ratios-csv ratios.csv`. Only `ratio` is
+required. Omitting the entire `weight` column gives equal weights; blank or
+invalid cells in an existing weight column cause an error. Missing source IDs
+are generated only when the entire `source_id` column is absent. Group labels
+and other columns remain provenance; they do not automatically filter or
+reweight records. Input order, duplicates, and zero-weight records are retained
+in the output tables. Missing files and malformed rows never fall back to the
+illustrative distribution.
+
+`--time-scaling-model` chooses the in vitro fitting model independently of
+`--analysis-model`; its default follows the analysis model. As in the other
+examples, the analysis model also generates the synthetic truth.
+`--ivivc-calibration-response-sd` controls in vitro source noise in this example,
+while `--observation-sd` controls target-study measurements.
+The default `--time-scaling-parameter-draws 0` fixes the fitted source curve;
+a positive K crosses K joint parameter draws with every positive-weight ratio.
+The resulting count is `active_ratio_count * K`, or one curve per active ratio
+when K is zero. `--reference-draws` does not resample the empirical ratios or
+control this count. The source curve does not need a computable integral tau.
+
+The requested horizon must be covered for every active ratio. For fitted-source
+extrapolation, explicitly add `--time-scaling-allow-extrapolation`; source-range
+checks and extrapolation diagnostics retain their backend meanings.
+
+The mixed-requirements example also accepts the two new input modes:
+
+```bash
+python examples/study_design_proof_of_concept.py --quick \
+    --scenario mixed_timing_requirements \
+    --planning-input-mode adaptive-time-scaling \
+    --analysis-model mass_loss_one_phase_normalized \
+    --timing-degraded-fraction 0.50 --timing-quantile 0.25
+```
+
+Use `prospective-time-scaling` for a new full study. In the mixed example,
+`--planning-input-mode` determines the mode; `--time-scaling-mode` applies only
+to the focused example. Ratio CSV, source-model, and uncertainty options apply
+to both. The mixed example retains its existing future-only eligibility and
+reports unavailable deadlines or schedules without changing the requests.
+
+Empirical-mode pages add weighted prior/current ECDFs, prior/current reference
+envelopes and central curves, record-weight tables, separate draw/record/unique
+ESS, and adaptive observation-agreement diagnostics. The usual optimized
+schedules, IRMSE, and endpoint summaries follow the existing calculation path.
+In vitro source observations are not plotted as in vivo measurements.
+Additional machine-readable files are `time_scale_input.csv`,
+`time_scale_weights.csv`, `time_scale_ecdf.csv`, and, for adaptive runs,
+`observation_agreement.csv`. JSON retains the full reference and agreement
+metadata with unavailable values as null. Rerunning the same scenario folder
+removes empirical-specific files that no longer apply.
 
 ### Approach 2 reference demonstration
 
@@ -722,7 +975,7 @@ Rerunning the same output folder with Approach 2 removes a previous
 
 The `design_size_evolution` example appears first in `index.html`, while the
 existing examples retain their order of simulation seeds and calculations.
-Run its full five-size illustration with:
+Run its full study-size illustration with:
 
 ```bash
 python examples/study_design_proof_of_concept.py \
@@ -732,7 +985,7 @@ python examples/study_design_proof_of_concept.py \
 ```
 
 Its four-panel figure shows the reference and N=4 schedules, optimized schedules
-across N=1–5, the existing penalized mean IRMSE, and mean T50 estimation error
+across N=1–6, the existing penalized mean IRMSE, and mean T50 estimation error
 with the central 95% simulation range. Time zero is a required baseline; the
 normal optimizer selects the remaining times. Nested schedules retain earlier
 selections; fixed-N refinement can move them. The historical reference is not
@@ -848,6 +1101,8 @@ Change only `--planning-input-mode` to select the source:
 | `prospective-ivivc` | IVIVC-predicted in vivo reference; plan a new study |
 | `adaptive-in-vivo` | Incomplete target-study in vivo data; add future times |
 | `adaptive-ivivc` | IVIVC reference updated using completed target-study data; add future times |
+| `prospective-time-scaling` | Target in vitro data and an empirical ratio distribution; plan a new study |
+| `adaptive-time-scaling` | Empirical time-scale reference updated using completed target-study data; add future times |
 
 The example defaults to at least one new nonbaseline time before the 10th
 percentile of T50, plus distinct latest-before points for the 10th percentiles

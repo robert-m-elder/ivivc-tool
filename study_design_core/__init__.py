@@ -72,6 +72,8 @@ from .timing import (
     optimize_next_time_before_deadline,
     reference_crossing_time_summary,
 )
+from .time_scaling import EmpiricalTimeScaleDistribution, reference_from_time_scaling
+from .time_scaling_planning import reweight_time_scaled_reference, time_scaling_weight_summary
 from .types import (
     CoordinateExchangeResult,
     CrossingTimeSummary,
@@ -98,6 +100,7 @@ __all__ = [
     'CrossingTimeSummary',
     'DesignConstraints',
     'ExistingObservations',
+    'EmpiricalTimeScaleDistribution',
     'LatestBefore',
     'LatestBeforePoint',
     'LatestBeforeSelectionResult',
@@ -158,11 +161,14 @@ __all__ = [
     'reference_response_scale',
     'reference_crossing_time_summary',
     'reweight_reference_ensemble',
+    'reweight_time_scaled_reference',
     'resolve_timing_requirements',
     'select_latest_before_times',
     'simulate_design',
     'summarize_simulation',
+    'time_scaling_weight_summary',
     'reference_from_profile_fit',
+    'reference_from_time_scaling',
     'reference_from_ivivc',
     'reference_from_time_course',
     'reference_from_trajectory_ensemble',

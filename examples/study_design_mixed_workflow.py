@@ -14,6 +14,7 @@ from study_design_core import CrossingTimeTarget, LatestBefore, PlanningContext,
 
 PLANNING_INPUT_MODES = (
     'prospective-measured', 'prospective-ivivc', 'adaptive-in-vivo', 'adaptive-ivivc',
+    'prospective-time-scaling', 'adaptive-time-scaling',
 )
 PLANNING_DESIGN_LABELS = {
     'central_schedule': 'Central I-optimal schedule (unrestricted benchmark)',
@@ -277,7 +278,7 @@ def _html_table(table, columns=None):
     ) + '</div>'
 
 
-def planning_summary_html(result, reference_table, go, to_html, *, reference_summary_html=''):
+def planning_summary_html(result, reference_table, go, to_html, *, reference_summary_html='', supplementary_html=''):
     """Show timing requirements, complete schedules, and paired MC recovery."""
     definition = result.definition
     resolved = result.planning_optimization.resolved_requirements
@@ -349,7 +350,7 @@ requirements. Reference uncertainty determines crossing-time
 bounds and Monte Carlo trajectories; it is not averaged into the information criterion. Crossing weights describe
 reference uncertainty, not population event rates. The envelope is pointwise; crossing targets use complete
 trajectories. Synthetic ground truth is displayed for evaluation only.</p>
-{first}<h2>Schedule status</h2>{statuses}<h2>Timing requirements</h2>
+{first}{supplementary_html}<h2>Schedule status</h2>{statuses}<h2>Timing requirements</h2>
 <p>Windows use (lower, upper]. Counts for unavailable schedules refer only to fixed times.
 All requested sizes and requirements remain visible; only feasible schedules are simulated.</p>{requirements}
 <h2>Latest-before selections</h2><p>Displacement is measured from the latest grid time eligible under the original

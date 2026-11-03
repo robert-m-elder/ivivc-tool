@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run reproducible proof-of-concept degradation study-design examples.
 
-The runner demonstrates eight backend-only scenarios:
+The runner demonstrates nine backend-only scenarios:
 
 1. fit measured in vivo data and optimize a prospective time course;
 2. generate an uncertain in vivo trajectory through the IVIVC core and optimize
@@ -15,8 +15,10 @@ The runner demonstrates eight backend-only scenarios:
    crossing-time deadline policies using incomplete in vivo data alone.
 7. mix window coverage and multiple latest-before points, with a selectable
    prospective or adaptive reference/input mode.
-8. reuse the measured reference to illustrate schedules of N=1–5 with a required
+8. reuse the measured reference to illustrate schedules of N=1–6 with a required
    time-zero baseline, including the returned results of underdetermined fits.
+9. use an empirical IVV/IV time-scale distribution with target in vitro data,
+   optionally updated by completed target-study observations.
 
 Each scenario uses the same downstream workflow:
 
@@ -75,6 +77,11 @@ from examples.study_design_mixed_workflow import (  # noqa: E402
     planning_summary_html,
     planning_tables,
 )
+from examples.study_design_time_scaling_poc import (  # noqa: E402
+    load_time_scale_distribution,
+    time_scaling_summary_html,
+    time_scaling_tables,
+)
 from study_design_core import (  # noqa: E402
     CrossingTimeTarget,
     CrossingTimeSummary,
@@ -103,10 +110,13 @@ from study_design_core import (  # noqa: E402
     optimize_timing_constrained_designs,
     reference_from_profile_fit,
     reference_from_ivivc,
+    reference_from_time_scaling,
     reference_crossing_time_summary,
     reweight_reference_ensemble,
+    reweight_time_scaled_reference,
     resolve_timing_requirements,
     threshold_crossing_time,
+    time_scaling_weight_summary,
 )
 
 
@@ -119,6 +129,7 @@ SCENARIO_NAMES = (
     'adaptive_timing_comparison',
     'mixed_timing_requirements',
     'design_size_evolution',
+    'empirical_time_scaling',
 )
 LEGACY_SCENARIO_NAMES = ('adaptive_refinement',)
 
@@ -236,6 +247,11 @@ class ProofOfConceptSettings:
     ivivc_approach: str = 'approach1'
     ivivc_model: str | None = None
     ivivc_method: str | None = None
+    time_scaling_mode: str = 'prospective'
+    time_scaling_ratios_csv: str | Path | None = None
+    time_scaling_model: str | None = None
+    time_scaling_parameter_draws: int = 0
+    time_scaling_allow_extrapolation: bool = False
     adaptive_candidate_policy: str = 'future_only'
     timing_degraded_fraction: float = 0.50
     timing_quantile: float = 0.10
@@ -275,6 +291,18 @@ class ProofOfConceptSettings:
                 f'ivivc_method {self.resolved_ivivc_method!r} is not supported for '
                 f'{self.ivivc_approach}.'
             )
+        if self.time_scaling_mode not in ('prospective', 'adaptive'):
+            raise ValueError('time_scaling_mode must be prospective or adaptive.')
+        if 'approach2' not in get_model_spec(self.resolved_time_scaling_model).approaches:
+            raise ValueError('time_scaling_model must be a registered Approach 2 profile model.')
+        if (isinstance(self.time_scaling_parameter_draws, bool)
+                or not isinstance(self.time_scaling_parameter_draws, (int, np.integer))
+                or self.time_scaling_parameter_draws < 0):
+            raise ValueError('time_scaling_parameter_draws must be a nonnegative integer.')
+        if not isinstance(self.time_scaling_allow_extrapolation, (bool, np.bool_)):
+            raise ValueError('time_scaling_allow_extrapolation must be a boolean.')
+        if self.time_scaling_ratios_csv is not None:
+            object.__setattr__(self, 'time_scaling_ratios_csv', str(Path(self.time_scaling_ratios_csv)))
         if not np.isfinite(self.observation_sd) or self.observation_sd <= 0:
             raise ValueError('observation_sd must be finite and positive.')
         if (
@@ -326,6 +354,10 @@ class ProofOfConceptSettings:
             return self.ivivc_method
         return 'time_mapping' if self.ivivc_approach == 'approach1' else 'value_ratio'
 
+    @property
+    def resolved_time_scaling_model(self) -> str:
+        return self.analysis_model if self.time_scaling_model is None else self.time_scaling_model
+
 
 @dataclass
 class ScenarioDefinition:
@@ -347,6 +379,7 @@ class ScenarioDefinition:
     metadata: Mapping[str, Any] = field(default_factory=dict)
     reference_model_initial_parameters: Mapping[str, float] | None = None
     planning: SchedulePlanningSpec | None = None
+    prior_reference: ReferenceTrajectoryEnsemble | None = None
 
     def __post_init__(self) -> None:
         if self.name not in SCENARIO_NAMES:
@@ -1345,6 +1378,122 @@ def build_adaptive_timing_comparison_scenario(
 
 
 
+def build_empirical_time_scaling_scenario(
+    settings: ProofOfConceptSettings,
+) -> ScenarioDefinition:
+    """Fit target in vitro data and transfer the empirical scale distribution."""
+    distribution, input_table = load_time_scale_distribution(settings.time_scaling_ratios_csv)
+    source_times = np.array([0., 4., 8., 12., 16., 20., 24., 32., 40.])
+    replicates = POC_FUTURE_REPLICATES_PER_TIME
+    source_preset = _ivivc_in_vitro_preset(settings)
+    rng = np.random.default_rng(settings.random_seed + 501)
+    response = source_preset.evaluate(source_times)[:, None] + rng.normal(
+        0., settings.ivivc_calibration_response_sd, size=(len(source_times), replicates),
+    )
+    observed = pd.DataFrame({
+        'time': np.repeat(source_times, replicates),
+        'response': np.clip(response, 0.002, None).reshape(-1),
+        'replicate_id': np.tile(np.arange(1, replicates + 1), len(source_times)),
+        'role': 'target in vitro reference data',
+    })
+    with _quiet_expected_numerical_warnings():
+        fitted = fit_time_course(
+            observed['time'].to_numpy(), observed['response'].to_numpy(),
+            model_names=settings.resolved_time_scaling_model, selected_metrics=['rmse'],
+            analysis_config=_analysis_config(settings.random_seed + 502),
+            approach_id='approach2',
+        )
+    if fitted.errors:
+        raise RuntimeError('In vitro source fit failed: ' + '; '.join(
+            error.message for error in fitted.errors.values()
+        ))
+    fit = fitted[settings.resolved_time_scaling_model]
+    grid = _reference_grid(*POC_IN_VIVO_TIME_RANGE, target_step=0.5)
+    adaptive = settings.time_scaling_mode == 'adaptive'
+    completed_times = np.asarray(ADAPTIVE_COMPLETED_TIMES if adaptive else [], dtype=float)
+    with _quiet_expected_numerical_warnings():
+        prior = reference_from_time_scaling(
+            fit, distribution, grid,
+            n_parameter_draws=settings.time_scaling_parameter_draws,
+            random_state=settings.random_seed + 504,
+            allow_extrapolation=settings.time_scaling_allow_extrapolation,
+            required_times=np.union1d([0.0], completed_times),
+        )
+    truth_preset = _common_in_vivo_preset(settings)
+    ground_truth = TimeCourse(grid, truth_preset.evaluate(grid), label='synthetic_ground_truth')
+    observation_model = ObservationModel(
+        kind='constant_sd', value=settings.observation_sd,
+        replicates_per_time=replicates, source='proof_of_concept_assumption',
+    )
+    reference, existing, agreement = prior, None, None
+    if adaptive:
+        existing, completed_table = _generate_completed_target_observations(
+            ground_truth, completed_times, replicate_count=replicates,
+            observation_sd=settings.observation_sd, random_state=settings.random_seed + 505,
+        )
+        update = reweight_time_scaled_reference(prior, existing, observation_model)
+        reference = update.reference
+        agreement = update.metadata['observation_agreement']
+        observed = pd.concat([observed, completed_table], ignore_index=True)
+    lower, upper = reference.supported_time_range
+    if adaptive:
+        candidates = _adaptive_candidate_grid(
+            lower, upper, completed_times=existing.unique_times,
+            step=1.0, policy=settings.adaptive_candidate_policy,
+        )
+        fixed = existing.unique_times
+        minimum = len(fixed) + 1
+    else:
+        candidates = _candidate_grid(lower, upper, step=1.0, include_zero=True)
+        fixed = np.array([0.0])
+        minimum = POC_PROSPECTIVE_MINIMUM_N
+    mode = f'{settings.time_scaling_mode}-time-scaling'
+    return ScenarioDefinition(
+        name='empirical_time_scaling',
+        title=f'Empirical time-scale guidance ({settings.time_scaling_mode})',
+        description=(
+            'Target in vitro observations and an externally supplied empirical '
+            'IVV/IV time-scale distribution define plausible in vivo trajectories. '
+            'No paired target-system IV/IVV calibration data are used. '
+            + ('Completed target in vivo observations update the original prior weights. '
+               if adaptive else 'A prospective study is planned from the original prior. ')
+            + 'The optimizer selects sampling times using the existing central '
+            'I-optimal criterion; Monte Carlo simulation assesses curve recovery.'
+        ),
+        reference=reference, prior_reference=prior,
+        observation_model=observation_model,
+        constraints=DesignConstraints(
+            candidate_times=candidates, fixed_times=fixed, min_time=lower, max_time=upper,
+            minimum_spacing=POC_MINIMUM_SPACING, min_number_of_times=minimum,
+            max_number_of_times=_scenario_max_n(minimum, POC_DEFAULT_MAXIMUM_N, settings),
+            replicates_per_time=replicates,
+        ),
+        analysis_model=settings.analysis_model, observed_data=observed,
+        target_response=0.5, ground_truth=ground_truth, existing_observations=existing,
+        metadata={
+            'reference_source': 'empirical_time_scaling',
+            'planning_input_mode': mode,
+            'time_scale_input_records': input_table.to_dict(orient='records'),
+            'time_scaling_prior_summary': time_scaling_weight_summary(prior),
+            'time_scaling_weight_summary': time_scaling_weight_summary(reference),
+            'time_scaling_observation_agreement': agreement,
+            'time_scaling_model': fit.model_name,
+            'time_scaling_source_parameters': fit.parameters,
+            'time_scaling_source_fit_rmse': fit.fit_metrics.get('rmse'),
+            'time_scaling_source_response_sd': settings.ivivc_calibration_response_sd,
+            'time_scaling_parameter_draws': settings.time_scaling_parameter_draws,
+            'time_scaling_allow_extrapolation': bool(settings.time_scaling_allow_extrapolation),
+            'ratio_input_source': distribution.metadata['input_source'],
+            'ratio_input_path': distribution.metadata.get('input_path'),
+            'adaptive_candidate_policy': settings.adaptive_candidate_policy,
+            'completed_times': completed_times.tolist(),
+            'generating_model': truth_preset.model_name,
+            'generating_parameters': truth_preset.parameter_mapping,
+            'candidate_time_step': 1.0, 'minimum_spacing': POC_MINIMUM_SPACING,
+        },
+    )
+
+
 def build_mixed_timing_requirements_scenario(
     settings: ProofOfConceptSettings,
 ) -> ScenarioDefinition:
@@ -1354,6 +1503,12 @@ def build_mixed_timing_requirements_scenario(
         'prospective-ivivc': build_ivivc_prediction_scenario,
         'adaptive-in-vivo': build_adaptive_in_vivo_only_scenario,
         'adaptive-ivivc': build_adaptive_ivivc_scenario,
+        'prospective-time-scaling': lambda value: build_empirical_time_scaling_scenario(
+            replace(value, time_scaling_mode='prospective'),
+        ),
+        'adaptive-time-scaling': lambda value: build_empirical_time_scaling_scenario(
+            replace(value, time_scaling_mode='adaptive'),
+        ),
     }
     scenario = builders[settings.planning_input_mode](
         replace(settings, adaptive_candidate_policy='future_only')
@@ -1405,6 +1560,7 @@ SCENARIO_BUILDERS: Mapping[
     'adaptive_timing_comparison': build_adaptive_timing_comparison_scenario,
     'mixed_timing_requirements': build_mixed_timing_requirements_scenario,
     'design_size_evolution': build_design_size_evolution_scenario,
+    'empirical_time_scaling': build_empirical_time_scaling_scenario,
     # Backward-compatible runner alias retained for existing scripts/tests.
     'adaptive_refinement': build_adaptive_refinement_scenario,
 }
@@ -2406,6 +2562,7 @@ def _plotly_summary_html(result: ScenarioResult) -> str:
         return planning_summary_html(
             result, _reference_table(result.definition.reference, result.definition.ground_truth), go, to_html,
             reference_summary_html=_ivivc_summary_html(result.definition),
+            supplementary_html=time_scaling_summary_html(result.definition, go, to_html, _reference_table),
         )
     if result.timing_summary is not None:
         return _timing_comparison_html(result, go, to_html)
@@ -2488,7 +2645,16 @@ def _plotly_summary_html(result: ScenarioResult) -> str:
     ))
 
     observed = definition.observed_data
-    if {'time', 'response'}.issubset(observed.columns):
+    if definition.reference.metadata.get('reference_source') == 'empirical_time_scaling':
+        # Source observations use in vitro times and must not be plotted as
+        # in vivo measurements. Only completed target observations belong here.
+        if definition.existing_observations is not None:
+            reference_figure.add_trace(go.Scatter(
+                x=definition.existing_observations.time,
+                y=definition.existing_observations.response,
+                mode='markers', name='Completed target in vivo observations',
+            ))
+    elif {'time', 'response'}.issubset(observed.columns):
         reference_figure.add_trace(go.Scatter(
             x=observed['time'],
             y=observed['response'],
@@ -2786,6 +2952,7 @@ def _plotly_summary_html(result: ScenarioResult) -> str:
   <p><strong>{DESIGN_LABELS['optimized_nested']}:</strong> {DESIGN_EXPLANATIONS['optimized_nested']} <strong>{DESIGN_LABELS['optimized_refined']}:</strong> {DESIGN_EXPLANATIONS['optimized_refined']} Both schedules are information-based; Monte Carlo simulation evaluates their finite-sample curve-recovery performance.</p>
   <p><strong>Synthetic ground truth:</strong> shown only for validation and never used to select the schedules.</p>
   {first_figure}
+  {time_scaling_summary_html(definition, go, to_html, _reference_table)}
   <h2>Degradation endpoints</h2>
   <p>T50 is the time to 50% degraded (50% of the curve's initial response remaining); T90 is the time to 90% degraded (10% remaining). These endpoints are reported for interpretation and Monte Carlo evaluation, not used by the I-optimal schedule generator.</p>
   {endpoint_display.to_html(index=False, escape=True)}
@@ -3116,6 +3283,13 @@ def write_proof_of_concept_outputs(
                 scenario_directory / 'ivivc_preprocessed_pairs.csv',
                 index=False,
             )
+        empirical_tables = time_scaling_tables(result.definition)
+        for filename in ('time_scale_input.csv', 'time_scale_weights.csv',
+                         'time_scale_ecdf.csv', 'observation_agreement.csv'):
+            if filename in empirical_tables:
+                empirical_tables[filename].to_csv(scenario_directory / filename, index=False)
+            else:
+                (scenario_directory / filename).unlink(missing_ok=True)
         _reference_table(
             result.definition.reference,
             result.definition.ground_truth,
@@ -3152,7 +3326,8 @@ def write_proof_of_concept_outputs(
                 table.to_csv(scenario_directory / filename, index=False)
         with (scenario_directory / 'metadata.json').open('w', encoding='utf-8') as handle:
             if (result.planning_optimization is not None
-                    or result.definition.metadata.get('ivivc_approach') == 'approach2'):
+                    or result.definition.metadata.get('ivivc_approach') == 'approach2'
+                    or result.definition.reference.metadata.get('reference_source') == 'empirical_time_scaling'):
                 json.dump(planning_json_safe(_scenario_metadata(result)), handle,
                           indent=2, sort_keys=True, allow_nan=False)
             else:
@@ -3221,6 +3396,25 @@ def write_proof_of_concept_outputs(
     planning_scenarios = {name: result.definition.planning.input_mode
                           for name, result in run.scenarios.items()
                           if result.planning_optimization is not None}
+    empirical_scenarios = {
+        name: result.definition.metadata['planning_input_mode']
+        for name, result in run.scenarios.items()
+        if result.definition.reference.metadata.get('reference_source') == 'empirical_time_scaling'
+    }
+    if empirical_scenarios:
+        manifest['settings'].update({
+            'time_scaling_mode': run.settings.time_scaling_mode,
+            'time_scaling_ratios_csv': run.settings.time_scaling_ratios_csv,
+            'time_scaling_model': run.settings.resolved_time_scaling_model,
+            'time_scaling_parameter_draws': run.settings.time_scaling_parameter_draws,
+            'time_scaling_allow_extrapolation': bool(run.settings.time_scaling_allow_extrapolation),
+        })
+        manifest['output_interpretation']['empirical_time_scaling_by_scenario'] = empirical_scenarios
+        manifest['files']['empirical_time_scaling_by_scenario'] = {
+            name: {Path(filename).stem: f'{name}/{filename}'
+                   for filename in time_scaling_tables(run.scenarios[name].definition)}
+            for name in empirical_scenarios
+        }
     if planning_scenarios:
         manifest['settings'].update({
             'planning_input_mode': run.settings.planning_input_mode,
@@ -3301,6 +3495,18 @@ def write_proof_of_concept_outputs(
 def _print_console_summary(run: ProofOfConceptRun) -> None:
     for name, result in run.scenarios.items():
         print(f'\n{name}: {result.definition.title}')
+        if result.definition.reference.metadata.get('reference_source') == 'empirical_time_scaling':
+            metadata = result.definition.metadata
+            summary = metadata['time_scaling_weight_summary']
+            print(f'  Empirical time scales: {metadata["planning_input_mode"]}; '
+                  f'source={metadata["ratio_input_source"]}; '
+                  f'reference draws={result.definition.reference.n_draws}; '
+                  f'draw ESS={summary["draw_effective_sample_size"]:.3g}; '
+                  f'ratio-record ESS={summary["record_effective_sample_size"]:.3g}; '
+                  f'unique-scale ESS={summary["unique_scale_effective_sample_size"]:.3g}')
+            if metadata['time_scaling_observation_agreement'] is not None:
+                print('  Best standardized residual RMS: '
+                      f'{metadata["time_scaling_observation_agreement"]["best_standardized_residual_rms"]:.4g}')
         if result.definition.metadata.get('ivivc_approach') == 'approach2':
             metadata = result.definition.metadata
             lower, upper = result.definition.reference.supported_time_range
@@ -3405,7 +3611,7 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         '--reference-draws',
         type=int,
         default=200,
-        help='Number of plausible reference trajectories (default: 200).',
+        help='Number of reference draws for existing sources; empirical scaling retains its ratio support (default: 200).',
     )
     parser.add_argument(
         '--simulations',
@@ -3460,8 +3666,8 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=float,
         default=0.05,
         help=(
-            'Absolute SD applied independently to the synthetic in vitro and in vivo '
-            'calibration response measurements (default: 0.05).'
+            'Absolute SD for synthetic IVIVC calibration responses and empirical '
+            'time-scaling in vitro source observations (default: 0.05).'
         ),
     )
     parser.add_argument(
@@ -3503,6 +3709,26 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=float,
         default=0.10,
         help='Crossing-time quantile for the timing comparison and all mixed-example targets (default: 0.10).',
+    )
+    parser.add_argument(
+        '--time-scaling-mode', choices=('prospective', 'adaptive'), default='prospective',
+        help='Mode for the empirical_time_scaling example (default: prospective).',
+    )
+    parser.add_argument(
+        '--time-scaling-ratios-csv',
+        help='Empirical ratio CSV: ratio required; weight, source_id, and group optional (default: illustrative ratios).',
+    )
+    parser.add_argument(
+        '--time-scaling-model', choices=tuple(spec.key for spec in iter_model_specs('approach2')),
+        help='Model fitted to target in vitro data for empirical scaling (default: study analysis model).',
+    )
+    parser.add_argument(
+        '--time-scaling-parameter-draws', type=int, default=0,
+        help='Joint in vitro parameter draws per positive-weight ratio; zero fixes the fitted curve (default: 0).',
+    )
+    parser.add_argument(
+        '--time-scaling-allow-extrapolation', action='store_true',
+        help='Explicitly permit fitted in vitro model extrapolation for empirical scaling.',
     )
     parser.add_argument(
         '--planning-input-mode', choices=PLANNING_INPUT_MODES, default='adaptive-in-vivo',
@@ -3548,6 +3774,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         ivivc_approach=args.ivivc_approach,
         ivivc_model=args.ivivc_model,
         ivivc_method=args.ivivc_method,
+        time_scaling_mode=args.time_scaling_mode,
+        time_scaling_ratios_csv=args.time_scaling_ratios_csv,
+        time_scaling_model=args.time_scaling_model,
+        time_scaling_parameter_draws=args.time_scaling_parameter_draws,
+        time_scaling_allow_extrapolation=args.time_scaling_allow_extrapolation,
         adaptive_candidate_policy=args.adaptive_candidate_policy.replace('-', '_'),
         timing_degraded_fraction=args.timing_degraded_fraction,
         timing_quantile=args.timing_quantile,
