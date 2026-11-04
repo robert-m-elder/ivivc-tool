@@ -134,7 +134,9 @@ def test_report_uses_one_interval_interpretation_and_keeps_numerical_bounds(appr
     assert rows[2][3:6] == ['4', '5', '5.7']
     content = text(sections)
     assert 'not prediction intervals for future observations' in content
-    assert '1,000 parameter draws and uncertainty seed 12345' in content
+    assert 'Fitted-curve intervals use 1,000 parameter draws' in content
+    assert 'uncertainty seed 12345' in content
+    assert 'Prediction draw counts and seeds are method-specific' in content
     assert 'surrogate for' not in content
     assert 'covariance and response perturbations' not in content
     json.dumps(sections, allow_nan=False)
