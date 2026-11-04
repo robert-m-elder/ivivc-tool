@@ -153,11 +153,37 @@
                 </fieldset>
                 {% endfor %}
                 </div>
+                {% set future_mode = request.form.get('future_uncertainty_mode', 'none') %}
+                {% set future_kind = request.form.get('future_response_kind', 'individual') %}
+                <fieldset class="option-group" id="future-uncertainty-group" aria-describedby="future-uncertainty-help">
+                    <legend>Future in vivo measurement variability</legend>
+                    <p id="future-uncertainty-help">Optional: include the variability of an additional future in vivo measurement in the vertical response intervals. Reuse assumes comparable future measurements and retains the source's SD/SEM interpretation. Calibration reuse selects the nearest analyzed in vivo time and extends the endpoint uncertainty outside calibration.</p>
+                    <div class="form-group">
+                        <label for="future_uncertainty_mode">Source</label>
+                        <select id="future_uncertainty_mode" name="future_uncertainty_mode">
+                            {% for value, text in [('none', 'Not supplied'), ('constant', 'Constant SD or SEM'), ('prediction', 'Same as prediction inputs'), ('calibration', 'Nearest in vivo calibration time')] %}
+                            <option value="{{ value }}"{% if future_mode == value %} selected{% endif %}{% if (value == 'prediction' and request.form.get('prediction_uncertainty_mode', 'none') == 'none') or (value == 'calibration' and request.form.get('in_vivo_uncertainty_mode', 'none') == 'none') %} disabled{% endif %}>{{ text }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group" data-future-field{% if future_mode != 'constant' %} hidden{% endif %}>
+                        <label for="future_response_kind">Future values are</label>
+                        <select id="future_response_kind" name="future_response_kind"{% if future_mode != 'constant' %} disabled{% endif %}>
+                            <option value="individual"{% if future_kind == 'individual' %} selected{% endif %}>Individual observations — supply SD</option>
+                            <option value="mean"{% if future_kind == 'mean' %} selected{% endif %}>Replicate means — supply SEM</option>
+                        </select>
+                    </div>
+                    <div class="form-group" data-future-field{% if future_mode != 'constant' %} hidden{% endif %}>
+                        <label for="future_uncertainty_value">Future SD or SEM (original in vivo response units)</label>
+                        <input type="number" step="any" min="0" id="future_uncertainty_value" name="future_uncertainty_value" value="{{ request.form.get('future_uncertainty_value', '') }}"{% if future_mode != 'constant' %} disabled{% endif %}>
+                        <p class="evidence-note">The app applies the in vivo calibration normalization once. Supply SEM directly for a future mean.</p>
+                    </div>
+                </fieldset>
                 <label class="stacked-option-label" id="uncertainty-independence-row">
                     <input type="checkbox" id="uncertainty_independence_confirmed" name="uncertainty_independence_confirmed"{% if request.form.get('uncertainty_independence_confirmed') == 'on' %} checked{% endif %}>
-                    I confirm that errors are independent across entered rows and that prediction measurements are independent of calibration measurements.
+                    I confirm that errors are independent across entered rows and times, prediction measurements are independent of calibration, and future measurement errors are independent of those measurements.
                 </label>
-                <p class="evidence-note">Normalization reference values are held fixed. Reported intervals describe fitted-parameter and supplied-input uncertainty; future in vivo measurement variability is excluded.</p>
+                <p class="evidence-note">Normalization reference values are held fixed. Fitted-curve and parameter uncertainty remain available. When future variability is supplied, response intervals combine it with propagated prediction uncertainty; mapped-time intervals retain their existing meaning.</p>
                 {% for error in form_errors if error.field_id == 'uncertainty-group' %}<p id="uncertainty-group-error" class="field-error">{{ error.message }}</p>{% endfor %}
             </fieldset>
         </details>

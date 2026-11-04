@@ -820,7 +820,8 @@ def _safe_ratio(numerator, denominator):
     return core_safe_ratio(numerator, denominator)
 
 
-def process_predictions(data, prediction_data, results, selected_approaches, interpolated_data=None, *, selected_scalings=None):
+def process_predictions(data, prediction_data, results, selected_approaches, interpolated_data=None, *, selected_scalings=None,
+                        future_observation_uncertainty=None):
     """Process predictions using fitted models on a new dataset."""
     prepared = data if isinstance(data, PreparedIVIVCData) else None
     if isinstance(prediction_data, PreparedIVIVCData):
@@ -839,6 +840,12 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
     data = data_for_display(data)
     interpolated_data = data_for_display(interpolated_data)
     t1, m1, t2, m2, mm, tt, ti1, ti2, mi1, mi2 = data
+    future_options = {}
+    if future_observation_uncertainty is not None:
+        if set(selected_approaches) != {'approach2'}:
+            raise ValueError('Future measurement variability requires Approach 2 alone.')
+        future_options = dict(future_observation_uncertainty=future_observation_uncertainty,
+                              calibration_in_vivo=prepared.in_vivo if prepared is not None else TimeCourse(t2, m2))
     prediction_results = {}
     minimum_inverse_time = (None if 'log_x' in (selected_scalings or ())
                             else min(0.0, float(np.nanmin(t2))))
@@ -847,6 +854,7 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
         source_uncertainty = model_results.get('observation_uncertainty') or [None, None]
         if trajectory.source_approach == 'approach2' and (
             prediction_course.observation_uncertainty is not None or any(item is not None for item in source_uncertainty)
+            or future_observation_uncertainty is not None
         ):
             trajectory.auxiliary['calibration_uncertainty'] = {
                 name: {
@@ -856,7 +864,7 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                 for index, name in enumerate(('in_vitro', 'in_vivo'))
             }
             trajectory.auxiliary['prediction_inputs_fixed'] = prediction_course.observation_uncertainty is None
-            trajectory.auxiliary['future_observation_variability_included'] = False
+            trajectory.auxiliary.setdefault('future_observation_variability_included', False)
             if prepared is not None:
                 fixed = [{
                     'name': record.name,
@@ -864,10 +872,16 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                     'in_vivo_parameters': (dict(record.in_vivo_parameters)
                                            if record.in_vivo_parameters is not None else None),
                 } for record in prepared.preprocessing.normalizations
-                    if record.in_vitro_parameters.get('constants_treated_as_fixed', False)
+                    if future_observation_uncertainty is not None
+                    or record.in_vitro_parameters.get('constants_treated_as_fixed', False)
                     or (record.in_vivo_parameters or {}).get('constants_treated_as_fixed', False)]
                 if fixed:
                     trajectory.auxiliary['fixed_normalization_constants'] = fixed
+        indices = trajectory.auxiliary.get('future_observation_calibration_indices')
+        if indices is not None:
+            calibration_times = future_options['calibration_in_vivo'].time
+            trajectory.auxiliary['future_observation_calibration_times'] = [
+                None if index is None else float(calibration_times[index]) for index in indices]
         if trajectory.source_method == 'time_mapping':
             pairs_x = np.asarray(model_results.get('residual_x', ti1), dtype=float)
             pairs_y = np.asarray(model_results.get('residual_y', ti2), dtype=float)
@@ -945,6 +959,7 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                             confidence_level=0.95,
                             n_samples=1000,
                             random_state=12345,
+                            **future_options,
                         )
                         annotate(value_prediction, model_results)
                         plot_time = value_prediction.auxiliary['plot_time']
@@ -986,6 +1001,7 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                                 in_vivo_covariance=model_results['pcov'][1],
                                 residual_dof=model_results.get('residual_dof', []),
                                 confidence_level=0.95,
+                                **future_options,
                             )
                             annotate(tau_prediction, model_results)
                             model_results.setdefault('prediction_skip_reasons', {})[
@@ -1035,6 +1051,7 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                             n_samples=100,
                             inverse_mapper=_inverse_response_times,
                             interval_estimator=_inverse_response_prediction_intervals,
+                            **future_options,
                         )
 
                         annotate(inverse_prediction, model_results)
@@ -1119,7 +1136,7 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                                 'status': inverse_prediction.status,
                             },
                         }
-                        if prediction_course.observation_uncertainty is not None or any(
+                        if future_observation_uncertainty is not None or prediction_course.observation_uncertainty is not None or any(
                             item is not None for item in (model_results.get('observation_uncertainty') or [])
                         ):
                             metadata_keys = {
@@ -1133,7 +1150,9 @@ def process_predictions(data, prediction_data, results, selected_approaches, int
                             }
                             approach_predictions[model_name]['uncertainty_metadata'] = {
                                 method: {key: value for key, value in trajectory.auxiliary.items()
-                                         if key in metadata_keys}
+                                         if key in metadata_keys or key.startswith('future_')
+                                         or (future_observation_uncertainty is not None
+                                             and key.startswith(('value_interval_', 'propagated_value_')))}
                                 for method, trajectory in (
                                     ('value_ratio', value_prediction), ('tau_ratio', tau_prediction),
                                     ('observed_response_inverse', inverse_prediction),
@@ -2537,6 +2556,31 @@ def extract_plotly_data_for_table(fig):
                     ('interval_conditional', 'Conditional inverse interval'),
                 ):
                     columns[f'{label} ({trace_name})'] = [row.get(key) for row in records]
+            if any(row.get('future_observation_variability_included') for row in records):
+                for key, label in (
+                    ('future_observation_uncertainty_source', 'Future error source'),
+                    ('future_standard_uncertainty', 'Future SD/SEM on analyzed scale'),
+                    ('future_uncertainty_kind', 'Future error type'),
+                    ('future_response_kind', 'Future measurement type'),
+                    ('future_replicate_count', 'Source replicate count (metadata)'),
+                    ('future_calibration_time', 'Matched calibration time'),
+                    ('future_lookup_rule', 'Future error lookup rule'),
+                    ('future_lookup_extrapolated', 'Future error profile extended'),
+                    ('value_interval_kind', 'Response interval interpretation'),
+                    ('value_interval_status', 'Response interval status'),
+                    ('value_interval_valid_samples', 'Response usable draws'),
+                    ('value_interval_requested_samples', 'Response requested draws'),
+                    ('value_interval_conditional', 'Conditional response interval'),
+                    ('propagated_response_lower_95', 'Propagated response lower 95% before future variability'),
+                    ('propagated_response_upper_95', 'Propagated response upper 95% before future variability'),
+                    ('propagated_response_interval_kind', 'Propagated response interpretation'),
+                    ('propagated_response_interval_status', 'Propagated response status'),
+                ):
+                    columns[f'{label} ({trace_name})'] = [row.get(key) for row in records]
+                if trace_metadata.get('prediction_output_kind') == 'time':
+                    for bound in ('lower', 'upper'):
+                        columns[_plot_table_column_label(y_title, trace_name, bound)] = [
+                            row.get(f'response_{bound}_95') for row in records]
             if any('input_standard_uncertainty' in row for row in records):
                 for key, label in (
                     ('interval_kind', 'Primary interval interpretation'),
@@ -3186,6 +3230,43 @@ def _parameter_prediction_records(trajectory, output_kind):
                 row['value_interval_kind'] = metadata.get('value_interval_kind')
                 row['value_interval_status'] = str(metadata['value_interval_status'][index]) if (
                     'value_interval_status' in metadata) else 'not calculated'
+        future = metadata.get('future_observation_uncertainty')
+        if future is not None:
+            row.update(
+                future_observation_variability_included=True,
+                future_observation_uncertainty_source=metadata['future_observation_uncertainty_source'],
+                future_standard_uncertainty=future['standard_uncertainty'][index],
+                future_uncertainty_kind=future['uncertainty_kind'],
+                future_response_kind=future['response_kind'],
+                future_replicate_count=(future['replicate_counts'][index]
+                                        if future.get('replicate_counts') is not None else None),
+                future_lookup_rule=metadata.get('future_observation_lookup_rule'),
+                propagated_response_lower_95=finite_value(metadata.get('propagated_value_lower'), index),
+                propagated_response_upper_95=finite_value(metadata.get('propagated_value_upper'), index),
+                propagated_response_interval_kind=metadata.get('propagated_value_interval_kind'),
+            )
+            previous_status = metadata.get('propagated_value_interval_status')
+            row['propagated_response_interval_status'] = (str(previous_status[index])
+                                                         if previous_status is not None else 'not generated')
+            for key, source in (
+                ('future_calibration_index', 'future_observation_calibration_indices'),
+                ('future_calibration_time', 'future_observation_calibration_times'),
+                ('future_lookup_extrapolated', 'future_observation_lookup_extrapolated'),
+            ):
+                if source in metadata:
+                    row[key] = metadata[source][index]
+            for key in ('value_interval_kind', 'value_interval_method', 'value_interval_confidence_level',
+                        'value_interval_total_samples', 'value_interval_requested_samples',
+                        'value_interval_min_valid_fraction', 'value_interval_sampling_error'):
+                if key in metadata:
+                    row[key] = metadata[key]
+            for key in ('value_interval_status', 'value_interval_valid_samples', 'value_interval_conditional'):
+                if key in metadata:
+                    value = metadata[key][index]
+                    row[key] = value.item() if hasattr(value, 'item') else value
+            if output_kind == 'time':
+                row['response_lower_95'] = finite_value(trajectory.value_lower, index)
+                row['response_upper_95'] = finite_value(trajectory.value_upper, index)
     return rows
 
 
@@ -3237,7 +3318,10 @@ def _add_parameter_prediction_trace(fig, t_pred, m_pred, centers, records, outpu
         meta={'prediction_records': records, 'prediction_output_kind': output_kind},
         text=['; '.join(str(row.get(key, '')) for key in
               ('status', 'interval_status', 'extrapolation_status', 'extrapolation_reason', 'interval_extrapolation_status')
-              if row.get(key)) for row in records],
+              if row.get(key)) + (
+                  '; Future ' + ('replicate mean' if row.get('future_response_kind') == 'mean' else 'measurement')
+                  + ' response interval: ' + str(row.get('value_interval_status', 'unavailable'))
+                  if row.get('future_observation_variability_included') else '') for row in records],
         hovertemplate='Time: %{x}<br>Response: %{y}<br>%{text}<extra>%{fullData.name}</extra>',
         marker=dict(color=colors['prediction_output'], size=15, line=dict(color='white', width=2)),
         **errors,
@@ -3251,6 +3335,8 @@ def _add_parameter_prediction_trace(fig, t_pred, m_pred, centers, records, outpu
             x=limits if is_time else coordinates, y=coordinates if is_time else limits,
             mode='lines', name=('95% inverse intervals (conditional where noted)' if any(
                 records[i].get('interval_conditional') for i in outside)
+                else '95% future-response prediction interval' if any(
+                    row.get('interval_kind') == 'future_observation_prediction' for row in records)
                 else '95% propagated-uncertainty interval' if any(
                 row.get('interval_kind') == 'parameter_and_input_uncertainty' for row in records)
                 else '95% parameter-uncertainty interval'),
@@ -3261,7 +3347,9 @@ def _add_parameter_prediction_trace(fig, t_pred, m_pred, centers, records, outpu
         limits = [v for i in response_outside for v in (response_lower[i], response_upper[i], None)]
         times = [v for i in response_outside for v in (center[i], center[i], None)]
         fig.add_trace(go.Scatter(
-            x=times, y=limits, mode='lines', name='95% input-response uncertainty interval',
+            x=times, y=limits, mode='lines', name=('95% future-response prediction interval' if any(
+                row.get('value_interval_kind') == 'future_observation_prediction' for row in records)
+                else '95% input-response uncertainty interval'),
             meta={'exclude_from_data_table': True},
             line=dict(color=colors['prediction_output'], width=2), connectgaps=False,
         ))

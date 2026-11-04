@@ -30,6 +30,30 @@
                 value.setCustomValidity('Enter a finite SD or SEM greater than zero.');
             }
         });
+        var future = document.getElementById('future_uncertainty_mode');
+        if (future) {
+            future.setCustomValidity('');
+            ['prediction', 'calibration'].forEach(function (source) {
+                var prefix = source === 'calibration' ? 'in_vivo' : 'prediction';
+                future.querySelector('option[value="' + source + '"]').disabled =
+                    document.getElementById(prefix + '_uncertainty_mode').value === 'none';
+            });
+            var constant = future.value === 'constant';
+            document.getElementById('future-uncertainty-group').querySelectorAll('[data-future-field]').forEach(function (row) {
+                row.hidden = !constant;
+                row.querySelectorAll('input, select').forEach(function (control) {
+                    control.disabled = !constant;
+                    control.required = constant;
+                    control.setCustomValidity('');
+                });
+            });
+            var futureValue = document.getElementById('future_uncertainty_value');
+            if (constant && futureValue.value !== '' &&
+                    (!Number.isFinite(Number(futureValue.value)) || Number(futureValue.value) <= 0)) {
+                futureValue.setCustomValidity('Enter a finite future SD or SEM greater than zero.');
+            }
+            if (future.value !== 'none') active.push(future);
+        }
         var confirmed = document.getElementById('uncertainty_independence_confirmed');
         confirmed.disabled = !active.length;
         confirmed.required = Boolean(active.length);
@@ -44,9 +68,15 @@
                 mode.setCustomValidity('Supplied uncertainty requires Approach 2 alone.');
             } else if (logResponse) {
                 mode.setCustomValidity('Log10 response scaling is unavailable with supplied SD or SEM.');
-            } else if (mode.id === 'prediction_uncertainty_mode' &&
+            } else if ((mode.id === 'prediction_uncertainty_mode' || mode.id === 'future_uncertainty_mode') &&
                     !document.getElementById('prediction_file').files.length) {
-                mode.setCustomValidity('Upload a prediction dataset or set prediction uncertainty to Not supplied.');
+                mode.setCustomValidity('Upload a prediction dataset or set this uncertainty source to Not supplied.');
+            } else if (mode === future && mode.value === 'prediction' &&
+                    document.getElementById('prediction_uncertainty_mode').value === 'none') {
+                mode.setCustomValidity('Supply prediction-input SD/SEM before reusing it for future measurements.');
+            } else if (mode === future && mode.value === 'calibration' &&
+                    document.getElementById('in_vivo_uncertainty_mode').value === 'none') {
+                mode.setCustomValidity('Supply in vivo calibration SD/SEM before reusing it for future measurements.');
             }
         });
     }

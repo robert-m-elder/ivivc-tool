@@ -418,9 +418,9 @@ Central predictions remain the nominal-input, fitted-parameter calculations.
 The sampled mean does not replace them. Response draws are never clipped to
 positive values or a normalized range, nor retried until an inverse is possible.
 An unsupported nominal inverse remains unavailable even if some perturbed
-responses can be mapped. Inverse time intervals default to requiring at least
-95% of requested draws to map successfully at each point; optional future-response
-intervals use the same rule. When some draws fail,
+responses can be mapped. Inverse time intervals require the configured minimum
+fraction of requested draws to map successfully at each point (stock threshold:
+95%); optional future-response intervals use the same rule. When some draws fail,
 the conditional interval encloses the middle 95% of successful mappings, not all
 requested outcomes. The policy, threshold, counts, and failure reasons are
 retained. Other sampled intervals require every requested draw to be usable.
@@ -509,4 +509,14 @@ Future variability does not alter fitted-curve/parameter uncertainty or the raw
 reference ensembles returned by `generate_trajectory_ensembles`. These intervals
 remain conditional on the chosen model and supplied error assumptions; model
 discrepancy, model-selection uncertainty, and variable normalization references
-are excluded. Browser/CLI controls and report presentation are separate updates.
+are excluded.
+
+The browser and CLI expose `none`, `constant`, `prediction`, and `calibration`
+future modes. Their constant values use the **original in vivo calibration
+response units**; `utilities.uncertainty_inputs.future_uncertainty_from_options`
+transports them once through the fixed in vivo normalization records before
+calling this backend. Reused errors are already analyzed and are not rescaled
+again. Future options require a prediction dataset, Approach 2 alone, no
+`log_y`, and confirmation of independent errors. Reports and downloads retain
+the entered/analyzed future errors, source/lookup assumptions, original
+propagated response bounds, and calculated interval status.

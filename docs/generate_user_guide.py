@@ -303,7 +303,7 @@ def build_readme() -> str:
 
         Include a header row in CSV and Excel files. Additional named columns can hold SD/SEM or replicate counts without changing the required time/response column order.
 
-        Use SD for individual observations and SEM for reported means. Replicate counts are optional metadata; SEM is used directly. Supplied-error analyses require Approach 2 alone and confirmation of independent errors. The app rescales errors with the responses while holding normalization references fixed. Log10 response scaling is unavailable with supplied errors, and reported intervals exclude future in vivo measurement variability.
+        Use SD for individual observations and SEM for reported means. Replicate counts are optional metadata; SEM is used directly. Supplied-error analyses require Approach 2 alone and confirmation of independent errors. The app rescales errors with the responses while holding normalization references fixed. Log10 response scaling is unavailable with supplied errors. Optional future in vivo measurement variability adds combined response prediction intervals; choose a constant SD/SEM or explicitly reuse prediction-input or nearest-time in vivo calibration uncertainty. Constant future errors use the original in vivo calibration response units.
 
         ## What the app does
 
@@ -327,6 +327,8 @@ def build_readme() -> str:
         ```
 
         Repeat `--metric` for additional scores. Input files or quoted glob patterns are accepted. Excel fitting inputs require `--sheet` with zero-based indices; Excel prediction inputs require `--prediction-sheet` selecting exactly one sheet. Fitting and prediction outputs are separate CSVs; omit either output option to print that result to the terminal.
+
+        For future-response intervals, add `--future-uncertainty-mode constant --future-uncertainty-value 0.03 --future-response-kind individual --independent-errors` to a prediction command; replace 0.03 with an appropriate SD. Modes `prediction` and `calibration` reuse supplied source errors. The default is `none`.
 
         Run `python cli.py --help` for available flags. The [user guide](docs/user_guide.pdf) includes uncertainty and preprocessing examples.
 

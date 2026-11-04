@@ -83,7 +83,7 @@ Additional columns may contain SD/SEM or replicate counts. Give these columns un
 \subsection{Measurement uncertainty (optional; Approach 2)}
 \label{sec:measurement-uncertainty}
 
-These settings describe uncertainty in the entered response values; time coordinates are treated as fixed. They are available only when Approach 2 is selected on its own. In the \textbf{Measurement uncertainty} panel, choose an input mode separately for the in vitro calibration, in vivo calibration, and optional in vitro prediction dataset. Any of these datasets can be left without supplied uncertainty.
+The dataset settings describe uncertainty in the entered response values; time coordinates are treated as fixed. They are available only when Approach 2 is selected on its own. In the \textbf{Measurement uncertainty} panel, choose an input mode separately for the in vitro calibration, in vivo calibration, and optional in vitro prediction dataset. Any of these datasets can be left without supplied uncertainty.
 
 Supplied calibration errors affect fitting and fitted uncertainty; smaller errors give an observation more influence. Prediction-input errors affect prediction intervals, as described in Section~\ref{sec:prediction-outputs}.
 
@@ -108,7 +108,9 @@ If means are accompanied by replicate SD and count $n$, convert SD to SEM before
 
 Enter absolute SD/SEM in the same units as the original response values, before any preprocessing selected in the app. Convert relative errors, such as a percentage of the response, to absolute values first. Every observation used in the analysis needs a finite, strictly positive error when uncertainty is supplied for that dataset. Missing or invalid errors on those rows cause an input error; they do not cause those observations to be silently removed. Error cells may be blank on unused padding rows.
 
-Confirm that errors in the original measurements are independent across entered rows, including measurements at the same time, and that prediction measurements are independent of calibration measurements. Prediction-input uncertainty also requires a prediction dataset. These inputs do not specify variability in future in vivo measurements. See Section~\ref{sec:preprocessing} for error rescaling and supported preprocessing choices.
+Confirm that errors in the original measurements are independent across entered rows, including measurements at the same time, and that prediction measurements are independent of calibration measurements. Prediction-input uncertainty also requires a prediction dataset. See Section~\ref{sec:preprocessing} for error rescaling and supported preprocessing choices.
+
+\textbf{Future in vivo measurements.} With a prediction dataset, optionally select future measurement variability separately: none (the default), a constant SD/SEM, the prediction inputs' uncertainty, or the in vivo calibration uncertainty at the nearest predicted in vivo time. Reuse requires the corresponding source uncertainty and inherits its individual/mean interpretation. For a constant, choose individual future measurements (SD) or future means (SEM), and enter the error in the original in vivo calibration response units. The app applies the fixed in vivo normalization references once. Future errors are assumed independent of the entered measurements. These options change prediction-response intervals, not fitting; their interpretation is described in Section~\ref{sec:prediction-outputs}.
 
 \subsection{Analysis approaches and models}
 
@@ -328,7 +330,7 @@ Approach 3: Time scaling & In vitro time and response & Uses the fitting dataset
 
 The three Approach 2 methods emphasize different features of the profiles. Response-value-ratio rescaling preserves time-dependent differences between the fitted curves but can become unstable near a zero fitted in vitro response. A zero or nonfinite fitted denominator makes the point unavailable; if the denominator's uncertainty interval includes zero, the prediction interval is unavailable. Time-constant-ratio rescaling provides one overall time scale and can miss differences in curve shape; its time constants also depend on fitted behavior beyond the observed times. Observed-response inverse mapping treats the supplied response as a degradation state.
 
-\textbf{Uncertainty in Approach 2 predictions.} Calibration uncertainty comes from the relevant fitted curves. A source with supplied SD/SEM uses that error scale; a source without supplied errors uses scatter around its fitted curve. Without prediction-input SD/SEM, the prediction responses are treated as fixed. The table below shows how supplying prediction-response uncertainty affects the approximate 95\% intervals.
+\textbf{Uncertainty in Approach 2 predictions.} Calibration uncertainty comes from the relevant fitted curves. A source with supplied SD/SEM uses that error scale; a source without supplied errors uses scatter around its fitted curve. Without prediction-input SD/SEM, the prediction responses are treated as fixed. The table below shows how supplying prediction-response uncertainty affects the approximate 95\% intervals before adding optional future measurement variability.
 
 \begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.24\textwidth}>{\raggedright\arraybackslash}p{0.32\textwidth}>{\raggedright\arraybackslash}p{0.36\textwidth}@{}}
 \toprule
@@ -345,9 +347,11 @@ Observed-response inverse mapping & The fitted in vivo curve contributes to the 
 \bottomrule
 \end{longtable}
 
-For time-constant and inverse predictions, the vertical coordinate is the supplied in vitro response carried into the plot; it is not an additional predicted in vivo response. Its bounds describe that input response only.
+For time-constant and inverse predictions, the vertical center is the supplied in vitro response retained by the mapping. Without future measurement variability, its bounds describe that input response only.
 
 Point estimates use the analyzed inputs and fitted parameters. Prediction-input SD/SEM enters the interval calculation without changing the point estimate when the calibration fits are held fixed. Supplying calibration errors can change those fits and therefore the point estimates.
+
+When future variability is selected, vertical bounds combine propagated response uncertainty with independent normal future measurement scatter. They are approximate 95\% prediction intervals for one future in vivo measurement, or for a future mean when SEM is selected. For time-constant and inverse mapping, these future responses accompany the mapped prediction; horizontal mapped-time intervals keep their existing meaning. Reusing source uncertainty explicitly assumes comparable future precision; it does not remove the source's contribution to propagation. Calibration reuse selects the nearest time on the analyzed scale (the earlier time for a tie), holds that SD/SEM fixed during propagation, and uses the endpoint error outside calibration. Downloads and reports record the source, applied errors, and interval status.
 
 \textbf{Prediction ranges and unavailable results.} Interpolation estimates between calibration observations; extrapolation extends a relationship beyond its calibration range. Approach 1 checks the paired-time ranges used for fitting. Approach 2 response-value ratios check the times at which both fitted curves are evaluated, while time-constant scaling checks the input and mapped times. These parametric methods can produce predictions beyond the observed ranges; narrow intervals do not establish that those predictions are reliable.
 
@@ -376,7 +380,7 @@ The app displays several uncertainty summaries. Check which quantity a bar, band
 \endhead
 Observed-data error bars & Approach 2 calibration observations with supplied uncertainty show $\pm$ one SD or SEM. These are the supplied errors, not 95\% intervals or uncertainty bands for the fitted curve. \\
 Fitted-curve shading & Approximate pointwise 95\% uncertainty in the fitted curve because its parameters were estimated from data. \\
-Prediction error bars or interval segments & Approximate pointwise 95\% bounds for the predicted quantity, propagating calibration uncertainty and, for Approach 2 when supplied, prediction-response uncertainty as described above. Time-prediction plots may also show separate input-response bounds. \\
+Prediction error bars or interval segments & Approximate pointwise 95\% bounds for the predicted quantity, propagating calibration uncertainty and, for Approach 2 when supplied, prediction-response uncertainty as described above. Time-prediction plots may also show separate input-response bounds. Selecting future variability adds future measurement scatter to the vertical response bounds. \\
 Parameter and time-constant tables & Estimate $\pm$ the half-width of an approximate 95\% interval for an individual coefficient or time constant, where available. The plus-minus value is not the supplied observation SD/SEM. \\
 CV fit variability shading & Mean $\pm$ one SD across successful CV-training fits. This describes sensitivity to omitted observations; it is not a confidence or prediction interval. \\
 \bottomrule
@@ -384,11 +388,11 @@ CV fit variability shading & Mean $\pm$ one SD across successful CV-training fit
 
 ``Pointwise'' means that a curve or prediction interval applies at each displayed position, not to the whole curve simultaneously. When both axes have bounds, each describes its coordinate separately; the resulting rectangle is not a joint 95\% region.
 
-Fitted-curve and prediction intervals propagate parameter uncertainty while retaining estimated relationships among parameters within each fit. Separate calibration fits are sampled independently. Supplied prediction-response errors are modeled as independent normal errors across entered rows. Time coordinates, normalization constants, the selected model, and preprocessing choices are held fixed. Supplied SD/SEM values are treated as given. The intervals exclude additional variability in future in vivo measurements, extra residual scatter, uncertainty about model choice, and model inadequacy; they are not prediction bands for future observations.
+Fitted-curve and prediction intervals propagate parameter uncertainty while retaining estimated relationships among parameters within each fit. Separate calibration fits are sampled independently. Supplied prediction-response errors are modeled as independent normal errors across entered rows. Time coordinates, normalization constants, the selected model, and preprocessing choices are held fixed. Supplied SD/SEM values are treated as given. Future in vivo measurement variability is included only when explicitly selected for Approach 2 prediction responses. Otherwise, these are propagated-uncertainty intervals rather than intervals for future observations. Extra residual scatter, uncertainty about model choice, and model inadequacy are excluded in either case.
 
 Approach 1 displays uncertainty in its fitted time relationship conditional on the paired times used for fitting; supplied measurement-error propagation is available only for Approach 2. Approach 3 calculates deterministic mappings without formal uncertainty intervals. Missing error bars do not mean a mapping is exact.
 
-A valid central estimate can remain available when its interval cannot be calculated. An unavailable interval does not mean zero uncertainty. For inverse time intervals, the default requires at least 95\% of requested draws to map successfully at that point. If some draws fail, the displayed interval is labeled conditional and encloses the middle 95\% of successful mappings; it does not describe all requested outcomes. Successful/requested counts and failure reasons are retained. Other sampled intervals require every requested calculation to succeed. Some intervals from sampled predictions do not contain the point estimate; the app draws them as separate segments at their calculated endpoints. Sampling settings and calculation-status details are recorded with the prediction results. See Appendix~\ref{app:model-performance} for further interpretation of fitted uncertainty and diagnostics.
+A valid central estimate can remain available when its interval cannot be calculated. An unavailable interval does not mean zero uncertainty. Inverse time intervals and their optional future-response intervals require the configured minimum fraction of requested draws to map successfully at that point. If some draws fail, the displayed interval is labeled conditional and encloses the middle 95\% of successful mappings; it does not describe all requested outcomes. Successful/requested counts and failure reasons are retained. Other sampled intervals require every requested calculation to succeed. Some intervals from sampled predictions do not contain the point estimate; the app draws them as separate segments at their calculated endpoints. Sampling settings and calculation-status details are recorded with the prediction results. See Appendix~\ref{app:model-performance} for further interpretation of fitted uncertainty and diagnostics.
 
 These intervals are not intended to define acceptability thresholds for regulatory submissions. Applicable credibility and evidence considerations depend on the intended use and applicable FDA guidance \cite{fda_modeling_guidance,fda_reporting_guidance}.
 
@@ -438,6 +442,8 @@ python cli.py calibration.csv --approach approach2 \
 
 Any supplied uncertainty requires \texttt{--approach approach2} and \texttt{--independent-errors} to confirm the assumptions. Leave \texttt{--scaling log\_y} unselected with supplied errors. CLI preprocessing rejects invalid logarithmic inputs rather than using the browser's calibration fallback.
 
+For future-response prediction intervals, add \texttt{--future-uncertainty-mode} with \texttt{constant}, \texttt{prediction}, or \texttt{calibration}; \texttt{none} is the default. Constant mode also takes \texttt{--future-uncertainty-value} and \texttt{--future-response-kind individual} (SD, the default) or \texttt{mean} (SEM). The value uses the original in vivo calibration response units. Reuse modes require the corresponding supplied source errors. Future variability requires \texttt{--prediction}, Approach 2 alone, and \texttt{--independent-errors}.
+
 \textbf{Fitting and prediction with SEM.} For this example, both files contain reported means on the same fraction-remaining scale. After its four required columns, \texttt{calibration.csv} has \texttt{vitro\_sem} and count column \texttt{vitro\_n}; \texttt{prediction.csv} has its two required columns plus \texttt{prediction\_sem}. The constant in vivo SEM of 0.03 is illustrative; use errors appropriate to the data.
 
 \begin{quote}
@@ -461,7 +467,7 @@ python cli.py calibration.csv --approach approach2 \
 \end{verbatim}
 \end{quote}
 
-\texttt{--out} writes fit-summary rows; \texttt{--prediction-out} writes separate prediction rows identified by method. If an output path is omitted, that result is printed to the terminal. Prediction outputs require \texttt{--prediction}; valid fitting summaries can remain available if prediction fails, with the failure recorded in the prediction output. With supplied calibration errors, the fit CSV retains entered and analyzed error values, covariance conventions, and normalization records; arrays and records use JSON in individual cells. Prediction rows retain supplied input errors, available bounds, statuses, and the relevant uncertainty assumptions.
+\texttt{--out} writes fit-summary rows; \texttt{--prediction-out} writes separate prediction rows identified by method. If an output path is omitted, that result is printed to the terminal. Prediction outputs require \texttt{--prediction}; valid fitting summaries can remain available if prediction fails, with the failure recorded in the prediction output. With supplied calibration errors, the fit CSV retains entered and analyzed error values, covariance conventions, and normalization records; arrays and records use JSON in individual cells. Prediction rows retain supplied input errors, available bounds, statuses, and the relevant uncertainty assumptions, including future variability and propagated-only response bounds when selected.
 
 \subsection{Extending the app}
 

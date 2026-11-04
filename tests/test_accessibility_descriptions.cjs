@@ -102,6 +102,45 @@ check('inverse mapping combines input and fitted-parameter uncertainty', () => {
     assert.match(prediction, /do not form a joint 95% region/);
     assert.doesNotMatch(prediction, /Prediction inputs are treated as fixed|Markers show observations and lines show the fitted model/);
 });
+for (const [kind, target] of [['individual', 'one future in vivo measurement'], ['mean', 'a future in vivo replicate mean']]) {
+    check('combined future response interval for ' + kind, () => {
+        const prediction = describe('plot-prediction-approach2-value', [predicted('value', [{
+            ...parameter, interval_kind: 'future_observation_prediction',
+            future_observation_variability_included: true, future_response_kind: kind,
+        }])]);
+        assert.ok(prediction.includes('95% prediction intervals for ' + target));
+        assert.match(prediction, /combining propagated uncertainty and independent future measurement variability/);
+        assert.doesNotMatch(prediction, /exclude future in vivo measurement variability|Horizontal bars/);
+    });
+}
+for (const [method, kind] of [['tau', 'individual'], ['inverse', 'mean']]) {
+    check('combined future response with mapped time for ' + method, () => {
+        const conditional = method === 'inverse';
+        const prediction = describe('plot-prediction-approach2-' + method, [predicted('time', [{
+            ...parameter, ...input,
+            interval_kind: conditional ? 'parameter_and_input_uncertainty' : 'parameter_uncertainty',
+            interval_conditional: conditional, value_interval_conditional: conditional,
+            value_interval_kind: 'future_observation_prediction',
+            future_observation_variability_included: true, future_response_kind: kind,
+        }])]);
+        assert.match(prediction, /Horizontal bars.*95%.*uncertainty/);
+        assert.match(prediction, /Vertical bars.*95% prediction intervals for/);
+        assert.match(prediction, /Future measurement variability does not change the horizontal mapped-time intervals/);
+        assert.match(prediction, /do not form a joint 95% region/);
+        assert.doesNotMatch(prediction, /exclude future in vivo measurement variability/);
+        if (conditional) assert.match(prediction, /conditional describe successful inverse mappings only/);
+        else assert.doesNotMatch(prediction, /unresolved draws are excluded/);
+    });
+}
+check('future response interval is not invented when its bounds are unavailable', () => {
+    const prediction = describe('plot-prediction-approach2-inverse', [predicted('time', [{
+        ...parameter, future_observation_variability_included: true,
+        value_interval_kind: 'future_observation_prediction',
+        response_lower_95: null, response_upper_95: null,
+    }])]);
+    assert.match(prediction, /Horizontal bars/);
+    assert.doesNotMatch(prediction, /Vertical bars|prediction intervals for one future/);
+});
 check('separate propagated interval segments without error bars', () => {
     const prediction = describe('plot-prediction-approach2-inverse', [
         predicted('time', [{...parameter, ...input, interval_kind: 'parameter_and_input_uncertainty'}], {error_x: {visible: false}, error_y: {array: [0.2]}}),
@@ -162,4 +201,4 @@ check('residuals use analyzed fitted-output units', () => {
     assert.match(residual, /units of the fitted output on the analyzed scale/);
     assert.doesNotMatch(residual, /original response units|supplied SD|supplied SEM/);
 });
-console.log('PASS ' + cases + ' plot-description cases: supplied SD/SEM, parameter/input propagation, both axes, missing bounds, CV and residuals');
+console.log('PASS ' + cases + ' plot-description cases: supplied SD/SEM, propagation/future measurements, both axes, conditional and missing bounds, CV and residuals');

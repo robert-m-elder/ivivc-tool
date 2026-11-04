@@ -211,7 +211,7 @@ plots, response-ratio predictions, and tau-ratio predictions request 1,000
 covariance-aware normal parameter draws; inverse predictions request 100. These
 calculations use seed 12345, with requested/valid counts and sampling status
 retained in prediction metadata. No residual noise is added; future-measurement
-noise is included only when explicitly requested through the backend option
+noise is included only when explicitly selected in the browser, CLI, or backend option
 [described here](OBSERVATION_UNCERTAINTY.md#optional-future-in-vivo-measurements-backend).
 Supplied prediction-input SD/SEM is propagated separately as described above.
 Separate fits are sampled independently. The center remains the fitted-parameter
@@ -226,8 +226,8 @@ explicitly when a caller needs a particular sampling convention.
 
 All requested draws must be usable at a point for its interval to be displayed,
 except for inverse time intervals and their optional future-response intervals.
-These default to allowing a conditional
-interval when at least 95% of requested draws map successfully at that point.
+These allow a conditional interval when the configured minimum fraction of
+requested draws maps successfully at that point (stock threshold: 95%).
 If any draws fail, its bounds enclose the middle 95% of successful mappings,
 not all requested outcomes; the status, counts, policy, and threshold are retained.
 Whole-trajectory validity masks remain separate for study-design callers.

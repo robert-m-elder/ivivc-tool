@@ -653,7 +653,7 @@
                                             <h4>Response-value ratio rescaling</h4>
                                             {{ render_prediction_cautions((pred_result.prediction_cautions or {}).get('value_ratio', [])) }}
                                             {% if pred_result.plot_value_ratio_note %}
-                                                <p class="prediction-skip-reason"><span class="evidence-badge uncertainty-plot-badge">Some intervals unavailable</span> {{ pred_result.plot_value_ratio_note }}</p>
+                                                <p class="prediction-skip-reason"><span class="evidence-badge uncertainty-plot-badge">Interval details</span> {{ pred_result.plot_value_ratio_note }}</p>
                                             {% endif %}
 <div id="plot-prediction-{{ approach_id }}-{{ model_name }}-value" class="plot-container report-source-plot">
                                                 {{ pred_result.plot.plot | safe }}
