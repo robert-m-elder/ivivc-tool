@@ -209,10 +209,11 @@
 
     function hasErrorBars(plotDiv) {
         return (plotDiv.data || []).some(function(trace) {
-            return Boolean(
-                (trace.error_x && trace.error_x.visible !== false && trace.error_x.array) ||
-                (trace.error_y && trace.error_y.visible !== false && trace.error_y.array)
-            );
+            return ['error_x', 'error_y'].some(function(axis) {
+                const error = trace[axis];
+                return error && error.visible !== false && error.array &&
+                    Array.from(error.array).some(Number.isFinite);
+            });
         });
     }
 
@@ -220,6 +221,64 @@
         return (plotDiv.data || []).some(function(trace) {
             return /parameter[- ]uncertainty/i.test(trace.name || '');
         });
+    }
+
+    function predictionIntervalDescription(plotDiv) {
+        const traces = plotDiv.data || [];
+        const predictions = traces.filter(function(trace) {
+            return trace.meta && Array.isArray(trace.meta.prediction_records);
+        });
+        let explanation = '';
+        let hasPrimary = false;
+        let hasResponse = false;
+        let hasInput = false;
+        predictions.forEach(function(trace) {
+            const rows = trace.meta.prediction_records;
+            const timeOutput = trace.meta.prediction_output_kind === 'time';
+            const hasPoint = function(row) {
+                return Number.isFinite(row[timeOutput ? 'predicted_in_vivo_time' : 'predicted_in_vivo_value']) &&
+                    Number.isFinite(row[timeOutput ? 'in_vitro_value' : 'in_vitro_time']);
+            };
+            const primary = rows.filter(function(row) {
+                return hasPoint(row) && Number.isFinite(row.lower_95) && Number.isFinite(row.upper_95);
+            });
+            const response = rows.some(function(row) {
+                return timeOutput && hasPoint(row) && Number.isFinite(row.response_lower_95) && Number.isFinite(row.response_upper_95);
+            });
+            const supplied = rows.some(function(row) {
+                return Number.isFinite(row.input_standard_uncertainty);
+            });
+            hasInput = hasInput || supplied;
+            if (primary.length) {
+                hasPrimary = true;
+                const combined = primary.some(function(row) {
+                    return row.interval_kind === 'parameter_and_input_uncertainty';
+                });
+                explanation += ' ' + (timeOutput ? 'Horizontal' : 'Vertical') +
+                    ' bars or separate interval segments show approximate pointwise 95% ' +
+                    (combined ? 'intervals combining fitted-parameter and supplied prediction-response uncertainty.'
+                        : 'parameter-uncertainty intervals.');
+                if (timeOutput && supplied && !combined) {
+                    explanation += ' Supplied prediction-response uncertainty does not change these mapped-time intervals.';
+                }
+            }
+            if (timeOutput && response) {
+                hasResponse = true;
+                explanation += ' Vertical bars or separate interval segments show approximate 95% intervals from supplied prediction-response uncertainty.';
+            }
+        });
+        if (!predictions.length && (hasErrorBars(plotDiv) || hasParameterInterval(plotDiv))) {
+            hasPrimary = true;
+            explanation = ' Error bars or separate interval segments show approximate pointwise 95% parameter-uncertainty intervals for calculated values or times.';
+        }
+        if (hasPrimary || hasResponse) {
+            if (!hasInput) explanation += ' Prediction inputs are treated as fixed.';
+            if (hasPrimary && hasResponse) {
+                explanation += ' Horizontal and vertical bounds describe each axis separately; they do not form a joint 95% region.';
+            }
+            explanation += ' The intervals exclude future in vivo measurement variability and do not describe the whole curve simultaneously.';
+        }
+        return explanation;
     }
 
     function associatedUncertaintyText(container) {
@@ -245,12 +304,13 @@
             : '';
         const xTitle = axisTitle(plotDiv, 'xaxis', 'x-axis value');
         const yTitle = axisTitle(plotDiv, 'yaxis', 'y-axis value');
+        const isPrediction = id.indexOf('prediction') !== -1 || titleLower.indexOf('prediction') !== -1;
         let explanation = '';
 
         if (id.indexOf('residual-qq') !== -1 || titleLower.indexOf('q-q') !== -1) {
             explanation = ' The diagonal reference line shows the pattern expected for normally distributed standardized residuals. Points farther from the line indicate larger departures from that pattern.';
         } else if (id.indexOf('residual') !== -1 || titleLower.indexOf('residual') !== -1) {
-            explanation = ' The dashed horizontal line marks zero residual. The y-axis is symmetric around zero and is shown in the original response units. The annotation reports the maximum absolute residual and indicates when a minimum display range is used to avoid magnifying negligible residuals.';
+            explanation = ' The dashed horizontal line marks zero residual. The y-axis is symmetric around zero and uses the units of the fitted output on the analyzed scale. The annotation reports the maximum absolute residual and indicates when a minimum display range is used to avoid magnifying negligible residuals.';
         } else if (id.indexOf('processing-raw-data') !== -1) {
             explanation = ' Markers show the uploaded in vitro and in vivo observations before preprocessing.';
         } else if (id.indexOf('interpolation') !== -1) {
@@ -260,18 +320,27 @@
             explanation = ' Lines compare the full-data fit with fits to cross-validation training subsets. Shading shows their mean plus or minus one standard deviation; it describes sensitivity to omitted observations, not a 95% uncertainty interval.';
         } else if (id.indexOf('plot-fit-approach3') !== -1) {
             explanation = ' The plot shows the direct interpolation-based value or time ratio used for mapping; no parametric fitted curve or model-based uncertainty band is shown.';
+        } else if (isPrediction) {
+            explanation = ' Marker symbols distinguish fitting observations, prediction inputs, and predicted in vivo values or times. Dotted connecting lines, when present, show the corresponding mapping between input and prediction points.';
+            explanation += predictionIntervalDescription(plotDiv);
         } else if (id.indexOf('plot-fit-') !== -1 || titleLower.indexOf(' fit') !== -1) {
             explanation = ' Markers show observations and lines show the fitted model relationship.';
+            const kinds = [];
+            (plotDiv.data || []).forEach(function(trace) {
+                const kind = trace.meta && trace.meta.observation_uncertainty_kind;
+                const error = trace.error_y;
+                if ((kind === 'sd' || kind === 'sem') && error && error.visible !== false && error.array && kinds.indexOf(kind) === -1) {
+                    kinds.push(kind);
+                }
+            });
+            if (kinds.length) {
+                explanation += ' Observed-data error bars show plus or minus one supplied ' +
+                    kinds.map(function(kind) { return kind === 'sd' ? 'SD of individual measurements' : 'SEM of reported means'; }).join(' or ') +
+                    '. These bars are separate from 95% fitted-curve intervals.';
+            }
             if (hasParameterInterval(plotDiv)) {
                 explanation += ' Shaded areas show approximate pointwise 95% parameter-uncertainty intervals. They do not include the additional scatter of future observations.';
             }
-        } else if (id.indexOf('prediction') !== -1 || titleLower.indexOf('prediction') !== -1) {
-            explanation = ' Marker symbols distinguish fitting observations, prediction inputs, and predicted in vivo values or times. Dotted connecting lines, when present, show the corresponding mapping between input and prediction points.';
-        }
-
-        if (hasErrorBars(plotDiv) ||
-            (hasParameterInterval(plotDiv) && (id.indexOf('prediction') !== -1 || titleLower.indexOf('prediction') !== -1))) {
-            explanation += ' Error bars or separate interval segments show approximate pointwise 95% parameter-uncertainty intervals for calculated values or times. Prediction inputs are treated as fixed; the intervals do not include the additional scatter of future observations.';
         }
 
         const warning = associatedUncertaintyText(container);

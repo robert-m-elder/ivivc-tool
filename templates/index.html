@@ -514,7 +514,7 @@
 <div id="metrics-help-content">
             <h4>Performance Metrics</h4>
             <p>Different metrics summarize different aspects of model performance, and the selected metric definitions are included in the report.</p>
-            <p>The default set is a compact software starting configuration: <strong>R²</strong> summarizes how closely the fitted curve follows the observed pattern; <strong>RMSE</strong> reports typical error in the original response units; and <strong>AICc</strong> compares fitted candidate models while penalizing additional complexity, with a correction that is useful for smaller datasets. These defaults do not establish preferred analysis choices.</p>
+            <p>The default set is a compact software starting configuration: <strong>R²</strong> summarizes how closely the fitted curve follows the observed pattern; <strong>RMSE</strong> reports typical error in the units of the fitted output on the analyzed scale; and <strong>AICc</strong> summarizes relative support within the displayed candidate set using a complexity penalty and a conventional small-sample correction. These defaults do not establish preferred analysis choices.</p>
             <ul>
                 {% for metric in metric_description_rows %}
                 <li><strong>{{ metric.name }}:</strong> {{ metric.description }} {% if metric.direction %}<em>{{ metric.direction }}.</em>{% endif %}</li>

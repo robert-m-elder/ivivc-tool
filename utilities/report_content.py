@@ -424,7 +424,7 @@ def _diagnostic_sections(result, context, option, index, label):
     dom_id = option.get('model_dom_id') or option['model_key'].replace(':', '-')
     choices = (
         ('include_cv_fit_variability_plot', 'cv_fit_variability_plot', 'CV fit variability', 'plot-cv-fit-', 'The full-data fit and mean plus/minus one SD across successful CV-training fits. This describes sensitivity to omissions, not a confidence or prediction interval.'),
-        ('include_raw_residual_plots', 'residual_plot', 'Residuals', 'plot-residual-', 'Observed minus fitted values on the analyzed response scale, shown against the fitting x-variable.'),
+        ('include_raw_residual_plots', 'residual_plot', 'Residuals', 'plot-residual-', 'Observed minus fitted values in the units of the fitted output on the analyzed scale, shown against the fitting x-variable.'),
         ('include_residual_qq_plots', 'residual_qq_plot', 'Normal Q-Q plot', 'plot-residual-qq-', 'Ordered standardized residuals compared with a normal reference; intended for qualitative review.'),
     )
     statuses = []
@@ -602,12 +602,12 @@ def build_report_sections(context, option):
         sections.append(_table('Settings used', ['Setting', 'Value'], settings))
         sections.append(_paragraph('Nonlinear least squares fits were initialized by searching candidate starting values, including model-specific starts when available. The starting-value search bounds are not parameter constraints for the final fit.'))
         if scheme == 'none':
-            sections.append(_paragraph('Cross-validation was disabled. No held-out prediction assessment was performed in this run.'))
+            sections.append(_paragraph('Cross-validation was disabled. Prediction error on data set aside from fitting was not assessed in this run.'))
         else:
             scope = ('the derived paired-time observations' if approach == 'approach1' else 'the preprocessed observed rows for each calibration series')
             text = 'Cross-validation refits the parametric model using subsets of ' + scope + '. Preprocessing and alignment are established before the splits, rather than recomputed within each training fold.'
             if scheme in ('leave_one_timepoint_out', 'leave_one_out'):
-                text += ' In this version, the option labelled leave-one-timepoint-out omits one row at a time; replicates sharing a time are not held out together.'
+                text += ' In this version, the option labelled leave-one-timepoint-out omits one row at a time; replicates sharing a time are not set aside together.'
             elif scheme == 'leave_contiguous_block_out':
                 text += ' Blocks contain adjacent observations in fitting-x order, not necessarily all observations sharing the same time.'
             sections.append(_paragraph(text))
@@ -628,7 +628,7 @@ def build_report_sections(context, option):
     if approach != 'approach3':
         if prediction_uncertainty:
             sections.append(_paragraph('Fitted-curve shading shows approximate pointwise 95% parameter uncertainty. Prediction intervals additionally propagate supplied input-response uncertainty according to the selected method; time coordinates, the model and preprocessing are held fixed. Future in vivo measurement variability, uncertainty about model choice and model inadequacy are excluded. These are not future-observation prediction intervals or a simultaneous envelope for the whole curve. Parameter tables separately report approximate local 95% coefficient intervals; the half-width is added to or subtracted from the estimate.'))
-            sections.append(_paragraph('Fitted curves use covariance-aware multivariate normal parameter draws, preserving correlations within each fit and dependence across times. Separate calibration fits and prediction-input errors are sampled independently. Prediction draw counts and seeds are recorded below; centers use the nominal inputs and fitted parameters. Tau and inverse response-axis bounds are normal marginal input intervals, while time bounds use joint Monte Carlo propagation. Failed requested calculations make the affected interval unavailable; missing bounds do not mean zero uncertainty. Plots, downloads and reports reuse the same calculated results.'))
+            sections.append(_paragraph('Fitted curves use covariance-aware multivariate normal parameter draws, preserving correlations within each fit and dependence across times. Separate calibration fits and prediction-input errors are sampled independently. Prediction draw counts and seeds are recorded below; centers use the nominal inputs and fitted parameters. Tau and inverse response-axis bounds are normal marginal input intervals. Tau time bounds propagate calibration parameters; inverse time bounds jointly propagate in vivo calibration parameters and input responses. Failed requested calculations make the affected interval unavailable; missing bounds do not mean zero uncertainty. Plots, downloads and reports reuse the same calculated results.'))
         elif uncertainty_records:
             sections.append(_paragraph('Fitted-curve shading and calculated-prediction intervals show approximate pointwise 95% parameter uncertainty, with the selected model, preprocessing and prediction inputs held fixed. Observed-data error bars separately show one supplied SD/SEM. Future-observation variability, model-selection uncertainty and model inadequacy are excluded. These are not future-observation prediction intervals or a simultaneous envelope for the whole curve. Parameter tables report approximate local 95% coefficient intervals.'))
             sections.append(_paragraph('Fitted curves and parametric predictions propagate complete multivariate normal parameter vectors with covariance retained within each fit; separate calibration fits are sampled independently. Centers use fitted parameters. Bounds use pointwise Monte Carlo percentiles, with prediction draw counts and seeds recorded below. Failed requested calculations make the affected interval unavailable; missing bounds do not mean zero uncertainty. Plots, downloads and reports reuse the same calculated results.'))
@@ -648,7 +648,7 @@ def build_report_sections(context, option):
             if cv:
                 cv_rows = [['Splits attempted', cv.get('total_splits')], ['Successful fits and finite test predictions', cv.get('successful_fits')], ['Failed fits or test predictions', cv.get('fitting_failure_count')]]
                 for key, title in (('min_training_observations', 'Smallest training subset'), ('max_training_observations', 'Largest training subset'),
-                                   ('min_test_observations', 'Smallest held-out subset'), ('max_test_observations', 'Largest held-out subset')):
+                                   ('min_test_observations', 'Smallest test subset'), ('max_test_observations', 'Largest test subset')):
                     if cv.get(key) is not None:
                         cv_rows.append([title, cv[key]])
                 sections.append(_table(label + ' cross-validation outcomes', ['Outcome', 'Count'], cv_rows))
@@ -656,7 +656,7 @@ def build_report_sections(context, option):
                 if error_summary:
                     sections.append(_table(label + ' supplied-error cross-validation summary', ['Quantity', 'Value'], [
                         ['All requested splits usable', error_summary.get('complete')],
-                        ['Held-out observation occurrences', error_summary.get('n_test')],
+                        ['Test observation occurrences', error_summary.get('n_test')],
                         ['Successful supplied-error scores', error_summary.get('successful_splits')],
                         ['Pooled standardized RMSE', error_summary.get('standardized_rmse')],
                         ['Observation negative log likelihood', error_summary.get('negative_log_likelihood')],

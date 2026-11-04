@@ -178,7 +178,8 @@ def test_source_descriptions_explain_inverse_extrapolation_and_unavailable_resul
     from utilities.descriptions import APPROACH_DESCRIPTIONS
     text = APPROACH_DESCRIPTIONS['approach2']['prediction_error_html']
     assert 'search can extend beyond calibration' in text
-    assert 'cannot reliably identify a unique time' in text
+    assert 'prediction is unavailable' in text
+    assert 'unique time' in text
     for path in ('docs/user_guide.tex', 'docs/appendices/glossary.tex', 'ivivc_core/README.md'):
         source = Path(path).read_text()
         assert 'does not automatically identify' not in source

@@ -673,7 +673,7 @@
                                             <p class="prediction-skip-reason">{{ pred_result.plot_tau_skip_reason }}</p>
                                         {% endif %}
                                         <h4>Observed-response inverse mapping</h4>
-                                        <p class="evidence-note">Estimates when the fitted in vivo curve reaches each supplied in vitro response. Horizontal intervals show uncertainty in that time from the fitted in vivo parameters, with the response held fixed. Results outside the observed in vivo calibration range carry an extrapolation caution. A prediction is unavailable when a unique time cannot be calculated reliably.</p>
+                                        <p class="evidence-note">Estimates when the fitted in vivo curve reaches each supplied in vitro response. Horizontal intervals, where available, reflect fitted in vivo parameter uncertainty and any supplied prediction-response uncertainty. Results outside the observed in vivo calibration range carry an extrapolation caution. A prediction is unavailable when a unique time cannot be calculated reliably.</p>
                                         {{ render_prediction_cautions((pred_result.prediction_cautions or {}).get('observed_response_inverse', [])) }}
                                         {% if pred_result.plot_inverse_response_note %}
                                             <p class="prediction-skip-reason">{{ pred_result.plot_inverse_response_note }}</p>
@@ -765,7 +765,7 @@
                 <li><strong>Model parameters:</strong> coefficients reported as estimate ± the half-width of an approximate 95% confidence interval.</li>
                 <li><strong>Fitted parameter diagnostics:</strong> brief badges that flag parameter uncertainty, coupling, or identifiability cautions.</li>
                 <li><strong>Goodness of fit:</strong> selected fitted-data metrics, eligible cross-validation metrics, fit/CV ratios, and CV comparison badges.</li>
-                <li><strong>Residual diagnostics:</strong> raw residual-vs-time plots in response units with independent symmetric axes, plus normal Q-Q plots when residual variation is large enough to make the diagnostic informative.</li>
+                <li><strong>Residual diagnostics:</strong> raw residual-vs-time plots in analyzed in vivo time units with independent symmetric axes, plus normal Q-Q plots when residual variation is large enough to make the diagnostic informative.</li>
             </ul>
             <h4>Uncertainty and fitting plot bands</h4>
             {{ approach_descriptions['approach1']['fit_uncertainty_html'] | safe }}
@@ -781,7 +781,7 @@
                 <li><strong>Fitted parameter diagnostics:</strong> brief badges shown separately for the in vitro and in vivo fits.</li>
                 <li><strong>Time constant:</strong> fitted characteristic time scale where available.</li>
                 <li><strong>Goodness of fit:</strong> selected fitted-data metrics, eligible cross-validation metrics, fit/CV ratios, and CV comparison badges for each dataset.</li>
-                <li><strong>Residual diagnostics:</strong> raw residual-vs-time plots in response units shown separately for the in vitro and in vivo fits, plus normal Q-Q plots when residual variation is large enough to make the diagnostic informative.</li>
+                <li><strong>Residual diagnostics:</strong> raw residual-vs-time plots in analyzed response units shown separately for the in vitro and in vivo fits, plus normal Q-Q plots when residual variation is large enough to make the diagnostic informative.</li>
             </ul>
             <h4>Uncertainty and fitting plot bands</h4>
             {{ approach_descriptions['approach2']['fit_uncertainty_html'] | safe }}

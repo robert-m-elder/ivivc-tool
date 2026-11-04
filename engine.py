@@ -2752,6 +2752,7 @@ def create_plotly_a2(x1, y1, x2, y2, model_info, include_bands=True):
             sigma = np.asarray(uncertainty['standard_uncertainty'], dtype=float)
             trace.error_y = dict(type='data', array=sigma, symmetric=True, visible=True,
                                  color=trace.marker.color, thickness=2, width=5)
+            trace.meta = {'observation_uncertainty_kind': uncertainty['uncertainty_kind']}
             trace.name += ' (± ' + uncertainty['uncertainty_kind'].upper() + ')'
             observation_limits.extend((np.asarray(response) - sigma, np.asarray(response) + sigma))
 
