@@ -68,6 +68,8 @@ def test_approach2_prediction_help_describes_each_input_contribution():
     all_text = ' '.join(paragraphs)
     assert 'separate marginal intervals' in all_text and 'not form a joint 95% region' in all_text
     assert 'independent normal errors' in all_text
+    assert 'prediction draw counts and seeds are method-specific' in all_text
+    assert '1,000 complete parameter draws' not in all_text
     assert 'exclude future in vivo measurement variability' in all_text
     assert 'missing interval does not mean zero uncertainty' in all_text
 
@@ -155,7 +157,9 @@ def test_browser_and_word_report_preserve_the_same_interval_explanation(approach
     explanation = next(item['text'] for item in sections if item.get('text', '').startswith('Shading and error bars'))
     assert 'not prediction intervals for future observations' in explanation
     assert 'half-width is the amount added to or subtracted from the estimate' in explanation
-    assert '1,000 parameter draws and uncertainty seed 12345' in text(sections)
+    assert 'Fitted-curve intervals use 1,000 parameter draws' in text(sections)
+    assert 'uncertainty seed 12345' in text(sections)
+    assert 'Prediction draw counts and seeds are method-specific' in text(sections)
     assert '2.5th and 97.5th percentiles' in text(sections)
 
     environment = Environment(loader=FileSystemLoader(ROOT / 'templates'), autoescape=True)

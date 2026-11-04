@@ -128,7 +128,7 @@ For Approach 2 models where a finite value can be calculated, the app summarizes
 \]
 which is the area under the fitted curve after normalizing its fitted value at time zero to 1 \cite{coffey2017}. It provides a single characteristic time scale for comparing fitted in vitro and in vivo profiles; a larger value generally corresponds to slower overall decay. For a simple exponential decay, the integral equation yields the time constant. The fitted time constants are also used by one of the optional Approach 2 prediction methods described in Section~\ref{sec:prediction-outputs}.
 
-The central time constant is evaluated at the fitted parameters, not averaged over parameter draws. The numerical integration uses its existing tolerances and subdivision limit; integration warnings or invalid results make the time constant unavailable without discarding the fitted curve. These checks do not prove convergence for every model. Standard uncertainty is estimated from 50 parameter draws using seed 12345. If sampling fails or any sampled time constant is invalid, uncertainty is marked unavailable rather than estimated after dropping failed draws. A valid central time constant can still be shown without its table interval. Plotted time-rescaling intervals separately propagate both fitted parameter vectors through tau integration and their ratio using 1,000 draws (seed 12345) and percentile endpoints; they do not use the table SDs or an additional residual-noise term. A valid time-rescaled point can remain available without its interval.
+The time constant is evaluated at the fitted parameters and is reported only when its integral can be calculated. A valid estimate can remain available without an uncertainty interval. See Section~\ref{sec:uncertainty} for how to read the uncertainty displays.
 
 \subsubsection{Models}
 
@@ -251,7 +251,7 @@ The CV fit variability plot, raw residual plots, and normal quantile-quantile (Q
 
 The IVIVC app generates interactive results and downloadable reports that summarize fitted model behavior, model-comparison metrics, diagnostic information, and user-selected analysis settings. Output availability depends on the selected approaches, whether fitting succeeds, and whether a prediction dataset was supplied.
 
-Goodness of fit describes agreement with the data used for fitting. Cross-validation checks predictions against observations set aside from that dataset, giving an approximate indication of how well the fitted models may predict similar new observations. Independent (external) validation provides a more direct test of the resulting IVIVC using additional paired in vitro and in vivo experimental data that were not used to develop or select the relationship; an in vitro prediction dataset alone does not provide this independent comparison. The plotted parameter-uncertainty intervals summarize uncertainty in calculated values under the selected model and preprocessing, not the additional scatter of future observations.
+Goodness of fit describes agreement with the data used for fitting. Cross-validation summarizes prediction error and sensitivity to observations set aside under the selected splitting scheme. Independent (external) validation uses additional paired in vitro and in vivo experimental data that were not used to develop or select the relationship; an in vitro prediction dataset alone does not provide this independent comparison. Uncertainty displays have different meanings, summarized in Section~\ref{sec:uncertainty}.
 
 \begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.24\textwidth}>{\raggedright\arraybackslash}p{0.68\textwidth}@{}}
 \toprule
@@ -262,20 +262,22 @@ Goodness of fit describes agreement with the data used for fitting. Cross-valida
 \textbf{Output} & \textbf{Description} \\
 \midrule
 \endhead
-Preprocessing outputs & Processed data tables and plots showing the data used for fitting and prediction. \\
-Model fitting outputs & Parameter estimates reported as estimate $\pm$ the half-width of an approximate 95\% confidence interval where available, fitted plots with parameter-uncertainty bands, optional CV fit-variability and residual diagnostic plots, and selected performance metrics. \\
+Preprocessing outputs & Processed data tables and plots showing the data used for fitting and prediction. When uncertainty is supplied, the record includes entered and analyzed SD/SEM aligned by source row. \\
+Model fitting outputs & Parameter estimates and approximate confidence intervals, fitted curves with parameter-uncertainty bands, supplied SD/SEM bars for Approach 2 observations, selected metrics, and optional CV fit-variability and residual diagnostic plots. \\
 Model comparison outputs & Tables comparing selected approaches, models, metrics, relative model evidence, and cross-validation summaries. \\
-Prediction outputs & Prediction plots and downloadable tables when a prediction dataset is supplied. Depending on the approach and prediction method, the output is either a predicted in vivo time or a predicted in vivo response value. \\
+Prediction outputs & Predicted in vivo time or response, depending on the method, with available interval bounds, calibration-range cautions, and calculation status in plots and downloadable tables. \\
 Selected model \& summary of outputs & User-selected report summaries and optional report export for incorporation into external documentation. \\
 \bottomrule
 \end{longtable}
 
+Review Data Processing to confirm which observations and errors were used, especially after normalization or removal of missing data. Entered and analyzed errors are reported separately so their rescaling can be checked. Plot-data downloads and reports retain the calculated interval endpoints and reasons for unavailable or extrapolated results.
+
 
 \subsection{Relative model evidence}
 
-Relative model evidence tables compare candidate parametric models using information criteria (i.e., AIC, AIC\textsubscript{c}, and/or BIC), showing which models have more support from the observed data after balancing fit quality against model complexity. These comparisons are only meaningful among models fitted to the same data, with the same preprocessing settings, and within the same IVIVC approach.
+Relative model evidence tables compare candidate parametric models using information criteria (i.e., AIC, AIC\textsubscript{c}, and/or BIC), showing which models have more support from the observed data after balancing fit quality against model complexity. These comparisons are only meaningful among models fitted to the same data, with the same preprocessing and uncertainty assumptions, and within the same IVIVC approach.
 
-These tables are shown only when one or more information criteria are selected as metrics. Each selected criterion is interpreted separately because AIC, AIC\textsubscript{c}, and BIC can occasionally rank the same models differently. See Appendix~\ref{app:model-performance} for interpretation guidance, rules of thumb, and limitations.
+These tables are shown only when one or more information criteria are selected as metrics. Each selected criterion is interpreted separately because AIC, AIC\textsubscript{c}, and BIC can rank the same models differently. Approach 2 provides separate in vitro and in vivo summaries and combined evidence where the required values are available. With supplied errors, the criteria reflect that observation-error model; AIC\textsubscript{c} retains the app's conventional correction. See Appendix~\ref{app:model-performance} for interpretation guidance and limitations.
 
 The relative model evidence tables contain the following quantities. 
 
@@ -292,7 +294,7 @@ The relative model evidence tables contain the following quantities.
 \(k\) & Number of fitted model parameters. Models with more parameters can fit more flexible shapes, so information criteria include a complexity penalty. \\
 AIC, AIC\textsubscript{c}, or BIC & Information-criterion value for the fitted model. Lower values indicate stronger relative support within the candidate set. \\
 Delta & Difference between a model's criterion value and the lowest value in the candidate set. Values near 0 indicate similar support to the leading model; larger values indicate less support. \\
-Weight & Normalized relative-support score across the candidate set. Weights are comparative summaries, not absolute probabilities that a model is correct. \\
+Weight & Normalized relative-support score across the candidate set. These comparative summaries are not absolute probabilities that a model is correct and differ from the SD/SEM-based observation weights used in fitting. \\
 Evidence ratio & Ratio of the highest weight in the candidate set to the model's weight. Larger values indicate less relative support compared with the leading model. \\
 Support badge & Rule-of-thumb label based on the delta value. Intended to aid user review, not to recommend a model. \\
 \bottomrule
@@ -302,17 +304,17 @@ Support badge & Rule-of-thumb label based on the delta value. Intended to aid us
 \subsection{Prediction outputs}
 \label{sec:prediction-outputs}
 
-The optional prediction dataset contains new in vitro time and response values. After the selected preprocessing is applied, the app uses those values with the relationship established from the fitting dataset. Different prediction methods use the prediction time, the prediction response, or both, and they do not all predict the same quantity. Some methods predict the corresponding \textbf{in vivo time}, while others predict the corresponding \textbf{in vivo response value}.
+The optional prediction dataset contains new in vitro time and response values. After preprocessing, the app applies the fitted relationship using the prediction time, response, or both. Some methods predict the corresponding \textbf{in vivo time}, while others predict the corresponding \textbf{in vivo response value}.
 
-The table below summarizes what each prediction method uses and how the result is calculated. These methods answer different prediction questions and should not be treated as interchangeable outputs.
+The file must contain both columns. The table below identifies which columns enter each calculation; the other coordinate may still be carried into the plot. These methods answer different prediction questions and should not be treated as interchangeable outputs.
 
 \begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.20\textwidth}>{\raggedright\arraybackslash}p{0.16\textwidth}>{\raggedright\arraybackslash}p{0.38\textwidth}>{\raggedright\arraybackslash}p{0.16\textwidth}@{}}
 \toprule
-\textbf{Approach / method} & \textbf{Prediction data used} & \textbf{How the prediction is made} & \textbf{Output} \\
+\textbf{Approach / method} & \textbf{Prediction columns used} & \textbf{How the prediction is made} & \textbf{Output} \\
 \midrule
 \endfirsthead
 \toprule
-\textbf{Approach / method} & \textbf{Prediction data used} & \textbf{How the prediction is made} & \textbf{Output} \\
+\textbf{Approach / method} & \textbf{Prediction columns used} & \textbf{How the prediction is made} & \textbf{Output} \\
 \midrule
 \endhead
 Approach 1: Direct correlation & In vitro time & Applies the fitted relationship between in vitro time and in vivo time: $t_{\mathrm{vivo,pred}}=f(t_{\mathrm{vitro,pred}})$. The prediction response value is not used in this calculation. & In vivo time \\
@@ -324,32 +326,73 @@ Approach 3: Time scaling & In vitro time and response & Uses the fitting dataset
 \bottomrule
 \end{longtable}
 
-The three Approach 2 prediction methods emphasize different aspects of the fitted calibration profiles. Response-value-ratio rescaling preserves time-dependent differences between the fitted in vitro and in vivo responses, but can become unstable when the fitted in vitro response approaches zero. Time-constant-ratio rescaling provides a simple overall time scaling and is most useful when the profiles mainly differ in degradation rate, but it does not capture changes in relative kinetics over time. Observed-response inverse mapping treats the supplied response as a degradation state and estimates when the fitted in vivo curve reaches that state; it can capture nonlinear changes in in vivo kinetics, but does not use the supplied prediction time or fitted in vitro calibration curve. Response-value-ratio and time-constant-ratio rescaling are also relatively straightforward to reproduce outside the app when a simpler manual calculation is useful.
+The three Approach 2 methods emphasize different features of the profiles. Response-value-ratio rescaling preserves time-dependent differences between the fitted curves but can become unstable near a zero fitted in vitro response. A zero or nonfinite fitted denominator makes the point unavailable; if the denominator's uncertainty interval includes zero, the prediction interval is unavailable. Time-constant-ratio rescaling provides one overall time scale and can miss differences in curve shape; its time constants also depend on fitted behavior beyond the observed times. Observed-response inverse mapping treats the supplied response as a degradation state.
 
-Interpolation estimates between calibration observations; extrapolation extends a relationship beyond the range used to establish it. The available prediction range depends on the method.
+\textbf{Uncertainty in Approach 2 predictions.} Calibration uncertainty comes from the relevant fitted curves. A source with supplied SD/SEM uses that error scale; a source without supplied errors uses scatter around its fitted curve. Without prediction-input SD/SEM, the prediction responses are treated as fixed. The table below shows how supplying prediction-response uncertainty affects the approximate 95\% intervals.
 
-Approach 1 can evaluate its fitted time relationship beyond the paired time range used for fitting. Approach 2 response-value-ratio predictions evaluate both fitted curves at the prediction time, which can fall outside either dataset's observed time range. Time-constant-ratio scaling does not restrict input or predicted times to the observed ranges. The app flags results outside the relevant calibration ranges with an \textbf{Extrapolation} caution. Approach 1 checks the paired times actually fitted; response-value ratios check the times at which both calibration curves are evaluated; time-constant scaling checks input and mapped time ranges. Time constants also depend on the unobserved fitted tail, even when individual predicted times lie within calibration.
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.24\textwidth}>{\raggedright\arraybackslash}p{0.32\textwidth}>{\raggedright\arraybackslash}p{0.36\textwidth}@{}}
+\toprule
+\textbf{Approach 2 method} & \textbf{Calibration contribution} & \textbf{Effect of prediction-response SD/SEM} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Approach 2 method} & \textbf{Calibration contribution} & \textbf{Effect of prediction-response SD/SEM} \\
+\midrule
+\endhead
+Response-value ratio & Both fitted curves contribute to the predicted response's vertical bounds. & Combines with calibration uncertainty in those vertical bounds. Prediction time is fixed. \\
+Time-constant ratio & Both fitted curves contribute to the predicted time's horizontal bounds. & Adds vertical input-response bounds; it does not change the mapped time or its horizontal bounds. \\
+Observed-response inverse mapping & The fitted in vivo curve contributes to the predicted time's horizontal bounds. & Propagates together with in vivo parameter uncertainty into the time bounds; vertical bounds show input-response uncertainty alone. \\
+\bottomrule
+\end{longtable}
 
-Approach 2 observed-response inverse mapping searches the fitted in vivo curve, extending beyond calibration when needed along a numerically monotonic continuation. It does not clip responses to calibration endpoints. It checks only the in vivo calibration response/time ranges: the supplied prediction time and in vitro calibration curve are not used in this inverse. Nonunique plateau responses, numerically flat tails, nonfinite domains, nonmonotonic continuations, or unresolved roots are reported as unavailable. The search starts with the calibration span and permits up to 16 doubling extensions. Unscaled time is bounded below by zero (or an already negative calibration minimum); log10-scaled time has no zero-coordinate lower bound. Exhausting this search is not proof that no mathematical solution exists, and sampled monotonicity checks do not prove global uniqueness. Approach 3 interpolates scaling factors within the supported calibration time or response range. These lookup limits do not restrict the resulting scaled in vivo response or time to the observed in vivo range.
+For time-constant and inverse predictions, the vertical coordinate is the supplied in vitro response carried into the plot; it is not an additional predicted in vivo response. Its bounds describe that input response only.
 
-Where supported, prediction plots include error bars or intervals that summarize uncertainty under the selected model and method. Narrow intervals do not establish that extrapolated predictions are reliable. An interval that extends beyond calibration while its central point remains inside receives a separate caution. All ranges and limits use the analyzed, preprocessed coordinates. Plot-data downloads and reports retain pointwise reasons and calibration ranges. Inverse-mapping intervals use the same extrapolation policy as the central estimate and retain failed-draw diagnostics; unsupported draws are not silently removed. Their calculation and limitations are described in Section~\ref{sec:uncertainty}.
+Point estimates use the analyzed inputs and fitted parameters. Prediction-input SD/SEM enters the interval calculation without changing the point estimate when the calibration fits are held fixed. Supplying calibration errors can change those fits and therefore the point estimates.
+
+\textbf{Prediction ranges and unavailable results.} Interpolation estimates between calibration observations; extrapolation extends a relationship beyond its calibration range. Approach 1 checks the paired-time ranges used for fitting. Approach 2 response-value ratios check the times at which both fitted curves are evaluated, while time-constant scaling checks the input and mapped times. These parametric methods can produce predictions beyond the observed ranges; narrow intervals do not establish that those predictions are reliable.
+
+Observed-response inverse mapping checks the in vivo calibration response and time ranges. Its numerical search can extend beyond calibration without clipping responses to the calibration endpoints. Flat or nonunique responses, nonmonotonic continuations, invalid model domains, or unresolved roots can make a prediction unavailable. An unavailable result means a reliable unique time was not calculated; it does not establish that no mathematical solution exists.
+
+Approach 3 obtains scaling factors only within the supported calibration time or response range. The resulting scaled in vivo response or time can still lie outside the observed in vivo range.
+
+An \textbf{Extrapolation} caution identifies results outside the relevant calibration ranges. An interval can carry a separate caution even when its point estimate is inside calibration. Review prediction status and interval status separately: a point may be available without its interval, and one prediction method may be unavailable while another produces a result. Downloads and reports retain the reasons and calibration ranges, including failed-draw information for inverse intervals.
+
+All predictions, interval bounds, and calibration ranges use the analyzed, preprocessed coordinates. The app does not automatically undo the selected normalization, response reversal, or logarithmic scaling. See Section~\ref{sec:uncertainty} for the interpretation and limitations of the displayed intervals.
 
 
 \subsection{Uncertainty and error bars}
 \label{sec:uncertainty}
 
-Shading and error bars show how uncertain fitted or calculated values are because the model parameters were estimated from data. All fitted-curve bands and parametric prediction error bars use the same approximate, pointwise 95\% parameter-uncertainty interpretation. The selected model, preprocessing, and supplied prediction times and responses are treated as fixed. These intervals do not include the additional scatter of future observations, uncertainty about which model to use, or errors from an unsuitable model. They are not prediction bands for future observations. ``Pointwise'' means that the interval applies at each plotted position, not to the whole curve simultaneously.
+The app displays several uncertainty summaries. Check which quantity a bar, band, or plus-minus value describes before comparing their widths.
 
-The app samples 1,000 complete parameter vectors from each fitted multivariate normal covariance approximation (seed 12345), keeping correlations within each fit and sampling separate fits independently. It evaluates the curve or mapping for each draw and uses the 2.5th and 97.5th percentiles as the bounds. Central values use the fitted parameters. Calibration variability still affects the fitted covariance; no additional residual or observation noise is added. If a sampled calculation is invalid at a point, its interval is unavailable. A missing interval does not mean zero uncertainty. Parameter-table confidence intervals and CV fit variability are separate summaries, described below and in the cross-validation section.
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.27\textwidth}>{\raggedright\arraybackslash}p{0.65\textwidth}@{}}
+\toprule
+\textbf{Display} & \textbf{What it means} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Display} & \textbf{What it means} \\
+\midrule
+\endhead
+Observed-data error bars & Approach 2 calibration observations with supplied uncertainty show $\pm$ one SD or SEM. These are the supplied errors, not 95\% intervals or uncertainty bands for the fitted curve. \\
+Fitted-curve shading & Approximate pointwise 95\% uncertainty in the fitted curve because its parameters were estimated from data. \\
+Prediction error bars or interval segments & Approximate pointwise 95\% bounds for the predicted quantity, propagating calibration uncertainty and, for Approach 2 when supplied, prediction-response uncertainty as described above. Time-prediction plots may also show separate input-response bounds. \\
+Parameter and time-constant tables & Estimate $\pm$ the half-width of an approximate 95\% interval for an individual coefficient or time constant, where available. The plus-minus value is not the supplied observation SD/SEM. \\
+CV fit variability shading & Mean $\pm$ one SD across successful CV-training fits. This describes sensitivity to omitted observations; it is not a confidence or prediction interval. \\
+\bottomrule
+\end{longtable}
+
+``Pointwise'' means that a curve or prediction interval applies at each displayed position, not to the whole curve simultaneously. When both axes have bounds, each describes its coordinate separately; the resulting rectangle is not a joint 95\% region.
+
+Fitted-curve and prediction intervals propagate parameter uncertainty while retaining estimated relationships among parameters within each fit. Separate calibration fits are sampled independently. Supplied prediction-response errors are modeled as independent normal errors across entered rows. Time coordinates, normalization constants, the selected model, and preprocessing choices are held fixed. Supplied SD/SEM values are treated as given. The intervals exclude additional variability in future in vivo measurements, extra residual scatter, uncertainty about model choice, and model inadequacy; they are not prediction bands for future observations.
+
+Approach 1 displays uncertainty in its fitted time relationship conditional on the paired times used for fitting; supplied measurement-error propagation is available only for Approach 2. Approach 3 calculates deterministic mappings without formal uncertainty intervals. Missing error bars do not mean a mapping is exact.
+
+A valid central estimate can remain available when its interval cannot be calculated. An unavailable interval does not mean zero uncertainty. For sampled intervals, a failed requested calculation makes the affected interval unavailable rather than being silently discarded. Some intervals from sampled predictions do not contain the point estimate; the app draws them as separate segments at their calculated endpoints. Sampling settings and calculation-status details are recorded with the prediction results. See Appendix~\ref{app:model-performance} for further interpretation of fitted uncertainty and diagnostics.
 
 These intervals are not intended to define acceptability thresholds for regulatory submissions. Applicable credibility and evidence considerations depend on the intended use and applicable FDA guidance \cite{fda_modeling_guidance,fda_reporting_guidance}.
 
 Very large uncertainty bands can extend beyond the initial plot range and remain out of view until the plot is rescaled. When this occurs, the app displays an informational badge near the affected fitting plot. A separate warning is shown if one or more uncertainty bounds are nonfinite or the uncertainty band cannot be calculated. The badge describes the display condition but does not identify its cause; the fitted parameter diagnostics, model form, and available data provide context for interpreting it.
-
-The following descriptions summarize how fitted-parameter uncertainty, fitting-plot bands, and prediction error bars are calculated or interpreted for each approach.
-
-\input{includes/generated/uncertainty_by_approach.tex}
-
 
 \section{Miscellaneous}
 
