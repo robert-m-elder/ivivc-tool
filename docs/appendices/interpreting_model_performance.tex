@@ -5,12 +5,31 @@ No single metric determines whether an IVIVC model is meaningful. An evaluation 
 
 The app reports metrics and comparison tables as descriptive aids for user review; the scope and advisory status described in the Introduction apply throughout this appendix. Users are responsible for determining how to document preprocessing assumptions, fitting settings, model-selection rationale, limitations, and any planned use of the model outside the fitted data range, consistent with the intended use and applicable credibility considerations.
 
+\subsection{Measurement uncertainty and weighted fitting}
+\label{app:measurement-uncertainty}
+
+For Approach 2, supplied SD or SEM represents the standard uncertainty $\sigma_i$ of the response entered at row $i$. SD describes variation among individual measurements; SEM describes uncertainty in a reported mean. These quantities differ from a fitted parameter's standard error, which is calculated from the parameter covariance matrix. A mean is one fitted observation, even if it summarizes several replicates. Optional replicate counts are metadata: they do not increase the fitted sample size or divide an entered SEM again. Input choices are described in Section~\ref{sec:measurement-uncertainty}.
+
+With supplied errors, the app minimizes squared residuals relative to their SD/SEM:
+\[
+Q=\sum_{i=1}^{n}\left(\frac{r_i}{\sigma_i}\right)^2,
+\qquad r_i=y_i-f(t_i;\widehat{\boldsymbol{\theta}}),
+\qquad w_i=\frac{1}{\sigma_i^2}.
+\]
+Here $r_i$ is observed minus fitted response and $w_i$ is an observation weight. The responses and errors use the analyzed scale after preprocessing. Smaller errors give an observation more influence. The same errors are used in the starting-value search, the full fit, and the corresponding CV training fits. This is weighted least squares \cite{nistWeightedLeastSquares}.
+
+The app treats the supplied error scale as absolute: the fitted covariance is not rescaled to match the residual scatter. Without supplied errors, each calibration source retains ordinary least squares and a covariance scale estimated from its residuals \cite{scipyCurveFit}. Equal constant errors give the ordinary least-squares objective up to a constant factor, but the covariance conventions can still differ. A perfect fit need not have zero parameter uncertainty when positive SD/SEM is supplied.
+
+Supplied errors are treated as given, even when they were estimated from few replicates. The app does not propagate uncertainty in those error estimates. It assumes independent measurement errors across entered rows and times, with prediction measurements independent of calibration. Selecting a different CV scheme does not introduce a correlated-error model.
+
+Normalization rescales the response errors using the selected transformation, with reference values treated as fixed. It does not propagate the joint uncertainty involved in estimating a normalization reference from the same observations. Normalizing a response to 1 therefore does not make its supplied SD/SEM zero. These are conditional assumptions, not evidence that normalization references or measurements are exact.
+
 
 \subsection{Model comparability before interpreting metrics}
 
-Performance metrics are most meaningful when the models being compared were evaluated under identical conditions. Metric comparisons are most interpretable within the same uploaded dataset, preprocessing configuration, response scale, selected IVIVC approach, and model set.
+Performance metrics are most meaningful when the models being compared were evaluated under identical conditions. Comparisons should use the same observations, preprocessing, analyzed output scale, selected IVIVC approach, and source-specific uncertainty assumptions.
 
-In particular, AIC, AIC\textsubscript{c}, and BIC values are not comparable across different datasets, transformed responses, preprocessing settings, or substantially different fitting contexts. These information criteria measure the \textit{relative} support among models evaluated under the same conditions---they are not absolute quality scores and lose their meaning when the underlying data or setup differs. Approach 3 is interpreted differently from Approaches 1 and 2 because it uses direct interpolation-based mappings rather than fitting a parametric model.
+In particular, do not compare AIC, AIC\textsubscript{c}, or BIC across runs with different data, response transformations, or entered SD/SEM. These criteria describe relative support within a comparable candidate set, not absolute model quality. Approach 3 uses direct mappings rather than a parametric likelihood fit and does not have the same information-criterion comparison.
 
 
 \subsection{Metric ranges, direction, and interpretation}
@@ -26,12 +45,12 @@ In particular, AIC, AIC\textsubscript{c}, and BIC values are not comparable acro
 \endhead
     \(R^2\) & Best possible value is 1. Values near 0 indicate little improvement over predicting the mean response. Can be negative if the model performs worse than the mean-response baseline. Higher is better. & Proportion of response variance explained by the model \cite{miles2014}. High \(R^2\) does not establish that the model is mechanistic, causal, predictive outside the fitted data range, or adequately supported for the intended use. \\
     Adjusted \(R^2\) & Higher is better. Can be lower than \(R^2\). & Penalizes additional fitted parameters, making it more informative than \(R^2\) when comparing models of different complexity \cite{miles2014}. \\ 
-    MAE & Lower is better. Units match the response units. & Mean absolute error on the response scale \cite{hodson2022}. Interpret relative to assay variability, measurement uncertainty, and the intended use. \\
-    MSE & Lower is better. Units are squared response units. & Mean squared prediction error \cite{hodson2022}. Useful computationally, but less intuitive than RMSE because the units are squared. \\
-    RMSE & Lower is better. Units match the response units. & Root mean squared error, the typical prediction error on the response scale \cite{hodson2022}. Interpret relative to assay variability, measurement uncertainty, and the intended use. Penalizes larger errors more heavily than MAE. \\
-    NRMSE & Lower is better. Normalized to allow more meaningful comparison across response scales. & RMSE prediction error expressed relative to a normalization factor such as the response mean or standard deviation. Interpretation depends on the normalization method used. \\
+    MAE & Lower is better. Units match the analyzed fitted output. & Mean absolute error \cite{hodson2022}. Interpret relative to assay variability, measurement uncertainty, and the intended use. \\
+    MSE & Lower is better. Units are squared units of the analyzed fitted output. & Mean squared prediction error \cite{hodson2022}. Useful computationally, but less intuitive than RMSE because the units are squared. \\
+    RMSE & Lower is better. Units match the analyzed fitted output. & Root mean squared error, a summary of typical prediction error \cite{hodson2022}. Penalizes larger errors more heavily than MAE. \\
+    NRMSE & Lower is better when the denominator is positive. & RMSE divided by the observed output SD (\textit{std. dev.}) or mean (\textit{mean}), as identified in the app. Near-zero denominators make the result unstable; a zero denominator makes it undefined. \\
     AIC & Lower is better, but only relative to other comparable models. No fixed bounds; negative values are allowed. & Balances goodness of fit against model complexity \cite{akaike1974,burnham2002,wagenmakers2004}. A lower value indicates a model that explains the data well without unnecessary parameters. Absolute values are not standalone quality grades. \\
-    AIC\textsubscript{c} & Lower is better, but only relative to other comparable models. Undefined when there are too few observations relative to the number of fitted parameters. & A small-sample correction to AIC that is most relevant when the observation-to-parameter ratio is low \cite{hurvich1989, burnham2002, wagenmakers2004}; \(n/k < 40\) is a rule of thumb \cite{burnham2002}. \\
+    AIC\textsubscript{c} & Lower indicates more support within a comparable set. The app requires $n>k+1$. & AIC plus the app's conventional small-sample correction. Its justification depends on the model and error assumptions; see the qualification below. \\
     BIC & Lower is better, but only relative to other comparable models. No fixed bounds; negative values are allowed. & Balances goodness of fit against model complexity, typically applying a stronger penalty for additional parameters than AIC \cite{schwarz1978,burnham2002,wagenmakers2004}. \\
     Cross-validation metrics & Direction follows the underlying metric: higher is better for \(R^2\)-type metrics, lower is better for error metrics. & Estimate prediction performance under the selected splitting scheme \cite{arlot2010, bergmeir2012, roberts2017, bergmeir2018}. Can help identify overfitting, instability, or sensitivity to individual observations or data splits. \\
     Fit/CV ratio & Values near 1 indicate similar fitted and cross-validation performance. & A ratio near 1 suggests similar full-fit and cross-validation behavior. Substantial deviations can indicate overfitting, instability, or sensitivity to the splitting scheme. \\
@@ -45,19 +64,51 @@ Goodness-of-fit metrics---\(R^2\), adjusted \(R^2\), MSE, MAE, RMSE, and NRMSE--
 
 Strong goodness-of-fit can still be misleading, particularly for small datasets or models with many parameters. Favorable fit metrics do not rule out unstable parameters, poor cross-validation performance, systematic residual patterns, or a fitted curve shape that is not scientifically plausible for the degradation process being modeled.
 
-RMSE is often the most intuitive error metric because it is expressed in the same units as the response. NRMSE can be useful for comparing error across different response scales, but the choice of denominator changes what the metric actually measures \cite{hyndman2006}:
+The ordinary descriptive metrics remain unweighted when SD/SEM is supplied. A weighted fit can therefore have a larger ordinary RMSE than an unweighted fit while better matching observations with smaller supplied errors. Review these scores alongside the stated fitting objective rather than expecting every metric to improve.
+
+RMSE uses the units of the analyzed fitted output: in vivo time for Approach 1, or response for Approach 2. The two NRMSE options change the denominator rather than incorporating experimental error bars \cite{hyndman2006}:
 
 \begin{itemize}
-    \item \textbf{NRMSE normalized by the response mean} answers: ``How large is the typical prediction error relative to the average response value?'' This normalization is useful for comparing model error across endpoints with different scales or units. For example, comparing how well a model fits mass loss data versus molecular weight data on a common scale.
-    \item \textbf{NRMSE normalized by the response standard deviation} answers: ``How large is the typical prediction error relative to the natural spread of the observed responses?'' This normalization is useful for gauging how much of the variability in the data the model fails to capture. A value approaching or exceeding 1 indicates that the typical prediction error is as large as the spread of the data itself, suggesting the model explains little of the observed variability, analogous to an $R^2$ near zero.
+    \item \textbf{NRMSE (mean)} asks how large the typical error is relative to the average analyzed output. It is most interpretable for a positive mean away from zero; a negative mean does not give the usual positive relative-error interpretation.
+    \item \textbf{NRMSE (std. dev.)} asks how large the typical error is relative to the spread of the observed outputs. That spread includes the changing trajectory across time; it is not the SD/SEM supplied for an individual observation or mean.
 \end{itemize}
 
 NRMSE values are not directly comparable across datasets or response scales when the normalization method differs. More broadly, the practical importance of a given error level depends on context: a numerically small error may still matter when the relevant degradation endpoint has narrow variation, while a larger error may be less consequential during exploratory model development when high predictive precision is not central to the analysis.
 
 
 \subsection{Interpreting relative model evidence}
+\label{app:information-criteria}
 
 Relative model evidence tables compare candidate models using information criteria (i.e., AIC, AIC\textsubscript{c}, and BIC), which balance goodness of fit against model complexity. In this context, \textit{empirical support} means that the observed data provide more support for one model than another within the displayed candidate set, based on the selected information criterion. It does not establish that a model is correct, mechanistic, or predictive outside the observed range. Whether the evidence base is sufficient to support a regulatory submission depends on the intended use and applicable FDA guidance \cite{fda_modeling_guidance,fda_reporting_guidance}.
+
+\subsubsection*{How supplied errors enter the criteria}
+
+For a calibration source with supplied errors, the app uses an independent normal observation-error model. At the fitted parameters, its negative twice log likelihood is
+\[
+D=-2\log L=\sum_{i=1}^{n}\left[\left(\frac{r_i}{\sigma_i}\right)^2
+  +\log(2\pi\sigma_i^2)\right],
+\qquad \mathrm{AIC}=D+2k,\quad \mathrm{BIC}=D+k\log n.
+\]
+Here $n$ counts the response rows used in that fit and $k$ counts fitted curve parameters. Replicate counts do not increase $n$, and fixed model coefficients are not included in $k$.
+
+Without supplied errors, the app retains its RSS-based criterion convention, using $n\log(\mathrm{RSS}/n)$ in place of $D$, with parameter-independent constants omitted and a numerical floor near zero RSS. This estimates a common error scale from the residuals. It answers a different error-model question from treating entered SD/SEM as an absolute scale. Raw RSS alone therefore does not describe the supplied-error likelihood. In both paths the app counts curve parameters only; it does not add an estimated error-scale parameter to $k$. These statements document the software's convention.
+
+\subsubsection*{AIC\textsubscript{c}: retained correction and its interpretation}
+
+For either error convention, the app retains
+\[
+\mathrm{AIC}_{\mathrm{c}}=\mathrm{AIC}+\frac{2k(k+1)}{n-k-1},
+\qquad n>k+1.
+\]
+When that sample-size condition fails, AIC\textsubscript{c} is unavailable even if AIC or BIC can be calculated. A low observation-to-parameter ratio makes small-sample assumptions important; the often-cited $n/k<40$ rule is a regression rule of thumb \cite{burnham2002}, not an automatic reason to prefer this correction for every fit.
+
+Small-sample corrections depend on the statistical setting \cite{hurvich1989}. Known and estimated error variances are different settings, as illustrated for normal linear regression by Maier's analysis (a preprint) \cite{maier2013}. The app keeps conventional AIC\textsubscript{c} available with supplied SD/SEM, but does not claim that it is an exact small-sample correction for every nonlinear model and supplied-error setting. Interpret it alongside the other selected criteria and model diagnostics, using the same uncertainty assumptions across candidates.
+
+\subsubsection*{Separate and combined Approach 2 support}
+
+Approach 2 reports in vitro support, in vivo support, and a combined summary. The combined value for each criterion is the sum of its two source-specific values, under the independent-source fitting assumptions. In particular, combined AIC\textsubscript{c} adds the two separate corrections and requires both to be defined. It is not a new correction calculated from pooled $n$ and $k$; combined BIC likewise adds the separate BIC values.
+
+One source may use supplied errors while the other estimates its scale from residuals. That mixed configuration remains available, provided each source's observations and error assumptions are kept the same across the compared models. Separate and combined support can differ because a model may describe one source more strongly than the other.
 
 \subsubsection*{Rules of thumb for delta values}
 
@@ -72,11 +123,11 @@ These are interpretive conventions, not regulatory acceptance criteria.
 
 \subsubsection*{Evidence weights}
 
-For a given criterion, the evidence weight for model $i$ is:
+For a given criterion, the evidence weight for model $m$ is:
 \begin{equation}
-w_i = \frac{\exp\left(-\frac{1}{2}\Delta_i\right)}{\sum_{j=1}^{J} \exp\left(-\frac{1}{2}\Delta_j\right)}
+W_m = \frac{\exp\left(-\frac{1}{2}\Delta_m\right)}{\sum_{j=1}^{J} \exp\left(-\frac{1}{2}\Delta_j\right)}
 \end{equation}
-where $\Delta_i$ is the delta value for model $i$ and $J$ is the number of candidate models. Larger weights indicate stronger relative support within the candidate set \cite{burnham2002, wagenmakers2004}.
+where $\Delta_m$ is the delta value for model $m$ and $J$ is the number of candidate models. Larger weights indicate stronger relative support within the displayed set \cite{burnham2002, wagenmakers2004}. These model-support weights differ from the observation weights $1/\sigma_i^2$ used during fitting and are not absolute probabilities that a model is correct.
 
 \subsubsection*{When multiple models have similar support}
 
@@ -89,7 +140,9 @@ Cross-validation evaluates prediction performance using observations left out wh
 
 \subsubsection*{What each scheme is testing}
 
-Different cross-validation schemes answer different questions, and those questions determine how the results are interpreted. Shuffle split, the default, sets aside randomly selected time points without regard to their order. It serves as a general check of overall curve-shape robustness, but it may make the model appear more reliable than it is when nearby time points carry similar information. Leave-one-timepoint-out tests how well the model predicts a single omitted time point when all others are available, a relatively gentle task when neighboring time points are close together. Leave-contiguous-block-out tests whether the model can bridge an entire missing time window, a harder and more time-aware task that is more sensitive to gaps in the profile.
+Different schemes create different prediction tasks. Shuffle split, the default, sets aside randomly selected observation rows and checks overall curve-shape robustness. Leave-one-timepoint-out omits one row at a time; observations sharing a time are not grouped together. Leave-contiguous-block-out omits adjacent rows in fitting-x order and checks sensitivity to a missing region. These checks can be gentle when nearby observations carry similar information.
+
+Preprocessing and alignment are established before the splits, rather than rebuilt using each training subset alone. Starting values can also come from the full-data initialization search. The results therefore describe sensitivity within the chosen analysis setup; they are not independent validation of the complete analysis procedure.
 
 These distinctions matter because adjacent time points in a degradation profile are often similar to one another, measurement errors may be related across time, and early, middle, and late portions of a degradation profile may reflect qualitatively different behavior. Standard cross-validation procedures are reviewed in \cite{arlot2010}; additional considerations for temporally ordered or dependent data are discussed in \cite{bergmeir2012,roberts2017,bergmeir2018}.
 
@@ -101,7 +154,7 @@ For example, strong leave-one-timepoint-out performance alongside weaker leave-c
 
 \subsubsection*{CV fit variability plots}
 
-Average CV performance metrics summarize prediction performance across the held-out observations and CV splits, but they do not show how much the fitted curve itself changes from one training subset to another. Two models can therefore have similar average CV errors even when one produces nearly the same fitted relationship across splits and the other changes appreciably depending on which observations are withheld.
+Average CV metrics summarize prediction error across the observations set aside and the CV splits, but do not show how much the fitted curve itself changes between training subsets. Two models can have similar average CV errors while differing in sensitivity to omitted observations.
 
 The optional CV fit variability plot provides this complementary information by showing the full-data fit together with the mean fitted curve and mean $\pm$ one standard deviation across the successful CV training-set fits. A narrow band indicates that the fitted relationship changes relatively little across the CV splits. A wider band, or widening confined to a particular part of the curve, identifies regions where the fitted relationship is more sensitive to the training data, suggesting that additional data in that region may be particularly informative. A noticeable difference between the mean CV fit and the full-data fit can likewise indicate that repeatedly leaving out observations changes the fitted relationship in a systematic way.
 
@@ -109,23 +162,35 @@ The band is a descriptive sensitivity diagnostic, not a confidence interval, pre
 
 \subsubsection*{Fit/CV ratios}
 
-The app reports fit/CV ratios to summarize the relationship between full-fit and cross-validation performance for the same metric. A ratio near 1 indicates that the two are similar. A ratio far from 1 may suggest reduced generalizability, overfitting, model instability, or sensitivity to the splitting scheme. Because the direction of concern depends on the metric (for example, a ratio above 1 is concerning for RMSE but not for $R^2$), interpretation of the ratio depends on the raw fit and CV values, the chosen splitting scheme, and the fitted plots.
+The displayed ratio is the full-fit value divided by the mean CV value. For a positive error metric such as RMSE, worse CV error gives a ratio below 1. For positive $R^2$ values, a smaller CV score gives a ratio above 1. Ratios can be undefined or difficult to interpret near zero or with negative scores. Review the raw values, splitting scheme, and fitted plots; a ratio alone does not establish generalizability or overfitting.
 
 \subsubsection*{Cross-validation comparison badges}
 
 The app displays cross-validation comparison badges as interpretive aids. Badges are assigned based on the preferred direction of the metric: for lower-is-better metrics such as RMSE, a worse CV result means the CV value is larger than the full-fit value; for higher-is-better metrics such as $R^2$, a worse CV result means the CV value is smaller. The thresholds used are:
 
 \begin{itemize}
-    \item \textbf{Similar}: CV performance is within a factor of 1.25 of the full-fit value.
+    \item \textbf{Similar}: CV performance is no more than 1.25-fold worse than the full-fit value, or is better under that metric.
     \item \textbf{Moderately worse}: CV performance is 1.25- to 2-fold worse than the full-fit value.
     \item \textbf{Substantially worse}: CV performance is more than 2-fold worse than the full-fit value.
 \end{itemize}
 
-These thresholds are heuristic review aids to help flag results that warrant closer attention. They are not statistical acceptance criteria or regulatory standards.
+The badges use a direction-aware worsening factor, rather than applying these thresholds directly to the displayed fit/CV ratio. Undefined factors produce an unavailable badge. These thresholds are heuristic review aids, not statistical acceptance criteria or regulatory standards.
+
+\subsubsection*{Additional CV summaries with supplied SD/SEM}
+
+Each Approach 2 CV training fit uses the supplied errors for its training rows. The additional supplied-error summary compares predictions with the errors assigned to the omitted observations. If $z_a$ is the omitted prediction error divided by that observation's SD/SEM, the pooled score is
+\[
+\mathrm{RMSE}_{\mathrm{standardized}}=\sqrt{\frac{1}{M}\sum_{a=1}^{M}z_a^2}.
+\]
+Here $M$ counts test-observation occurrences across splits: a row used as test data repeatedly is counted repeatedly. It is not a count of additional independent measurements. A score near 1 means the omitted errors are comparable to the supplied SD/SEM scale on average, not that the model passes a calibrated test.
+
+The observation negative log likelihood uses the supplied normal error model evaluated at each CV fitted prediction; the report also gives its mean per test occurrence. It assesses the fitted prediction against that measurement-error model without adding uncertainty from estimating the training-fit parameters. Compare values only for comparable test data, error assumptions, and units; absolute values are not model-quality grades.
+
+These pooled supplied-error scores require a finite score from every requested split. They are unavailable if CV is disabled or the requested splits are incomplete. Ordinary CV means can still summarize finite split scores, so inspect the successful-split and finite-score counts before interpreting them. Supplied-error CV information criteria are not calculated; full-fit AIC, AIC\textsubscript{c}, and BIC remain available.
 
 \subsubsection*{Metrics excluded from cross-validation comparisons}
 
-The app does not include adjusted $R^2$, information criteria (AIC, AIC\textsubscript{c}, and BIC), or normalized RMSE (NRMSE) in cross-validation comparison tables. The reason is that these metrics are not directly comparable across fits that use different numbers of observations:
+The app does not give fit/CV comparisons for adjusted $R^2$, information criteria (AIC, AIC\textsubscript{c}, and BIC), or either NRMSE normalization. These quantities depend on the sample size or subset-dependent reference values:
 
 \begin{itemize}
     \item \textbf{Adjusted $R^2$ and information criteria} incorporate the number of observations or fitted parameters as part of their calculation. Because the full-data model and each cross-validation model are fitted to different subsets of the data, these quantities are not on the same scale and are not directly comparable.
@@ -137,15 +202,15 @@ Eligible cross-validation metrics summarize prediction behavior during CV, while
 
 \subsection{Interpreting residual diagnostics}
 
-Residuals are the differences between observed and predicted values (i.e., the errors in the predictions). A well-specified model generally produces residuals without systematic structure. Residual diagnostics help assess whether model errors show systematic patterns \cite{kutner2005}. The app provides two qualitative diagnostic plots: residual-vs-time plots and quantile-quantile (Q-Q) plots. If your dataset contains few time points, which is typical of IVIVC datasets, these plots are intended as exploratory diagnostics rather than pass/fail tests. With only a few points, random variation can sometimes appear to form a meaningful pattern.
+Residuals are observed minus fitted outputs. They use analyzed in vivo time units for Approach 1 and analyzed response units for Approach 2. The app provides raw residual and normal quantile-quantile (Q-Q) plots to explore patterns \cite{kutner2005}. With few observations, random variation can resemble structure, so these are exploratory aids rather than pass/fail tests.
 
 \subsubsection*{Residual-vs-time plots}
 
-Residuals are plotted in the same units as the fitted response. The axis covers the largest absolute residual for each model but is not allowed to shrink below a small fraction of the observed response range. This minimum prevents extremely small numerical residuals from being expanded to fill the plot and appearing more important than they are. Overall error metrics such as RMSE or MAE provide a more direct comparison of error magnitude across models than residual plots.
+Raw residuals retain the units of the analyzed fitted output. Each plot has its own symmetric axis and a minimum display range so tiny numerical errors are not magnified. Use the axes and ordinary error metrics when comparing magnitudes across fits. With unequal supplied SD/SEM, unequal raw residual spread can be consistent with the entered error model; raw residuals are not divided by those errors.
 
 \subsubsection*{Q-Q plots}
 
-Q-Q plots compare the ordered standardized residuals against the pattern expected for randomly distributed errors (i.e., a normal distribution, Gaussian distribution, or `bell curve'). Points near the diagonal reference line are broadly consistent with random residual variation. Systematic curvature, large departures in the tails, or isolated extreme points may suggest non-randomness, outliers, or a model form that does not fit the data well. When residual variation is too small relative to the response scale, the app reports that the Q-Q plot is not informative rather than magnifying numerical differences. 
+The Q-Q display centers residuals and divides them by their sample standard deviation before comparison with a normal reference. It does not standardize each residual by its supplied SD/SEM. With unequal measurement errors, the pooled residual distribution need not look normal even when individual errors follow the supplied normal model. Curvature, tail departures, or isolated points prompt review; a straight pattern does not establish independence, model correctness, or agreement with the supplied error scale. If residual variation is too small, the app reports that the display is not informative.
 
 \subsubsection*{What to look for}
 
@@ -161,9 +226,11 @@ When any of these patterns appear, they can motivate evaluation of whether a dif
 
 \subsection{Interpreting parameter uncertainty}
 
-Model parameters cannot always be estimated precisely from the available data. The app reports each parameter estimate $\pm$ 95\% confidence interval. The plus-minus value represents the confidence interval half-width around the estimate. In practical terms, a wide interval means the data do not pin down that parameter precisely, while a narrow interval means the estimate is more stable.
+Model parameters cannot always be estimated precisely. Where available, the app reports each estimate $\pm$ the half-width of an approximate 95\% confidence interval. The parameter standard error is the square root of its covariance diagonal entry; it is not the SD/SEM supplied for an observation. A wide coefficient interval indicates imprecision under the fitted model and error assumptions. A narrow interval is conditional on those assumptions and does not establish model correctness.
 
-The interval is calculated from the fitted model's covariance matrix and residual degrees of freedom. This calculation estimates uncertainty from the behavior of the model near the fitted parameter values. For nonlinear models, especially with small datasets, the true uncertainty can be wider, asymmetric, or more strongly affected by relationships among parameters than the reported interval suggests. The interval is most informative when considered together with the relative standard errors, parameter-coupling diagnostics, fitted curves, and scientific plausibility rather than as a precise boundary for the parameter. For a practical overview of nonlinear regression and interpretation of fitted results, see \cite{motulsky1987}. For a technical treatment of covariance-based parameter uncertainty and approximate confidence intervals in nonlinear least-squares models, see \cite{bates2007}.
+With supplied absolute errors, the coefficient interval uses a normal multiplier (approximately 1.96 at 95\%), conditional on those errors. Without supplied errors, the app uses a Student $t$ multiplier based on residual degrees of freedom $n-k$ when available, with its normal fallback otherwise. Replicate counts do not supply extra degrees of freedom or choose a different multiplier.
+
+The covariance is a local approximation around the fitted parameters; nonlinear curvature or weakly determined parameters can make that approximation inaccurate \cite{scipyCurveFit}. Intervals can then understate asymmetry or dependence. Review them alongside parameter coupling, the fitted curves, and scientific plausibility \cite{motulsky1987,bates2007}.
 
 The app summarizes parameter uncertainty using informational badges as screening aids, not acceptance criteria. They highlight fitted-parameter uncertainty that may affect interpretation or prediction.
 
@@ -176,7 +243,7 @@ The app summarizes parameter uncertainty using informational badges as screening
 \textbf{Diagnostic} & \textbf{What it summarizes} & \textbf{Interpretation guidance} \\
 \midrule
 \endhead
-Relative standard error & The uncertainty in a parameter estimate expressed as a percentage of the estimate itself. & A large value means the uncertainty is large relative to the estimate, so the data are not pinning down that parameter well. The app flags values of at least 50\% as elevated and at least 100\% as large. \\
+Relative standard error & Parameter standard error expressed as a percentage of the absolute parameter estimate. & A large value means the uncertainty is large relative to the estimate, so the data are not pinning down that parameter well. The app flags values of at least 50\% as elevated and at least 100\% as large. \\
 Parameter coupling / correlation & How strongly pairs of parameter estimates move together during fitting (pairwise correlation). & When two parameters are highly correlated, the model can reach a similar fit by trading off one against the other, making both harder to estimate reliably. Some coupling is normal in nonlinear models. The app reports correlation alone as \emph{parameter coupling noted}; when high correlation coincides with elevated relative standard error or a numerical sensitivity flag, it reports a stronger identifiability caution. Absolute correlations of at least 0.90 are noted, with stronger concern when correlations of at least 0.95 occur alongside other uncertainty diagnostics. \\
 \bottomrule
 \end{longtable}
@@ -184,6 +251,38 @@ Parameter coupling / correlation & How strongly pairs of parameter estimates mov
 If no parameter uncertainty concerns are flagged, the app did not detect large relative standard errors or strong parameter coupling under these screening checks. This does not establish mechanistic correctness, predictive adequacy for a particular use, or regulatory acceptability. Conversely, a coupling or warning badge does not by itself determine whether the model can support a particular use; rather, it identifies parameter behavior that can be reviewed alongside the fitted curves, residuals, cross-validation behavior, and scientific plausibility.
 
 Parameter uncertainty deserves particular attention when a model will be interpreted mechanistically, used to extrapolate beyond the observed data range, or used to compare degradation behavior across materials, processes, or test conditions. In these situations, relevant considerations include whether the reported intervals are wide, parameters are strongly coupled, fitted parameter values are extreme or scientifically implausible, or small changes in the data or fitting settings produce substantially different estimates. Strong fit metrics alone may not be sufficient to address concerns about poorly estimated parameters or scientifically implausible values; these aspects warrant separate review.
+
+\subsection{How curve and prediction intervals are calculated}
+\label{app:uncertainty-calculation}
+
+For fitted curves and parametric predictions, the app samples complete parameter vectors from a multivariate normal covariance approximation. This preserves estimated parameter relationships within a fit and dependence across times along each sampled curve. Separate calibration fits are sampled independently. When prediction SD/SEM is supplied, independent normal response errors are propagated once per entered row; inverse mapping uses the same sampled response to calculate its time and response coordinate.
+
+Sampled bounds enclose the middle 95\% of calculated values at each position. They are marginal, pointwise intervals, not a simultaneous whole-curve band or joint time-response region. For time-constant and inverse plots, response-axis bounds instead come directly from the supplied normal input error model. Additional future-measurement scatter is not added. See Section~\ref{sec:uncertainty} for the display legend and method-specific interpretation.
+
+The current browser and CLI conventions use seed 12345 for these calculations, separately from CV and initialization seeds:
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.62\textwidth}>{\raggedright\arraybackslash}p{0.30\textwidth}@{}}
+\toprule
+\textbf{Calculation} & \textbf{Requested draws} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Calculation} & \textbf{Requested draws} \\
+\midrule
+\endhead
+Fitted-curve bands & 1,000 per fit \\
+Approach 2 response-value ratio intervals & 1,000 per calibration fit \\
+Time-constant table standard uncertainty & 50 per fit \\
+Approach 2 time-constant ratio intervals & 1,000 per calibration fit \\
+Approach 2 observed-response inverse intervals & 100 from the in vivo fit \\
+\bottomrule
+\end{longtable}
+
+Central estimates use the fitted parameters and analyzed inputs, not averages across draws. Sampled calculations must succeed for an interval to be shown at the affected position; failed draws are not silently removed. A valid center can remain without its interval. Sampling settings and failure details are retained with prediction results.
+
+The integral time constant uses numerical integration from zero to infinity with the integration routine's default tolerances and a subdivision limit of 100. Warnings or invalid results make the time constant unavailable without discarding the fitted curve. Any invalid sampled time constant makes its table standard uncertainty unavailable, while retaining a valid central estimate. Time-ratio plot bounds separately propagate both parameter vectors through integration and their ratio; they do not combine the table SDs as independent errors.
+
+Inverse mapping starts in the calibration time span and can extend it by doubling, with a current default of up to three extensions. Unscaled time has a lower search bound of zero, or the observed minimum if already negative; log-time coordinates have no zero-coordinate floor. The limit used is recorded with the result. The finite search and numerical monotonicity checks examine a branch of the fitted curve; they do not prove global uniqueness or that no solution exists outside the examined range.
 
 
 \subsection{Considering model complexity}
@@ -286,7 +385,7 @@ The following passages illustrate how model results might be described in a tech
     \item Although Model C had strong goodness-of-fit, its cross-validation error was substantially higher than its fitted error, suggesting sensitivity to which observations were included in fitting.
     \item Residuals for Model A were scattered around zero without obvious systematic patterns, consistent with a model form that captures the observed data.
     \item Model B showed a systematic trend in the residuals across time, suggesting the selected model form does not fully capture the degradation profile.
-    \item The fitted parameters for Model A were within plausible ranges for the degradation mechanism, with narrow confidence intervals indicating stable estimation.
+    \item The fitted parameters for Model A were within plausible ranges for the degradation mechanism, with narrow local confidence intervals under the selected error assumptions.
     \item Model C showed strong parameter coupling between the rate and shape parameters, with relative standard errors exceeding 100\%. Parameter estimates were retained for curve description but were not interpreted individually.
     \item The selected model was chosen based on a balance of goodness-of-fit, cross-validation behavior, relative empirical support, parameter stability, and scientific plausibility for the degradation mechanism and intended use.
 \end{itemize}
