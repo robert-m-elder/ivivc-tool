@@ -222,5 +222,6 @@ def test_calibration_error_bars_retain_fitted_parameter_bands(monkeypatch):
     figure = captured['figure']
     trace = next(trace for trace in figure.data if trace.name == 'In Vitro Data (± SEM)')
     np.testing.assert_array_equal(trace.error_y.array, [0.1] * 3)
+    assert trace.meta['observation_uncertainty_kind'] == 'sem'
     assert any('Parameter-Uncertainty Band' in trace.name for trace in figure.data)
     assert figure.layout.yaxis.range[1] > 1.1

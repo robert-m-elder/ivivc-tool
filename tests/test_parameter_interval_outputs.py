@@ -145,8 +145,13 @@ def test_description_sources_and_template_no_longer_promise_observation_bands():
     for approach in ('approach1','approach2'):
         for key in ('fit_uncertainty_html','prediction_error_html'):
             value = APPROACH_DESCRIPTIONS[approach][key]
-            assert 'No additional residual or observation noise is added' in value
-            assert 'not observation prediction bands' in value
+            if approach == 'approach1':
+                assert 'No additional residual or observation noise is added' in value
+                assert 'not observation prediction bands' in value
+            else:
+                assert 'exclude future in vivo measurement variability' in value
+    prediction_help = APPROACH_DESCRIPTIONS['approach2']['prediction_error_html']
+    assert 'when supplied' in prediction_help and 'uncertainty in the prediction responses' in prediction_help
     template = Path('templates/results.html').read_text()
     assert "assumed response uncertainty equal to" not in template
     assert 'additional scatter of future observations' in template
