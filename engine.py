@@ -2530,6 +2530,13 @@ def extract_plotly_data_for_table(fig):
                 ('interval_requested_samples', 'Requested draws'),
             ):
                 columns[f'{label} ({trace_name})'] = [row.get(key) for row in records]
+            if any('interval_policy' in row for row in records):
+                for key, label in (
+                    ('interval_policy', 'Inverse interval policy'),
+                    ('interval_min_valid_fraction', 'Minimum usable fraction'),
+                    ('interval_conditional', 'Conditional inverse interval'),
+                ):
+                    columns[f'{label} ({trace_name})'] = [row.get(key) for row in records]
             if any('input_standard_uncertainty' in row for row in records):
                 for key, label in (
                     ('interval_kind', 'Primary interval interpretation'),
@@ -3132,9 +3139,12 @@ def _parameter_prediction_records(trajectory, output_kind):
         if 'interval_status' in metadata:
             row['interval_status'] = str(metadata['interval_status'][index])
         for key in ('interval_kind', 'interval_confidence_level', 'interval_total_samples',
-                    'interval_requested_samples', 'interval_random_seed'):
+                    'interval_requested_samples', 'interval_random_seed',
+                    'interval_policy', 'interval_min_valid_fraction'):
             if key in metadata:
                 row[key] = metadata[key]
+        if 'interval_conditional' in metadata:
+            row['interval_conditional'] = bool(metadata['interval_conditional'][index])
         if 'interval_valid_samples' in metadata:
             row['interval_valid_samples'] = int(metadata['interval_valid_samples'][index])
         for key in ('extrapolation_status', 'extrapolation_reason', 'interval_extrapolation_status'):
@@ -3226,7 +3236,7 @@ def _add_parameter_prediction_trace(fig, t_pred, m_pred, centers, records, outpu
         mode='markers', name='In Vivo (Predicted)',
         meta={'prediction_records': records, 'prediction_output_kind': output_kind},
         text=['; '.join(str(row.get(key, '')) for key in
-              ('status', 'extrapolation_status', 'extrapolation_reason', 'interval_extrapolation_status')
+              ('status', 'interval_status', 'extrapolation_status', 'extrapolation_reason', 'interval_extrapolation_status')
               if row.get(key)) for row in records],
         hovertemplate='Time: %{x}<br>Response: %{y}<br>%{text}<extra>%{fullData.name}</extra>',
         marker=dict(color=colors['prediction_output'], size=15, line=dict(color='white', width=2)),
@@ -3239,7 +3249,9 @@ def _add_parameter_prediction_trace(fig, t_pred, m_pred, centers, records, outpu
         coordinates = [v for i in outside for v in (fixed[i], fixed[i], None)]
         fig.add_trace(go.Scatter(
             x=limits if is_time else coordinates, y=coordinates if is_time else limits,
-            mode='lines', name=('95% propagated-uncertainty interval' if any(
+            mode='lines', name=('95% inverse intervals (conditional where noted)' if any(
+                records[i].get('interval_conditional') for i in outside)
+                else '95% propagated-uncertainty interval' if any(
                 row.get('interval_kind') == 'parameter_and_input_uncertainty' for row in records)
                 else '95% parameter-uncertainty interval'),
             meta={'exclude_from_data_table': True},

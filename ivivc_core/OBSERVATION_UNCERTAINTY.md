@@ -416,9 +416,14 @@ Central predictions remain the nominal-input, fitted-parameter calculations.
 The sampled mean does not replace them. Response draws are never clipped to
 positive values or a normalized range, nor retried until an inverse is possible.
 An unsupported nominal inverse remains unavailable even if some perturbed
-responses can be mapped. All requested draws must be usable at a point for its
-Monte Carlo interval to be displayed. Denominator safeguards and inverse-domain
-checks remain active, with failed and extrapolated inverse draws counted.
+responses can be mapped. Inverse time intervals default to requiring at least
+95% of requested draws to map successfully at each point. When some draws fail,
+the conditional interval encloses the middle 95% of successful mappings, not all
+requested outcomes. The policy, threshold, counts, and failure reasons are
+retained. Other sampled intervals require every requested draw to be usable.
+Denominator safeguards and inverse-domain checks remain active, with failed and
+extrapolated inverse draws counted. Backend settings and overrides are described
+in [the core README](README.md#common-plotted-parameter-uncertainty).
 
 Primary response-ratio and inverse-time intervals record
 `interval_kind="parameter_and_input_uncertainty"`. Tau time intervals retain

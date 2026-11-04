@@ -222,10 +222,13 @@ that setting to every selected parametric method, including inverse mapping.
 wrappers have their own signature defaults; pass `n_samples` and `random_state`
 explicitly when a caller needs a particular sampling convention.
 
-All requested draws must be usable at a point for its interval to be displayed.
+All requested draws must be usable at a point for its interval to be displayed,
+except for inverse time intervals. These default to allowing a conditional
+interval when at least 95% of requested draws map successfully at that point.
+If any draws fail, its bounds enclose the middle 95% of successful mappings,
+not all requested outcomes; the status, counts, policy, and threshold are retained.
 Whole-trajectory validity masks remain separate for study-design callers.
-`predict_in_vivo` now supplies this interpretation for every parametric method,
-with an optional `random_state` to control reproducibility. Low-level
+`predict_in_vivo` has an optional `random_state` to control reproducibility. Low-level
 `predict_time_mapping` remains central-only unless `include_uncertainty=True`.
 `predict_tau_ratio` requires both fitted parameter mappings/covariances for its
 intervals; legacy tau values alone still supply central times, not intervals.
@@ -250,9 +253,24 @@ Low-level inverse functions accept `allow_extrapolation`, `minimum_time` (defaul
 coordinates such as log10 time. The public API and Flask adapter apply this choice
 from **applied** scaling metadata. A negative calibration minimum on unlogged
 coordinates remains allowed; the app does not invent a domain excluding data.
-Failed sampled inverses are counted by reason and are not silently dropped from
-parameter intervals. Extra raw-mass or raw-response sign constraints are not
-imposed on normalized/log-transformed responses.
+Failed sampled inverses are counted by reason. In `ivivc_core.predictions`,
+`DEFAULT_INVERSE_INTERVAL_POLICY="conditional"` and
+`DEFAULT_INVERSE_MIN_VALID_FRACTION=0.95` control the backend defaults, including
+browser and CLI runs. Set the policy to `"strict"` to require every draw; restart
+the app after editing these defaults. Low-level prediction functions accept
+`interval_policy` and `min_valid_fraction` overrides. The public API accepts
+`inverse_interval_policy` and `inverse_min_valid_fraction`; for example:
+
+```python
+predictions = predict_in_vivo(
+    analysis, prediction, inverse_interval_policy="strict",
+)
+```
+
+These settings affect inverse time intervals only. Nominal predictions, numerical
+searches, and draw counts retain their existing behavior. Extra raw-mass or
+raw-response sign constraints are not imposed on normalized/log-transformed
+responses.
 
 `annotate_prediction_domain` keeps calibration coverage distinct from numerical
 validity. Prediction auxiliary metadata carries ranges, per-point reasons,
