@@ -402,7 +402,66 @@ Software verification concerns whether the app works as described and performs i
 
 \subsection{Command-line interface}
 
-The repository includes \texttt{cli.py} for batch-oriented fitting from the command line. Use \texttt{python cli.py --help} to see available arguments for input files, approaches, models, metrics, preprocessing options, cross-validation settings, and grid-search settings. The internal keys specified in this user guide are used to specify settings with \texttt{cli.py}.
+Run \texttt{cli.py} from the repository root with the app's Python environment activated. The CLI supports Approach 1 or 2, with one approach and one model per invocation. Use internal model and metric keys; repeat \texttt{--metric} for additional metrics. Run \texttt{python cli.py --help} to see the available choices.
+
+CSV and Excel files use the same first-four/first-two column conventions as the browser. Files or quoted glob patterns, such as \texttt{data/*.csv}, can be supplied. Excel fitting files require \texttt{--sheet}; selectors use zero-based indices and support negative indices, lists, and Python-style slices. For example, \texttt{--sheet 0} selects the first sheet and \texttt{--sheet 0,2} selects the first and third. Excel prediction files require \texttt{--prediction-sheet} selecting exactly one sheet. The same settings and prediction dataset apply to all selected fitting files and sheets.
+
+\textbf{Basic fitting example.} Assume \texttt{calibration.csv} contains fraction-remaining responses compatible with the normalized exponential model. The examples use one CPU core and disable CV to keep the illustration simple; choose settings appropriate to the analysis. Backslashes continue commands across lines in a shell such as Bash; enter the command on one line if the shell uses different continuation syntax.
+
+\begin{quote}
+\small
+\begin{verbatim}
+python cli.py calibration.csv --approach approach2 \
+  --model exponential_normalized --metric rmse --metric aicc \
+  --cv-scheme none --grid-search-num-cores 1 --out fits.csv
+\end{verbatim}
+\end{quote}
+
+\textbf{Uncertainty options.} Use the prefixes \texttt{in-vitro}, \texttt{in-vivo}, and \texttt{prediction} for the three datasets. Replace \texttt{PREFIX} in the flags below with the relevant prefix. The SD/SEM interpretation, original response units, and count rules in Section~\ref{sec:measurement-uncertainty} apply to the CLI as well.
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.45\textwidth}>{\raggedright\arraybackslash}p{0.47\textwidth}@{}}
+\toprule
+\textbf{Flag} & \textbf{Meaning} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Flag} & \textbf{Meaning} \\
+\midrule
+\endhead
+\texttt{--PREFIX-uncertainty-mode} & \texttt{none} (default), \texttt{constant}, or \texttt{column}. \\
+\texttt{--PREFIX-uncertainty-value} & Positive absolute SD/SEM for \texttt{constant} mode. \\
+\texttt{--PREFIX-uncertainty-column} & Error-column header for \texttt{column} mode. \\
+\texttt{--PREFIX-response-kind} & \texttt{individual} (default) uses SD; \texttt{mean} uses SEM directly. \\
+\texttt{--PREFIX-replicate-column} & Optional positive-integer count column for means; metadata only. \\
+\bottomrule
+\end{longtable}
+
+Any supplied uncertainty requires \texttt{--approach approach2} and \texttt{--independent-errors} to confirm the assumptions. Leave \texttt{--scaling log\_y} unselected with supplied errors. CLI preprocessing rejects invalid logarithmic inputs rather than using the browser's calibration fallback.
+
+\textbf{Fitting and prediction with SEM.} For this example, both files contain reported means on the same fraction-remaining scale. After its four required columns, \texttt{calibration.csv} has \texttt{vitro\_sem} and count column \texttt{vitro\_n}; \texttt{prediction.csv} has its two required columns plus \texttt{prediction\_sem}. The constant in vivo SEM of 0.03 is illustrative; use errors appropriate to the data.
+
+\begin{quote}
+\small
+\begin{verbatim}
+python cli.py calibration.csv --approach approach2 \
+  --model exponential_normalized --metric rmse --metric aicc \
+  --in-vitro-response-kind mean \
+  --in-vitro-uncertainty-mode column \
+  --in-vitro-uncertainty-column vitro_sem \
+  --in-vitro-replicate-column vitro_n \
+  --in-vivo-response-kind mean \
+  --in-vivo-uncertainty-mode constant \
+  --in-vivo-uncertainty-value 0.03 \
+  --prediction prediction.csv --prediction-response-kind mean \
+  --prediction-uncertainty-mode column \
+  --prediction-uncertainty-column prediction_sem \
+  --independent-errors --cv-scheme none \
+  --grid-search-num-cores 1 \
+  --out fits.csv --prediction-out predictions.csv
+\end{verbatim}
+\end{quote}
+
+\texttt{--out} writes fit-summary rows; \texttt{--prediction-out} writes separate prediction rows identified by method. If an output path is omitted, that result is printed to the terminal. Prediction outputs require \texttt{--prediction}; valid fitting summaries can remain available if prediction fails, with the failure recorded in the prediction output. With supplied calibration errors, the fit CSV retains entered and analyzed error values, covariance conventions, and normalization records; arrays and records use JSON in individual cells. Prediction rows retain supplied input errors, available bounds, statuses, and the relevant uncertainty assumptions.
 
 \subsection{Extending the app}
 

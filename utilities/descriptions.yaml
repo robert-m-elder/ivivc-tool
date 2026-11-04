@@ -59,29 +59,23 @@ approaches:
     prediction_error_html: "\n            <p><strong>Prediction plot error bars:</strong> Approach 3 does not generate formal propagated error bars for prediction outputs because no parametric covariance model is fitted.</p>\n            <p>The app does not quantify how uncertainty in the input data, preprocessing, or mapping assumptions affects these predictions. Missing error bars do not mean the predictions are exact. Lookup ratios outside the interpolation range remain unavailable rather than extrapolated. A supported mapping that produces a time outside observed calibration is flagged.</p>\n        "
 preprocessing:
   normalization:
-    _guide_intro: >-
-      Normalization changes how response values are expressed without adding or removing observations. Initial-value normalization expresses each profile relative to its first response value, whereas min-max normalization expresses each profile relative to its observed range. Optional response reversal applies 1 minus the response after these normalizations and before logarithmic scaling or interpolation. These choices change the response scale used for fitting, mapping, and metrics.
     min_max:
       display_name: Min-max normalization
-      description: Converts response values to a 0-1 scale using the observed minimum and maximum within each dataset. Supplied SD/SEM is divided by that observed range, which is treated as fixed.
+      description: Converts response values to a 0-1 scale using the observed minimum and maximum within each dataset. With supplied SD/SEM, the range must be finite and positive; errors are divided by that range, which is treated as fixed.
     initial_value:
       display_name: Initial-value normalization
-      description: Expresses each response value relative to the first response value in the corresponding dataset. Supplied SD/SEM is divided by the absolute reference value, which is treated as fixed.
+      description: Divides each response by the first response value in that dataset when it is nonzero. Supplied SD/SEM is divided by its absolute value, which is treated as fixed. A zero initial response leaves values and errors unchanged.
     one_minus:
       display_name: Reverse response (1 − value)
       description: Applies 1 minus each response after any selected normalizations and before logarithmic scaling or interpolation. For data already expressed as fractions, this converts fraction lost to fraction remaining without requiring another normalization. The same selection applies to both calibration profiles and prediction inputs; values are not clipped to 0-1. Supplied SD/SEM is unchanged by this reversal.
   scaling:
-    _guide_intro: >-
-      Scaling changes the numerical representation of time or response values while preserving the observations themselves. The available base-10 logarithmic transformations compress wide numerical ranges and are applied only when the relevant processed values are positive; otherwise the app retains the unscaled values and reports the fallback.
     log_x:
       display_name: Log10 time scaling
-      description: Uses a base-10 log scale for time values before fitting or interpolation. All time values must be greater than zero. If this scaling is selected but the analyzed data contain a zero or negative time, the app leaves time unscaled, continues the analysis, and reports the fallback in Data Processing.
+      description: Uses a base-10 log scale for time values before fitting or interpolation. All analyzed times must be positive. The browser falls back to unscaled time when calibration times include zero or negative values and reports this in Data Processing. Prediction data must support the applied scaling; CLI inputs with invalid times are rejected.
     log_y:
       display_name: Log10 response scaling
-      description: Uses a base-10 log scale for response values before fitting or interpolation. This option is unavailable with supplied SD/SEM. Without supplied uncertainty, all processed responses must be positive; otherwise the app leaves response unscaled and reports the fallback in Data Processing.
+      description: Uses a base-10 log scale for response values before fitting or interpolation. This option is unavailable with supplied SD/SEM. Without supplied uncertainty, all processed responses must be positive. The browser can fall back to unscaled response for invalid calibration values and reports this in Data Processing; prediction data must support the applied scaling, and CLI inputs with invalid responses are rejected.
   interpolation:
-    _guide_intro: >-
-      Interpolation estimates quantities between measured observations when a paired-data approach requires matching time or response positions. The available options differ in how the shared grids are constructed; interpolated points are estimates derived from the observed data rather than additional experimental observations.
     none:
       display_name: No interpolation
       description: Uses only exact matches from the observed data. No response-at-time or time-at-response estimates are added, so unmatched positions remain unavailable for Approaches 1 and 3. Approach 2 uses observed points regardless of this setting.
@@ -104,9 +98,9 @@ metrics:
   mae:
     description: Average absolute model error in the units of the fitted output on the analyzed scale. Lower values indicate predictions closer to the observations.
   nrmse:
-    description: RMSE divided by the standard deviation of the fitted output data. Lower values indicate smaller error relative to the amount of variation in the response.
+    description: RMSE divided by the standard deviation of the observed analyzed outputs. Lower values indicate smaller error relative to the trajectory's variation, not relative to supplied observation SD/SEM.
   mnrmse:
-    description: RMSE divided by the mean of the fitted output data. Lower values indicate smaller error relative to the typical response magnitude.
+    description: RMSE divided by the mean of the observed analyzed outputs. Lower values indicate smaller relative error when the mean is positive and away from zero; near-zero or negative means make that interpretation unsuitable.
   aic:
     description: >-
       Akaike Information Criterion. AIC compares fitted models by considering both fit quality and the number of fitted parameters. Among comparable fitted models, a lower AIC value generally indicates better empirical support for a model that fits the data without unnecessary complexity. Absolute AIC values, including negative values, are not standalone quality grades. Supplied-error fits use a normal likelihood for the supplied observation-error model on the analyzed scale.
