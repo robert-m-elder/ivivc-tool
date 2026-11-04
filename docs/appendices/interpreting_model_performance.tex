@@ -278,7 +278,7 @@ Approach 2 observed-response inverse intervals & 100 from the in vivo fit \\
 \bottomrule
 \end{longtable}
 
-Central estimates use the fitted parameters and analyzed inputs, not averages across draws. Sampled calculations must succeed for an interval to be shown at the affected position; failed draws are not silently removed. A valid center can remain without its interval. Sampling settings and failure details are retained with prediction results.
+Central estimates use the fitted parameters and analyzed inputs, not averages across draws. Other than inverse time intervals, sampled intervals require every requested calculation to succeed at the affected position. Inverse time intervals can exclude unsuccessful mappings when the configured success threshold is met; these intervals are labeled conditional and describe successful mappings only. A valid center can remain without its interval. Sampling settings and failure details are retained with prediction results.
 
 The integral time constant uses numerical integration from zero to infinity with the integration routine's default tolerances and a subdivision limit of 100. Warnings or invalid results make the time constant unavailable without discarding the fitted curve. Any invalid sampled time constant makes its table standard uncertainty unavailable, while retaining a valid central estimate. Time-ratio plot bounds separately propagate both parameter vectors through integration and their ratio; they do not combine the table SDs as independent errors.
 

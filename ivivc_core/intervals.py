@@ -5,6 +5,8 @@ The ensemble samplers retain their separate whole-trajectory validity masks.
 """
 from __future__ import annotations
 
+from numbers import Real
+
 import numpy as np
 
 DEFAULT_INTERVAL_SAMPLES = 1000
@@ -119,16 +121,19 @@ def profile_parameter_intervals(fit, *, confidence_level=.95):
 def parameter_interval_summary(draws, central, *, confidence_level=.95,
                                n_samples=DEFAULT_INTERVAL_SAMPLES,
                                random_state=DEFAULT_INTERVAL_SEED,
-                               sampling_error=None):
-    """Summarize without silently conditioning on successful draws at a point.
+                               sampling_error=None, min_valid_fraction=1.0):
+    """Summarize pointwise draws, requiring complete sampling by default.
 
-    All requested draws must be finite at a point for a bounded interval to be
-    displayed there. Failure elsewhere does not change that point's interval.
-    Raw finite-draw counts are retained even when the interval is unavailable.
+    An explicit lower success threshold permits labeled conditional intervals.
+    Counts use requested draws as the denominator, including missing draws.
+    Failure elsewhere does not change that point's interval.
     """
     from .uncertainty import summarize_draws
 
     confidence_level, n_samples = validate_interval_settings(confidence_level, n_samples)
+    if (isinstance(min_valid_fraction, (bool, np.bool_)) or not isinstance(min_valid_fraction, Real)
+            or not np.isfinite(min_valid_fraction) or not 0 < min_valid_fraction <= 1):
+        raise ValueError('min_valid_fraction must be finite and greater than zero and at most one.')
     central = np.asarray(central, dtype=float).reshape(-1)
     values = np.asarray(draws, dtype=float)
     if values.ndim != 2 or values.shape[1] != len(central):
@@ -136,13 +141,20 @@ def parameter_interval_summary(draws, central, *, confidence_level=.95,
     with np.errstate(over='ignore', invalid='ignore'):
         summary = summarize_draws(values, confidence_level=confidence_level)
     complete = (summary.valid_counts == n_samples) & (len(values) == n_samples)
-    supported = complete & np.isfinite(summary.lower) & np.isfinite(summary.upper)
-    supported &= np.isfinite(central)
+    sufficient = ((summary.valid_counts >= 2)
+                  & (summary.valid_counts / n_samples >= min_valid_fraction)
+                  & (len(values) <= n_samples))
+    supported = sufficient & np.isfinite(summary.lower) & np.isfinite(summary.upper)
+    supported &= np.isfinite(central) & (sampling_error is None)
     status = np.full(len(central), 'unavailable (nonfinite or missing Monte Carlo draws)', dtype=object)
-    status[complete] = 'unavailable (nonfinite percentile bounds)'
+    if min_valid_fraction < 1:
+        status[:] = 'unavailable (successful-draw fraction below threshold)'
+        status[summary.valid_counts < 2] = 'unavailable (fewer than two successful draws)'
+    status[sufficient] = 'unavailable (nonfinite percentile bounds)'
     if sampling_error is not None:
         status[:] = 'unavailable (parameter sampling failed)'
     status[supported] = 'available'
+    status[supported & ~complete] = 'available (conditional on successful draws)'
     status[~np.isfinite(central)] = 'unavailable (point prediction unavailable)'
     return {
         'lower': np.where(supported, summary.lower, np.nan),

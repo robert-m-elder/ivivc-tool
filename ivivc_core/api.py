@@ -406,6 +406,8 @@ def predict_in_vivo(
     n_samples: int = 1000,
     fail_fast: bool = False,
     random_state=12345,
+    inverse_interval_policy: str | None = None,
+    inverse_min_valid_fraction: float | None = None,
 ) -> ResultBatch[PredictedTrajectory]:
     """Generate central in vivo trajectories from a structured IVIVC analysis.
 
@@ -414,7 +416,8 @@ def predict_in_vivo(
     set; for example ``{'approach2': ('value_ratio', 'tau_ratio')}``.
     Approach 2 also propagates supplied prediction-response SD/SEM, assuming
     independent prediction and calibration measurements. Input times remain
-    fixed. Future in vivo observation variability is not added.
+    fixed. Future in vivo observation variability is not added. Optional inverse
+    settings override the backend conditional/strict policy and success threshold.
     """
     _validate_prediction_measurements(analysis, prediction)
     selected_methods = _resolved_prediction_methods(methods)
@@ -477,6 +480,11 @@ def predict_in_vivo(
                             confidence_level=confidence_level,
                         )
                     else:
+                        inverse_options = {}
+                        if inverse_interval_policy is not None:
+                            inverse_options['interval_policy'] = inverse_interval_policy
+                        if inverse_min_valid_fraction is not None:
+                            inverse_options['min_valid_fraction'] = inverse_min_valid_fraction
                         trajectory = predict_inverse_response(
                             prediction,
                             model_name=model_fit.model_name,
@@ -492,6 +500,7 @@ def predict_in_vivo(
                                           else min(0.0, float(np.min(prepared.in_vivo.time)))),
                             confidence_level=confidence_level,
                             n_samples=n_samples, random_state=random_state,
+                            **inverse_options,
                         )
                 else:
                     if method == 'value_scaling':

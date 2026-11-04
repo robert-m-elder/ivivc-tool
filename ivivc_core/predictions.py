@@ -8,6 +8,7 @@ figures, HTML tables, and mutation of the legacy fit dictionaries remain in the
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from numbers import Real
 from typing import Any
 
 import numpy as np
@@ -29,6 +30,21 @@ from .intervals import (
     validate_interval_settings, parameter_interval_summary,
     curve_parameter_intervals, attach_parameter_interval,
 )
+
+
+DEFAULT_INVERSE_INTERVAL_POLICY = 'conditional'
+DEFAULT_INVERSE_MIN_VALID_FRACTION = .95
+
+
+def _inverse_interval_settings(interval_policy, min_valid_fraction):
+    policy = DEFAULT_INVERSE_INTERVAL_POLICY if interval_policy is None else interval_policy
+    fraction = DEFAULT_INVERSE_MIN_VALID_FRACTION if min_valid_fraction is None else min_valid_fraction
+    if policy not in ('conditional', 'strict'):
+        raise ValueError('interval_policy must be conditional or strict.')
+    if (isinstance(fraction, (bool, np.bool_)) or not isinstance(fraction, Real)
+            or not np.isfinite(fraction) or not 0 < fraction <= 1):
+        raise ValueError('min_valid_fraction must be finite and greater than zero and at most one.')
+    return policy, 1.0 if policy == 'strict' else float(fraction)
 
 
 def _require_fixed_prediction_input(prediction: TimeCourse) -> None:
@@ -57,7 +73,7 @@ def inverse_response_prediction_intervals(
     grid_points=101, random_state=DEFAULT_INTERVAL_SEED,
     inverse_mapper=inverse_response_times, *, minimum_time=0.0,
     allow_extrapolation=True, max_expansions=DEFAULT_INVERSE_EXPANSIONS,
-    observation_uncertainty=None,
+    observation_uncertainty=None, interval_policy=None, min_valid_fraction=None,
 ):
     """Propagate fitted parameters and optional supplied response SD/SEM.
 
@@ -65,12 +81,15 @@ def inverse_response_prediction_intervals(
     sampled calculations use the same monotonic-branch search and time domain.
     Outside responses are never clipped to calibration endpoints.
     Supplied response errors are independent normal perturbations on the input
-    scale. Residual/future-observation noise is never added, and no failed draws
-    are silently discarded or retried to obtain supported inverse mappings.
+    scale. Failed draws are counted, never replaced or retried. By default,
+    intervals condition on successful mappings when at least 95% succeed;
+    the backend defaults above or keyword overrides select the policy/threshold.
+    Residual/future-observation noise is never added.
     """
     from .uncertainty import sample_parameter_sets
 
     confidence_level, n_samples = validate_interval_settings(confidence_level, n_samples)
+    policy, fraction = _inverse_interval_settings(interval_policy, min_valid_fraction)
     targets = np.asarray(target_responses, dtype=float)
     input_course = None
     if observation_uncertainty is not None:
@@ -130,7 +149,12 @@ def inverse_response_prediction_intervals(
     interval = parameter_interval_summary(
         draws, central, confidence_level=confidence_level, n_samples=n_samples,
         random_state=random_state, sampling_error=sampling_error,
+        min_valid_fraction=fraction,
     )
+    available = np.isfinite(interval['lower']) & np.isfinite(interval['upper'])
+    interval['interval_policy'] = policy
+    interval['interval_min_valid_fraction'] = fraction
+    interval['interval_conditional'] = available & (interval['valid_counts'] < n_samples)
     if input_course is not None:
         interval.update(prediction_input_metadata(
             input_course, propagated=sampling_error is None and len(draws) > 0,
@@ -141,11 +165,12 @@ def inverse_response_prediction_intervals(
     interval['residual_std'] = 0.0
     interval['inverse_failed_draw_reasons'] = failed_reasons
     interval['inverse_extrapolated_samples'] = extrapolated_counts.reshape(targets.shape)
-    for key in ('lower', 'upper', 'valid_counts', 'interval_status', 'interval_valid_samples'):
+    for key in ('lower', 'upper', 'valid_counts', 'interval_status', 'interval_valid_samples',
+                'interval_conditional'):
         interval[key] = interval[key].reshape(targets.shape)
     eligible_for_interval = np.isfinite(targets) & np.isfinite(central)
     unavailable = int(np.count_nonzero(
-        (interval['interval_status'] != 'available') & eligible_for_interval
+        ~available.reshape(targets.shape) & eligible_for_interval
     ))
     note = reason
     if unavailable and note is None:
@@ -172,6 +197,14 @@ def inverse_response_prediction_intervals(
                 f'{targets.size} predictions because some parameter estimates did not '
                 'produce unique inverse mappings.'
             )
+    conditional_count = int(np.count_nonzero(interval['interval_conditional']))
+    if conditional_count:
+        conditional_note = (
+            'Conditional inverse time intervals describe successful mappings only; '
+            'they exclude unresolved draws. See the prediction data table for '
+            'successful/requested draw counts and failure reasons.'
+        )
+        note = ' '.join(filter(None, (note, conditional_note)))
     return interval, note
 
 def predict_time_mapping(
@@ -495,10 +528,13 @@ def predict_inverse_response(
     minimum_time: float | None = 0.0,
     allow_extrapolation: bool = True,
     max_expansions: int = DEFAULT_INVERSE_EXPANSIONS,
+    interval_policy=None,
+    min_valid_fraction=None,
 ) -> PredictedTrajectory:
     """Map nominal responses, propagating in vivo parameters and input SD/SEM."""
     uncertainty = prediction_uncertainty(prediction)
     confidence_level, n_samples = validate_interval_settings(confidence_level, n_samples)
+    policy, fraction = _inverse_interval_settings(interval_policy, min_valid_fraction)
     function = get_model_spec(model_name).model_function
     mapper_options = dict(minimum_time=minimum_time, allow_extrapolation=allow_extrapolation,
                           max_expansions=max_expansions)
@@ -515,6 +551,10 @@ def predict_inverse_response(
     interval_note = None
     if skip_reason is None and np.any(supported):
         input_options = {} if uncertainty is None else {'observation_uncertainty': uncertainty}
+        if interval_policy is not None:
+            input_options['interval_policy'] = interval_policy
+        if min_valid_fraction is not None:
+            input_options['min_valid_fraction'] = min_valid_fraction
         interval, interval_note = interval_estimator(
             function, parameters, covariance, residuals,
             np.where(supported, prediction.value, np.nan), calibration_time_range,
@@ -534,6 +574,9 @@ def predict_inverse_response(
         available=bool(skip_reason is None and np.any(supported)),
         skip_reason=skip_reason, status=status,
     )
+    interval.setdefault('interval_policy', policy)
+    interval.setdefault('interval_min_valid_fraction', fraction)
+    interval.setdefault('interval_conditional', np.zeros(times.shape, dtype=bool))
     if uncertainty is not None:
         interval['interval_kind'] = 'parameter_and_input_uncertainty'
     attach_parameter_interval(trajectory, interval, output_kind='time')
