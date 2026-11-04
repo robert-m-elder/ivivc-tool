@@ -191,9 +191,9 @@ Performance metrics are summary measures that help describe how closely a fitted
 
 For additional background on common error metrics, scale-dependent accuracy measures, and adjusted \(R^2\), see references \cite{hodson2022,hyndman2006,miles2014}.
 
-AIC\textsubscript{c} adds a small-sample correction to AIC that is relevant when the ratio of fitted observations to estimated parameters is small. A commonly cited rule of thumb is \(n/k < 40\), where \(n\) is the number of fitted observations and \(k\) is the number of model parameters \cite{burnham2002}; this condition is common in typical IVIVC datasets.
+AIC\textsubscript{c} adds the app's conventional small-sample correction to AIC when the number of fitted observations permits it. Its justification depends on the model and error assumptions, including whether SD/SEM is supplied. It remains available, but a small dataset alone does not establish that it is the preferred criterion. See Appendix~\ref{app:information-criteria} for the convention and interpretation.
 
-By default, the app selects \(R^2\), RMSE, and AIC\textsubscript{c}. This default set reflects the tool developers' experience with representative IVIVC datasets and is not intended as a universal or required metric set. Additional metrics are available when they provide useful context for a specific analysis. The default set gives three complementary views of model performance. \(R^2\) is widely known and describes how well the fitted curve follows the observed response pattern. RMSE reports typical error in the original response units, making it easier to judge whether the error is practically large or small. AIC\textsubscript{c} supports comparison among fitted candidate models by balancing fit quality with a penalty for unnecessary model complexity, with a correction that is useful for smaller datasets.
+By default, the app selects \(R^2\), RMSE, and AIC\textsubscript{c}. This is a software starting configuration, not a universal or required metric set. \(R^2\) describes agreement with the observed pattern, RMSE reports typical error in the units of the analyzed fitted output, and AIC\textsubscript{c} summarizes relative support within the candidate set using a complexity penalty and the conventional correction. Additional metrics can provide context for the intended analysis.
 
 \subsection{Cross-validation options}
 

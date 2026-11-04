@@ -57,7 +57,7 @@ _METHODS = {
         'The same numerical search is used for central predictions and sampled curves. It starts within calibration and can extend while the fitted response continues in the same direction. '
         'Extrapolated results are flagged. Responses without a unique mapped time, numerically flat responses, '
         'nonmonotonic continuations, nonfinite model domains, and unresolved roots remain unavailable. '
-        'The search uses up to 16 doubling extensions of the calibration span; failure to find a root is not proof that no root exists. '
+        'The search uses the configured number of doubling extensions of the calibration span; failure to find a root is not proof that no root exists. '
         'Unscaled time is searched no earlier than zero (or the observed minimum if negative); log10 time has no zero-coordinate floor. '
         'Monotonicity/uniqueness are numerical checks on the examined branch, not global proofs for arbitrary functions.'),
     'value_scaling': (
@@ -326,7 +326,7 @@ def _method_uncertainty_text(method, prediction_uncertainty):
             'Horizontal parameter-uncertainty intervals invert sampled in vivo curves at the fixed supplied response. No response perturbations or residual noise are added.',
             'Horizontal intervals jointly propagate supplied input-response errors and fitted in vivo parameters. The same sampled response determines its mapped time and response value. '
             'Response-axis bounds show the input-only normal marginal interval; no future in vivo measurement variability or residual noise is added.',
-        ).replace('up to 16 doubling extensions', 'the configured number of doubling extensions')
+        )
     return text
 
 

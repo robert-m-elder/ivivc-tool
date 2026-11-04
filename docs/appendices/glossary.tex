@@ -23,7 +23,7 @@ Analysis approach & The overarching method used to establish or evaluate the in 
 
 Approach 1: Direct Correlation & Relates in vitro and in vivo times at common response values and fits a model that maps in vitro time to predicted in vivo time. Interpolation by response value can be used when exact response-value matches are unavailable. \\
 
-Approach 2: Independent Model Fitting & Fits the same model family separately to the preprocessed observed in vitro and in vivo datasets, then compares or applies the fitted relationships. Interpolated points are not used for fitting. \\
+Approach 2: Independent Model Fitting & Fits the same model family separately to the preprocessed observed in vitro and in vivo datasets. It supports supplied response SD/SEM for fitting and prediction. Interpolated points are not used for fitting. \\
 
 Approach 3: Direct Mapping & Uses response-at-shared-time and time-at-shared-response-value mappings between the in vitro and in vivo datasets rather than fitting a parametric model. \\
 
@@ -33,9 +33,9 @@ Candidate model & A mathematical form considered for fitting within an applicabl
 
 %Confidence interval half-width & Distance from a parameter estimate to either endpoint of the reported symmetric confidence interval. This is the value shown after the \(\pm\) sign in the app. \\
 
-Confidence interval (parameter) & Approximate range used to summarize uncertainty in a fitted parameter. The app reports each parameter as the estimate \(\pm\) the half-width of a 95\% confidence interval when the required covariance information is available. \\
+Confidence interval (parameter) & Approximate interval for one fitted coefficient, reported as the estimate \(\pm\) the half-width of a 95\% interval when available. Supplied-error intervals use a normal multiplier conditional on the given SD/SEM; residual-based intervals use residual degrees of freedom when available. \\
 
-Covariance matrix & Matrix calculated from the fitted model that summarizes approximate parameter variances and how parameter estimates vary together. It is used for parameter standard errors, confidence intervals, and parameter-correlation diagnostics. \\
+Covariance matrix & Matrix summarizing approximate parameter variances and how parameter estimates vary together. With supplied errors, it uses the absolute SD/SEM scale; otherwise the error scale is estimated from residual variation. It supports parameter standard errors, intervals, and coupling diagnostics. \\
 
 Cross-validation (CV) & Prediction-error and sensitivity diagnostic in which part of the fitting data is set aside, the model is fit to the remaining observations, and predictions are compared with the omitted observations. CV does not estimate parameter uncertainty. \\
 
@@ -45,11 +45,11 @@ Cross-validation (CV) & Prediction-error and sensitivity diagnostic in which par
 
 Densified interpolation & Interpolation option that adds intermediate grid points in both the time and response-value directions before interpolation. The added values are estimates, not additional experimental observations. \\
 
-Empirical support & Relative support provided by the observed data for one candidate model compared with others under a selected information criterion. It does not establish that a model is correct or suitable for a particular use. \\
+Empirical support & Relative support from the observed data for a model balancing fit quality and complexity well within the displayed candidate set, under a selected information criterion. It does not establish correctness or suitability for a particular use. \\
 
 %Evidence ratio & Ratio comparing the largest information-criterion weight in a candidate set with a model's weight. Larger values indicate less relative support than the leading model. \\
 
-Extrapolation & Use of a fitted model to estimate behavior outside the range of the observed data. Extrapolated behavior generally has greater uncertainty and depends more strongly on the assumed model form. \\
+Extrapolation & Use of a fitted relationship outside its observed calibration range. It relies on assumptions about behavior beyond the available data; a narrow interval does not establish that an extrapolated result is reliable. \\
 
 Fit/CV ratio & Ratio of a full-fit metric value to the corresponding mean cross-validation metric reported by the app. Values near 1 indicate similar full-fit and cross-validation performance; interpretation also depends on the metric and CV scheme. \\
 
@@ -83,17 +83,23 @@ IVIVC (in vitro--in vivo correlation) & Quantitative relationship between in vit
 
 %MAE (mean absolute error) & Average absolute difference between observed and fitted or predicted values. Lower values indicate smaller errors, and the units match the response units. \\
 
+Marginal interval & Interval describing one quantity separately. The displayed time and response bounds are marginal intervals; together they do not form a joint 95\% region for both coordinates. \\
+
+Measurement uncertainty (supplied) & Absolute SD for an individual response or SEM for a reported mean, entered as a constant or a column. Approach 2 treats these errors as given and assumes independent measurement errors across entered rows and between prediction and calibration data. \\
+
 Model complexity & Flexibility introduced by a model's form and number of fitted parameters. Additional complexity can improve in-sample fit but can also increase parameter uncertainty or overfitting. \\
 
 Model parameter & Numerical quantity in a model equation that is estimated from the data during fitting, such as an amplitude, rate constant, exponent, or lag parameter. \\
 
 %MSE (mean squared error) & Average squared difference between observed and fitted or predicted values. Lower values indicate smaller errors; the units are squared response units. \\
 
-Normalization & Preprocessing that expresses response values relative to a reference, such as the first response value or the observed minimum and maximum, so datasets can be compared on a common relative scale. \\
+Normalization & Preprocessing that expresses responses relative to a reference, such as the first response or observed range. With supplied errors, the app rescales SD/SEM with the responses while treating the normalization reference values as fixed; uncertainty in those references is excluded. \\
 
 %NRMSE (normalized root mean squared error) & RMSE divided by a selected normalization factor, such as the response mean or standard deviation. Interpretation depends on the normalization method used. \\
 
-Observed-response inverse mapping & Approach 2 method that estimates when the fitted in vivo curve reaches a supplied in vitro response. It does not use the supplied prediction time or fitted in vitro curve. Extrapolation is flagged; predictions without a reliably calculated unique time are unavailable. Horizontal intervals show uncertainty from the fitted in vivo parameters, with the supplied response held fixed. \\
+Observation weight & Influence assigned to a fitting observation. With supplied SD/SEM \(\sigma_i\), Approach 2 uses weights \(1/\sigma_i^2\): smaller errors give more influence. These differ from information-criterion evidence weights. \\
+
+Observed-response inverse mapping & Approach 2 method that estimates when the fitted in vivo curve reaches a supplied in vitro response, without using the prediction time or fitted in vitro curve. Horizontal bounds propagate in vivo parameter uncertainty and any supplied response uncertainty; vertical bounds describe the input response only. Unreliable or nonunique mapped times are unavailable. \\
 
 Overfitting & Situation in which a model's flexibility allows it to follow random variation in the fitted data rather than only the underlying relationship. Overfitting can appear as excellent full-fit metrics accompanied by poorer CV performance or unstable parameters. \\
 
@@ -107,15 +113,19 @@ Parameter uncertainty & Uncertainty in the numerical values of fitted model para
 
 Parametric model & Mathematical model described by an equation with a finite set of fitted parameters. Approaches 1 and 2 can use parametric models; Approach 3 uses direct mappings rather than a fitted parametric model. \\
 
-Prediction band & Interval intended to describe future observations, including their additional scatter around a model. The app's fitted-curve shading and parametric prediction error bars instead show pointwise parameter-uncertainty intervals conditional on fixed inputs; they are not observation prediction bands. \\
+Pointwise interval & Interval applying at one plotted position. Approximate 95\% pointwise bounds do not provide simultaneous 95\% coverage of the whole fitted or predicted curve. \\
+
+Prediction band & Interval intended to include the additional scatter of future observations. The app instead displays fitted-parameter and propagated input-response uncertainty; its intervals exclude additional future in vivo measurement variability. \\
 
 Prediction dataset & Optional in vitro dataset used after model fitting to generate corresponding in vivo predictions. \\
 
-Prediction error & Difference between an observed response and the corresponding model prediction. For fitted observations, this difference is also called a residual. \\
+Prediction error & Difference between an observed output and its model prediction. The output may be time or response, depending on the approach and method. For observations used in fitting, this difference is also called a residual. \\
 
 Preprocessing & Operations applied to uploaded data before fitting, comparison, or prediction. In this app, preprocessing can include normalization, scaling, and interpolation. \\
 
-Q--Q plot (quantile--quantile plot) & Graph that compares ordered standardized residuals with the quantiles expected from a normal distribution. It is used as a qualitative diagnostic for residual-distribution shape. \\
+Propagated uncertainty & Uncertainty carried through a calculation from the relevant fitted parameters and, for Approach 2 when supplied, prediction-response SD/SEM. Its meaning depends on the prediction method and output coordinate. \\
+
+Q--Q plot (quantile--quantile plot) & Graph comparing ordered residuals, centered and divided by their sample SD, with normal quantiles. It is a qualitative diagnostic, not a normality pass/fail test. The app does not scale these residuals by supplied observation SD/SEM. \\
 
 %\(R^2\) (coefficient of determination) & Measure of how much of the observed response variation is represented by the fitted model relative to a mean-response baseline. Higher values indicate closer agreement with the observed pattern, but a high \(R^2\) does not establish model suitability. \\
 
@@ -125,11 +135,13 @@ Relative model evidence & Comparison of candidate models using AIC, AIC\textsubs
 
 Relative standard error (RSE) & Parameter standard error expressed as a percentage of the absolute parameter estimate. Large RSE values indicate that uncertainty is large relative to the fitted value. \\
 
-Residual & Observed response minus the fitted or predicted response (i.e., the error in a given prediction). Residual patterns over time can reveal systematic lack of fit that is not obvious from the fitted curve alone. \\
+Replicate count & Optional positive integer recorded with a reported mean. Counts are metadata: they neither divide an entered SEM again nor add fitting observations. \\
 
-Residual degrees of freedom & Number of fitted observations minus the number of estimated model parameters, \(n-p\). It is used in estimating residual variance and in the app's approximate parameter confidence intervals. \\
+Residual & Observed output minus the fitted output. In Approach 1 this is an in vivo time difference; in Approach 2 it is a response difference. Patterns can reveal systematic lack of fit that is not obvious from the fitted curve alone. \\
 
-Residual plot & Plot of residuals against time or another fitted quantity. In this app, raw residual plots show observed-minus-predicted response values versus time in the original response units. \\
+Residual degrees of freedom & Number of fitted observations minus the number of estimated curve parameters, \(n-k\). It is used for residual variance and residual-based parameter intervals. With supplied absolute SD/SEM, coefficient intervals use a normal multiplier instead. \\
+
+Residual plot & Plot of residuals against the fitting variable on the analyzed scale. Raw residuals use analyzed in vivo time units for Approach 1 and analyzed response units for Approach 2. \\
 
 Response value & Measured y-axis quantity that changes with time, such as mass remaining, molecular weight, a mechanical property (e.g., tensile or burst strength), or another quantitative degradation-related endpoint. \\
 
@@ -143,7 +155,11 @@ Shared-grid interpolation & Interpolation option that estimates response values 
 
 %Shuffle split & Default CV scheme that repeatedly divides observations at random into training and test subsets. It provides a general robustness check but does not preserve time order. \\
 
-Standard error (SE) & Approximate standard deviation of a fitted parameter estimate implied by the fitted model and covariance calculation. Smaller values indicate more precise parameter estimates on that parameter's scale. \\
+Standard deviation (SD) & Spread of individual measurements at a given time. For Approach 2, supply SD when each entered response is an individual observation; use SEM when each response is a reported mean. \\
+
+Standard error (SE; parameter) & Approximate standard deviation of a fitted parameter estimate implied by its covariance. It describes parameter precision and differs from SEM, which describes uncertainty in a reported response mean. \\
+
+Standard error of the mean (SEM) & Uncertainty in a reported mean, expressed as the standard deviation of that mean. Approach 2 uses supplied SEM directly; an optional replicate count does not divide it again. \\
 
 %Support badge & Informational label based on an information-criterion delta value. It summarizes relative model support as a screening aid and is not an acceptance criterion or model recommendation. \\
 
@@ -153,7 +169,7 @@ Time constant (integral time constant) & Characteristic time scale calculated, w
 
 Training data & Observations retained during a CV split and used to fit the model for that split. \\
 
-%Weight (information criterion) & Normalized relative-support value calculated from information-criterion deltas across the displayed candidate set. Weights sum to 1 within that set and are not absolute probabilities that a model is correct. \\
+Weight (information criterion) & Normalized relative-support value calculated from information-criterion deltas across the displayed candidate set. Weights sum to 1 within that set and are not absolute probabilities that a model is correct. \\
 
 \bottomrule
 \end{longtable}
