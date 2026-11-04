@@ -257,7 +257,7 @@ Parameter uncertainty deserves particular attention when a model will be interpr
 
 For fitted curves and parametric predictions, the app samples complete parameter vectors from a multivariate normal covariance approximation. This preserves estimated parameter relationships within a fit and dependence across times along each sampled curve. Separate calibration fits are sampled independently. When prediction SD/SEM is supplied, independent normal response errors are propagated once per entered row; inverse mapping uses the same sampled response to calculate its time and response coordinate.
 
-Sampled bounds enclose the middle 95\% of calculated values at each position. They are marginal, pointwise intervals, not a simultaneous whole-curve band or joint time-response region. For time-constant and inverse plots, response-axis bounds instead come directly from the supplied normal input error model. Additional future-measurement scatter is not added. See Section~\ref{sec:uncertainty} for the display legend and method-specific interpretation.
+Sampled bounds enclose the middle 95\% of calculated values at each position. They are marginal, pointwise intervals, not a simultaneous whole-curve band or joint time-response region. Without future variability, time-constant and inverse response-axis bounds come directly from the supplied normal input error model. Selecting future variability adds independent normal future measurement noise to the propagated response draws; inverse future-response bounds use the same successful mappings as the time bounds. See Section~\ref{sec:uncertainty} for the display legend and method-specific interpretation.
 
 The current browser and CLI conventions use seed 12345 for these calculations, separately from CV and initialization seeds:
 
@@ -278,7 +278,7 @@ Approach 2 observed-response inverse intervals & 100 from the in vivo fit \\
 \bottomrule
 \end{longtable}
 
-Central estimates use the fitted parameters and analyzed inputs, not averages across draws. Other than inverse time intervals, sampled intervals require every requested calculation to succeed at the affected position. Inverse time intervals can exclude unsuccessful mappings when the configured success threshold is met; these intervals are labeled conditional and describe successful mappings only. A valid center can remain without its interval. Sampling settings and failure details are retained with prediction results.
+Central estimates use the fitted parameters and analyzed inputs, not averages across draws. Other than inverse time intervals and their optional future-response intervals, sampled intervals require every requested calculation to succeed at the affected position. Inverse time intervals can exclude unsuccessful mappings when the configured success threshold is met; these intervals are labeled conditional and describe successful mappings only. A valid center can remain without its interval. Sampling settings and failure details are retained with prediction results.
 
 The integral time constant uses numerical integration from zero to infinity with the integration routine's default tolerances and a subdivision limit of 100. Warnings or invalid results make the time constant unavailable without discarding the fitted curve. Any invalid sampled time constant makes its table standard uncertainty unavailable, while retaining a valid central estimate. Time-ratio plot bounds separately propagate both parameter vectors through integration and their ratio; they do not combine the table SDs as independent errors.
 

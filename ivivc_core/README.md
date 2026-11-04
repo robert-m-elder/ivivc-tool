@@ -142,10 +142,10 @@ one-draw ensemble.
 the two parameter vectors independently from their fitted normal covariance
 approximations and takes pointwise percentiles of **input response times ratio**.
 Input times are fixed. Optional supplied response SD/SEM contributes independent
-normal input draws once per original row. No residual or future-observation
-noise is added.
+normal input draws once per original row. No residual noise is added;
+future-observation noise is optional.
 The center is the fitted-parameter prediction, not the Monte Carlo mean. These
-are approximate propagated-uncertainty intervals, not future-observation
+are, by default, approximate propagated-uncertainty intervals, not future-observation
 prediction intervals or simultaneous bands. Model choice, preprocessing, and
 transferability of the fitted relationship are not included.
 
@@ -210,7 +210,9 @@ provide pointwise equal-tailed bounds and diagnostics. Browser and CLI fitting
 plots, response-ratio predictions, and tau-ratio predictions request 1,000
 covariance-aware normal parameter draws; inverse predictions request 100. These
 calculations use seed 12345, with requested/valid counts and sampling status
-retained in prediction metadata. No residual or future-measurement noise is added.
+retained in prediction metadata. No residual noise is added; future-measurement
+noise is included only when explicitly selected in the browser, CLI, or backend option
+[described here](OBSERVATION_UNCERTAINTY.md#optional-future-in-vivo-measurements-backend).
 Supplied prediction-input SD/SEM is propagated separately as described above.
 Separate fits are sampled independently. The center remains the fitted-parameter
 calculation; percentile bounds can exclude it and are never moved to fit error-bar
@@ -223,8 +225,9 @@ wrappers have their own signature defaults; pass `n_samples` and `random_state`
 explicitly when a caller needs a particular sampling convention.
 
 All requested draws must be usable at a point for its interval to be displayed,
-except for inverse time intervals. These default to allowing a conditional
-interval when at least 95% of requested draws map successfully at that point.
+except for inverse time intervals and their optional future-response intervals.
+These allow a conditional interval when the configured minimum fraction of
+requested draws maps successfully at that point (stock threshold: 95%).
 If any draws fail, its bounds enclose the middle 95% of successful mappings,
 not all requested outcomes; the status, counts, policy, and threshold are retained.
 Whole-trajectory validity masks remain separate for study-design callers.
@@ -267,7 +270,8 @@ predictions = predict_in_vivo(
 )
 ```
 
-These settings affect inverse time intervals only. Nominal predictions, numerical
+These settings affect inverse time intervals and their optional future-response
+intervals. Nominal predictions, numerical
 searches, and draw counts retain their existing behavior. Extra raw-mass or
 raw-response sign constraints are not imposed on normalized/log-transformed
 responses.
@@ -284,4 +288,5 @@ validation of transfer between devices or of the underlying model.
 Parameter-table and tau-table local intervals and descriptive CV variability
 retain their distinct meanings. Normal covariance draws remain a local
 approximation, conditional on the preprocessing and model selection; no
-interpolation-error, model-discrepancy, or future-observation coverage is claimed.
+interpolation-error or model-discrepancy coverage is claimed. Future-response
+intervals additionally depend on the specified measurement-error assumptions.

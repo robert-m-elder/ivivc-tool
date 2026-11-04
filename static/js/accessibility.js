@@ -232,6 +232,9 @@
         let hasPrimary = false;
         let hasResponse = false;
         let hasInput = false;
+        let hasFuture = false;
+        let hasMappedTime = false;
+        let hasConditional = false;
         predictions.forEach(function(trace) {
             const rows = trace.meta.prediction_records;
             const timeOutput = trace.meta.prediction_output_kind === 'time';
@@ -242,9 +245,11 @@
             const primary = rows.filter(function(row) {
                 return hasPoint(row) && Number.isFinite(row.lower_95) && Number.isFinite(row.upper_95);
             });
-            const response = rows.some(function(row) {
+            const response = rows.filter(function(row) {
                 return timeOutput && hasPoint(row) && Number.isFinite(row.response_lower_95) && Number.isFinite(row.response_upper_95);
             });
+            const futureTarget = rows.some(function(row) { return row.future_response_kind === 'mean'; })
+                ? 'a future in vivo replicate mean' : 'one future in vivo measurement';
             const supplied = rows.some(function(row) {
                 return Number.isFinite(row.input_standard_uncertainty);
             });
@@ -254,17 +259,29 @@
                 const combined = primary.some(function(row) {
                     return row.interval_kind === 'parameter_and_input_uncertainty';
                 });
+                const future = !timeOutput && primary.some(function(row) {
+                    return row.interval_kind === 'future_observation_prediction';
+                });
+                hasFuture = hasFuture || future;
+                hasMappedTime = hasMappedTime || timeOutput;
+                hasConditional = hasConditional || primary.some(function(row) { return row.interval_conditional; });
                 explanation += ' ' + (timeOutput ? 'Horizontal' : 'Vertical') +
                     ' bars or separate interval segments show approximate pointwise 95% ' +
-                    (combined ? 'intervals combining fitted-parameter and supplied prediction-response uncertainty.'
+                    (future ? 'prediction intervals for ' + futureTarget + ', combining propagated uncertainty and independent future measurement variability.'
+                        : combined ? 'intervals combining fitted-parameter and supplied prediction-response uncertainty.'
                         : 'parameter-uncertainty intervals.');
                 if (timeOutput && supplied && !combined) {
                     explanation += ' Supplied prediction-response uncertainty does not change these mapped-time intervals.';
                 }
             }
-            if (timeOutput && response) {
+            if (timeOutput && response.length) {
                 hasResponse = true;
-                explanation += ' Vertical bars or separate interval segments show approximate 95% intervals from supplied prediction-response uncertainty.';
+                const future = response.some(function(row) { return row.value_interval_kind === 'future_observation_prediction'; });
+                hasFuture = hasFuture || future;
+                hasConditional = hasConditional || response.some(function(row) { return row.value_interval_conditional; });
+                explanation += ' Vertical bars or separate interval segments show approximate 95% ' +
+                    (future ? 'prediction intervals for ' + futureTarget + ', combining propagated uncertainty and independent future measurement variability.'
+                        : 'intervals from supplied prediction-response uncertainty.');
             }
         });
         if (!predictions.length && (hasErrorBars(plotDiv) || hasParameterInterval(plotDiv))) {
@@ -276,7 +293,15 @@
             if (hasPrimary && hasResponse) {
                 explanation += ' Horizontal and vertical bounds describe each axis separately; they do not form a joint 95% region.';
             }
-            explanation += ' The intervals exclude future in vivo measurement variability and do not describe the whole curve simultaneously.';
+            if (hasConditional) {
+                explanation += ' Intervals marked conditional describe successful inverse mappings only; unresolved draws are excluded and recorded.';
+            }
+            if (hasFuture) {
+                if (hasMappedTime) explanation += ' Future measurement variability does not change the horizontal mapped-time intervals.';
+                explanation += ' The intervals do not describe the whole curve simultaneously.';
+            } else {
+                explanation += ' The intervals exclude future in vivo measurement variability and do not describe the whole curve simultaneously.';
+            }
         }
         return explanation;
     }

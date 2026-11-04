@@ -159,7 +159,8 @@ def test_failed_inverse_draws_are_counted_and_not_silently_conditioned(monkeypat
     monkeypatch.setattr(uncertainty, 'sample_parameter_sets', lambda *a, **k:
                         ParameterSamples(('a', 'b'), np.array([[1., -.1], [.5, -.1], [1., -.2]])))
     interval, note = inverse_response_prediction_intervals(
-        exponential, PARAMS, np.eye(2), [], [.8, .2], (0., 10.), n_samples=3)
+        exponential, PARAMS, np.eye(2), [], [.8, .2], (0., 10.), n_samples=3,
+        interval_policy='strict')
     assert interval['valid_counts'].tolist() == [2, 3]
     assert np.isnan(interval['lower'][0]) and np.isfinite(interval['lower'][1])
     assert sum(interval['inverse_failed_draw_reasons'][0].values()) == 1

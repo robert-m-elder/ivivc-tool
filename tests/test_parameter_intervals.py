@@ -228,7 +228,7 @@ def test_inverse_failed_draw_counts_are_not_hidden(monkeypatch):
         return values, np.full(targets.shape, 'mapped'), None
     result, note = inverse_response_prediction_intervals(
         None, {'a': 1.}, np.eye(1), [], [1., 2.], (0., 10.), n_samples=3,
-        inverse_mapper=mapper,
+        inverse_mapper=mapper, interval_policy='strict',
     )
     assert np.isfinite(result['lower'][0])
     assert np.isnan(result['lower'][1])

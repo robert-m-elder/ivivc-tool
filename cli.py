@@ -19,7 +19,9 @@ from engine import (
 from metrics import metrics
 from models import approaches, models
 from preprocessing import preprocessing_options
-from utilities.uncertainty_inputs import uncertainty_from_options, validate_uncertainty_options
+from utilities.uncertainty_inputs import (
+    future_uncertainty_from_options, uncertainty_from_options, validate_uncertainty_options,
+)
 
 def parse_sheet_spec(spec: str | None, sheet_names: list[str]) -> list[tuple[int, str]]:
     """
@@ -148,7 +150,7 @@ def _uncertainty_columns(raw, analyzed, preprocessing_metadata=None):
 
 
 def _prediction_rows(data, frame, results, approach, model, base, *, interpolation,
-                     scalings, normalizations, options):
+                     scalings, normalizations, options, calibration_preprocessing_metadata=None):
     supplied, record = uncertainty_from_options(frame, 'prediction', options)
     if len(frame.columns) < 2:
         raise ValueError('Prediction data require time and response in the first two columns.')
@@ -164,8 +166,14 @@ def _prediction_rows(data, frame, results, approach, model, base, *, interpolati
     if supplied is not None:
         retained_rows = next(iter(prediction_data.preprocessing.sources.values())).retained_rows
         prediction_data = prediction_data.in_vitro
+    future_options, future_record = {}, None
+    if (options.get('future_uncertainty_mode', 'none') or 'none') != 'none':
+        if options.get('future_uncertainty_mode') == 'constant' and normalizations and calibration_preprocessing_metadata is None:
+            raise ValueError('Future SD/SEM requires the in vivo calibration normalization references.')
+        future, future_record = future_uncertainty_from_options(options, calibration_preprocessing_metadata)
+        future_options['future_observation_uncertainty'] = future
     predictions = process_predictions(data, prediction_data, results, [approach],
-                                      interpolated_data=data, selected_scalings=scalings)
+                                      interpolated_data=data, selected_scalings=scalings, **future_options)
     payload = predictions.get(approach, {}).get(model, {})
     if 'error' in payload:
         return [base | {'error': payload['error']}]
@@ -189,6 +197,12 @@ def _prediction_rows(data, frame, results, approach, model, base, *, interpolati
                            prediction_uncertainty_column=record.get('column'),
                            entered_input_standard_uncertainty=record['standard_uncertainty'][retained_rows[index]],
                            independent_errors_confirmed=True, normalization_constants_fixed=True)
+            if future_record:
+                row.update(future_uncertainty_mode=future_record['mode'],
+                           independent_errors_confirmed=True, normalization_constants_fixed=True)
+                for name in ('entered_standard_uncertainty', 'analyzed_standard_uncertainty'):
+                    if name in future_record:
+                        row['future_' + name] = future_record[name]
             rows.append(row)
     return rows
 
@@ -258,8 +272,9 @@ def run_one_df(file_path, sheet_idx, sheet_name, df, approach, model, metrics,
     vitro_uncertainty, vitro_record = uncertainty_from_options(df, 'in_vitro', options)
     vivo_uncertainty, vivo_record = uncertainty_from_options(df, 'in_vivo', options)
     supplied_calibration = vitro_uncertainty is not None or vivo_uncertainty is not None
+    future_active = (options.get('future_uncertainty_mode', 'none') or 'none') != 'none'
     preparation_options = {}
-    if supplied_calibration:
+    if supplied_calibration or future_active:
         preparation_options = dict(return_prepared=True, return_metadata=True,
                                    in_vitro_uncertainty=vitro_uncertainty,
                                    in_vivo_uncertainty=vivo_uncertainty)
@@ -275,7 +290,7 @@ def run_one_df(file_path, sheet_idx, sheet_name, df, approach, model, metrics,
         **preparation_options,
     )
     preprocessing_metadata = None
-    if supplied_calibration:
+    if supplied_calibration or future_active:
         data, preprocessing_metadata = data
 
     model_key = f"{approach}:{model}"
@@ -315,6 +330,7 @@ def run_one_df(file_path, sheet_idx, sheet_name, df, approach, model, metrics,
                     data, prediction_frame, results, approach, model, base,
                     interpolation=interpolation, scalings=scalings,
                     normalizations=normalizations, options=options,
+                    calibration_preprocessing_metadata=preprocessing_metadata,
                 ))
             except Exception as exc:
                 # Preserve completed fitting summaries when a prediction input
@@ -391,9 +407,15 @@ def build_parser():
                             help='individual uses SD; mean uses SEM without dividing it again.')
         parser.add_argument(f'--{flag}-replicate-column',
                             help='Optional replicate-count column for means; recorded without rescaling SEM.')
+    parser.add_argument('--future-uncertainty-mode', choices=['none', 'constant', 'prediction', 'calibration'], default='none',
+                        help='Future in vivo variability: none, a constant, prediction-input precision, or nearest calibration in vivo precision.')
+    parser.add_argument('--future-uncertainty-value', type=float,
+                        help='Positive future SD/SEM in original in vivo calibration response units; used with constant mode.')
+    parser.add_argument('--future-response-kind', choices=['individual', 'mean'], default='individual',
+                        help='Future constant describes individual measurements (SD) or reported means (SEM). Reuse modes inherit the source interpretation.')
     parser.add_argument('--independent-errors', action='store_true',
                         dest='uncertainty_independence_confirmed',
-                        help='Confirm independent errors across original rows/times and between prediction and calibration measurements.')
+                        help='Confirm independent errors across original rows/times, independent prediction and calibration measurements, and independent future measurements.')
     parser.add_argument('--prediction', help='Optional prediction CSV/Excel file; first two columns are time and response.')
     parser.add_argument('--prediction-sheet', help='Required for prediction Excel input; use a zero-based selector resolving to exactly one sheet.')
     parser.add_argument('--prediction-out', help='Optional prediction CSV path; otherwise predictions are printed separately.')

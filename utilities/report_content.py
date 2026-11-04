@@ -231,7 +231,9 @@ def _uncertainty_label(record):
 def build_uncertainty_sections(context):
     """Use the same interpretation and row-aligned error tables in page/export/report."""
     records = _uncertainty_records(context)
-    if not records:
+    future = context.get('future_observation_input') or {}
+    future_active = future.get('mode', 'none') != 'none'
+    if not records and not future_active:
         return []
     labels = {'in_vitro': 'In vitro calibration', 'in_vivo': 'In vivo calibration',
               'prediction': 'In vitro prediction input'}
@@ -258,6 +260,20 @@ def build_uncertainty_sections(context):
                     else 'User confirmation was not recorded.')
     sections.append(_paragraph('Measurement errors at the entered rows are assumed independent within and across times; '
                                'prediction measurements are assumed independent of calibration measurements. ' + confirmation))
+    if future_active:
+        source = {'constant': 'User-specified constant', 'prediction': 'Prediction-input uncertainty',
+                  'calibration': 'Nearest-time in vivo calibration uncertainty'}.get(future['mode'], future['mode'])
+        settings = [['Source', source]]
+        if future['mode'] == 'constant':
+            kind = 'SEM for a future mean' if future.get('response_kind') == 'mean' else 'SD for one future individual measurement'
+            settings.extend([['Interpretation', kind],
+                             ['Entered uncertainty (original in vivo response units)', future.get('entered_standard_uncertainty')],
+                             ['Analyzed uncertainty', future.get('analyzed_standard_uncertainty')]])
+        sections.append(_table('Future measurement variability', ['Setting', 'Value'], settings,
+                               precise_columns=(1,)))
+        sections.append(_paragraph('Future in vivo measurement errors are assumed independent of the calibration and prediction-input errors. '
+                                   'They are added to propagated response uncertainty for combined prediction intervals. '
+                                   'Fitted-curve and parameter intervals retain their existing meaning.'))
     sections.append(_paragraph('Individual measurements use SD and reported means use SEM. Replicate counts are optional metadata; '
                                'SEM is not divided by counts again. Supplied errors use the entered response scale and are transformed '
                                'with the responses. Time coordinates and normalization constants are held fixed; uncertainty in those constants is excluded.'))
@@ -273,7 +289,7 @@ def build_uncertainty_sections(context):
                                    'Response-ratio intervals combine input and calibration uncertainty; inverse mapping retains the dependence '
                                    'between sampled response and mapped time. Time-constant scaling carries input uncertainty on the response axis '
                                    'without changing its calibration-based time intervals. Axis bounds are marginal intervals, not a joint 95% '
-                                   'region or simultaneous band. Future in vivo measurement variability is not included.'))
+                                   'region or simultaneous band.' + ('' if future_active else ' Future in vivo measurement variability is not included.')))
     for key, label in labels.items():
         record = records.get(key)
         if not record:
@@ -308,8 +324,16 @@ def build_uncertainty_sections(context):
     return sections
 
 
-def _method_uncertainty_text(method, prediction_uncertainty):
+def _method_uncertainty_text(method, prediction_uncertainty, future_observation=False):
     text = _METHODS[method][2]
+    if future_observation:
+        time_text = ('Horizontal intervals continue to show calibration uncertainty in mapped time; input-response errors and future measurement noise affect only response bounds. '
+                     if method == 'tau_ratio' else
+                     'Horizontal intervals propagate in vivo calibration uncertainty and any supplied input-response uncertainty; future measurement noise changes only response bounds. '
+                     if method == 'observed_response_inverse' else '')
+        return (time_text + 'Vertical bounds combine propagated response uncertainty with independent future in vivo measurement variability. '
+                'Centers use the nominal inputs and fitted parameters. The entered error model defines whether a future individual measurement or a future mean is predicted. '
+                'Axis bounds are marginal, not a joint 95% region or a simultaneous band; model inadequacy and uncertainty about model choice are excluded.')
     if not prediction_uncertainty:
         return text
     if method == 'value_ratio':
@@ -328,6 +352,64 @@ def _method_uncertainty_text(method, prediction_uncertainty):
             'Response-axis bounds show the input-only normal marginal interval; no future in vivo measurement variability or residual noise is added.',
         )
     return text
+
+
+def _future_prediction_sections(method, records):
+    """Present calculated future-response bounds without re-running propagation."""
+    rows = [row for row in records if row.get('future_observation_variability_included')]
+    if not rows:
+        return []
+    target = 'a future replicate mean' if rows[0].get('future_response_kind') == 'mean' else 'one future individual measurement'
+    sections = [_paragraph('Response bounds are approximate pointwise 95% prediction intervals for ' + target
+                           + ', conditional on the fitted relationship and specified variability assumptions. '
+                           'For time-scaling and inverse methods, the future response accompanies the mapped prediction; '
+                           'the curve is not reevaluated at a fixed nominal time.')]
+    headers = ['Row', 'Source', 'Future uncertainty (analyzed scale)', 'SD or SEM', 'Future response type']
+    counts = any(row.get('future_replicate_count') is not None for row in rows)
+    if counts:
+        headers.append('Source replicate count (metadata)')
+    calibration = any(row.get('future_observation_uncertainty_source') == 'calibration' for row in rows)
+    if calibration:
+        headers.extend(['Matched calibration time', 'Endpoint error reused'])
+    assumptions, intervals, propagated = [], [], []
+    for index, row in enumerate(records):
+        if not row.get('future_observation_variability_included'):
+            continue
+        source = row.get('future_observation_uncertainty_source')
+        values = [index + 1, {'supplied': 'User-specified', 'prediction': 'Prediction input',
+                             'calibration': 'In vivo calibration'}.get(source, source), row.get('future_standard_uncertainty'),
+                  str(row.get('future_uncertainty_kind', '')).upper(), row.get('future_response_kind')]
+        if counts:
+            values.append(row.get('future_replicate_count'))
+        if calibration:
+            values.extend([row.get('future_calibration_time'), bool(row.get('future_lookup_extrapolated'))])
+        assumptions.append(values)
+        intervals.append([index + 1,
+                          row.get('lower_95') if method == 'value_ratio' else row.get('response_lower_95'),
+                          row.get('upper_95') if method == 'value_ratio' else row.get('response_upper_95'),
+                          row.get('value_interval_status', row.get('interval_status')),
+                          row.get('value_interval_valid_samples', row.get('interval_valid_samples')),
+                          row.get('value_interval_requested_samples', row.get('interval_requested_samples'))])
+        interpretation = row.get('propagated_response_interval_kind')
+        propagated.append([index + 1, row.get('propagated_response_lower_95'), row.get('propagated_response_upper_95'),
+                           str(interpretation).replace('_', ' ') if interpretation is not None else None,
+                           row.get('propagated_response_interval_status')])
+    sections.append(_table('Future measurement assumptions', headers, assumptions,
+                           precise_columns=(2, len(headers) - 2) if calibration else (2,)))
+    sections.append(_table('Future response prediction intervals',
+                           ['Row', 'Response lower 95%', 'Response upper 95%', 'Status', 'Usable draws', 'Requested draws'],
+                           intervals, precise_columns=(1, 2)))
+    sections.append(_table('Propagated response bounds before future variability',
+                           ['Row', 'Response lower 95%', 'Response upper 95%', 'Interpretation', 'Status'], propagated,
+                           'Calculated response bounds before adding independent future measurement error. Fixed responses may have no separately calculated bounds.',
+                           precise_columns=(1, 2)))
+    if calibration:
+        sections.append(_paragraph('The nearest calibration in vivo error is selected on the analyzed time scale at each nominal predicted time and held fixed during propagation. '
+                                   'Equal-distance ties use the earlier time. Outside calibration, the nearest endpoint error is reused as an explicit assumption.'))
+    if any(row.get('value_interval_conditional') for row in rows):
+        sections.append(_paragraph('Conditional future-response intervals describe successful inverse mappings only; they do not describe unresolved outcomes. '
+                                   'They use the same mapping-success rule as the inverse time intervals.'))
+    return sections
 
 
 def _stats_rows(stats, selected_metrics, finite_scores=None, fit_cv_ratios=None, cv_comparison=None):
@@ -499,6 +581,9 @@ def build_report_sections(context, option):
     approach, method = option['approach_id'], option.get('method_id')
     uncertainty_records = _uncertainty_records(context)
     prediction_uncertainty = approach == 'approach2' and 'prediction' in uncertainty_records
+    prediction_records, prediction_error = _prediction_records(context, option) if method else ([], None)
+    future_prediction = approach == 'approach2' and any(
+        row.get('future_observation_variability_included') for row in prediction_records)
     sections = [_heading('Analysis summary')]
     for key, label in REPORT_DETAIL_FIELDS:
         sections.append(_paragraph(label + ': Not provided', detail_key=key, detail_label=label))
@@ -626,7 +711,12 @@ def build_report_sections(context, option):
     for warning in (result.get('plot') or {}).get('uncertainty_warnings', []):
         sections.append(_paragraph('Fitting-plot warning: ' + str(warning.get('message', '')) + (' ' + str(warning['detail']) if warning.get('detail') else '')))
     if approach != 'approach3':
-        if prediction_uncertainty:
+        if future_prediction:
+            sections.append(_paragraph('Fitted-curve shading and coefficient tables retain their approximate parameter-uncertainty interpretation. '
+                                       'Future in vivo measurement variability is included only in the combined prediction-response intervals identified below. '
+                                       'Time coordinates, the selected model and normalization constants are held fixed; uncertainty about model choice and model inadequacy are excluded. '
+                                       'Prediction counts, calculation status and the original propagated response bounds are retained.'))
+        elif prediction_uncertainty:
             sections.append(_paragraph('Fitted-curve shading shows approximate pointwise 95% parameter uncertainty. Prediction intervals additionally propagate supplied input-response uncertainty according to the selected method; time coordinates, the model and preprocessing are held fixed. Future in vivo measurement variability, uncertainty about model choice and model inadequacy are excluded. These are not future-observation prediction intervals or a simultaneous envelope for the whole curve. Parameter tables separately report approximate local 95% coefficient intervals; the half-width is added to or subtracted from the estimate.'))
             sections.append(_paragraph('Fitted curves use covariance-aware multivariate normal parameter draws, preserving correlations within each fit and dependence across times. Separate calibration fits and prediction-input errors are sampled independently. Prediction draw counts and seeds are recorded below; centers use the nominal inputs and fitted parameters. Tau and inverse response-axis bounds are normal marginal input intervals. Tau time bounds propagate calibration parameters; inverse time bounds jointly propagate in vivo calibration parameters and input responses. Failed requested calculations make the affected interval unavailable, except for inverse intervals under the recorded conditional policy; missing bounds do not mean zero uncertainty. Plots, downloads and reports reuse the same calculated results.'))
         elif uncertainty_records:
@@ -695,8 +785,8 @@ def build_report_sections(context, option):
                                        'A prediction dataset was supplied, but no prediction method is active for this report.'))
         else:
             if method in _METHODS:
-                sections.append(_paragraph(_method_uncertainty_text(method, prediction_uncertainty)))
-            records, error = _prediction_records(context, option)
+                sections.append(_paragraph(_method_uncertainty_text(method, prediction_uncertainty, future_prediction)))
+            records, error = prediction_records, prediction_error
             if error:
                 sections.append(_paragraph('Prediction status: ' + error))
             if records:
@@ -718,9 +808,13 @@ def build_report_sections(context, option):
                                            row.get('value_interval_status', row.get('response_interval_status'))])
                     sections.append(_table('Prediction input and response uncertainty', headers, uncertainty_rows, precise_columns=range(1, len(headers))))
                     interval_kind = next((row.get('interval_kind') for row in records if row.get('interval_kind')), 'Not recorded')
+                    response_interpretation = ('Response-axis bounds include the specified future measurement variability. ' if future_prediction else
+                                               'Response-axis bounds for tau/inverse methods describe entered-input uncertainty; they do not include future in vivo measurement variability. ')
                     sections.append(_paragraph('Primary interval interpretation: ' + str(interval_kind).replace('_', ' ') + '. '
-                                               'Response-axis bounds for tau/inverse methods describe entered-input uncertainty; they do not include future in vivo measurement variability. '
-                                               'Axis bounds are marginal intervals and do not form a joint 95% region or simultaneous band.'))
+                                               + response_interpretation
+                                               + 'Axis bounds are marginal intervals and do not form a joint 95% region or simultaneous band.'))
+                if future_prediction:
+                    sections.extend(_future_prediction_sections(method, records))
                 domain_rows = [
                     [i + 1, row.get('extrapolation_status'), row.get('extrapolation_reason'),
                      row.get('interval_extrapolation_status')]
@@ -799,6 +893,9 @@ def build_report_sections(context, option):
                     caption = ('Predicted in vivo responses with pointwise intervals combining calibration and supplied input uncertainty.' if method == 'value_ratio' else
                                'Predicted in vivo times with joint calibration/input time intervals and separate normal input-response bounds.' if method == 'observed_response_inverse' else
                                'Predicted in vivo times with calibration-based horizontal intervals and input-only response-axis bounds.')
+                if future_prediction:
+                    caption = ('Predicted in vivo responses with combined approximate 95% future-response prediction intervals.' if method == 'value_ratio' else
+                               'Predicted in vivo times with their existing horizontal uncertainty intervals and combined approximate 95% future-response intervals vertically.')
                 sections.append(_image(source['source_id'], source['title'], caption))
     else:
         sections.append(_paragraph('No prediction dataset was supplied. This report describes calibration fitting or mapping only.'))

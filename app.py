@@ -34,7 +34,8 @@ from utilities.reporting import build_final_model_options
 from utilities.report_content import build_report_sections, build_uncertainty_sections
 from utilities.model_evidence import build_relative_evidence_tables
 from utilities.uncertainty_inputs import (
-    make_uncertainty_record, uncertainty_from_options, validate_uncertainty_options,
+    future_uncertainty_from_options, make_uncertainty_record,
+    uncertainty_from_options, validate_uncertainty_options,
 )
 from utilities.word_report import build_word_report, safe_report_filename, WORD_MIME_TYPE
 from utilities.excel_export import build_accessible_excel, EXCEL_MIME_TYPE
@@ -154,6 +155,7 @@ def index():
 
         validation_errors = []
         has_prediction_dataset = bool(prediction_file and prediction_file.filename)
+        future_active = (request.form.get('future_uncertainty_mode', 'none') or 'none') != 'none'
         try:
             uncertainty_active = validate_uncertainty_options(
                 request.form, selected_approaches, selected_scalings,
@@ -217,6 +219,7 @@ def index():
             return _render_index([{'message': str(exc), 'field_id': 'file'}], status=400)
 
         source_uncertainties, raw_uncertainty, observation_uncertainty = {}, {}, {}
+        future_uncertainty, future_uncertainty_record = None, None
         if uncertainty_active:
             try:
                 for source in ('in_vitro', 'in_vivo'):
@@ -232,7 +235,7 @@ def index():
         # continue with that axis unscaled and report the fallback in results.
         try:
             preparation_options = ({'return_prepared': True, **source_uncertainties}
-                                   if source_uncertainties else {})
+                                   if source_uncertainties or future_active else {})
             calculation_data, preprocessing_metadata = preprocess_data(
                 t1, m1, t2, m2,
                 selected_interpolation=selected_interpolation,
@@ -242,7 +245,11 @@ def index():
                 return_metadata=True,
                 **preparation_options,
             )
-            data = data_for_display(calculation_data) if source_uncertainties else calculation_data
+            data = data_for_display(calculation_data) if source_uncertainties or future_active else calculation_data
+            if future_active:
+                future_uncertainty, future_uncertainty_record = future_uncertainty_from_options(
+                    request.form, preprocessing_metadata,
+                )
             if source_uncertainties:
                 for source, record in raw_uncertainty.items():
                     observation_uncertainty[source] = make_uncertainty_record(
@@ -251,7 +258,7 @@ def index():
                     )
         except ValueError as exc:
             return _render_index([{'message': str(exc),
-                                   'field_id': 'uncertainty-group' if source_uncertainties else None}], status=400)
+                                   'field_id': 'uncertainty-group' if source_uncertainties or future_active else None}], status=400)
         selected_scalings = preprocessing_metadata['applied_scalings']
         preprocessing_warnings = preprocessing_metadata['warnings']
         t1_scale,m1_scale,t2_scale,m2_scale,mm,tt,ti1,ti2,mi1,mi2 = data
@@ -355,10 +362,12 @@ def index():
 
                 prediction_interpolation_info = create_prediction_interpolation_plotly(*prediction_data)
 
-                prediction_results = process_predictions(calculation_data, calculation_prediction, results, selected_approaches, interpolated_data=data, selected_scalings=selected_scalings)
+                future_options = ({'future_observation_uncertainty': future_uncertainty}
+                                  if future_active else {})
+                prediction_results = process_predictions(calculation_data, calculation_prediction, results, selected_approaches, interpolated_data=data, selected_scalings=selected_scalings, **future_options)
 
             except Exception as e:
-                if request.form.get('prediction_uncertainty_mode', 'none') != 'none':
+                if request.form.get('prediction_uncertainty_mode', 'none') != 'none' or future_active:
                     return _render_index([{'message': str(e), 'field_id': 'uncertainty-group'}], status=400)
                 print(f"Error processing prediction file: {e}")
                 prediction_results = {'error': str(e)}
@@ -429,6 +438,9 @@ def index():
         }
         if observation_uncertainty:
             report_context['observation_uncertainty'] = observation_uncertainty
+        if future_uncertainty_record is not None:
+            report_context['future_observation_input'] = future_uncertainty_record
+        if observation_uncertainty or future_active:
             report_context['uncertainty_independence_confirmed'] = True
         final_report_sections = {
             option['id']: build_report_sections(report_context, option)
