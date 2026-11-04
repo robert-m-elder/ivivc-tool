@@ -30,10 +30,12 @@ def _interval(**kwargs):
 
 
 @pytest.mark.parametrize('successful,policy,fraction,available,conditional', [
-    (100, None, None, True, False),
-    (95, None, None, True, True),
-    (94, None, None, False, False),
-    (0, None, None, False, False),
+    (100, 'conditional', .95, True, False),
+    (95, 'conditional', .95, True, True),
+    (94, 'conditional', .95, False, False),
+    (0, 'conditional', .95, False, False),
+    (50, 'conditional', .5, True, True),
+    (49, 'conditional', .5, False, False),
     (95, 'strict', .95, False, False),
     (95, 'conditional', .99, False, False),
     (94, 'conditional', .94, True, True),
@@ -63,7 +65,7 @@ def test_success_threshold_is_pointwise_and_preserves_percentiles(
 
 def test_missing_draws_use_requested_count_not_returned_count(monkeypatch):
     _draws(monkeypatch, 94, count=94)
-    result, _ = _interval()
+    result, _ = _interval(interval_policy='conditional', min_valid_fraction=.95)
     assert result['interval_requested_samples'] == 100
     assert result['interval_total_samples'] == 94
     assert result['valid_counts'].tolist() == [94, 94]
@@ -90,13 +92,16 @@ def _prediction(**kwargs):
         n_samples=100, **kwargs)
 
 
-def test_backend_defaults_are_read_at_call_time_and_centers_remain_nominal(monkeypatch):
+@pytest.mark.parametrize('configured_fraction', [.95, .5])
+def test_backend_defaults_are_read_at_call_time_and_centers_remain_nominal(monkeypatch, configured_fraction):
     import ivivc_core.predictions as predictions
+    monkeypatch.setattr(predictions, 'DEFAULT_INVERSE_INTERVAL_POLICY', 'conditional')
+    monkeypatch.setattr(predictions, 'DEFAULT_INVERSE_MIN_VALID_FRACTION', configured_fraction)
     _draws(monkeypatch, 95)
     default = _prediction()
     np.testing.assert_allclose(default.in_vivo_time, -10 * np.log([.8, .2]))
     assert default.auxiliary['interval_policy'] == 'conditional'
-    assert default.auxiliary['interval_min_valid_fraction'] == .95
+    assert default.auxiliary['interval_min_valid_fraction'] == configured_fraction
     assert default.auxiliary['interval_conditional'].tolist() == [True, False]
     monkeypatch.setattr(predictions, 'DEFAULT_INVERSE_MIN_VALID_FRACTION', .99)
     assert np.isnan(_prediction().time_lower[0])
@@ -140,6 +145,9 @@ def test_backend_settings_are_validated_even_without_a_nominal_inverse(options):
 
 
 def test_public_api_forwards_inverse_settings(monkeypatch):
+    import ivivc_core.predictions as predictions
+    monkeypatch.setattr(predictions, 'DEFAULT_INVERSE_INTERVAL_POLICY', 'conditional')
+    monkeypatch.setattr(predictions, 'DEFAULT_INVERSE_MIN_VALID_FRACTION', .95)
     _draws(monkeypatch, 95)
     course = TimeCourse([0., 10.], [1., np.exp(-1.)])
     fit = SimpleNamespace(parameters=PARAMS, covariance=np.eye(2), residuals=np.zeros(2))
@@ -169,7 +177,7 @@ def test_conditional_input_draws_preserve_nominal_center_and_unconditional_respo
     result = predict_inverse_response(
         prediction, model_name='exponential', parameters=PARAMS,
         covariance=np.zeros((2, 2)), residuals=[], calibration_time_range=(0., 10.),
-        n_samples=100, random_state=12345)
+        n_samples=100, random_state=12345, interval_policy='conditional', min_valid_fraction=.95)
     expected_time = np.percentile(-10 * np.log(sampled[valid]), [2.5, 97.5])
     np.testing.assert_allclose([result.time_lower[0], result.time_upper[0]], expected_time)
     np.testing.assert_allclose(result.in_vivo_time, [-10 * np.log(.9)])

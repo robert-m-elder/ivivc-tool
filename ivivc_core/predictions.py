@@ -25,6 +25,7 @@ from .prediction_inputs import (
     prediction_uncertainty, sample_prediction_responses,
     prediction_input_metadata, attach_input_response_interval,
 )
+from .future_observations import future_response_interval, attach_future_response_interval
 from .intervals import (
     DEFAULT_INTERVAL_SAMPLES, DEFAULT_INTERVAL_SEED,
     validate_interval_settings, parameter_interval_summary,
@@ -74,6 +75,7 @@ def inverse_response_prediction_intervals(
     inverse_mapper=inverse_response_times, *, minimum_time=0.0,
     allow_extrapolation=True, max_expansions=DEFAULT_INVERSE_EXPANSIONS,
     observation_uncertainty=None, interval_policy=None, min_valid_fraction=None,
+    future_observation_uncertainty=None, calibration_in_vivo=None,
 ):
     """Propagate fitted parameters and optional supplied response SD/SEM.
 
@@ -84,7 +86,8 @@ def inverse_response_prediction_intervals(
     scale. Failed draws are counted, never replaced or retried. By default,
     intervals condition on successful mappings when at least 95% succeed;
     the backend defaults above or keyword overrides select the policy/threshold.
-    Residual/future-observation noise is never added.
+    Optional future-response bounds reuse these same successful mappings;
+    future noise does not enter the inverse-time calculation.
     """
     from .uncertainty import sample_parameter_sets
 
@@ -109,6 +112,7 @@ def inverse_response_prediction_intervals(
     central = np.asarray(central, dtype=float).reshape(-1)
     sampling_error = None
     draws = np.empty((0, targets.size))
+    response_draws = None
     if reason is None and np.any(np.isfinite(central)):
         try:
             samples = sample_parameter_sets(params, pcov, n_samples=n_samples,
@@ -205,6 +209,17 @@ def inverse_response_prediction_intervals(
             'successful/requested draw counts and failure reasons.'
         )
         note = ' '.join(filter(None, (note, conditional_note)))
+    if future_observation_uncertainty is not None:
+        responses = (np.broadcast_to(targets, draws.shape) if response_draws is None
+                     else response_draws)
+        interval['future_value_interval'] = future_response_interval(
+            np.where(np.isfinite(draws), responses, np.nan),
+            input_course if input_course is not None else TimeCourse(np.arange(targets.size), targets),
+            central, targets, future_observation_uncertainty=future_observation_uncertainty,
+            calibration_in_vivo=calibration_in_vivo, confidence_level=confidence_level,
+            n_samples=n_samples, random_state=random_state,
+            sampling_error=sampling_error, min_valid_fraction=fraction,
+        )
     return interval, note
 
 def predict_time_mapping(
@@ -313,13 +328,15 @@ def predict_value_ratio_with_uncertainty(
     confidence_level: float = 0.95,
     n_samples: int = 1000,
     random_state=DEFAULT_INTERVAL_SEED,
+    future_observation_uncertainty=None,
+    calibration_in_vivo=None,
 ) -> PredictedTrajectory:
     """Add pointwise calibration/input intervals to response-ratio predictions.
 
     Both calibration parameter vectors are sampled independently, preserving
     covariance within each vector. Prediction times are fixed; supplied response
-    SD/SEM contributes independent normal input draws. No residual noise,
-    future-observation variability, or model discrepancy is added.
+    SD/SEM contributes independent normal input draws. Optional future-response
+    noise is added only after propagation; residual/model discrepancy is excluded.
     The fitted-parameter prediction, not the sampled mean, remains the center.
 
     A bounded interval is withheld at a point if any requested draw is unusable
@@ -344,6 +361,7 @@ def predict_value_ratio_with_uncertainty(
     valid_counts = np.zeros(count, dtype=int)
     total_samples = 0
     sampling_error = None
+    response_draws = np.empty((0, count))
     interval_status = np.full(count, 'unavailable (parameter sampling failed)', dtype=object)
 
     try:
@@ -369,6 +387,7 @@ def predict_value_ratio_with_uncertainty(
         sampling_error = str(exc)
     else:
         trajectory = ensemble.central
+        response_draws = ensemble.value_draws
         total_samples = ensemble.n_draws
         # Pass the full matrix, NOT only rows flagged valid across all times.
         with np.errstate(over='ignore', divide='ignore', invalid='ignore'):
@@ -419,6 +438,13 @@ def predict_value_ratio_with_uncertainty(
         )
         if sampling_error is not None:
             trajectory.note += f' Parameter sampling failed: {sampling_error}'
+    if future_observation_uncertainty is not None:
+        attach_future_response_interval(trajectory, future_response_interval(
+            response_draws, prediction, trajectory.in_vivo_time, trajectory.in_vivo_value,
+            future_observation_uncertainty=future_observation_uncertainty,
+            calibration_in_vivo=calibration_in_vivo, confidence_level=confidence_level,
+            n_samples=n_samples, random_state=random_state, sampling_error=sampling_error,
+        ))
     return trajectory
 
 
@@ -436,6 +462,8 @@ def predict_tau_ratio(
     in_vivo_covariance=None,
     n_samples: int = DEFAULT_INTERVAL_SAMPLES,
     random_state=DEFAULT_INTERVAL_SEED,
+    future_observation_uncertainty=None,
+    calibration_in_vivo=None,
 ) -> PredictedTrajectory:
     """Predict in vivo times using the ratio of fitted time constants."""
     uncertainty = prediction_uncertainty(prediction)
@@ -487,6 +515,7 @@ def predict_tau_ratio(
     from .uncertainty import sample_tau_ratio_trajectories
     sampling_error = None
     draws = np.empty((0, len(prediction.time)))
+    response_draws = np.empty((0, len(prediction.time)))
     if in_vitro_parameters is None or in_vivo_parameters is None:
         sampling_error = 'Fitted parameter vectors and covariance matrices are required for tau-ratio intervals.'
     else:
@@ -498,6 +527,8 @@ def predict_tau_ratio(
                 n_samples=n_samples, random_state=random_state,
             )
             draws = ensemble.time_draws
+            if future_observation_uncertainty is not None:
+                response_draws = np.where(np.isfinite(draws), ensemble.value_draws, np.nan)
         except (ValueError, TypeError, RuntimeError, np.linalg.LinAlgError) as exc:
             sampling_error = str(exc)
     interval = parameter_interval_summary(
@@ -508,6 +539,13 @@ def predict_tau_ratio(
     if uncertainty is not None:
         trajectory.auxiliary['time_interval_kind'] = 'parameter_uncertainty'
         attach_input_response_interval(trajectory, prediction, confidence_level=confidence_level)
+    if future_observation_uncertainty is not None:
+        attach_future_response_interval(trajectory, future_response_interval(
+            response_draws, prediction, trajectory.in_vivo_time, trajectory.in_vivo_value,
+            future_observation_uncertainty=future_observation_uncertainty,
+            calibration_in_vivo=calibration_in_vivo, confidence_level=confidence_level,
+            n_samples=n_samples, random_state=random_state, sampling_error=sampling_error,
+        ))
     return trajectory
 
 
@@ -530,6 +568,8 @@ def predict_inverse_response(
     max_expansions: int = DEFAULT_INVERSE_EXPANSIONS,
     interval_policy=None,
     min_valid_fraction=None,
+    future_observation_uncertainty=None,
+    calibration_in_vivo=None,
 ) -> PredictedTrajectory:
     """Map nominal responses, propagating in vivo parameters and input SD/SEM."""
     uncertainty = prediction_uncertainty(prediction)
@@ -555,6 +595,9 @@ def predict_inverse_response(
             input_options['interval_policy'] = interval_policy
         if min_valid_fraction is not None:
             input_options['min_valid_fraction'] = min_valid_fraction
+        if future_observation_uncertainty is not None:
+            input_options.update(future_observation_uncertainty=future_observation_uncertainty,
+                                 calibration_in_vivo=calibration_in_vivo)
         interval, interval_note = interval_estimator(
             function, parameters, covariance, residuals,
             np.where(supported, prediction.value, np.nan), calibration_time_range,
@@ -577,6 +620,7 @@ def predict_inverse_response(
     interval.setdefault('interval_policy', policy)
     interval.setdefault('interval_min_valid_fraction', fraction)
     interval.setdefault('interval_conditional', np.zeros(times.shape, dtype=bool))
+    future_interval = interval.pop('future_value_interval', None)
     if uncertainty is not None:
         interval['interval_kind'] = 'parameter_and_input_uncertainty'
     attach_parameter_interval(trajectory, interval, output_kind='time')
@@ -597,6 +641,16 @@ def predict_inverse_response(
         attach_input_response_interval(trajectory, prediction, confidence_level=confidence_level)
     if interval_note:
         trajectory.note = interval_note
+    if future_observation_uncertainty is not None:
+        if future_interval is None:
+            future_interval = future_response_interval(
+                np.empty((0, len(times))), prediction, times, prediction.value,
+                future_observation_uncertainty=future_observation_uncertainty,
+                calibration_in_vivo=calibration_in_vivo, confidence_level=confidence_level,
+                n_samples=n_samples, random_state=random_state,
+                sampling_error=interval.get('interval_sampling_error'), min_valid_fraction=fraction,
+            )
+        attach_future_response_interval(trajectory, future_interval)
     missing = int(np.count_nonzero(~supported))
     if missing:
         if missing == 1:

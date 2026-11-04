@@ -237,7 +237,7 @@ def test_inverse_unreachable_input_draws_are_retained_and_not_clipped_or_retried
     assert np.isfinite(ensemble.time_draws[:, 1]).all()
     np.testing.assert_array_equal(ensemble.valid_draws, np.all(np.isfinite(ensemble.time_draws), axis=1))
     assert 0 < ensemble.n_valid_draws < ensemble.n_draws
-    result = predict_inverse_response(prediction, residuals=np.zeros(3), **options)
+    result = predict_inverse_response(prediction, residuals=np.zeros(3), interval_policy='strict', **options)
     assert np.isfinite(result.in_vivo_time).all()
     assert np.isnan(result.time_lower[0]) and np.isnan(result.time_upper[0])
     assert np.isfinite(result.time_lower[1]) and np.isfinite(result.time_upper[1])

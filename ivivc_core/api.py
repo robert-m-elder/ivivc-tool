@@ -408,6 +408,7 @@ def predict_in_vivo(
     random_state=12345,
     inverse_interval_policy: str | None = None,
     inverse_min_valid_fraction: float | None = None,
+    future_observation_uncertainty: ObservationUncertainty | ResolvedObservationUncertainty | str | None = None,
 ) -> ResultBatch[PredictedTrajectory]:
     """Generate central in vivo trajectories from a structured IVIVC analysis.
 
@@ -416,8 +417,11 @@ def predict_in_vivo(
     set; for example ``{'approach2': ('value_ratio', 'tau_ratio')}``.
     Approach 2 also propagates supplied prediction-response SD/SEM, assuming
     independent prediction and calibration measurements. Input times remain
-    fixed. Future in vivo observation variability is not added. Optional inverse
-    settings override the backend conditional/strict policy and success threshold.
+    fixed. Optional future observation SD/SEM on the analyzed response scale
+    adds independent measurement variability for Approach 2. Use ``'prediction'``
+    to reuse input precision or ``'calibration'`` for nearest-time in vivo
+    calibration precision. Optional inverse settings override the backend
+    conditional/strict policy and success threshold.
     """
     _validate_prediction_measurements(analysis, prediction)
     selected_methods = _resolved_prediction_methods(methods)
@@ -426,6 +430,13 @@ def predict_in_vivo(
     prepared = analysis.prepared_data
     if prepared.in_vivo is None:
         raise ValueError('Paired in vitro and in vivo data are required for prediction.')
+    future_options = {}
+    if future_observation_uncertainty is not None:
+        if any(fit.approach_id != 'approach2' and selected_methods.get(fit.approach_id)
+               for fit in analysis.model_results.values()):
+            raise ValueError('Future observation uncertainty is supported only for Approach 2 predictions.')
+        future_options = dict(future_observation_uncertainty=future_observation_uncertainty,
+                              calibration_in_vivo=prepared.in_vivo)
 
     for model_fit in analysis.model_results.values():
         for method in selected_methods.get(model_fit.approach_id, ()):
@@ -458,6 +469,7 @@ def predict_in_vivo(
                             in_vivo_covariance=in_vivo_fit.covariance,
                             confidence_level=confidence_level,
                             n_samples=n_samples, random_state=random_state,
+                            **future_options,
                         )
                     elif method == 'tau_ratio':
                         trajectory = predict_tau_ratio(
@@ -478,6 +490,7 @@ def predict_in_vivo(
                                 in_vivo_fit.residual_dof,
                             ),
                             confidence_level=confidence_level,
+                            **future_options,
                         )
                     else:
                         inverse_options = {}
@@ -501,6 +514,7 @@ def predict_in_vivo(
                             confidence_level=confidence_level,
                             n_samples=n_samples, random_state=random_state,
                             **inverse_options,
+                            **future_options,
                         )
                 else:
                     if method == 'value_scaling':
@@ -532,7 +546,11 @@ def predict_in_vivo(
                     paired_in_vitro_time=mapping.time if mapping is not None else None,
                     paired_in_vivo_time=mapping.response if mapping is not None else None,
                 )
-                trajectory.auxiliary.update(_calibration_uncertainty_metadata(analysis, model_fit, prediction))
+                calibration_metadata = _calibration_uncertainty_metadata(analysis, model_fit, prediction)
+                if 'future_observation_variability_included' in calibration_metadata:
+                    calibration_metadata['future_observation_variability_included'] = trajectory.auxiliary.get(
+                        'future_observation_variability_included', False)
+                trajectory.auxiliary.update(calibration_metadata)
                 trajectories[key] = trajectory
             except Exception as exception:
                 _record_failure(

@@ -34,8 +34,9 @@ Optional `replicate_counts` describe reported means and may be scalar or
 pointwise. They are retained as metadata; they **never divide an SEM again** or
 add another fitting weight. A mean accompanied by replicate SD must have that
 SD converted to SEM before using this interface. Counts are not required.
-Relative weights, percentage-error conversion, raw-replicate aggregation, and
-future-observation variability are not implemented by this representation.
+Relative weights, percentage-error conversion, and raw-replicate aggregation
+are not implemented by this representation. Future-observation variability is
+selected separately through the backend option below.
 
 Resolution requires finite, strictly positive uncertainties for every retained
 response. Missing uncertainty is `None`, not zero or known unit uncertainty.
@@ -360,7 +361,8 @@ assumption. No additional calibration residual noise is added.
 When either source has supplied errors, prediction auxiliary data and complete
 ensemble metadata include each source's `calibration_uncertainty` and covariance
 scale, `prediction_inputs_fixed=True` when no input errors are supplied, and
-`future_observation_variability_included=False`. Applicable fixed normalization
+`future_observation_variability_included=False` unless future measurements are
+explicitly requested. Applicable fixed normalization
 records are retained under `fixed_normalization_constants`. The metadata is
 provenance, not an extra uncertainty contribution. Outputs without supplied
 errors retain their existing metadata shape.
@@ -417,7 +419,8 @@ The sampled mean does not replace them. Response draws are never clipped to
 positive values or a normalized range, nor retried until an inverse is possible.
 An unsupported nominal inverse remains unavailable even if some perturbed
 responses can be mapped. Inverse time intervals default to requiring at least
-95% of requested draws to map successfully at each point. When some draws fail,
+95% of requested draws to map successfully at each point; optional future-response
+intervals use the same rule. When some draws fail,
 the conditional interval encloses the middle 95% of successful mappings, not all
 requested outcomes. The policy, threshold, counts, and failure reasons are
 retained. Other sampled intervals require every requested draw to be usable.
@@ -457,11 +460,53 @@ Approach 1/3 prediction methods and their samplers still reject attached input
 errors. Mixed high-level batches retain successful Approach 2 predictions and
 record unsupported methods as errors, unless `fail_fast=True`.
 
-No future in vivo measurement variability, model discrepancy, model-selection
-uncertainty, or variable normalization references are added. Input uncertainty
+By default no future in vivo measurement variability is added. Input uncertainty
 describes the existing prediction measurements. Future study-design simulation
 must use a separate measurement-error assumption for future times and must not
 count these entered input errors again. Browser and CLI inputs use the shared
 parsing boundary described above.
 The existing `uncertainties` dependency is loaded only when the high-level
 tau-prediction compatibility wrapper needs its nominal/SD value type.
+
+## Optional future in vivo measurements (backend)
+
+Approach 2 prediction functions and `predict_in_vivo` accept
+`future_observation_uncertainty`. Omit it or pass `None` to preserve the existing
+intervals. Supply an existing `ObservationUncertainty` or
+`ResolvedObservationUncertainty` on the **analyzed response scale**, or select a
+source for reuse:
+
+```python
+predictions = predict_in_vivo(
+    analysis, prediction,
+    future_observation_uncertainty=ObservationUncertainty(.03, response_kind="individual"),
+)
+# Alternatives: future_observation_uncertainty="prediction" or "calibration".
+```
+
+An individual future observation uses SD; a future mean uses SEM. Counts remain
+metadata and never divide SEM again. Raw uncertainties must first be transported
+through the selected preprocessing, as for other backend inputs.
+
+`"prediction"` explicitly reuses the prediction inputs' precision and
+individual/mean interpretation. `"calibration"` uses supplied in vivo calibration
+SD/SEM at the nearest nominal predicted in vivo time. Lookup uses analyzed time
+coordinates, prefers the earlier time for ties, and extends the endpoint error
+outside calibration. The matched errors are held fixed during propagation and
+their source and lookup assumptions are recorded. Missing source uncertainty is
+an error; variability is not inferred from fit residuals.
+
+Independent normal future measurement noise is added once to the propagated
+response draws. The resulting `value_lower`/`value_upper` are combined future
+response intervals; propagated-only bounds remain in auxiliary metadata.
+For tau and inverse methods these future responses accompany the mapped
+prediction; the fitted curve is not reevaluated at a fixed nominal time.
+Horizontal time intervals and central predictions retain their existing meaning.
+Inverse response intervals use the same successful mappings and conditional
+policy as inverse time intervals. Separate axis bounds remain marginal intervals.
+
+Future variability does not alter fitted-curve/parameter uncertainty or the raw
+reference ensembles returned by `generate_trajectory_ensembles`. These intervals
+remain conditional on the chosen model and supplied error assumptions; model
+discrepancy, model-selection uncertainty, and variable normalization references
+are excluded. Browser/CLI controls and report presentation are separate updates.
