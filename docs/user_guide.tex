@@ -24,11 +24,13 @@ For additional discussion of model performance, cross-validation results, uncert
 
 The following provides a brief orientation for a first run of the app. The settings described here as defaults are software defaults only; they do not establish preferred analysis choices or regulatory expectations. Detailed descriptions and interpretation considerations are provided in the sections that follow.
 
-\textbf{Minimum input.} A fitting dataset is required with four columns containing in vitro time, in vitro response, in vivo time, and in vivo response. A separate two-column in vitro prediction dataset is optional and is needed only when generating predictions from fitted or mapped relationships.
+\textbf{Minimum input.} A fitting dataset is required whose first four columns contain in vitro time, in vitro response, in vivo time, and in vivo response. A separate in vitro prediction dataset, whose first two columns contain time and response, is optional. Additional columns can contain measurement uncertainty and replicate counts.
 
 \textbf{From setup to results.} On the setup page, upload the fitting dataset and, if desired, a prediction dataset. Select at least one analysis approach and, for model-based approaches, at least one candidate model. Review or modify the preprocessing, model-fitting, performance-metric, cross-validation, and diagnostic-plot options as applicable, then select \textbf{Analyze}. The app processes the uploaded data, performs the selected analyses, and opens the results page, where results are organized by processing, fitting, model comparison, and prediction outputs as applicable.
 
-\textbf{Current software defaults.} No analysis approaches or candidate models are selected initially. No normalization or scaling is selected. Shared-grid interpolation is selected for approaches that use matched quantities. The default displayed metrics are $R^2$, RMSE, and AIC\textsubscript{c}. Shuffle-split cross-validation is selected by default. The available CV-fit-variability, raw-residual, and Q--Q diagnostic plots are not enabled by default. These defaults provide a starting configuration and can be changed to match the dataset and analysis purpose.
+\textbf{Optional measurement uncertainty.} To use supplied SD or SEM, select Approach 2 on its own and expand \textbf{Measurement uncertainty}. See Section~\ref{sec:measurement-uncertainty} for the input choices and assumptions.
+
+\textbf{Current software defaults.} No analysis approaches or candidate models are selected initially. Measurement uncertainty starts as \textbf{Not supplied} for all datasets. No normalization or scaling is selected. Shared-grid interpolation is selected for approaches that use matched quantities. The default displayed metrics are $R^2$, RMSE, and AIC\textsubscript{c}. Shuffle-split cross-validation is selected by default. The available CV-fit-variability, raw-residual, and Q--Q diagnostic plots are not enabled by default. These defaults provide a starting configuration and can be changed to match the dataset and analysis purpose.
 
 \textbf{Main outputs.} After analysis, the results include the processed data used by each approach, fitted or mapped relationships, selected performance and cross-validation summaries, diagnostic plots, model-comparison information where applicable, and prediction outputs when a prediction dataset is supplied. User-selected results can also be assembled into a downloadable summary report.
 
@@ -42,6 +44,7 @@ The IVIVC app requires paired in vitro and in vivo degradation data, along with 
 \item optionally, a spreadsheet containing in vitro data from which to generate predictions using fitted correlations;
 \item selection of one or more IVIVC modeling approaches;
 \item selection of candidate models to evaluate, where applicable;
+\item optionally, measurement uncertainty for Approach 2;
 \item optionally, preprocessing options, such as normalization, interpolation, and scaling;
 \item selected performance metrics to display in the results and reports;
 \item optionally, cross-validation settings for applicable approaches;
@@ -68,12 +71,44 @@ When interpreting an IVIVC, consider measurement reliability, sample size, compa
 \textbf{Input} & \textbf{Description} \\
 \midrule
 \endhead
-Fitting dataset & Required four-column dataset used to establish the in vitro/in vivo relationship. Columns are interpreted as in vitro time, in vitro response value, in vivo time, and in vivo response value. \\
-Prediction dataset & Optional two-column in vitro dataset used after fitting to generate in vivo predictions. Columns are interpreted as in vitro time and in vitro response value. \\
+Fitting dataset & Required dataset used to establish the in vitro/in vivo relationship. The first four columns are interpreted as in vitro time, in vitro response value, in vivo time, and in vivo response value. \\
+Prediction dataset & Optional in vitro dataset used after fitting to generate in vivo predictions. The first two columns are interpreted as in vitro time and in vitro response value. \\
 \bottomrule
 \end{longtable}
 
-Supported formats are CSV and Excel (.xls, .xlsx). For Excel workbooks, select the sheet containing the relevant data. For CSV files, the first columns are read directly in the order described above.
+Supported formats are CSV and Excel (.xls, .xlsx). Include a header row; the required columns are read by position in the order above for either format. For Excel workbooks, select the sheet containing the relevant data. The two calibration profiles need not have matching times or equal lengths; leave unused cells blank when one profile ends earlier.
+
+Additional columns may contain SD/SEM or replicate counts. Give these columns unambiguous headers and enter the relevant header in the uncertainty settings. Keep each error and count on the same row as its response value, including when profiles have different lengths.
+
+\subsection{Measurement uncertainty (optional; Approach 2)}
+\label{sec:measurement-uncertainty}
+
+These settings describe uncertainty in the entered response values; time coordinates are treated as fixed. They are available only when Approach 2 is selected on its own. In the \textbf{Measurement uncertainty} panel, choose an input mode separately for the in vitro calibration, in vivo calibration, and optional in vitro prediction dataset. Any of these datasets can be left without supplied uncertainty.
+
+Supplied calibration errors affect fitting and fitted uncertainty; smaller errors give an observation more influence. Prediction-input errors affect prediction intervals, as described in Section~\ref{sec:prediction-outputs}.
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.24\textwidth}>{\raggedright\arraybackslash}p{0.68\textwidth}@{}}
+\toprule
+\textbf{Uncertainty input} & \textbf{What to enter} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Uncertainty input} & \textbf{What to enter} \\
+\midrule
+\endhead
+Not supplied & No error values. A calibration fit estimates its error scale from scatter around the fitted curve; prediction responses without supplied errors are treated as fixed. \\
+Constant SD or SEM & One positive error value that applies to every response used in the analysis of that dataset. \\
+SD or SEM column & The header of a column containing one positive error value for each response used in the analysis. \\
+\bottomrule
+\end{longtable}
+
+Choose \textbf{Individual observations} when supplying a standard deviation (SD), which describes variation among individual measurements at a given time. Choose \textbf{Reported means} when supplying a standard error of the mean (SEM), which describes uncertainty in a reported mean. The column name does not determine which interpretation the app uses.
+
+If means are accompanied by replicate SD and count $n$, convert SD to SEM before entry: $\mathrm{SEM}=\mathrm{SD}/\sqrt{n}$ for independent replicates. The app does not calculate this conversion. A replicate-count column is optional for reported means; its positive integer counts are recorded as metadata. They are not used to divide SEM again or to increase the number of fitted observations.
+
+Enter absolute SD/SEM in the same units as the original response values, before any preprocessing selected in the app. Convert relative errors, such as a percentage of the response, to absolute values first. Every observation used in the analysis needs a finite, strictly positive error when uncertainty is supplied for that dataset. Missing or invalid errors on those rows cause an input error; they do not cause those observations to be silently removed. Error cells may be blank on unused padding rows.
+
+Confirm that errors in the original measurements are independent across entered rows, including measurements at the same time, and that prediction measurements are independent of calibration measurements. Prediction-input uncertainty also requires a prediction dataset. These inputs do not specify variability in future in vivo measurements. See Section~\ref{sec:preprocessing} for error rescaling and supported preprocessing choices.
 
 \subsection{Analysis approaches and models}
 
@@ -111,14 +146,21 @@ Each Approach 2 family has a less-flexible normalized variant. Exponential and S
 
 
 \subsection{Preprocessing options}
+\label{sec:preprocessing}
 
 Preprocessing prepares the uploaded data for comparison, fitting, and prediction. Normalization expresses response values relative to a reference value so datasets can be compared on a common relative scale. Scaling changes the numerical scale of time or response values without changing the underlying pattern. Interpolation is used when an approach requires paired in vitro and in vivo quantities that were not measured at exactly matching positions. The app constructs both response-at-time and time-at-response representations; these are used differently by Approaches 1 and 3 and are not used for Approach 2 fitting.
 
+With supplied SD/SEM, leave \textbf{Log10 response scaling} unselected; the app rejects that combination even when responses are positive. The logarithmic fallback behavior described below applies only to otherwise supported settings.
+
 \input{includes/generated/preprocessing_options.tex}
 
-\textbf{Reverse response ($1-\mathrm{value}$)} can be used to transform fraction lost into fraction remaining. It is an optional checkbox applied after any selected normalizations and before scaling or interpolation. Response values should be normalized to employ this option.
+\textbf{Reverse response ($1-\mathrm{value}$)} can be used to transform fraction lost into fraction remaining. It is an optional checkbox applied after any selected normalizations and before scaling or interpolation. Use it for fraction-scale responses, applying normalization first if needed.
 
-The app preserves observed time zero as $t=0$ in processed data, fitting, plots, and downloads rather than replacing it with a small positive value. Because $\log_{10}(0)$ is undefined, Log10 time scaling cannot be applied when any analyzed time value is zero or negative. In that case, the app continues the analysis with unscaled time and displays a scaling-fallback warning in Data Processing. Similarly, if Log10 response scaling is selected but the processed response values contain zero or negative values, the app continues with unscaled response values and reports the fallback. The preprocessing table reports the scaling that was actually applied. Model-specific numerical/domain limitations at zero are handled during fitting rather than by changing the supplied time values. For Approach 3, an in vivo/in vitro time ratio with an in vitro time of zero is undefined and is reported as unavailable, although a prediction observed at time zero can still map to time zero.
+Supplied SD/SEM is rescaled automatically with the responses. When normalization divides responses by a constant, errors are divided by that constant's absolute value. The reference values used for initial-value and min-max normalization are treated as fixed; their own uncertainty is excluded. Response reversal leaves SD/SEM unchanged. Supply errors on the original response scale so the app applies each selected transformation once.
+
+The app preserves observed time zero as $t=0$ rather than replacing it with a small positive value. Because $\log_{10}(0)$ is undefined, Log10 time scaling requires positive times. If this scaling is selected and calibration times include zero or negative values, the browser analysis continues with unscaled time and displays a scaling-fallback warning in Data Processing. When Log10 time scaling is applied, prediction times must also be positive. Changing the time scale does not change response SD/SEM.
+
+Without supplied uncertainty, Log10 response scaling requires positive processed responses. If this scaling is selected and calibration responses contain zero or negative values, the browser analysis continues with unscaled responses and reports the fallback. Prediction data must support the scaling applied to calibration. The preprocessing table reports the scaling actually applied. Model-specific numerical limitations at zero are handled during fitting rather than by changing the supplied times. For Approach 3, an in vivo/in vitro time ratio with an in vitro time of zero is undefined and is reported as unavailable, although a prediction observed at time zero can still map to time zero.
 
 \subsubsection{How interpolation is used by each approach}
 
