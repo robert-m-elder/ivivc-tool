@@ -33,7 +33,7 @@ from .intervals import (
 
 
 DEFAULT_INVERSE_INTERVAL_POLICY = 'conditional'
-DEFAULT_INVERSE_MIN_VALID_FRACTION = .95
+DEFAULT_INVERSE_MIN_VALID_FRACTION = .5
 
 
 def _inverse_interval_settings(interval_policy, min_valid_fraction):
