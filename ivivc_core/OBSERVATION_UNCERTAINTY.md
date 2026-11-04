@@ -26,7 +26,7 @@ Original experimental errors are assumed independent within and across time
 points. Initial-value and min-max normalization use the fixed-reference working
 model described below: their observed constants are held fixed, and uncertainty
 in those constants is excluded. Fitted curves and other derived quantities can
-still be dependent. Separate experiments must be independent for later
+still be dependent. Separate experiments must be independent for
 independent-input propagation; reuse of calibration measurements is not a new
 independent experiment.
 
@@ -55,6 +55,22 @@ be. Scalar inputs must be valid even for an empty selection. Validated resolved
 objects can be subset again with `.subset(keep)`. Arrays are defensive read-only
 copies, and `.to_metadata()` returns a separate JSON-compatible record of the
 resolved values, interpretation, provenance, units, and assumptions.
+
+## Browser and CLI input boundary
+
+The browser and CLI accept constant or named-column SD/SEM independently for in
+vitro calibration, in vivo calibration, and prediction input. Their shared parser
+in `utilities.uncertainty_inputs` constructs `ObservationUncertainty`; preprocessing
+then cleans and rescales it with the response rows. Users enter errors on the
+uploaded response scale, before transformations selected in the app.
+
+These entry points require Approach 2 alone, confirmation of independent original
+errors, and no `log_y` selection when any error is supplied. The CLI confirmation
+flag is `--independent-errors`. Optional replicate-count columns describe reported
+means and remain metadata. Reports retain both entered and analyzed errors with
+source-row alignment. See the [repository README](../README.md) and
+[guide source](../docs/user_guide.tex) for the controls and examples. The batch API
+has its own per-selection error behavior, described below.
 
 ## Standalone weighted profile fitting
 
@@ -102,20 +118,32 @@ Reduced chi-squared is diagnostic only; it never rescales absolute covariance.
 The retained observation count, not the sum of replicate counts, determines the
 reported residual degrees of freedom.
 
-RMSE, R-squared, and other descriptive metrics retain their existing unweighted
-definitions. Supplied-error full fits calculate AIC/BIC from the normal likelihood
-and retain the application's conventional AICc correction and sample-size cutoff.
-Their criteria are forwarded explicitly to the existing source-wise evidence
-calculations, including mixed supplied-error/residual-scaled sources. Weighted
-CV information criteria remain unavailable; its compact `observation_error`
-summary instead records pooled standardized RMSE and observation likelihood.
+RMSE, R-squared, and other descriptive metrics retain their unweighted definitions.
+Supplied-error full fits calculate AIC/BIC from the normal likelihood on the
+analyzed scale. They retain the application's conventional AICc correction
+`2*k*(k+1)/(n-k-1)` when `n > k+1`, where `n` counts retained responses and `k`
+counts fitted curve parameters. This convention does not assert exact small-sample
+calibration for every nonlinear model or supplied-error setting.
+
+Criteria are forwarded explicitly to source-wise evidence calculations, including
+mixed supplied-error/residual-scaled sources. Combined Approach 2 evidence adds
+the two source-specific criteria; combined AICc adds their separate corrections
+and requires both to be defined. It is not reconstructed using pooled `n` and `k`.
+
+Supplied-error CV information criteria remain unavailable. Its `observation_error`
+summary pools standardized RMSE and normal observation negative log likelihood
+over test-observation occurrences, including repeated uses of a row across splits.
+These scores compare fitted predictions with the supplied observation errors;
+they do not add training-parameter uncertainty. Pooled scores require CV to be
+enabled and every requested split to provide a finite score. Ordinary CV means can
+still summarize finite split scores and retain their finite-score counts.
 
 Low-level `auto_grid_search` accepts optional scalar/pointwise `sigma`.
 `cross_validation_curve_fit` accepts `sigma` and `absolute_sigma`, validates
 uncertainty before splitting (including when CV is disabled), and subsets it to
-each training fold. Existing fold construction and full-data starting vectors are
-unchanged; training-only initialization and rebuilding data-dependent preprocessing
-inside CV are later validation work. Low-level helper metrics remain descriptive.
+each training fold. Preprocessing and starting vectors are established before the
+CV splits; they are not rebuilt using each training subset alone. Low-level helper
+metrics remain descriptive.
 
 The standalone fitter accepts either supplied or already-resolved uncertainty.
 Callers must supply time, response, and uncertainty on the same analyzed scale.
@@ -316,13 +344,14 @@ fitted parameters; tau-ratio prediction intervals continue to use the existing
 nonlinear parameter-draw percentiles. Weighted table metadata records the method
 and scale source. The adapter forwards supplied-error information criteria
 explicitly and preserves the existing source-wise combined-evidence convention;
-it does not rebuild weighted criteria from unweighted RSS. Guide recommendations
-for interpreting these criteria will be updated separately.
+it does not rebuild weighted criteria from unweighted RSS. The
+[statistical appendix](../docs/appendices/interpreting_model_performance.tex)
+describes the criterion conventions and interpretation limits.
 
 ## Calibration uncertainty in existing predictions
 
 For fixed prediction inputs, Approach 2 value-ratio, time-constant-ratio, and
-inverse-response calculations now inherit the weighted calibration covariances.
+inverse-response calculations inherit the weighted calibration covariances.
 Existing complete source parameter vectors are reused across each trajectory,
 preserving dependence across times and within vectors. In vitro and in vivo
 source vectors are sampled independently under the declared source independence
@@ -399,8 +428,9 @@ entered response and SD/SEM, with
 `value_interval_kind="prediction_input_uncertainty"` and
 `value_interval_method="normal"`. These analytical marginal bounds need not
 match finite-sample percentiles of the response draws exactly; they do not
-describe a joint confidence region or simultaneous band. Time bounds remain
-joint Monte Carlo percentiles. Vertical input bounds can remain available when
+describe a joint confidence region or simultaneous band. Tau time bounds propagate
+calibration parameters only; inverse time bounds propagate in vivo parameters and
+the sampled response together. Vertical input bounds can remain available when
 parameter covariance prevents calculating horizontal uncertainty.
 
 Input metadata records the resolved error representation under
@@ -426,6 +456,7 @@ No future in vivo measurement variability, model discrepancy, model-selection
 uncertainty, or variable normalization references are added. Input uncertainty
 describes the existing prediction measurements. Future study-design simulation
 must use a separate measurement-error assumption for future times and must not
-count these entered input errors again. Browser/CLI controls remain unchanged.
+count these entered input errors again. Browser and CLI inputs use the shared
+parsing boundary described above.
 The existing `uncertainties` dependency is loaded only when the high-level
 tau-prediction compatibility wrapper needs its nominal/SD value type.

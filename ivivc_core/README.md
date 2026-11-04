@@ -28,8 +28,11 @@ normalization, scaling, or interpolation.
 The experimental-uncertainty representation, preprocessing transport, weighted
 Approach 2 calibration, fitted uncertainty summaries, and prediction-input
 propagation are documented in
-[Supplied observation uncertainty](OBSERVATION_UNCERTAINTY.md). Browser/CLI input
-controls remain a later step.
+[Supplied observation uncertainty](OBSERVATION_UNCERTAINTY.md). The browser and CLI
+expose constant or named-column SD/SEM inputs for Approach 2. See the
+[repository README](../README.md) and [guide source](../docs/user_guide.tex) for
+user-facing controls and command-line examples; direct backend callers use the
+typed inputs described below.
 
 Preprocessing accepts `one_minus` to apply `1 - response` after the selected
 normalizations and before logarithmic scaling or interpolation. It applies to
@@ -146,8 +149,9 @@ are approximate propagated-uncertainty intervals, not future-observation
 prediction intervals or simultaneous bands. Model choice, preprocessing, and
 transferability of the fitted relationship are not included.
 
-Use `random_state` on the low-level wrapper for repeatable draws. The app uses
-1,000 draws, 95% intervals, and seed 12345. Covariance/sampling failures retain
+Use `random_state` on the low-level wrapper for repeatable draws. Browser and CLI
+response-ratio plots use 1,000 draws, 95% intervals, and seed 12345.
+Covariance/sampling failures retain
 usable central predictions but mark intervals unavailable. No denominator floor
 or physical-response clipping is applied. A pointwise interval is withheld if
 any requested draw is unusable there or the denominator's sampled equal-tailed
@@ -202,12 +206,21 @@ the shared percentile convention below.
 ## Common plotted parameter uncertainty
 
 `ivivc_core.intervals.curve_parameter_intervals` and `parameter_interval_summary`
-provide pointwise equal-tailed bounds and diagnostics. App fitting plots and
-parametric predictions use 1,000 covariance-aware normal parameter draws, seed
-12345, and no added residual/future-measurement noise. Supplied prediction-input
-SD/SEM is propagated separately as described above. Separate fits are sampled
-independently. The center remains the fitted-parameter calculation; percentile
-bounds can exclude it and are never moved to fit error-bar geometry.
+provide pointwise equal-tailed bounds and diagnostics. Browser and CLI fitting
+plots, response-ratio predictions, and tau-ratio predictions request 1,000
+covariance-aware normal parameter draws; inverse predictions request 100. These
+calculations use seed 12345, with requested/valid counts and sampling status
+retained in prediction metadata. No residual or future-measurement noise is added.
+Supplied prediction-input SD/SEM is propagated separately as described above.
+Separate fits are sampled independently. The center remains the fitted-parameter
+calculation; percentile bounds can exclude it and are never moved to fit error-bar
+geometry.
+
+The public `predict_in_vivo` API instead defaults to `n_samples=1000` and forwards
+that setting to every selected parametric method, including inverse mapping.
+`generate_trajectory_ensembles` also defaults to 1,000 draws. Direct numerical
+wrappers have their own signature defaults; pass `n_samples` and `random_state`
+explicitly when a caller needs a particular sampling convention.
 
 All requested draws must be usable at a point for its interval to be displayed.
 Whole-trajectory validity masks remain separate for study-design callers.
@@ -223,7 +236,9 @@ helper. The inverse helper likewise ignores its legacy residuals argument.
 Inverse mapping uses one generic mapper (`ivivc_core.inverse`) for central and
 sampled calculations, including trajectory-ensemble draws. It checks a finite,
 numerically monotonic calibration grid, then searches the indicated continuation
-with up to 16 doubling extensions (129 points per extension) and Brent roots.
+using the configured number of doubling extensions and Brent roots. The default
+is three extensions; grid density is configurable, with at least 101 calibration
+points and at most 129 points per extension.
 There is no response clipping or model-specific inverse. Plateaus/rounded tails,
 nonmonotonic continuations, nonfinite domains and unresolved roots are explicit
 unavailable statuses. These checks establish numerical support on the examined
@@ -231,7 +246,7 @@ branch, not global mathematical uniqueness. The finite search budget is not a
 physical endpoint. An invalid distant target cannot alter an earlier result.
 
 Low-level inverse functions accept `allow_extrapolation`, `minimum_time` (default
-0) and `max_expansions` (default 16). Use `minimum_time=None` for transformed time
+0) and `max_expansions` (default 3). Use `minimum_time=None` for transformed time
 coordinates such as log10 time. The public API and Flask adapter apply this choice
 from **applied** scaling metadata. A negative calibration minimum on unlogged
 coordinates remains allowed; the app does not invent a domain excluding data.

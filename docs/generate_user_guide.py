@@ -280,21 +280,30 @@ def build_readme() -> str:
 
         After installing and launching the app:
 
-        1. Upload a fitting dataset with four columns: in vitro time, in vitro response, in vivo time, and in vivo response. (The included `toy-data.xlsx` file can be used as a test.)
-        2. Optionally upload a two-column in vitro prediction dataset if predictions are desired.
+        1. Upload a fitting dataset whose first four columns contain in vitro time, in vitro response, in vivo time, and in vivo response. (The included `toy-data.xlsx` file can be used as a test.)
+        2. Optionally upload an in vitro prediction dataset whose first two columns contain time and response.
         3. Select at least one analysis approach and, for model-based approaches, at least one candidate model.
-        4. Review or modify the preprocessing, performance-metric, cross-validation, diagnostic-plot, and other analysis options as applicable.
+        4. Review or modify measurement uncertainty (Approach 2 only), preprocessing, performance-metric, cross-validation, diagnostic-plot, and other analysis options as applicable.
         5. Select **Analyze** to process the data and open the results page.
         6. Review the processed data, fitted or mapped relationships, model-comparison and diagnostic results, predictions where applicable, downloadable data, and report outputs.
 
+        To rebuild the example workbook from the app's model functions, run
+        `python tools/generate_toy_data.py`. See [toy-data generation](tools/TOY_DATA.md)
+        for parameters, noise settings, and alternate output paths.
+
         ## Main inputs
 
-        - **Fitting dataset:** required four-column dataset used for model fitting.
-        - **Prediction dataset:** optional two-column in vitro dataset used to generate predictions after fitting.
+        - **Fitting dataset:** required time/response columns in the first four positions.
+        - **Prediction dataset:** optional in vitro time and response in the first two positions.
         - **Approaches/models:** mathematical methods and candidate functions to evaluate.
+        - **Measurement uncertainty:** optional absolute SD/SEM, supplied as a constant or named column for Approach 2.
         - **Preprocessing:** optional normalization, scaling, and interpolation settings.
         - **Metrics:** goodness-of-fit and model-comparison metrics.
         - **Analysis parameters:** cross-validation and grid-search settings, and optional advanced analysis plots.
+
+        Include a header row in CSV and Excel files. Additional named columns can hold SD/SEM or replicate counts without changing the required time/response column order.
+
+        Use SD for individual observations and SEM for reported means. Replicate counts are optional metadata; SEM is used directly. Supplied-error analyses require Approach 2 alone and confirmation of independent errors. The app rescales errors with the responses while holding normalization references fixed. Log10 response scaling is unavailable with supplied errors, and reported intervals exclude future in vivo measurement variability.
 
         ## What the app does
 
@@ -308,6 +317,18 @@ def build_readme() -> str:
         - Model-comparison tables.
         - Prediction plots and tables when a prediction dataset is supplied.
         - Downloadable spreadsheet outputs and report outputs where enabled.
+
+        ## Command-line interface
+
+        Run `cli.py` from the repository root with the app's Python environment activated. It handles one approach and model per run. For fraction-remaining responses expressed relative to an initial value of 1, an example using `calibration.csv` and `prediction.csv` is:
+
+        ```bash
+        python cli.py calibration.csv --approach approach2 --model exponential_normalized --metric rmse --metric aicc --prediction prediction.csv --out fits.csv --prediction-out predictions.csv
+        ```
+
+        Repeat `--metric` for additional scores. Input files or quoted glob patterns are accepted. Excel fitting inputs require `--sheet` with zero-based indices; Excel prediction inputs require `--prediction-sheet` selecting exactly one sheet. Fitting and prediction outputs are separate CSVs; omit either output option to print that result to the terminal.
+
+        Run `python cli.py --help` for available flags. The [user guide](docs/user_guide.pdf) includes uncertainty and preprocessing examples.
 
         ## User guide
 
@@ -371,9 +392,6 @@ def build_preprocessing_options() -> str:
     parts: list[str] = []
     for category in ["normalization", "scaling", "interpolation"]:
         parts.append(latex_section(3, category.title()))
-        guide_intro = PREPROCESSING_DESCRIPTIONS.get(category, {}).get("_guide_intro", "")
-        if guide_intro:
-            parts.append(latex_paragraphs(guide_intro))
         keys = list(preprocessing_options.get(category, {}).keys())
         if not keys:
             keys = [

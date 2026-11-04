@@ -338,24 +338,30 @@ def print_results(df: pd.DataFrame):
 
 
 def build_parser():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("inputs", nargs="+", help="Files or glob patterns")
+    parser = argparse.ArgumentParser(
+        description='Fit one IVIVC model to calibration files, with optional in vitro prediction data.',
+        epilog=('Supplied absolute SD/SEM requires Approach 2 and --independent-errors. '
+                'Log10 response scaling (log_y) is unavailable with supplied uncertainty. '
+                'See the user guide for uncertainty interpretation and CLI examples.'),
+    )
+    parser.add_argument("inputs", nargs="+", help="Calibration CSV/Excel files or glob patterns; first four columns are time/response pairs.")
     parser.add_argument(
         "--sheet",
         help=(
             "Excel sheet selector using zero-based indexing. Supports single indices, "
             "negative indices, comma-separated lists, and Python-style slices. "
-            "Examples: 0, -1, 0,2,4, 1:-1, 2:, :3"
+            "Examples: 0, -1, 0,2,4, 1:-1, 2:, :3. Required for Excel; ignored for CSV."
         ),
     )
-    parser.add_argument("--approach", required=True, choices=["approach1", "approach2"])
-    parser.add_argument("--model", required=True, choices=sorted(models), help="Model name as used in your app")
-    parser.add_argument("--metric", dest="metrics", action="append", choices=sorted(metrics), required=True)
+    parser.add_argument("--approach", required=True, choices=["approach1", "approach2"], help="One approach per run; supplied SD/SEM requires approach2.")
+    parser.add_argument("--model", required=True, choices=sorted(models), help="One model key from the selected approach.")
+    parser.add_argument("--metric", dest="metrics", action="append", choices=sorted(metrics), required=True,
+                        help="Metric key; repeat --metric for multiple metrics.")
     parser.add_argument(
         "--interpolation",
         choices=sorted(preprocessing_options["interpolation"]),
         default="default",
-        help="Interpolation/alignment method. Default: default (shared-time interpolation).",
+        help="Alignment method. Default: default (shared grids in time and response). Approach 2 fits observed points.",
     )
     parser.add_argument("--scaling", dest="scalings", action="append", choices=sorted(preprocessing_options["scaling"]), default=[])
     parser.add_argument("--normalization", dest="normalizations", action="append", choices=sorted(preprocessing_options["normalization"]), default=[])
@@ -371,7 +377,7 @@ def build_parser():
     parser.add_argument("--grid-search-random-state", type=int, default=12345)
     parser.add_argument(
         "--out",
-        help="Optional output CSV path. If omitted, results are printed to stdout."
+        help="Optional fit-summary CSV path. If omitted, fit results are printed to stdout."
     )
     for prefix, label in (('in_vitro', 'in vitro calibration'), ('in_vivo', 'in vivo calibration'),
                           ('prediction', 'prediction input')):
@@ -387,9 +393,9 @@ def build_parser():
                             help='Optional replicate-count column for means; recorded without rescaling SEM.')
     parser.add_argument('--independent-errors', action='store_true',
                         dest='uncertainty_independence_confirmed',
-                        help='Confirm independent original observations and prediction measurements separate from calibration.')
+                        help='Confirm independent errors across original rows/times and between prediction and calibration measurements.')
     parser.add_argument('--prediction', help='Optional prediction CSV/Excel file; first two columns are time and response.')
-    parser.add_argument('--prediction-sheet', help='Zero-based worksheet selector for prediction Excel input; select exactly one sheet.')
+    parser.add_argument('--prediction-sheet', help='Required for prediction Excel input; use a zero-based selector resolving to exactly one sheet.')
     parser.add_argument('--prediction-out', help='Optional prediction CSV path; otherwise predictions are printed separately.')
     return parser
 
