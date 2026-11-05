@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from typing import Literal
 
 import numpy as np
@@ -14,13 +15,60 @@ from ivivc_core import (
     TimeCourse,
     TrajectoryEnsemble,
     deterministic_trajectory_ensemble,
+    fit_time_course,
     sample_profile_trajectory,
 )
 
-from .types import InterpolationMethod, ReferenceTrajectoryEnsemble
+from .types import ExistingObservations, InterpolationMethod, ReferenceTrajectoryEnsemble
 
 
 DuplicateTimePolicy = Literal['mean', 'first', 'error']
+
+
+def fit_reference_profile(
+    source: TimeCourse | ExistingObservations,
+    *,
+    model_name: str,
+    analysis_config: Mapping[str, object] | None = None,
+) -> ProfileFit:
+    """Fit measured reference data without losing their supplied SD/SEM.
+
+    Source responses and uncertainty must already use the analyzed scale.
+    Individual SD or mean SEM is passed unchanged to the shared profile fitter;
+    counts never divide SEM again. No future measurement model is inferred.
+    """
+    if isinstance(source, TimeCourse):
+        response = source.value
+    elif isinstance(source, ExistingObservations):
+        response = source.response
+    else:
+        raise TypeError('Reference source must be a TimeCourse or ExistingObservations.')
+    uncertainty_options = (
+        {} if source.observation_uncertainty is None else
+        {'observation_uncertainty': source.observation_uncertainty}
+    )
+    fitted = fit_time_course(
+        source.time, response, model_names=model_name, selected_metrics=['rmse'],
+        analysis_config=analysis_config, fail_fast=True, **uncertainty_options,
+    )[model_name]
+    if source.label is not None:
+        fitted.fit_diagnostics['source_label'] = source.label
+    return fitted
+
+
+def _profile_fit_uncertainty_metadata(fit: ProfileFit) -> dict:
+    """Record source precision and its interpretation without adding noise."""
+    uncertainty = getattr(fit, 'observation_uncertainty', None)
+    diagnostics = deepcopy(getattr(fit, 'fit_diagnostics', {}))
+    return {
+        'source_observation_uncertainty': (
+            None if uncertainty is None else uncertainty.to_metadata()
+        ),
+        'source_fit_diagnostics': diagnostics,
+        'source_covariance_scaling': diagnostics.get(
+            'covariance_scaling', 'absolute' if uncertainty is not None else 'unspecified',
+        ),
+    }
 
 
 def _prepare_time_value_pairs(
@@ -326,18 +374,24 @@ def reference_from_profile_fit(
     random_state=None,
     interpolation: InterpolationMethod = 'pchip',
 ) -> ReferenceTrajectoryEnsemble:
-    """Create a common-grid reference from one fitted in vivo profile."""
+    """Sample joint fitted-parameter uncertainty, without future measurement noise."""
     ensemble = sample_profile_trajectory(
         fit,
         time_grid,
         n_samples=n_samples,
         random_state=random_state,
     )
-    return reference_from_trajectory_ensemble(
+    reference = reference_from_trajectory_ensemble(
         ensemble,
         time_grid=np.asarray(time_grid, dtype=float),
         interpolation=interpolation,
     )
+    reference.metadata.update({
+        **_profile_fit_uncertainty_metadata(fit),
+        'source_parameter_uncertainty_propagated': True,
+        'future_observation_variability_included': False,
+    })
+    return reference
 
 
 def _evaluation_times(

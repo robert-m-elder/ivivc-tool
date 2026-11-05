@@ -49,6 +49,7 @@ from .simulation import (
 from .reference import (
     evaluate_central_trajectory,
     evaluate_reference_trajectories,
+    fit_reference_profile,
     reference_from_profile_fit,
     reference_from_time_course,
     reference_from_trajectory_ensemble,
@@ -149,6 +150,7 @@ __all__ = [
     'finite_difference_sensitivities',
     'fit_model_once',
     'fit_reference_model_ensemble',
+    'fit_reference_profile',
     'greedy_local_i_optimal_designs',
     'greedy_i_optimal_designs',
     'information_matrix',

@@ -23,6 +23,43 @@ intersection of the valid draw domains, and does not extrapolate.
 `reference_from_profile_fit()` supports a fitted measured in vivo profile, and
 `reference_from_time_course()` supports a deterministic external trajectory.
 
+Use `fit_reference_profile()` to fit a measured `TimeCourse` or completed
+`ExistingObservations` without discarding its SD/SEM when extracting arrays:
+
+```python
+import numpy as np
+from ivivc_core import ObservationUncertainty, prepare_time_course
+from study_design_core import fit_reference_profile, reference_from_profile_fit
+
+source, _ = prepare_time_course(
+    [0., 2., 4., 6.], [1., 0.8, 0.5, 0.3],
+    observation_uncertainty=ObservationUncertainty(
+        [0.03, 0.06, 0.03, 0.05], response_kind='mean', replicate_counts=4,
+    ),
+)
+fit = fit_reference_profile(source, model_name='linear',
+                            analysis_config={'cv_scheme': 'none'})
+reference = reference_from_profile_fit(
+    fit, np.linspace(0., 6., 25), n_samples=200, random_state=123,
+)
+```
+
+The adapter uses the shared profile fitter and returns a `ProfileFit`. It
+performs no normalization; prepare responses and their uncertainty on the
+analyzed scale first. Individual SD or mean SEM determines weighting and
+absolute parameter covariance; counts never divide SEM again. Without supplied
+precision, the existing unweighted fit and residual-scaled covariance apply.
+The same adapter can refit cumulative completed data for an in vivo-only
+reference, or fit an in vitro source for empirical time scaling.
+An in vivo-only source fit already uses its completed observations; do not
+apply their likelihood again by reweighting the resulting reference.
+
+Profile references sample joint fitted parameters and evaluate each complete
+curve. They retain source precision, fitting diagnostics, covariance scaling,
+and whether parameter uncertainty was propagated. They do not add independent
+measurement noise to each reference point. Specify future measurement SD and
+replicate count separately with `ObservationModel`.
+
 ## Selecting a fitted IVIVC reference
 
 `reference_from_ivivc()` connects one fitted IVIVC selection and prediction
@@ -72,6 +109,13 @@ time units. The adapter rejects applied `log_x` or `log_y` preprocessing because
 the IVIVC APIs return predictions on those transformed axes; this adapter does
 not convert them back to study time/response coordinates. Normalized response
 data remain supported.
+
+Approach 2 uses the existing propagation of calibration SD/SEM through fitted
+covariance and of independent prediction-input SD/SEM through joint time and
+response draws. The adapter retains this information without adding another
+noise layer. Future in vivo variability belongs in `ObservationModel`, not in
+the reference ensemble. Approach 1 and Approach 3 retain their current
+uncertainty scope.
 
 The shared supported domain is the intersection of usable draw domains.
 Partial inverse-response predictions may therefore supply a shorter reference;
@@ -158,6 +202,10 @@ of the historical systems.
 
 The default fixes the supplied fitted parameters and propagates only the
 empirical scale distribution. A usable fitted covariance is not required.
+This remains true when supplied SD/SEM affected the source fit: its fitted
+parameters reflect that weighting, but source parameter uncertainty contributes
+to reference spread only when `n_parameter_draws` is positive. Reference
+metadata records this choice separately from source precision.
 Set `n_parameter_draws=K` and `random_state=123` to propagate in vitro fitting
 uncertainty using the existing covariance-aware joint parameter sampler. Each
 of the K complete parameter vectors is paired with every positive-weight ratio,
@@ -173,6 +221,10 @@ explicit `duplicate_time_policy` (default `mean`). Parameter uncertainty
 requires a `ProfileFit`. The target model need not support the integral tau
 calculation: historical ratios are already supplied, and no target tau is
 computed or refitted by this constructor.
+
+A direct `TimeCourse` with supplied SD/SEM is rejected: interpolation here does
+not propagate its errors. Fit it with `fit_reference_profile()` first, then pass
+that fitted source and explicitly choose whether to sample its parameters.
 
 Every requested in vivo time must map inside the observed source domain for
 every positive-weight ratio by default. A fitted source can explicitly permit

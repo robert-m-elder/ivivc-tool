@@ -54,6 +54,11 @@ def reference_from_ivivc(
     simulation APIs. Choose the study analysis model separately with
     ``fit_reference_model_ensemble``. For adaptive design, update this prior
     with ``reweight_reference_ensemble`` and cumulative completed observations.
+
+    Approach 2 retains the shared IVIVC propagation of calibration SD/SEM
+    through fitted covariance, and of independent target-input SD/SEM through
+    joint time/response draws. No future in vivo measurement noise is added;
+    specify that separately with the study's ObservationModel.
     """
     if not isinstance(analysis, IVIVCAnalysis):
         raise TypeError('analysis must be an IVIVCAnalysis.')
@@ -141,6 +146,7 @@ def reference_from_ivivc(
     reference.metadata = {
         **reference.metadata,
         'reference_source': 'ivivc_prediction',
+        'future_observation_variability_included': False,
         'ivivc_selection': selection,
         'ivivc_approach': fit.approach_id,
         'ivivc_calibration_model': fit.model_name,

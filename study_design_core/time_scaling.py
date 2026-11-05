@@ -19,7 +19,10 @@ from ivivc_core import (
     sample_parameter_sets,
 )
 
-from .reference import DuplicateTimePolicy, _interpolate_values, _prepare_time_value_pairs
+from .reference import (
+    DuplicateTimePolicy, _interpolate_values, _prepare_time_value_pairs,
+    _profile_fit_uncertainty_metadata,
+)
 from .types import InterpolationMethod, ReferenceTrajectoryEnsemble
 
 
@@ -150,13 +153,21 @@ def reference_from_time_scaling(
     Requested times must be supported by every positive-weight record. Explicit
     extrapolation permits fitted-model evaluations beyond observed in vitro
     times; external TimeCourse data always require interpolation inside their
-    supplied domain. Invalid positive-weight curves cause an error rather than
-    dropping ratio mass. Responses are neither clipped nor renormalized, and
-    no target-curve tau is calculated. Source and study times must use compatible
-    units and the same elapsed-time origin on unlogged axes.
+    supplied domain and cannot carry observation uncertainty. Fit such source
+    observations with ``fit_reference_profile()`` first. Invalid positive-weight
+    curves cause an error rather than dropping ratio mass. Responses are
+    neither clipped nor renormalized, and no target-curve tau is calculated.
+    Source and study times must use compatible units and the same elapsed-time
+    origin on unlogged axes.
     """
     if not isinstance(in_vitro, (ProfileFit, TimeCourse)):
         raise TypeError('in_vitro must be a ProfileFit or TimeCourse.')
+    if isinstance(in_vitro, TimeCourse) and in_vitro.observation_uncertainty is not None:
+        raise ValueError(
+            'TimeCourse interpolation does not propagate observation uncertainty. '
+            'Use fit_reference_profile() first and supply its fitted source '
+            'with n_parameter_draws > 0 to propagate source-fit uncertainty.'
+        )
     if not isinstance(distribution, EmpiricalTimeScaleDistribution):
         distribution = EmpiricalTimeScaleDistribution(distribution)
     if isinstance(n_parameter_draws, bool) or not isinstance(n_parameter_draws, Integral) or n_parameter_draws < 0:
@@ -281,6 +292,9 @@ def reference_from_time_scaling(
         'required_in_vitro_time_ranges': mapped[:, [0, -1]].copy(),
         'extrapolated_points_by_ratio': outside.copy(),
         'central_curve_source': 'weighted_draw_mean',
+        **(_profile_fit_uncertainty_metadata(in_vitro) if isinstance(in_vitro, ProfileFit) else {}),
+        'source_parameter_uncertainty_propagated': bool(n_parameter_draws),
+        'future_observation_variability_included': False,
     }
     return ReferenceTrajectoryEnsemble(
         time_grid=grid, value_draws=values, valid_draws=np.ones(len(values), dtype=bool),

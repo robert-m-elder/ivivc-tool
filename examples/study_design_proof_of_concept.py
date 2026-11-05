@@ -412,6 +412,7 @@ class ScenarioDefinition:
                 self.existing_observations.time,
                 self.existing_observations.response,
                 label=self.existing_observations.label,
+                observation_uncertainty=self.existing_observations.observation_uncertainty,
             )
             for value in self.existing_observations.unique_times:
                 if not np.any(
@@ -1079,6 +1080,8 @@ def build_adaptive_in_vivo_only_scenario(
             selected_metrics=['rmse'],
             analysis_config=_analysis_config(settings.random_seed + 302),
             approach_id='approach2',
+            **({} if existing.observation_uncertainty is None else
+               {'observation_uncertainty': existing.observation_uncertainty}),
         )
     if fit_batch.errors:
         raise RuntimeError(
