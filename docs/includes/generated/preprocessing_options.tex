@@ -3,8 +3,6 @@
 
 \subsubsection{Normalization}
 
-Normalization changes how response values are expressed without adding or removing observations. Initial-value normalization expresses each profile relative to its first response value, whereas min-max normalization expresses each profile relative to its observed range; either transformation changes the response scale used for subsequent fitting, mapping, and metrics.
-
 \begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.22\textwidth}>{\raggedright\arraybackslash}p{0.20\textwidth}>{\raggedright\arraybackslash}p{0.50\textwidth}@{}}
 \toprule
 \textbf{Option} & \textbf{Internal key} & \textbf{Description} \\
@@ -14,15 +12,14 @@ Normalization changes how response values are expressed without adding or removi
 \textbf{Option} & \textbf{Internal key} & \textbf{Description} \\
 \midrule
 \endhead
-Min-max normalization & min\_max & Converts response values to a 0-1 scale using the observed minimum and maximum within each dataset. \\
-Initial-value normalization & initial\_value & Expresses each response value relative to the first response value in the corresponding dataset. \\
+Min-max normalization & min\_max & Converts response values to a 0-1 scale using the observed minimum and maximum within each dataset. With supplied SD/SEM, the range must be finite and positive; errors are divided by that range, which is treated as fixed. \\
+Initial-value normalization & initial\_value & Divides each response by the first response value in that dataset when it is nonzero. Supplied SD/SEM is divided by its absolute value, which is treated as fixed. A zero initial response leaves values and errors unchanged. \\
+Reverse response (1 - value) & one\_minus & Applies 1 minus each response after any selected normalizations and before logarithmic scaling or interpolation. For data already expressed as fractions, this converts fraction lost to fraction remaining without requiring another normalization. The same selection applies to both calibration profiles and prediction inputs; values are not clipped to 0-1. Supplied SD/SEM is unchanged by this reversal. \\
 \bottomrule
 \end{longtable}
 
 \subsubsection{Scaling}
 
-Scaling changes the numerical representation of time or response values while preserving the observations themselves. The available base-10 logarithmic transformations compress wide numerical ranges and are applied only when the relevant processed values are positive; otherwise the app retains the unscaled values and reports the fallback.
-
 \begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.22\textwidth}>{\raggedright\arraybackslash}p{0.20\textwidth}>{\raggedright\arraybackslash}p{0.50\textwidth}@{}}
 \toprule
 \textbf{Option} & \textbf{Internal key} & \textbf{Description} \\
@@ -32,14 +29,12 @@ Scaling changes the numerical representation of time or response values while pr
 \textbf{Option} & \textbf{Internal key} & \textbf{Description} \\
 \midrule
 \endhead
-Log10 time scaling & log\_x & Uses a base-10 log scale for time values before fitting or interpolation. All time values must be greater than zero. If this scaling is selected but the analyzed data contain a zero or negative time, the app leaves time unscaled, continues the analysis, and reports the fallback in Data Processing. \\
-Log10 response scaling & log\_y & Uses a base-10 log scale for response values before fitting or interpolation. All response values must be greater than zero after normalization. If this scaling is selected but the processed responses contain a zero or negative value, the app leaves response unscaled, continues the analysis, and reports the fallback in Data Processing. \\
+Log10 time scaling & log\_x & Uses a base-10 log scale for time values before fitting or interpolation. All analyzed times must be positive. The browser falls back to unscaled time when calibration times include zero or negative values and reports this in Data Processing. Prediction data must support the applied scaling; CLI inputs with invalid times are rejected. \\
+Log10 response scaling & log\_y & Uses a base-10 log scale for response values before fitting or interpolation. This option is unavailable with supplied SD/SEM. Without supplied uncertainty, all processed responses must be positive. The browser can fall back to unscaled response for invalid calibration values and reports this in Data Processing; prediction data must support the applied scaling, and CLI inputs with invalid responses are rejected. \\
 \bottomrule
 \end{longtable}
 
 \subsubsection{Interpolation}
-
-Interpolation estimates quantities between measured observations when a paired-data approach requires matching time or response positions. The available options differ in how the shared grids are constructed; interpolated points are estimates derived from the observed data rather than additional experimental observations.
 
 \begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.22\textwidth}>{\raggedright\arraybackslash}p{0.20\textwidth}>{\raggedright\arraybackslash}p{0.50\textwidth}@{}}
 \toprule
