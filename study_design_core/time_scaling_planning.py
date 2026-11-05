@@ -7,6 +7,7 @@ from copy import deepcopy
 import numpy as np
 
 from .adaptive import reweight_reference_ensemble
+from .observation import completed_observation_standard_deviation
 from .time_scaling import EmpiricalTimeScaleDistribution
 from .types import (
     ExistingObservations,
@@ -112,7 +113,7 @@ def _weighted_rms(rms: np.ndarray, weights: np.ndarray) -> float:
 def _observation_agreement(prior, observations, observation_model, update) -> dict:
     active = np.flatnonzero(prior.valid_draws & (update.prior_weights > 0))
     predicted = prior.evaluate(observations.time, draw_indices=active)
-    sd = observation_model.standard_deviation(predicted)
+    sd = completed_observation_standard_deviation(observations, predicted, observation_model)
     with np.errstate(over='ignore', invalid='ignore', divide='ignore'):
         residual = observations.response[None, :] - predicted
         standardized = residual / sd
@@ -122,7 +123,9 @@ def _observation_agreement(prior, observations, observation_model, update) -> di
     standardized_rms[active] = _row_rms(standardized)
     return {
         'observation_count': observations.n_observations,
-        'residual_scale': 'individual_replicate_observation_sd',
+        'residual_scale': ('individual_replicate_observation_sd'
+                           if observations.observation_uncertainty is None
+                           else 'supplied_observation_' + observations.observation_uncertainty.uncertainty_kind),
         'rmse_by_draw': rmse,
         'standardized_residual_rms_by_draw': standardized_rms,
         'best_standardized_residual_rms': float(np.min(standardized_rms[active])),
@@ -140,7 +143,7 @@ def reweight_time_scaled_reference(
 ) -> ReferenceUpdateResult:
     """Condition an original empirical-scale prior on all completed observations.
 
-    Reuses the existing replicate-level likelihood calculation. Only weights
+    Reuses the existing completed-observation likelihood calculation. Only weights
     change; trajectories and scale support are not widened or refitted. Always
     supply the original prior and the cumulative dataset. An already-updated
     reference, including a generic reweighting result, is rejected to prevent

@@ -193,7 +193,7 @@ def information_matrix(
         else replicates_per_time,
         len(design_times),
     )
-    variance = observation_model.standard_deviation(expected) ** 2 / replicates
+    variance = observation_model.standard_deviation(expected, times=design_times) ** 2 / replicates
     if np.any(~np.isfinite(variance)) or np.any(variance <= 0):
         raise ValueError(
             'Information calculations require a strictly positive observation variance.'

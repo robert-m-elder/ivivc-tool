@@ -22,7 +22,11 @@ from .metrics import (
     reference_response_scale,
     threshold_crossing_time,
 )
-from .observation import observation_model_from_residuals
+from .observation import (
+    completed_observation_standard_deviation,
+    existing_observations_from_time_course,
+    observation_model_from_residuals,
+)
 from .optimize import (
     coordinate_exchange_local_i_optimal_design,
     coordinate_exchange_i_optimal_design,
@@ -95,6 +99,8 @@ from .types import (
 )
 
 __all__ = [
+    'completed_observation_standard_deviation',
+    'existing_observations_from_time_course',
     'CoordinateExchangeResult',
     'CrossingTimeTarget',
     'CrossingTimeSummary',

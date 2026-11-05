@@ -273,7 +273,8 @@ Adaptive results and their reference metadata contain
 `time_scaling_weight_summary` and `observation_agreement`. The latter records
 per-draw response RMSE and standardized residual RMS, the best complete-draw
 standardized RMS, and prior/posterior weighted RMS values. Standardization uses
-the individual replicate observation SD, not the future mean's standard error.
+supplied completed-row SD/SEM when available. Otherwise it uses individual SD
+from the observation model, without applying the future replicate count.
 Weighted RMS is the square root of the weighted mean squared residual, not
 the mean of per-draw RMS values. These continuous diagnostics show agreement
 even when all supplied trajectories fit poorly and one merely receives the
@@ -283,10 +284,70 @@ widening, or alternative-method fallback is applied.
 ## Future-study variability
 
 `ObservationModel` is separate from uncertainty in the reference trajectory.
-The initial supported forms are constant absolute SD and constant coefficient
-of variation. `observation_model_from_residuals()` can create a clearly labeled
+Observation errors are assumed independent within and across times; covariance
+between measurements is not represented.
+Supported forms are constant absolute SD, constant coefficient of variation,
+and an explicitly supplied time profile of individual SD. Historical pointwise
+errors do not automatically define the future profile. For example:
+
+```python
+observation = ObservationModel(
+    kind='time_profile_sd',
+    profile_times=[0., 5., 10.],
+    profile_sd=[0.02, 0.08, 0.03],
+    replicates_per_time=3,
+)
+sd = observation.standard_deviation([1., 0.7, 0.2], times=[0., 6., 12.])
+```
+
+Times must be strictly increasing and use the study's analyzed time coordinate;
+SD values use its analyzed response scale. Lookup selects the nearest profile
+time, prefers the earlier time for ties, and extends the endpoint SD outside the
+profile range. Profile arrays are copied and read-only. The SD floor still
+applies. `variance_of_mean()` uses SD squared divided by planned replicate
+count; `simulate()` generates individual replicates. Neither expects an SEM.
+Profile calls require `times=`, including direct simulation and mean-variance
+evaluation. Information, optimization, and measurement simulation pass their
+actual observation times. Output metadata retains the complete profile.
+
+`observation_model_from_residuals()` can create a clearly labeled
 residual-based surrogate from an existing `ProfileFit`; it can include both
 measurement variability and model lack of fit.
+
+### Precision of completed measurements
+
+Historical `TimeCourse` inputs already support the shared uncertainty types.
+Use the same representation for completed observations:
+
+```python
+from ivivc_core import ObservationUncertainty, prepare_time_course
+from study_design_core import existing_observations_from_time_course
+
+course, _ = prepare_time_course(
+    [1., 3.], [0.9, 0.6],
+    observation_uncertainty=ObservationUncertainty(
+        [0.04, 0.05], response_kind='mean', replicate_counts=[4, 9],
+    ),
+)
+completed = existing_observations_from_time_course(course)
+```
+
+Supply individual SD for individual rows, or SEM for reported means. Counts
+remain metadata and never divide SEM again. Normalize the time course before
+conversion; the adapter preserves rows and existing uncertainty. Alternatively,
+pass `observation_uncertainty=` directly to `ExistingObservations`. Missing
+uncertainty preserves the existing individual-observation interpretation and
+observation-model fallback. `n_observations` counts reported rows, not the
+underlying units contributing to reported means. `mean_response_by_time()` is
+only an arithmetic response summary, not precision-weighted pooling.
+
+Adaptive likelihoods and empirical-scale agreement diagnostics use supplied
+completed-row precision directly. Completed means do not acquire the future
+study's replicate count. Weighted study refitting follows in D2; until then,
+`simulate_design()` rejects explicit completed precision instead of ignoring it.
+Future profiles already affect information and noise generation, but simulated
+study refits retain the existing unweighted fitting. These are backend APIs;
+POC input controls and completed-count information weighting follow separately.
 
 ## User constraints
 
@@ -429,9 +490,10 @@ requires a monotonic central reference trajectory.
 
 ## Adaptive study support
 
-`ExistingObservations` stores replicate-level measurements that have already
-been collected. Adaptive simulations keep these values fixed and simulate only
-new measurements at proposed elapsed times. `reweight_reference_ensemble()` can
+`ExistingObservations` stores individual measurements or explicitly identified
+reported means already collected. Supported adaptive simulations keep completed
+values fixed and simulate only new measurements at proposed elapsed times.
+`reweight_reference_ensemble()` can
 update the weights of complete IVIVC-predicted trajectories using the
 likelihood of those completed observations; trajectory shapes are retained and
 the effective sample size of the reweighted ensemble is reported.

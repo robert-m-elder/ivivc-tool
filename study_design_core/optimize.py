@@ -9,6 +9,7 @@ import numpy as np
 
 from ivivc_core import get_model_spec
 
+from .observation import observation_model_metadata
 from .information import (
     finite_difference_sensitivities,
     score_information_matrices,
@@ -160,7 +161,7 @@ def _build_information_context(
     for draw_index in np.flatnonzero(reference_model.valid_draws):
         theta = reference_model.parameter_draws[draw_index]
         expected = _evaluate_model(reference_model.model_name, all_times, theta)
-        variance = observation_model.standard_deviation(expected) ** 2 / replicates
+        variance = observation_model.standard_deviation(expected, times=all_times) ** 2 / replicates
         if np.any(~np.isfinite(variance)) or np.any(variance <= 0):
             raise ValueError(
                 'Information optimization requires strictly positive observation variance '
@@ -222,7 +223,7 @@ def _build_local_information_context(
     theta = reference_model.central_parameters
     expected = _evaluate_model(reference_model.model_name, all_times, theta)
     replicates = float(constraints.replicates_per_time)
-    variance = observation_model.standard_deviation(expected) ** 2 / replicates
+    variance = observation_model.standard_deviation(expected, times=all_times) ** 2 / replicates
     if np.any(~np.isfinite(variance)) or np.any(variance <= 0):
         raise ValueError(
             'Information optimization requires strictly positive observation variance '
@@ -650,8 +651,7 @@ def optimize_i_optimal_designs(
         'criterion': 'uncertainty_averaged_i_optimality',
         'rank_aware_initialization': True,
         'replicates_per_time': constraints.replicates_per_time,
-        'observation_model_kind': observation_model.kind,
-        'observation_model_value': observation_model.value,
+        **observation_model_metadata(observation_model),
         'minimum_spacing': constraints.minimum_spacing,
         'fixed_times': constraints.fixed_times.copy(),
         'candidate_time_count': len(constraints.candidate_times),
@@ -735,8 +735,7 @@ def optimize_local_i_optimal_designs(
         'parameter_names': tuple(reference_model.parameter_names),
         'parameter_count': reference_model.n_parameters,
         'replicates_per_time': constraints.replicates_per_time,
-        'observation_model_kind': observation_model.kind,
-        'observation_model_value': observation_model.value,
+        **observation_model_metadata(observation_model),
         'minimum_spacing': constraints.minimum_spacing,
         'fixed_times': constraints.fixed_times.copy(),
         'candidate_time_count': len(constraints.candidate_times),

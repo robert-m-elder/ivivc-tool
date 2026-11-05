@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 
 from .fitting import fit_model_once
+from .observation import observation_model_metadata
 from .information import fit_reference_model_ensemble, trapezoidal_integration_weights
 from .metrics import (
     approximate_mean_curve_interval_width,
@@ -102,8 +103,7 @@ def create_simulation_plan(
         standard_normal_errors=errors,
         metadata={
             'random_state': random_state,
-            'observation_model_kind': observation_model.kind,
-            'observation_model_value': observation_model.value,
+            **observation_model_metadata(observation_model),
             'replicates_per_time': observation_model.replicates_per_time,
             'common_random_numbers': True,
         },
@@ -171,7 +171,14 @@ def simulate_design(
     dataset and the registered model heuristic. ``central_reference`` uses
     one common prior starting vector. ``oracle`` is retained only as an
     explicit diagnostic because it uses the unknown generating parameters.
+    Completed data with supplied SD/SEM require the weighted-refit extension;
+    their precision is never silently ignored by this evaluator.
     """
+    if existing_observations is not None and existing_observations.observation_uncertainty is not None:
+        raise ValueError(
+            'Simulation with supplied completed-observation SD/SEM requires '
+            'weighted-refit support; completed precision must not be ignored.'
+        )
     fit_initialization = str(fit_initialization).strip().lower()
     if fit_initialization not in {'data_driven', 'central_reference', 'oracle'}:
         raise ValueError(
@@ -255,7 +262,7 @@ def simulate_design(
 
     if len(future_design):
         true_at_future = reference.evaluate(future_design, draw_indices=draw_indices)
-        standard_deviation = observation_model.standard_deviation(true_at_future)
+        standard_deviation = observation_model.standard_deviation(true_at_future, times=future_design)
         errors = simulation_plan.standard_normal_errors[
             :, :replicates, :
         ][:, :, future_plan_indices]

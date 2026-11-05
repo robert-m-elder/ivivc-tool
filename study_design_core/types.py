@@ -8,13 +8,19 @@ IVIVC result dictionaries.  They form the boundary between the existing
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from numbers import Real
 from typing import Any, Literal, Mapping, Sequence
 
 import numpy as np
 
+from ivivc_core.observations import (
+    ObservationUncertainty, ResolvedObservationUncertainty,
+    resolve_observation_uncertainty,
+)
+
 
 InterpolationMethod = Literal['linear', 'pchip']
-ObservationModelKind = Literal['constant_sd', 'constant_cv']
+ObservationModelKind = Literal['constant_sd', 'constant_cv', 'time_profile_sd']
 
 
 @dataclass
@@ -162,37 +168,104 @@ class ReferenceTrajectoryEnsemble:
 
 @dataclass(frozen=True)
 class ObservationModel:
-    """Future-study variability around one assumed true trajectory."""
+    """Individual-measurement SD around one assumed true trajectory.
+
+    A time profile uses nearest-time SD with endpoint extension. Its times must
+    use the same analyzed time coordinate as the study calculations. Supplied
+    SEM for existing means belongs on ``ExistingObservations``, not here.
+    """
 
     kind: ObservationModelKind
-    value: float
+    value: float | None = None
     replicates_per_time: int = 1
     minimum_sd: float = 0.0
     source: str = 'user'
+    profile_times: np.ndarray | None = None
+    profile_sd: np.ndarray | None = None
+
+    @staticmethod
+    def _profile_values(values, name: str, *, vector: bool = False) -> np.ndarray:
+        try:
+            original = np.asarray(values, dtype=object)
+            if vector and (original.ndim != 1 or original.size == 0):
+                raise ValueError(f'{name} must be a nonempty one-dimensional array.')
+            if any(isinstance(v, (bool, np.bool_)) or not isinstance(v, Real)
+                   for v in original.flat):
+                raise ValueError(f'{name} must contain real numbers.')
+            result = np.array(original, dtype=float, copy=True)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError(f'{name} must contain finite real numbers: {exc}') from exc
+        if not np.isfinite(result).all():
+            raise ValueError(f'{name} must contain finite real numbers.')
+        return result
 
     def __post_init__(self) -> None:
-        if self.kind not in ('constant_sd', 'constant_cv'):
-            raise ValueError("Observation-model kind must be 'constant_sd' or 'constant_cv'.")
-        if not np.isfinite(self.value) or self.value < 0:
-            raise ValueError('Observation-model value must be finite and nonnegative.')
+        if self.kind not in ('constant_sd', 'constant_cv', 'time_profile_sd'):
+            raise ValueError("Observation-model kind must be 'constant_sd', 'constant_cv', or 'time_profile_sd'.")
+        if self.kind == 'time_profile_sd':
+            if self.value is not None:
+                raise ValueError('A time-profile SD uses profile_times/profile_sd, not value.')
+            times = self._profile_values(self.profile_times, 'profile_times', vector=True)
+            sd = self._profile_values(self.profile_sd, 'profile_sd', vector=True)
+            if len(times) != len(sd) or np.any(sd < 0):
+                raise ValueError('profile_sd must be nonnegative and match profile_times.')
+            if np.any(times[1:] <= times[:-1]):
+                raise ValueError('profile_times must be strictly increasing without duplicates.')
+            times.setflags(write=False)
+            sd.setflags(write=False)
+            object.__setattr__(self, 'profile_times', times)
+            object.__setattr__(self, 'profile_sd', sd)
+        else:
+            if self.value is None or not np.isfinite(self.value) or self.value < 0:
+                raise ValueError('Observation-model value must be finite and nonnegative.')
+            if self.profile_times is not None or self.profile_sd is not None:
+                raise ValueError('Profile fields require kind=time_profile_sd.')
         if int(self.replicates_per_time) != self.replicates_per_time or self.replicates_per_time < 1:
             raise ValueError('replicates_per_time must be a positive integer.')
         if not np.isfinite(self.minimum_sd) or self.minimum_sd < 0:
             raise ValueError('minimum_sd must be finite and nonnegative.')
 
-    def standard_deviation(self, expected_value) -> np.ndarray:
-        """Return the observation SD at each expected response value."""
+    def standard_deviation(self, expected_value, *, times=None) -> np.ndarray:
+        """Return individual SD; a time profile requires broadcastable times."""
         expected = np.asarray(expected_value, dtype=float)
         if self.kind == 'constant_sd':
             sd = np.full(expected.shape, self.value, dtype=float)
-        else:
+        elif self.kind == 'constant_cv':
             sd = self.value * np.abs(expected)
+        else:
+            if times is None:
+                raise ValueError('A time-profile SD requires times for every expected response.')
+            query = self._profile_values(times, 'Observation times')
+            try:
+                query = np.broadcast_to(query, expected.shape)
+            except ValueError as exc:
+                raise ValueError('Observation times must broadcast to the expected response shape.') from exc
+            grid = self.profile_times
+            right = np.clip(np.searchsorted(grid, query), 0, len(grid) - 1)
+            left = np.maximum(right - 1, 0)
+            with np.errstate(over='ignore', invalid='ignore'):
+                nearest = np.where(abs(grid[right] - query) < abs(query - grid[left]), right, left)
+            nearest = np.where(query <= grid[0], 0, nearest)
+            nearest = np.where(query >= grid[-1], len(grid) - 1, nearest)
+            sd = self.profile_sd[nearest]
         return np.maximum(sd, self.minimum_sd)
 
-    def variance_of_mean(self, expected_value) -> np.ndarray:
+    def variance_of_mean(self, expected_value, *, times=None) -> np.ndarray:
         """Return the variance of a mean across the configured replicates."""
-        sd = self.standard_deviation(expected_value)
+        sd = self.standard_deviation(expected_value, times=times)
         return sd ** 2 / int(self.replicates_per_time)
+
+    def to_metadata(self) -> dict[str, Any]:
+        """Record the future-measurement assumption without adding curve noise."""
+        result = {
+            'kind': self.kind, 'value': None if self.value is None else float(self.value),
+            'replicates_per_time': int(self.replicates_per_time),
+            'minimum_sd': float(self.minimum_sd), 'source': self.source,
+        }
+        if self.kind == 'time_profile_sd':
+            result.update(profile_times=self.profile_times.tolist(), profile_sd=self.profile_sd.tolist(),
+                          profile_rule='nearest_time_with_endpoint_extension')
+        return result
 
     def simulate(
         self,
@@ -200,6 +273,7 @@ class ObservationModel:
         *,
         random_state=None,
         replicates_per_time: int | None = None,
+        times=None,
     ) -> np.ndarray:
         """Generate independent replicate observations around expected values.
 
@@ -216,7 +290,7 @@ class ObservationModel:
         rng = np.random.default_rng(random_state)
         loc = np.broadcast_to(expected, (replicates,) + expected.shape)
         scale = np.broadcast_to(
-            self.standard_deviation(expected),
+            self.standard_deviation(expected, times=times),
             (replicates,) + expected.shape,
         )
         return rng.normal(loc=loc, scale=scale)
@@ -227,13 +301,15 @@ class ExistingObservations:
     """Completed observations that remain fixed during adaptive design.
 
     Repeated times are allowed so replicate-level observations can be retained
-    exactly as measured.  These values are never resimulated by the Monte
-    Carlo study-design evaluator.
+    exactly as measured. Optional uncertainty describes each supplied value:
+    SD for an individual response or SEM for a reported mean. Counts are
+    metadata and never divide SEM again. These values are never resimulated.
     """
 
     time: np.ndarray
     response: np.ndarray
     label: str = 'completed in vivo observations'
+    observation_uncertainty: ObservationUncertainty | ResolvedObservationUncertainty | None = None
 
     def __post_init__(self) -> None:
         self.time = np.asarray(self.time, dtype=float).copy()
@@ -244,7 +320,15 @@ class ExistingObservations:
             raise ValueError('Existing observations require equally sized nonempty time and response arrays.')
         if np.any(~np.isfinite(self.time)) or np.any(~np.isfinite(self.response)):
             raise ValueError('Existing observations must contain only finite values.')
+        self.observation_uncertainty = resolve_observation_uncertainty(
+            self.observation_uncertainty, len(self.response),
+        )
         self.label = str(self.label)
+
+    @property
+    def response_kind(self) -> str:
+        return ('individual' if self.observation_uncertainty is None
+                else self.observation_uncertainty.response_kind)
 
     @property
     def unique_times(self) -> np.ndarray:
@@ -263,6 +347,7 @@ class ExistingObservations:
         return int(len(self.unique_times))
 
     def mean_response_by_time(self) -> tuple[np.ndarray, np.ndarray]:
+        """Return descriptive row means, without pooling precision or counts."""
         times = self.unique_times
         means = np.asarray([np.mean(self.response[self.time == value]) for value in times])
         return times, means

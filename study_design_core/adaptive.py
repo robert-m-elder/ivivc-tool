@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from .observation import completed_observation_standard_deviation, observation_model_metadata
 from .types import (
     ExistingObservations,
     ObservationModel,
@@ -22,7 +23,7 @@ def reweight_reference_ensemble(
     existing_observations: ExistingObservations,
     observation_model: ObservationModel,
 ) -> ReferenceUpdateResult:
-    """Update trajectory weights using completed replicate-level observations.
+    """Update trajectory weights using completed observations and their precision.
 
     The trajectory shapes themselves are not changed.  Each complete curve is
     assigned a likelihood under the completed observations, multiplied by its
@@ -45,7 +46,9 @@ def reweight_reference_ensemble(
         existing_observations.time,
         draw_indices=valid_indices,
     )
-    sd = observation_model.standard_deviation(predicted)
+    sd = completed_observation_standard_deviation(
+        existing_observations, predicted, observation_model,
+    )
     if np.any(~np.isfinite(sd)) or np.any(sd <= 0):
         raise ValueError(
             'Observation-model SD must be finite and positive for adaptive reweighting.'
@@ -79,6 +82,8 @@ def reweight_reference_ensemble(
     effective_sample_size = float(1.0 / np.sum(posterior_valid**2))
     log_normalizing_constant = maximum + float(np.log(denominator))
     metadata = dict(reference.metadata)
+    if observation_model.kind != 'time_profile_sd':
+        metadata.pop('observation_model_profile', None)
     metadata.update({
         'adaptive_reweighting': True,
         'existing_observation_count': existing_observations.n_observations,
@@ -86,9 +91,12 @@ def reweight_reference_ensemble(
         'latest_existing_time': existing_observations.latest_time,
         'effective_sample_size': effective_sample_size,
         'effective_sample_size_fraction': effective_sample_size / len(valid_indices),
-        'observation_model_kind': observation_model.kind,
-        'observation_model_value': observation_model.value,
+        **observation_model_metadata(observation_model),
     })
+    if existing_observations.observation_uncertainty is not None:
+        metadata['completed_observation_uncertainty'] = existing_observations.observation_uncertainty.to_metadata()
+    else:
+        metadata.pop('completed_observation_uncertainty', None)
 
     updated = ReferenceTrajectoryEnsemble(
         time_grid=reference.time_grid,

@@ -2,17 +2,65 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 import numpy as np
 
-from ivivc_core import ProfileFit
+from ivivc_core import ProfileFit, TimeCourse
 
-from .types import ObservationModel, ObservationModelKind
+from .types import ExistingObservations, ObservationModel
+
+
+def existing_observations_from_time_course(
+    course: TimeCourse, *, label: str | None = None,
+) -> ExistingObservations:
+    """Retain measured rows and their shared SD/SEM on the analyzed scale.
+
+    Prepare or normalize the time course before this conversion. Each reported
+    mean is one row whose supplied SEM is already its observation uncertainty.
+    Counts remain metadata; no averaging or additional SEM conversion occurs.
+    """
+    if not isinstance(course, TimeCourse):
+        raise TypeError('Completed observations require a TimeCourse.')
+    return ExistingObservations(
+        course.time, course.value,
+        label=label if label is not None else course.label or 'completed in vivo observations',
+        observation_uncertainty=course.observation_uncertainty,
+    )
+
+
+def completed_observation_standard_deviation(
+    observations: ExistingObservations, expected_value, observation_model: ObservationModel,
+) -> np.ndarray:
+    """Use actual row precision, falling back to the assumed observation model.
+
+    Expected values have shape ``(..., reported rows)``. Supplied individual SD
+    or mean SEM is used directly, independently of future replicate allocation.
+    """
+    expected = np.asarray(expected_value, dtype=float)
+    if expected.ndim < 1 or expected.shape[-1] != observations.n_observations:
+        raise ValueError('Expected values must end with one value per completed observation row.')
+    uncertainty = observations.observation_uncertainty
+    if uncertainty is not None:
+        return np.broadcast_to(uncertainty.sigma, expected.shape).copy()
+    return observation_model.standard_deviation(expected, times=observations.time)
+
+
+def observation_model_metadata(observation_model: ObservationModel) -> dict:
+    """Preserve legacy metadata and record the complete profile when selected."""
+    metadata = {
+        'observation_model_kind': observation_model.kind,
+        'observation_model_value': observation_model.value,
+    }
+    if observation_model.kind == 'time_profile_sd':
+        metadata['observation_model_profile'] = observation_model.to_metadata()
+    return metadata
 
 
 def observation_model_from_residuals(
     fit: ProfileFit,
     *,
-    kind: ObservationModelKind = 'constant_sd',
+    kind: Literal['constant_sd', 'constant_cv'] = 'constant_sd',
     replicates_per_time: int = 1,
     minimum_sd: float = 0.0,
     relative_value_floor: float | None = None,
