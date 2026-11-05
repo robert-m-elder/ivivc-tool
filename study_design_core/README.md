@@ -343,11 +343,11 @@ only an arithmetic response summary, not precision-weighted pooling.
 
 Adaptive likelihoods and empirical-scale agreement diagnostics use supplied
 completed-row precision directly. Completed means do not acquire the future
-study's replicate count. Weighted study refitting follows in D2; until then,
-`simulate_design()` rejects explicit completed precision instead of ignoring it.
-Future profiles already affect information and noise generation, but simulated
-study refits retain the existing unweighted fitting. These are backend APIs;
-POC input controls and completed-count information weighting follow separately.
+study's replicate count. Simulated-study refits retain each completed row with
+its SD/SEM and keep the measured response fixed across simulations. Missing
+completed precision uses the observation model on the central reference curve.
+These are backend APIs; POC input controls and completed-observation precision
+in schedule information calculations follow separately.
 
 ## User constraints
 
@@ -363,8 +363,23 @@ plots, or HTML. It is intended for Monte Carlo study simulations. A caller can
 supply reference parameters directly; model-specific starts are used when
 available, and generic grid search can be requested or used once as a fallback.
 
-The later optimization and simulation modules should consume these objects
-rather than legacy IVIVC dictionaries.
+Supply `observation_uncertainty=` using the shared `ObservationUncertainty` or
+`ResolvedObservationUncertainty` types. Individual SD or mean SEM determines
+the residual weights in candidate selection, grid search, and the final fit.
+Parameter covariance uses that absolute scale (`absolute_sigma=True`) without
+adding a residual-based variance estimate. Without supplied uncertainty, the
+previous unweighted fit and residual-scaled covariance remain in use.
+
+The lower-level `sigma=` alternative accepts absolute standard uncertainty for
+each fitted value, allowing a refit to combine completed means and individual
+future measurements. Supply either this numeric form or typed uncertainty,
+not both. Missing time/response rows are removed with the same mask applied to
+uncertainty; pointwise inputs must match the original rows. `ModelFitResult`
+retains `observation_sigma` and, for typed inputs, `observation_uncertainty`.
+Residuals and `residual_sd` remain response-scale descriptive errors.
+
+Fits that project dense reference trajectories onto an analysis model remain
+unweighted. Those grid values are not additional experimental observations.
 
 ## Information-based time-point optimization
 
@@ -474,7 +489,29 @@ the simulated dataset and the model's registered data-driven initial guess. A
 common central-reference start is available when prior information is intended
 to guide fitting. The generating draw's true parameters are available only
 through an explicitly requested `oracle` diagnostic mode and are not used by
-default. The primary metric is integrated
+default.
+
+Refits use individual SD for every simulated replicate row, repeated in the
+same order as the responses. Completed-row SEM is used directly, without
+another division by its count or the planned count. The numerical weights and
+covariance scaling are recorded in simulation metadata. Reference-trajectory
+spread is not added to these measurement errors; complete trajectories are
+already sampled separately.
+
+Constant SD and supplied SD profiles give response-independent refitting
+weights. For constant CV, the engine fixes refitting SDs at the central
+reference curve for all simulated studies. Noise generation still uses each
+draw's true response. These fixed planning weights approximate the
+response-dependent variance model; they avoid weighting by noisy observations
+or using the generating draw to set fitting weights.
+
+Zero-noise scalar models and all-zero SD profiles retain unweighted refitting.
+Mixing zero-SD and positive-SD rows is unsupported: specify a positive
+`minimum_sd` rather than dropping exact rows or assigning them an arbitrary
+large weight. A positive CV also needs a positive SD floor if the central
+reference gives zero planning SD, even when all its values are zero.
+
+The primary metric is integrated
 root mean square error (IRMSE). Additional outputs include normalized IRMSE,
 maximum absolute error, approximate mean-curve interval width, optional
 threshold-time error, parameter-bound hits, and fit-failure rate.

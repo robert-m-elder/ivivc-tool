@@ -9,6 +9,9 @@ import numpy as np
 import scipy as sp
 
 from ivivc_core import get_model_spec
+from ivivc_core.observations import (
+    ObservationUncertainty, ResolvedObservationUncertainty, resolve_observation_uncertainty,
+)
 from utilities.evaluation import auto_grid_search
 
 from .types import ModelFitResult
@@ -77,6 +80,8 @@ def _best_candidate(
     time: np.ndarray,
     response: np.ndarray,
     candidates: np.ndarray | None,
+    *,
+    sigma: np.ndarray | None = None,
 ) -> np.ndarray | None:
     if candidates is None or len(candidates) == 0:
         return None
@@ -89,7 +94,10 @@ def _best_candidate(
                 predicted = np.asarray(model_function(time, *candidate), dtype=float)
             if predicted.shape != response.shape or np.any(~np.isfinite(predicted)):
                 continue
-            error = float(np.sum((response - predicted) ** 2))
+            residuals = response - predicted
+            if sigma is not None:
+                residuals = residuals / sigma
+            error = float(np.sum(residuals ** 2))
         except Exception:
             continue
         if error < best_error:
@@ -106,6 +114,7 @@ def _grid_search_start(
     initial_parameters: np.ndarray | None,
     model_candidates: np.ndarray | None,
     grid_search_config: Mapping[str, object] | None,
+    sigma: np.ndarray | None = None,
 ) -> np.ndarray:
     config = dict(_DEFAULT_GRID_SEARCH)
     if grid_search_config:
@@ -133,6 +142,7 @@ def _grid_search_start(
                 num_cores=config['num_cores'],
                 random_state=config['random_state'],
                 initial_points=initial_points,
+                **({} if sigma is None else {'sigma': sigma}),
             ),
             dtype=float,
         )
@@ -148,6 +158,8 @@ def _failed_result(
     initial_parameters: np.ndarray | None,
     used_grid_search: bool,
     exception: BaseException,
+    observation_uncertainty: ResolvedObservationUncertainty | None,
+    observation_sigma: np.ndarray | None,
 ) -> ModelFitResult:
     parameter_count = len(parameter_names)
     nan_values = np.full(len(time), np.nan, dtype=float)
@@ -167,6 +179,8 @@ def _failed_result(
         used_grid_search=used_grid_search,
         message=str(exception),
         exception_type=type(exception).__name__,
+        observation_uncertainty=observation_uncertainty,
+        observation_sigma=observation_sigma,
     )
 
 
@@ -180,6 +194,8 @@ def fit_model_once(
     fallback_grid_search: bool = True,
     grid_search_config: Mapping[str, object] | None = None,
     raise_on_failure: bool = False,
+    observation_uncertainty: ObservationUncertainty | ResolvedObservationUncertainty | None = None,
+    sigma=None,
 ) -> ModelFitResult:
     """Fit one registered model without CV, metrics, plots, or HTML.
 
@@ -187,6 +203,12 @@ def fit_model_once(
     A supplied parameter vector is used directly.  Otherwise, the best
     model-specific candidate is used when available.  If the first fit fails,
     a generic grid search can be attempted once as a fallback.
+
+    Supplied SD for individuals or SEM for means controls candidate selection,
+    grid search, and final fitting. Covariance uses its absolute scale without
+    residual rescaling; residuals and residual_sd remain descriptive raw errors.
+    Alternatively, sigma supplies absolute per-value uncertainties for mixed
+    individual/mean rows without assigning them one common response kind.
     """
     spec = get_model_spec(model_name)
     time = np.asarray(time, dtype=float)
@@ -197,6 +219,17 @@ def fit_model_once(
         raise ValueError('Fit time and response arrays must have matching lengths.')
 
     finite = np.isfinite(time) & np.isfinite(response)
+    if sigma is not None and observation_uncertainty is not None:
+        raise ValueError('Supply sigma or observation_uncertainty, not both.')
+    resolved_input = resolve_observation_uncertainty(
+        observation_uncertainty if sigma is None else
+        ObservationUncertainty(sigma, response_kind='individual'),
+        len(response), row_mask=finite,
+    )
+    resolved_uncertainty = resolved_input if observation_uncertainty is not None else None
+    sigma = None if resolved_input is None else resolved_input.sigma
+    if sigma is not None and any(key in spec.fit_kwargs for key in ('sigma', 'absolute_sigma')):
+        raise ValueError('Registered fit options must not override the supplied observation uncertainty.')
     time = time[finite]
     response = response[finite]
     if len(time) == 0:
@@ -220,6 +253,7 @@ def fit_model_once(
             time,
             response,
             model_candidates,
+            sigma=sigma,
         )
     start = _clip_to_registered_bounds(spec, start)
 
@@ -233,6 +267,7 @@ def fit_model_once(
                 initial_parameters=supplied_initial,
                 model_candidates=model_candidates,
                 grid_search_config=grid_search_config,
+                sigma=sigma,
             )
         except Exception as exception:
             if raise_on_failure:
@@ -245,10 +280,14 @@ def fit_model_once(
                 initial_parameters=start,
                 used_grid_search=True,
                 exception=exception,
+                observation_uncertainty=resolved_uncertainty,
+                observation_sigma=sigma,
             )
 
     def run_fit(p0):
         fit_kwargs = dict(spec.fit_kwargs)
+        if sigma is not None:
+            fit_kwargs.update(sigma=sigma, absolute_sigma=True)
         if 'bounds' not in fit_kwargs and spec.parameter_bounds is not None:
             fit_kwargs['bounds'] = spec.parameter_bounds
         with warnings.catch_warnings():
@@ -292,6 +331,7 @@ def fit_model_once(
                     initial_parameters=supplied_initial,
                     model_candidates=model_candidates,
                     grid_search_config=grid_search_config,
+                    sigma=sigma,
                 )
                 used_grid_search = True
                 parameters, covariance, fitted_values = run_fit(start)
@@ -306,6 +346,8 @@ def fit_model_once(
                     initial_parameters=start,
                     used_grid_search=used_grid_search,
                     exception=final_exception,
+                    observation_uncertainty=resolved_uncertainty,
+                    observation_sigma=sigma,
                 )
         else:
             if raise_on_failure:
@@ -318,6 +360,8 @@ def fit_model_once(
                 initial_parameters=start,
                 used_grid_search=used_grid_search,
                 exception=first_exception,
+                observation_uncertainty=resolved_uncertainty,
+                observation_sigma=sigma,
             )
 
     residuals = response - fitted_values
@@ -341,4 +385,6 @@ def fit_model_once(
         residual_dof=residual_dof,
         residual_sd=residual_sd,
         used_grid_search=used_grid_search,
+        observation_uncertainty=resolved_uncertainty,
+        observation_sigma=sigma,
     )

@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 
 from .fitting import fit_model_once
-from .observation import observation_model_metadata
+from .observation import completed_observation_standard_deviation, observation_model_metadata
 from .information import fit_reference_model_ensemble, trapezoidal_integration_weights
 from .metrics import (
     approximate_mean_curve_interval_width,
@@ -171,14 +171,10 @@ def simulate_design(
     dataset and the registered model heuristic. ``central_reference`` uses
     one common prior starting vector. ``oracle`` is retained only as an
     explicit diagnostic because it uses the unknown generating parameters.
-    Completed data with supplied SD/SEM require the weighted-refit extension;
-    their precision is never silently ignored by this evaluator.
+    Refits use absolute per-row uncertainty: completed SD/SEM where supplied,
+    and individual SD for simulated replicate rows. Constant-CV fitting weights
+    are fixed at the central reference curve, not the generating draw.
     """
-    if existing_observations is not None and existing_observations.observation_uncertainty is not None:
-        raise ValueError(
-            'Simulation with supplied completed-observation SD/SEM requires '
-            'weighted-refit support; completed precision must not be ignored.'
-        )
     fit_initialization = str(fit_initialization).strip().lower()
     if fit_initialization not in {'data_driven', 'central_reference', 'oracle'}:
         raise ValueError(
@@ -279,6 +275,42 @@ def simulate_design(
     else:
         future_observations = np.empty((n_simulations, replicates, 0), dtype=float)
 
+    repeated_future_times = np.tile(future_design, replicates)
+    if existing_observations is None:
+        existing_fit_times = np.array([], dtype=float)
+        existing_fit_response = np.array([], dtype=float)
+    else:
+        existing_fit_times = existing_observations.time
+        existing_fit_response = existing_observations.response
+    fit_times = np.concatenate([existing_fit_times, repeated_future_times])
+    completed_sigma = (
+        np.array([], dtype=float) if existing_observations is None else
+        completed_observation_standard_deviation(
+            existing_observations,
+            reference.evaluate_central(existing_fit_times),
+            observation_model,
+        )
+    )
+    future_sigma = (
+        observation_model.standard_deviation(
+            reference.evaluate_central(future_design), times=future_design,
+        ) if len(future_design) else np.array([], dtype=float)
+    )
+    fit_sigma = np.concatenate([completed_sigma, np.tile(future_sigma, replicates)])
+    if np.all(fit_sigma == 0) and not (
+        observation_model.kind == 'constant_cv' and observation_model.value > 0
+    ):
+        # Retain deterministic, zero-noise simulations without inventing a
+        # positive measurement variance or introducing exact constraints. A
+        # zero central CV curve need not mean zero noise in the source draws.
+        fit_sigma = None
+    elif np.any(~np.isfinite(fit_sigma)) or np.any(fit_sigma <= 0):
+        raise ValueError(
+            'Weighted study refits require positive SD/SEM for every row. '
+            'Set a positive minimum_sd when the observation model produces '
+            'zero SD; mixed exact and noisy observations are not supported.'
+        )
+
     if reference_model is None:
         reference_model = fit_reference_model_ensemble(reference, model_name=model_name)
     if reference_model.model_name != model_name:
@@ -291,15 +323,6 @@ def simulate_design(
     fit_success = np.zeros(n_simulations, dtype=bool)
     fit_messages: list[str | None] = []
     interval_widths = np.full(n_simulations, np.nan, dtype=float)
-
-    repeated_future_times = np.tile(future_design, replicates)
-    if existing_observations is None:
-        existing_fit_times = np.array([], dtype=float)
-        existing_fit_response = np.array([], dtype=float)
-    else:
-        existing_fit_times = existing_observations.time
-        existing_fit_response = existing_observations.response
-    fit_times = np.concatenate([existing_fit_times, repeated_future_times])
 
     for simulation_index in range(n_simulations):
         response = np.concatenate([
@@ -319,6 +342,7 @@ def simulate_design(
             perform_grid_search=False,
             fallback_grid_search=fallback_grid_search,
             grid_search_config=grid_search_config,
+            **({} if fit_sigma is None else {'sigma': fit_sigma}),
         )
         if not fit.success:
             fit_messages.append(fit.message)
@@ -414,6 +438,18 @@ def simulate_design(
             'confidence_level': confidence_level,
             'replicates_per_time': replicates,
             'fit_initialization': fit_initialization,
+            **observation_model_metadata(observation_model),
+            'refit_objective': ('unweighted_least_squares' if fit_sigma is None
+                                else 'weighted_least_squares'),
+            'refit_covariance_scaling': ('residual_scaled' if fit_sigma is None else 'absolute'),
+            'refit_observation_sigma': None if fit_sigma is None else fit_sigma.copy(),
+            'refit_cv_weighting': ('fixed_at_central_reference'
+                                   if observation_model.kind == 'constant_cv' else None),
+            'completed_observation_uncertainty': (
+                None if existing_observations is None or
+                existing_observations.observation_uncertainty is None else
+                existing_observations.observation_uncertainty.to_metadata()
+            ),
             'existing_observation_count': (
                 0 if existing_observations is None else existing_observations.n_observations
             ),

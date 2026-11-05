@@ -184,12 +184,15 @@ class ObservationUncertaintyTests(unittest.TestCase):
         score = evaluate_local_i_optimal_design([0., 4.], model, profile(), constraints)
         self.assertTrue(np.isfinite(score.criterion))
 
-    def test_new_completed_precision_cannot_be_silently_refitted_unweighted(self):
+    def test_completed_precision_is_used_for_simulated_study_refits(self):
         completed = ExistingObservations([0.], [1.], observation_uncertainty=
             ObservationUncertainty(.1, response_kind='individual'))
-        with self.assertRaisesRegex(ValueError, 'weighted|refit'):
-            simulate_design(reference(), [0., 2., 4.], profile(), model_name='linear',
-                            existing_observations=completed, n_simulations=2, random_state=1)
+        result = simulate_design(reference(), [0., 2., 4.], profile(), model_name='linear',
+                                 existing_observations=completed, n_simulations=2, random_state=1)
+        self.assertTrue(result.fit_success.all())
+        self.assertEqual(result.metadata['refit_objective'], 'weighted_least_squares')
+        np.testing.assert_array_equal(result.metadata['refit_observation_sigma'],
+                                      [.1, .2, .4, .2, .4, .2, .4])
 
     def test_simulation_accepts_future_profile_without_changing_reference_curves(self):
         prior = reference()

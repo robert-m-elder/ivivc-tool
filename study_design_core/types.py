@@ -518,6 +518,8 @@ class ModelFitResult:
     used_grid_search: bool = False
     message: str | None = None
     exception_type: str | None = None
+    observation_uncertainty: ResolvedObservationUncertainty | None = None
+    observation_sigma: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         self.time = np.asarray(self.time, dtype=float).copy()
@@ -541,6 +543,22 @@ class ModelFitResult:
             raise ValueError('Fit covariance has the wrong shape for the model parameters.')
         self.residual_dof = int(self.residual_dof)
         self.residual_sd = float(self.residual_sd)
+        self.observation_uncertainty = resolve_observation_uncertainty(
+            self.observation_uncertainty, len(self.response),
+        )
+        if self.observation_sigma is None:
+            self.observation_sigma = (None if self.observation_uncertainty is None
+                                      else self.observation_uncertainty.sigma)
+        else:
+            resolved_sigma = resolve_observation_uncertainty(
+                ObservationUncertainty(self.observation_sigma, response_kind='individual'),
+                len(self.response),
+            )
+            self.observation_sigma = resolved_sigma.sigma
+            if self.observation_uncertainty is not None and not np.array_equal(
+                self.observation_sigma, self.observation_uncertainty.sigma,
+            ):
+                raise ValueError('observation_sigma must match the supplied observation uncertainty.')
 
     @property
     def parameter_vector(self) -> np.ndarray:
