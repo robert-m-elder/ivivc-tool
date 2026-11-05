@@ -2003,6 +2003,7 @@ def _timing_comparison_designs(
     constrained = optimize_next_time_before_deadline(
         summary, reference_model, definition.observation_model,
         definition.constraints, latest_completed_time=existing.latest_time,
+        existing_observations=existing,
     )
     central = optimization.nested_steps[0]
     designs: dict[str, Sequence[float]] = {'central_next_time': central.times}
@@ -2034,6 +2035,7 @@ def _timing_comparison_designs(
                     score = evaluate_local_i_optimal_design(
                         times, reference_model, definition.observation_model,
                         definition.constraints,
+                        existing_observations=existing,
                     )
         crossed_before = (
             summary.crossed_weight_before(new_time)
@@ -2094,6 +2096,8 @@ def run_scenario(
         definition.observation_model,
         definition.constraints,
         refine=False if timing_comparison else settings.refine,
+        **({} if definition.existing_observations is None else
+           {'existing_observations': definition.existing_observations}),
     )
     plan = create_simulation_plan(
         definition.reference,
@@ -2165,7 +2169,9 @@ def _run_planning_scenario(definition, settings, reference_model, seed):
         (), definition.reference, definition.constraints, context=spec.context,
     )
     kwargs = dict(refine=settings.refine, max_search_states=spec.search_limit,
-                  max_anchor_search_states=spec.search_limit)
+                  max_anchor_search_states=spec.search_limit,
+                  **({} if definition.existing_observations is None else
+                     {'existing_observations': definition.existing_observations}))
     benchmark = optimize_timing_constrained_designs(
         reference_model, definition.observation_model, definition.constraints, unrestricted, **kwargs,
     )

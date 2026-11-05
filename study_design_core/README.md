@@ -397,9 +397,9 @@ Adaptive likelihoods and empirical-scale agreement diagnostics use supplied
 completed-row precision directly. Completed means do not acquire the future
 study's replicate count. Simulated-study refits retain each completed row with
 its SD/SEM and keep the measured response fixed across simulations. Missing
-completed precision uses the observation model on the central reference curve.
-These are backend APIs; POC input controls and completed-observation precision
-in schedule information calculations follow separately.
+completed precision uses the observation model on the central analysis-model
+fit for optimization and refitting. Adaptive likelihoods evaluate this fallback
+on each candidate true trajectory instead. POC input controls follow separately.
 
 ## User constraints
 
@@ -483,6 +483,29 @@ trajectory. Before that information matrix is full rank, candidate additions
 are selected by rank and then log pseudo-determinant. Once full rank is reached,
 selection minimizes local I-optimality.
 
+For adaptive optimization, pass `existing_observations=completed` to the
+optimizer and to direct schedule scoring. Completed times must be fixed in
+the design. At those times, information comes from the actual measured rows:
+each individual SD or mean SEM supplies its inverse-variance weight. Repeated
+rows contribute separately; counts attached to means do not increase their
+weight. This replaces the planned contribution at completed times, so those
+observations are counted once. Planned replicate counts apply only to new
+times, including fixed points still to be collected.
+
+```python
+result = optimize_local_i_optimal_designs(
+    reference_model, observation, constraints,
+    existing_observations=completed,
+)
+```
+
+The same keyword is supported by local and ensemble information calculations,
+greedy selection, coordinate exchange, window/mixed scheduling, and deadline
+optimization. Timing contexts must identify the same completed times as the
+supplied measurements. Pass the same object into subsequent simulation; the
+POC forwards it through all these paths. Without completed observations, all
+design times retain the existing planned-measurement interpretation.
+
 Those scenarios present two versions of this same information-based design.
 **I-optimal (add-one-at-a-time)** greedily adds one time while retaining all
 previously selected times; this is why the internal implementation calls the
@@ -552,10 +575,13 @@ already sampled separately.
 
 Constant SD and supplied SD profiles give response-independent refitting
 weights. For constant CV, the engine fixes refitting SDs at the central
-reference curve for all simulated studies. Noise generation still uses each
-draw's true response. These fixed planning weights approximate the
+analysis-model fit for all simulated studies, matching local optimization even
+when that analysis model approximates a differently shaped reference. Noise
+generation still uses each draw's true response. These fixed planning weights approximate the
 response-dependent variance model; they avoid weighting by noisy observations
 or using the generating draw to set fitting weights.
+The optional ensemble-averaged information criterion retains its per-draw
+variance evaluation; the POC uses the local criterion.
 
 Zero-noise scalar models and all-zero SD profiles retain unweighted refitting.
 Mixing zero-SD and positive-SD rows is unsupported: specify a positive
@@ -586,6 +612,12 @@ values fixed and simulate only new measurements at proposed elapsed times.
 update the weights of complete IVIVC-predicted trajectories using the
 likelihood of those completed observations; trajectory shapes are retained and
 the effective sample size of the reweighted ensemble is reported.
+
+For each successive update, use the original prior and all cumulative
+completed observations. Generic and empirical-scale updates reject an
+already-updated reference, preventing repeated application of cumulative data.
+The supplied SD/SEM determines the likelihood; a future replicate allocation
+does not change the precision of observations already collected.
 
 The backend therefore supports two distinct adaptive use cases:
 

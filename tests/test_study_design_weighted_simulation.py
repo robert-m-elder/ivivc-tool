@@ -7,7 +7,7 @@ import numpy as np
 from ivivc_core import ObservationUncertainty
 from study_design_core import (
     ExistingObservations, ObservationModel, ReferenceTrajectoryEnsemble,
-    SimulationPlan, fit_model_once, simulate_design,
+    ReferenceModelEnsemble, SimulationPlan, fit_model_once, fit_reference_model_ensemble, simulate_design,
 )
 import study_design_core.simulation as simulation
 
@@ -126,8 +126,11 @@ class WeightedSimulationTests(unittest.TestCase):
         times = np.array([0., 2., 4.])
         shared = plan(times)
         model = ObservationModel('constant_cv', .1, replicates_per_time=2)
-        result, records = captured_simulation(ref, times, model, simulation_plan=shared)
-        expected_sigma = np.tile(.1 * ref.evaluate_central(times), 2)
+        analysis = fit_reference_model_ensemble(ref, model_name='linear')
+        result, records = captured_simulation(ref, times, model, simulation_plan=shared,
+                                              reference_model=analysis)
+        expected_sigma = np.tile(.1 * np.abs(analysis.central_parameters[0]
+                                             + analysis.central_parameters[1]*times), 2)
         for index, (_, response, options, _) in enumerate(records):
             truth = ref.evaluate(times, draw_indices=[index])[0]
             expected = truth + .1*np.abs(truth)*shared.standard_normal_errors[index]
@@ -164,9 +167,12 @@ class WeightedSimulationTests(unittest.TestCase):
         ref = ReferenceTrajectoryEnsemble(
             times, [[1., 1., 1.], [-1., -1., -1.]], [True, True],
             central_curve=np.zeros(3), interpolation='linear')
+        analysis = ReferenceModelEnsemble('linear', ('a', 'b'), [[1., 0.], [-1., 0.]],
+            [True, True], [.5, .5], [0., 0.], times, (0., 4.))
         with self.assertRaisesRegex(ValueError, 'positive|zero'):
             simulate_design(ref, times, ObservationModel('constant_cv', .1),
-                            model_name='linear', simulation_plan=plan(times, replicates=1))
+                            model_name='linear', reference_model=analysis,
+                            simulation_plan=plan(times, replicates=1))
 
 
 if __name__ == '__main__':

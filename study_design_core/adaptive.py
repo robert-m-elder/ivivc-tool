@@ -29,8 +29,14 @@ def reweight_reference_ensemble(
     assigned a likelihood under the completed observations, multiplied by its
     prior weight, and then normalized.  This permits the same reference
     trajectory ensemble to be used before and after target-study observations
-    become available.
+    become available. Use the original prior with cumulative observations;
+    an already-updated reference is rejected to prevent repeated use of data.
     """
+    if reference.metadata.get('adaptive_reweighting'):
+        raise ValueError(
+            'Use the original reference prior with cumulative observations, '
+            'not an already-updated reference.'
+        )
     lower, upper = reference.supported_time_range
     if (
         np.min(existing_observations.time) < lower - 1e-12

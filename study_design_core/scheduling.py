@@ -21,9 +21,11 @@ from .anchors import (
 from .feasibility import check_schedule_feasibility
 from .optimize import (
     _build_local_information_context,
+    _existing_observation_metadata,
     _prepare_evaluation_grid,
     _score_is_better,
     _selection_rule,
+    _validate_existing_observations,
 )
 from .requirements import (
     LatestBefore,
@@ -32,7 +34,10 @@ from .requirements import (
     _signature,
     evaluate_timing_requirements,
 )
-from .types import DesignConstraints, DesignInformationScore, ObservationModel, ReferenceModelEnsemble
+from .types import (
+    DesignConstraints, DesignInformationScore, ExistingObservations,
+    ObservationModel, ReferenceModelEnsemble,
+)
 
 
 @dataclass(frozen=True)
@@ -114,6 +119,19 @@ def _requested_sizes(number_of_times, constraints: DesignConstraints) -> tuple[i
     ):
         raise ValueError('Requested schedule sizes must be within the design constraints.')
     return sizes
+
+
+def _validate_completed_context(existing_observations, constraints, resolved) -> None:
+    """Keep actual completed rows aligned with the schedule's time roles."""
+    if existing_observations is None:
+        return
+    _validate_existing_observations(existing_observations, constraints)
+    supplied = existing_observations.unique_times
+    expected = np.asarray(resolved.context.completed_times, dtype=float)
+    matches = np.isclose(supplied[:, None], expected[None, :], rtol=0.0, atol=1e-12)
+    if (len(supplied) != len(expected) or np.any(matches.sum(axis=1) != 1)
+            or np.any(matches.sum(axis=0) != 1)):
+        raise ValueError('Existing observations must match the resolved completed_times.')
 
 
 def _eligible_additions(selected, resolved: ResolvedTimingRequirements, constraints: DesignConstraints):
@@ -213,6 +231,7 @@ def optimize_window_constrained_designs(
     refine: bool = True,
     max_exchange_iterations: int = 25,
     max_search_states: int = 100000,
+    existing_observations: ExistingObservations | None = None,
 ) -> WindowDesignOptimizationResult:
     """Plan complete schedules with minimum counts in resolved sampling windows.
 
@@ -238,6 +257,7 @@ def optimize_window_constrained_designs(
         raise TypeError('resolved_requirements must be a ResolvedTimingRequirements result.')
     if _signature(constraints) != resolved_requirements.constraints_signature:
         raise ValueError('Use the same design constraints that resolved the requirements.')
+    _validate_completed_context(existing_observations, constraints, resolved_requirements)
     all_times = constraints.all_available_times
     if np.any(np.isclose(all_times[:-1], all_times[1:], rtol=0.0, atol=1e-12)):
         raise ValueError('Fixed and candidate times must be unambiguous at the information-matching tolerance.')
@@ -275,6 +295,8 @@ def optimize_window_constrained_designs(
                 evaluation_times=times, evaluation_weights=evaluation_weights,
                 relative_step=relative_step, absolute_step=absolute_step,
                 rank_tolerance=rank_tolerance,
+                **({} if existing_observations is None else
+                   {'existing_observations': existing_observations}),
             )
         initial, interrupted, checks, states = _greedy_with_completion(
             feasibility.times, context, resolved_requirements, constraints,
@@ -321,6 +343,7 @@ def optimize_window_constrained_designs(
             'nested_schedules': False,
             'max_search_states_per_check': max_search_states,
             'global_information_optimum_verified': False,
+            **_existing_observation_metadata(existing_observations),
         },
         resolved_requirements,
     )
@@ -364,6 +387,7 @@ def optimize_timing_constrained_designs(
     max_exchange_iterations: int = 25,
     max_search_states: int = 100000,
     max_anchor_search_states: int = 100000,
+    existing_observations: ExistingObservations | None = None,
 ) -> WindowDesignOptimizationResult:
     """Combine window coverage and distinct latest-before points for each N.
 
@@ -383,6 +407,7 @@ def optimize_timing_constrained_designs(
         raise TypeError('resolved_requirements must be a ResolvedTimingRequirements result.')
     if _signature(constraints) != resolved_requirements.constraints_signature:
         raise ValueError('Use the same design constraints that resolved the requirements.')
+    _validate_completed_context(existing_observations, constraints, resolved_requirements)
     sizes = _requested_sizes(number_of_times, constraints)
     max_search_states = _positive_integer(max_search_states, 'max_search_states')
     max_anchor_search_states = _positive_integer(max_anchor_search_states, 'max_anchor_search_states')
@@ -393,6 +418,8 @@ def optimize_timing_constrained_designs(
         relative_step=relative_step, absolute_step=absolute_step,
         rank_tolerance=rank_tolerance, refine=refine,
         max_exchange_iterations=max_exchange_iterations, max_search_states=max_search_states,
+        **({} if existing_observations is None else
+           {'existing_observations': existing_observations}),
     )
     if not any(isinstance(row.request, LatestBefore) for row in resolved_requirements.requirements):
         return optimize_window_constrained_designs(
@@ -434,6 +461,8 @@ def optimize_timing_constrained_designs(
                 evaluation_times=times, evaluation_weights=evaluation_weights,
                 relative_step=relative_step, absolute_step=absolute_step,
                 rank_tolerance=rank_tolerance,
+                **({} if existing_observations is None else
+                   {'existing_observations': existing_observations}),
             )
             fallback_score = context.score(selection.times)
             optimized = replace(
@@ -466,6 +495,7 @@ def optimize_timing_constrained_designs(
          'latest_before_priority': 'later_deadlines_first_then_request_order',
          'max_anchor_search_states_per_size': max_anchor_search_states,
          'max_search_states_per_check': max_search_states,
-         'global_information_optimum_verified': False},
+         'global_information_optimum_verified': False,
+         **_existing_observation_metadata(existing_observations)},
         resolved_requirements,
     )

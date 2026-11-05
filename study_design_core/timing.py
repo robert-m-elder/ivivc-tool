@@ -11,10 +11,11 @@ from dataclasses import replace
 
 import numpy as np
 
-from .optimize import optimize_local_i_optimal_designs
+from .optimize import optimize_local_i_optimal_designs, _validate_existing_observations
 from .types import (
     CrossingTimeSummary,
     DesignConstraints,
+    ExistingObservations,
     NextTimeRecommendation,
     ObservationModel,
     ReferenceModelEnsemble,
@@ -197,6 +198,7 @@ def optimize_next_time_before_deadline(
     relative_step: float = 1e-5,
     absolute_step: float = 1e-8,
     rank_tolerance: float | None = None,
+    existing_observations: ExistingObservations | None = None,
 ) -> NextTimeRecommendation:
     """Minimize central I-optimality for one new time before the deadline.
 
@@ -205,6 +207,11 @@ def optimize_next_time_before_deadline(
     retained. With one added time, the existing greedy search evaluates every
     eligible candidate; coordinate exchange would repeat that same search.
     """
+    if existing_observations is not None:
+        _validate_existing_observations(existing_observations, constraints)
+        if not np.isclose(existing_observations.latest_time, latest_completed_time,
+                          rtol=0.0, atol=1e-12):
+            raise ValueError('latest_completed_time must match the supplied existing observations.')
     if not np.allclose(
         reference_model.supported_time_range, summary.supported_time_range,
         rtol=0.0, atol=1e-12,
@@ -232,6 +239,8 @@ def optimize_next_time_before_deadline(
         absolute_step=absolute_step,
         rank_tolerance=rank_tolerance,
         refine=False,
+        **({} if existing_observations is None else
+           {'existing_observations': existing_observations}),
     )
     step = optimization.design_for_n(size)
     return NextTimeRecommendation(

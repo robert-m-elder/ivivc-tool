@@ -15,8 +15,10 @@ import numpy as np
 from ivivc_core import get_model_spec
 
 from .fitting import fit_model_once
+from .observation import completed_observation_standard_deviation
 from .types import (
     DesignInformationScore,
+    ExistingObservations,
     ObservationModel,
     ReferenceModelEnsemble,
     ReferenceTrajectoryEnsemble,
@@ -164,6 +166,73 @@ def _coerce_replicates(replicates_per_time, count: int) -> np.ndarray:
     return replicates
 
 
+def _information_contributions(
+    model_name: str,
+    design_times,
+    parameters: Mapping[str, float] | Sequence[float] | np.ndarray,
+    observation_model: ObservationModel,
+    *,
+    replicates_per_time=None,
+    existing_observations: ExistingObservations | None = None,
+    relative_step: float = 1e-5,
+    absolute_step: float = 1e-8,
+) -> np.ndarray:
+    """Return one information contribution per proposed distinct time.
+
+    Completed times use their actual rows and precision, replacing the planned
+    replicate means at those times. Other fixed or candidate times remain
+    future measurements under the observation model.
+    """
+    design_times = np.asarray(design_times, dtype=float)
+    if design_times.ndim != 1 or len(design_times) == 0:
+        raise ValueError('design_times must be a nonempty one-dimensional array.')
+    theta, _ = _coerce_parameter_vector(model_name, parameters)
+    completed_indices = np.array([], dtype=int)
+    if existing_observations is not None:
+        if not isinstance(existing_observations, ExistingObservations):
+            raise TypeError('existing_observations must be ExistingObservations.')
+        matches = np.isclose(existing_observations.time[:, None], design_times[None, :],
+                             rtol=0.0, atol=1e-12)
+        if np.any(np.sum(matches, axis=1) != 1):
+            raise ValueError('Every completed observation time must match exactly one design time.')
+        completed_indices = np.argmax(matches, axis=1)
+    future = np.ones(len(design_times), dtype=bool)
+    future[completed_indices] = False
+    replicates = _coerce_replicates(
+        observation_model.replicates_per_time
+        if replicates_per_time is None
+        else replicates_per_time,
+        len(design_times),
+    )
+    matrices = np.zeros((len(design_times), len(theta), len(theta)), dtype=float)
+    if np.any(future):
+        times = design_times[future]
+        expected = _evaluate_model(model_name, times, theta)
+        variance = observation_model.standard_deviation(expected, times=times) ** 2 / replicates[future]
+        if np.any(~np.isfinite(variance)) or np.any(variance <= 0):
+            raise ValueError('Information calculations require a strictly positive observation variance.')
+        sensitivities = finite_difference_sensitivities(
+            model_name, times, theta, relative_step=relative_step, absolute_step=absolute_step,
+        )
+        matrices[future] = (sensitivities[:, :, None] * sensitivities[:, None, :]
+                            / variance[:, None, None])
+    if existing_observations is not None:
+        times = existing_observations.time
+        expected = _evaluate_model(model_name, times, theta)
+        sd = completed_observation_standard_deviation(existing_observations, expected, observation_model)
+        with np.errstate(over='ignore', under='ignore', invalid='ignore'):
+            variance = sd ** 2
+        if np.any(~np.isfinite(variance)) or np.any(variance <= 0):
+            raise ValueError('Completed SD/SEM must give finite, strictly positive observation variance.')
+        sensitivities = finite_difference_sensitivities(
+            model_name, times, theta, relative_step=relative_step, absolute_step=absolute_step,
+        )
+        contributions = (sensitivities[:, :, None] * sensitivities[:, None, :]
+                         / variance[:, None, None])
+        np.add.at(matrices, completed_indices, contributions)
+    return matrices
+
+
 def information_matrix(
     model_name: str,
     design_times,
@@ -171,35 +240,16 @@ def information_matrix(
     observation_model: ObservationModel,
     *,
     replicates_per_time=None,
+    existing_observations: ExistingObservations | None = None,
     relative_step: float = 1e-5,
     absolute_step: float = 1e-8,
 ) -> np.ndarray:
-    """Calculate the local Fisher-information approximation for one design."""
-    design_times = np.asarray(design_times, dtype=float)
-    if design_times.ndim != 1 or len(design_times) == 0:
-        raise ValueError('design_times must be a nonempty one-dimensional array.')
-    theta, _ = _coerce_parameter_vector(model_name, parameters)
-    expected = _evaluate_model(model_name, design_times, theta)
-    sensitivities = finite_difference_sensitivities(
-        model_name,
-        design_times,
-        theta,
-        relative_step=relative_step,
-        absolute_step=absolute_step,
-    )
-    replicates = _coerce_replicates(
-        observation_model.replicates_per_time
-        if replicates_per_time is None
-        else replicates_per_time,
-        len(design_times),
-    )
-    variance = observation_model.standard_deviation(expected, times=design_times) ** 2 / replicates
-    if np.any(~np.isfinite(variance)) or np.any(variance <= 0):
-        raise ValueError(
-            'Information calculations require a strictly positive observation variance.'
-        )
-    weighted = sensitivities / variance[:, None]
-    matrix = sensitivities.T @ weighted
+    """Calculate information from completed rows and planned future means."""
+    matrix = np.sum(_information_contributions(
+        model_name, design_times, parameters, observation_model,
+        replicates_per_time=replicates_per_time, existing_observations=existing_observations,
+        relative_step=relative_step, absolute_step=absolute_step,
+    ), axis=0)
     return 0.5 * (matrix + matrix.T)
 
 
@@ -289,6 +339,7 @@ def local_i_optimality(
     evaluation_times,
     evaluation_weights=None,
     replicates_per_time=None,
+    existing_observations: ExistingObservations | None = None,
     relative_step: float = 1e-5,
     absolute_step: float = 1e-8,
     rank_tolerance: float | None = None,
@@ -306,6 +357,7 @@ def local_i_optimality(
         theta,
         observation_model,
         replicates_per_time=replicates_per_time,
+        existing_observations=existing_observations,
         relative_step=relative_step,
         absolute_step=absolute_step,
     )
@@ -398,6 +450,7 @@ def ensemble_i_optimality(
     evaluation_times=None,
     evaluation_weights=None,
     replicates_per_time=None,
+    existing_observations: ExistingObservations | None = None,
     relative_step: float = 1e-5,
     absolute_step: float = 1e-8,
     rank_tolerance: float | None = None,
@@ -429,6 +482,7 @@ def ensemble_i_optimality(
             theta,
             observation_model,
             replicates_per_time=replicates_per_time,
+            existing_observations=existing_observations,
             relative_step=relative_step,
             absolute_step=absolute_step,
         )

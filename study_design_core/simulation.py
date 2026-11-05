@@ -8,6 +8,8 @@ from typing import Any
 
 import numpy as np
 
+from ivivc_core import get_model_spec
+
 from .fitting import fit_model_once
 from .observation import completed_observation_standard_deviation, observation_model_metadata
 from .information import fit_reference_model_ensemble, trapezoidal_integration_weights
@@ -173,7 +175,7 @@ def simulate_design(
     explicit diagnostic because it uses the unknown generating parameters.
     Refits use absolute per-row uncertainty: completed SD/SEM where supplied,
     and individual SD for simulated replicate rows. Constant-CV fitting weights
-    are fixed at the central reference curve, not the generating draw.
+    are fixed at the central analysis-model fit, as in local optimization.
     """
     fit_initialization = str(fit_initialization).strip().lower()
     if fit_initialization not in {'data_driven', 'central_reference', 'oracle'}:
@@ -275,6 +277,12 @@ def simulate_design(
     else:
         future_observations = np.empty((n_simulations, replicates, 0), dtype=float)
 
+    if reference_model is None:
+        reference_model = fit_reference_model_ensemble(reference, model_name=model_name)
+    if reference_model.model_name != model_name:
+        raise ValueError('reference_model does not match the requested analysis model.')
+    central_function = get_model_spec(model_name).model_function
+
     repeated_future_times = np.tile(future_design, replicates)
     if existing_observations is None:
         existing_fit_times = np.array([], dtype=float)
@@ -287,13 +295,13 @@ def simulate_design(
         np.array([], dtype=float) if existing_observations is None else
         completed_observation_standard_deviation(
             existing_observations,
-            reference.evaluate_central(existing_fit_times),
+            central_function(existing_fit_times, *reference_model.central_parameters),
             observation_model,
         )
     )
     future_sigma = (
         observation_model.standard_deviation(
-            reference.evaluate_central(future_design), times=future_design,
+            central_function(future_design, *reference_model.central_parameters), times=future_design,
         ) if len(future_design) else np.array([], dtype=float)
     )
     fit_sigma = np.concatenate([completed_sigma, np.tile(future_sigma, replicates)])
@@ -310,11 +318,6 @@ def simulate_design(
             'Set a positive minimum_sd when the observation model produces '
             'zero SD; mixed exact and noisy observations are not supported.'
         )
-
-    if reference_model is None:
-        reference_model = fit_reference_model_ensemble(reference, model_name=model_name)
-    if reference_model.model_name != model_name:
-        raise ValueError('reference_model does not match the requested analysis model.')
 
     parameter_count = reference_model.n_parameters
     fitted_curves = np.full_like(true_curves, np.nan, dtype=float)

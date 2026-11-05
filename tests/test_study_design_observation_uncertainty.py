@@ -170,6 +170,7 @@ class ObservationUncertaintyTests(unittest.TestCase):
         # Use the same original curves/prior weights with copied metadata to
         # check assumption replacement without applying data a second time.
         prior.metadata = dict(profiled.metadata)
+        prior.metadata.pop('adaptive_reweighting')
         plain = reweight_reference_ensemble(prior, ExistingObservations([1., 3.], [.8, .4]),
                                             ObservationModel('constant_sd', .1)).reference
         self.assertNotIn('observation_model_profile', plain.metadata)

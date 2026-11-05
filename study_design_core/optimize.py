@@ -7,10 +7,9 @@ from typing import Mapping
 
 import numpy as np
 
-from ivivc_core import get_model_spec
-
 from .observation import observation_model_metadata
 from .information import (
+    _information_contributions,
     finite_difference_sensitivities,
     score_information_matrices,
     trapezoidal_integration_weights,
@@ -21,6 +20,7 @@ from .types import (
     DesignInformationScore,
     DesignOptimizationResult,
     DesignStep,
+    ExistingObservations,
     ObservationModel,
     ReferenceModelEnsemble,
 )
@@ -37,9 +37,11 @@ class _InformationContext:
     information_contributions: np.ndarray
     evaluation_sensitivities: np.ndarray
     rank_tolerance: float | None
+    existing_observations: ExistingObservations | None = None
 
     def score(self, times) -> DesignInformationScore:
         times = np.unique(np.asarray(times, dtype=float))
+        _require_completed_times(times, self.existing_observations)
         indices = []
         for value in times:
             matches = np.flatnonzero(np.isclose(self.all_times, value, rtol=0.0, atol=1e-12))
@@ -70,9 +72,11 @@ class _LocalInformationContext:
     information_contributions: np.ndarray
     evaluation_sensitivities: np.ndarray
     rank_tolerance: float | None
+    existing_observations: ExistingObservations | None = None
 
     def score(self, times) -> DesignInformationScore:
         times = np.unique(np.asarray(times, dtype=float))
+        _require_completed_times(times, self.existing_observations)
         indices = []
         for value in times:
             matches = np.flatnonzero(
@@ -94,13 +98,31 @@ class _LocalInformationContext:
         )
 
 
-def _evaluate_model(model_name: str, times: np.ndarray, parameters: np.ndarray) -> np.ndarray:
-    spec = get_model_spec(model_name)
-    with np.errstate(all='ignore'):
-        values = np.asarray(spec.model_function(times, *parameters), dtype=float)
-    if values.shape != times.shape or np.any(~np.isfinite(values)):
-        raise ValueError('Model evaluation returned invalid values during design optimization.')
-    return values
+def _require_completed_times(times, existing_observations, *, label='the design') -> None:
+    if existing_observations is not None:
+        matches = np.isclose(existing_observations.unique_times[:, None],
+                             np.asarray(times)[None, :], rtol=0.0, atol=1e-12)
+        if np.any(np.sum(matches, axis=1) != 1):
+            raise ValueError(f'Every completed time must appear exactly once in {label}.')
+
+
+def _validate_existing_observations(existing_observations, constraints) -> None:
+    if existing_observations is not None:
+        if not isinstance(existing_observations, ExistingObservations):
+            raise TypeError('existing_observations must be ExistingObservations.')
+        _require_completed_times(constraints.fixed_times, existing_observations, label='fixed design times')
+
+
+def _existing_observation_metadata(existing_observations) -> dict:
+    if existing_observations is None:
+        return {}
+    uncertainty = existing_observations.observation_uncertainty
+    return {
+        'completed_observation_count': existing_observations.n_observations,
+        'completed_time_point_count': existing_observations.n_time_points,
+        'completed_precision_source': ('observation_model_individual_sd' if uncertainty is None
+                                       else 'supplied_' + uncertainty.uncertainty_kind),
+    }
 
 
 def _prepare_evaluation_grid(
@@ -129,12 +151,14 @@ def _build_information_context(
     observation_model: ObservationModel,
     constraints: DesignConstraints,
     *,
+    existing_observations: ExistingObservations | None = None,
     evaluation_times=None,
     evaluation_weights=None,
     relative_step: float = 1e-5,
     absolute_step: float = 1e-8,
     rank_tolerance: float | None = None,
 ) -> _InformationContext:
+    _validate_existing_observations(existing_observations, constraints)
     all_times = constraints.all_available_times
     lower, upper = reference_model.supported_time_range
     tolerance = 1e-12 * max(1.0, abs(lower), abs(upper))
@@ -157,25 +181,15 @@ def _build_information_context(
         dtype=float,
     )
 
-    replicates = float(constraints.replicates_per_time)
     for draw_index in np.flatnonzero(reference_model.valid_draws):
         theta = reference_model.parameter_draws[draw_index]
-        expected = _evaluate_model(reference_model.model_name, all_times, theta)
-        variance = observation_model.standard_deviation(expected, times=all_times) ** 2 / replicates
-        if np.any(~np.isfinite(variance)) or np.any(variance <= 0):
-            raise ValueError(
-                'Information optimization requires strictly positive observation variance '
-                'at every available time.'
-            )
-        sensitivities = finite_difference_sensitivities(
-            reference_model.model_name,
-            all_times,
-            theta,
+        contributions[draw_index] = _information_contributions(
+            reference_model.model_name, all_times, theta, observation_model,
+            replicates_per_time=constraints.replicates_per_time,
+            existing_observations=existing_observations,
             relative_step=relative_step,
             absolute_step=absolute_step,
         )
-        for time_index, (gradient, var) in enumerate(zip(sensitivities, variance)):
-            contributions[draw_index, time_index] = np.outer(gradient, gradient) / var
         evaluation_sensitivities[draw_index] = finite_difference_sensitivities(
             reference_model.model_name,
             evaluation_times,
@@ -194,6 +208,7 @@ def _build_information_context(
         information_contributions=contributions,
         evaluation_sensitivities=evaluation_sensitivities,
         rank_tolerance=rank_tolerance,
+        existing_observations=existing_observations,
     )
 
 
@@ -202,6 +217,7 @@ def _build_local_information_context(
     observation_model: ObservationModel,
     constraints: DesignConstraints,
     *,
+    existing_observations: ExistingObservations | None = None,
     evaluation_times=None,
     evaluation_weights=None,
     relative_step: float = 1e-5,
@@ -209,6 +225,7 @@ def _build_local_information_context(
     rank_tolerance: float | None = None,
 ) -> _LocalInformationContext:
     """Build a local information context at the central reference parameters."""
+    _validate_existing_observations(existing_observations, constraints)
     all_times = constraints.all_available_times
     lower, upper = reference_model.supported_time_range
     tolerance = 1e-12 * max(1.0, abs(lower), abs(upper))
@@ -221,24 +238,12 @@ def _build_local_information_context(
         evaluation_weights,
     )
     theta = reference_model.central_parameters
-    expected = _evaluate_model(reference_model.model_name, all_times, theta)
-    replicates = float(constraints.replicates_per_time)
-    variance = observation_model.standard_deviation(expected, times=all_times) ** 2 / replicates
-    if np.any(~np.isfinite(variance)) or np.any(variance <= 0):
-        raise ValueError(
-            'Information optimization requires strictly positive observation variance '
-            'at every available time.'
-        )
-    sensitivities = finite_difference_sensitivities(
-        reference_model.model_name,
-        all_times,
-        theta,
+    contributions = _information_contributions(
+        reference_model.model_name, all_times, theta, observation_model,
+        replicates_per_time=constraints.replicates_per_time,
+        existing_observations=existing_observations,
         relative_step=relative_step,
         absolute_step=absolute_step,
-    )
-    contributions = np.asarray(
-        [np.outer(gradient, gradient) / var for gradient, var in zip(sensitivities, variance)],
-        dtype=float,
     )
     evaluation_sensitivities = finite_difference_sensitivities(
         reference_model.model_name,
@@ -258,6 +263,7 @@ def _build_local_information_context(
         information_contributions=contributions,
         evaluation_sensitivities=evaluation_sensitivities,
         rank_tolerance=rank_tolerance,
+        existing_observations=existing_observations,
     )
 
 
@@ -308,6 +314,7 @@ def evaluate_i_optimal_design(
     observation_model: ObservationModel,
     constraints: DesignConstraints,
     *,
+    existing_observations: ExistingObservations | None = None,
     evaluation_times=None,
     evaluation_weights=None,
     relative_step: float = 1e-5,
@@ -325,6 +332,7 @@ def evaluate_i_optimal_design(
         relative_step=relative_step,
         absolute_step=absolute_step,
         rank_tolerance=rank_tolerance,
+        existing_observations=existing_observations,
     )
     return context.score(design)
 
@@ -335,6 +343,7 @@ def evaluate_local_i_optimal_design(
     observation_model: ObservationModel,
     constraints: DesignConstraints,
     *,
+    existing_observations: ExistingObservations | None = None,
     evaluation_times=None,
     evaluation_weights=None,
     relative_step: float = 1e-5,
@@ -352,6 +361,7 @@ def evaluate_local_i_optimal_design(
         relative_step=relative_step,
         absolute_step=absolute_step,
         rank_tolerance=rank_tolerance,
+        existing_observations=existing_observations,
     )
     return context.score(design)
 
@@ -416,6 +426,7 @@ def greedy_i_optimal_designs(
     observation_model: ObservationModel,
     constraints: DesignConstraints,
     *,
+    existing_observations: ExistingObservations | None = None,
     evaluation_times=None,
     evaluation_weights=None,
     relative_step: float = 1e-5,
@@ -438,6 +449,7 @@ def greedy_i_optimal_designs(
         relative_step=relative_step,
         absolute_step=absolute_step,
         rank_tolerance=rank_tolerance,
+        existing_observations=existing_observations,
     )
     return _greedy_designs_from_context(context)
 
@@ -447,6 +459,7 @@ def greedy_local_i_optimal_designs(
     observation_model: ObservationModel,
     constraints: DesignConstraints,
     *,
+    existing_observations: ExistingObservations | None = None,
     evaluation_times=None,
     evaluation_weights=None,
     relative_step: float = 1e-5,
@@ -468,6 +481,7 @@ def greedy_local_i_optimal_designs(
         relative_step=relative_step,
         absolute_step=absolute_step,
         rank_tolerance=rank_tolerance,
+        existing_observations=existing_observations,
     )
     return _greedy_designs_from_context(context)
 
@@ -533,6 +547,7 @@ def coordinate_exchange_i_optimal_design(
     observation_model: ObservationModel,
     constraints: DesignConstraints,
     *,
+    existing_observations: ExistingObservations | None = None,
     evaluation_times=None,
     evaluation_weights=None,
     relative_step: float = 1e-5,
@@ -553,6 +568,7 @@ def coordinate_exchange_i_optimal_design(
         relative_step=relative_step,
         absolute_step=absolute_step,
         rank_tolerance=rank_tolerance,
+        existing_observations=existing_observations,
     )
     return _coordinate_exchange_from_context(
         initial_times,
@@ -567,6 +583,7 @@ def coordinate_exchange_local_i_optimal_design(
     observation_model: ObservationModel,
     constraints: DesignConstraints,
     *,
+    existing_observations: ExistingObservations | None = None,
     evaluation_times=None,
     evaluation_weights=None,
     relative_step: float = 1e-5,
@@ -587,6 +604,7 @@ def coordinate_exchange_local_i_optimal_design(
         relative_step=relative_step,
         absolute_step=absolute_step,
         rank_tolerance=rank_tolerance,
+        existing_observations=existing_observations,
     )
     return _coordinate_exchange_from_context(
         initial_times,
@@ -600,6 +618,7 @@ def optimize_i_optimal_designs(
     observation_model: ObservationModel,
     constraints: DesignConstraints,
     *,
+    existing_observations: ExistingObservations | None = None,
     evaluation_times=None,
     evaluation_weights=None,
     relative_step: float = 1e-5,
@@ -618,6 +637,7 @@ def optimize_i_optimal_designs(
         relative_step=relative_step,
         absolute_step=absolute_step,
         rank_tolerance=rank_tolerance,
+        existing_observations=existing_observations,
     )
     nested = _greedy_designs_from_context(context)
     refined_steps: list[DesignStep] = []
@@ -652,6 +672,7 @@ def optimize_i_optimal_designs(
         'rank_aware_initialization': True,
         'replicates_per_time': constraints.replicates_per_time,
         **observation_model_metadata(observation_model),
+        **_existing_observation_metadata(existing_observations),
         'minimum_spacing': constraints.minimum_spacing,
         'fixed_times': constraints.fixed_times.copy(),
         'candidate_time_count': len(constraints.candidate_times),
@@ -672,6 +693,7 @@ def optimize_local_i_optimal_designs(
     observation_model: ObservationModel,
     constraints: DesignConstraints,
     *,
+    existing_observations: ExistingObservations | None = None,
     evaluation_times=None,
     evaluation_weights=None,
     relative_step: float = 1e-5,
@@ -695,6 +717,7 @@ def optimize_local_i_optimal_designs(
         relative_step=relative_step,
         absolute_step=absolute_step,
         rank_tolerance=rank_tolerance,
+        existing_observations=existing_observations,
     )
     nested = _greedy_designs_from_context(context)
     refined_steps: list[DesignStep] = []
@@ -736,6 +759,7 @@ def optimize_local_i_optimal_designs(
         'parameter_count': reference_model.n_parameters,
         'replicates_per_time': constraints.replicates_per_time,
         **observation_model_metadata(observation_model),
+        **_existing_observation_metadata(existing_observations),
         'minimum_spacing': constraints.minimum_spacing,
         'fixed_times': constraints.fixed_times.copy(),
         'candidate_time_count': len(constraints.candidate_times),
