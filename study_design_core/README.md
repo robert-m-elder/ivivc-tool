@@ -1006,6 +1006,85 @@ python examples/study_design_proof_of_concept.py --quick
 The default output directory, `study_design_poc_output/`, contains transparent
 CSV and JSON files for each scenario and optional static Plotly HTML summaries.
 
+### Measurement uncertainty controls
+
+The default source fits retain their existing uncertainty behavior. Add
+`--use-measurement-uncertainty` to use the known synthetic measurement SD in
+source fitting and completed-data updates. Supported source generators then
+use independent, unclipped Gaussian errors. Without that flag, legacy clipping
+and monotonic-generation rules remain. Approach 1 calibration keeps its existing
+generation and uncertainty scope in either case.
+Known source precision requires a positive generating SD.
+When a separate future SD/profile is chosen without source weighting,
+completed rows retain the historical `--observation-sd` as an explicitly
+labeled nominal error assumption. This keeps future choices from changing
+completed-data likelihoods or historical source fitting.
+
+| Option | Meaning |
+| --- | --- |
+| `--source-response-kind mean` | Report synthetic replicate means with known SEM = individual SD / sqrt(actual count); requires the measurement-uncertainty flag. The default retains individual rows. |
+| `--reference-replicates-per-time` | Historical in vivo and empirical in vitro count; also the reported-mean count for Approach 2 calibration. Default: 3. |
+| `--completed-replicates-per-time` | Count already collected at each adaptive time. Default: 3. |
+| `--future-replicates-per-time` | Planned count at each new time. Changing it does not change source or completed data. Default: 3. |
+| `--future-observation-sd` | Explicit future individual SD, independent of historical/completed SD. Otherwise the existing `--observation-sd` supplies the default assumption. |
+| `--future-sd-profile-csv` | Alternative future individual SD profile with `time,sd` columns on the analyzed in vivo time coordinate. Do not combine with an explicit future constant SD. |
+| `--ivivc-prediction-sem` | Optional SEM for independent target in vitro prediction values, for Approach 2 only. This describes prediction inputs, not future in vivo measurements. |
+
+`--observation-sd` still controls historical in vivo and completed-data
+generation; `--ivivc-calibration-response-sd` controls IVIVC calibration and
+empirical in vitro source generation. Source SD/SEM does not automatically
+define a future profile. For example:
+
+```bash
+python examples/study_design_proof_of_concept.py --quick --no-html \
+    --scenario measured_in_vivo --analysis-model exponential \
+    --use-measurement-uncertainty --source-response-kind mean \
+    --reference-replicates-per-time 4 --future-replicates-per-time 3 \
+    --future-observation-sd 0.08
+```
+
+A future profile CSV may contain:
+
+```csv
+time,sd
+0,0.03
+10,0.05
+30,0.08
+52,0.15
+```
+
+Pass it with `--future-sd-profile-csv future_sd.csv`. Times must increase and
+SDs must be positive. Lookup uses the nearest time, preferring the earlier time
+at a tie and extending endpoint SDs. Each scenario exports the resolved SD and
+future mean SEM in `future_measurement_variability.csv`; completed times are
+excluded. Metadata retains the complete profile, source/completed precision,
+and separate replicate counts. HTML summaries state the same assumptions; the
+reference envelope remains distinct from future measurement variability.
+
+For Approach 2, select `--ivivc-approach approach2` and a method such as
+`--ivivc-method value_ratio`; optionally add `--ivivc-prediction-sem 0.005`.
+Inverse prediction may lose required
+zero-time support with uncertain inputs; the existing support error is retained
+rather than moving or inventing a baseline. Empirical scaling still requires
+`--time-scaling-parameter-draws` above zero to include source parameter
+uncertainty in addition to the scale distribution.
+
+### Unequal-uncertainty comparison
+
+Run the focused comparison without generating files:
+
+```bash
+python examples/study_design_uncertainty_demo.py --simulations 1000 --seed 123
+```
+
+It selects schedules using constant SD or an unequal SD profile, then assesses
+both under the same unequal-error model, reference ensemble, and common Monte
+Carlo draws. JSON output reports selected times, information scores under that
+common assessment model, curve-recovery error, and fit failures. The three
+plausible reference curves are distinct from future measurement noise. This
+illustrates the effect of error assumptions; it is not a general superiority
+claim or a guarantee of recovery for another dataset.
+
 ### Empirical time-scale POC example
 
 Run the focused example with its illustrative synthetic ratios:
@@ -1192,7 +1271,7 @@ panel a uses the largest available size. The original `measured_in_vivo` example
 and the prospective-measured mixed-requirements mode retain their fixed baseline
 and previous design-size settings. No numerical backend changes are required.
 
-All built-in scenarios are synthetic validation examples. Their HTML summaries
+All built-in scenarios are synthetic demonstrations. Their HTML summaries
 and `reference_trajectory.csv` files include the known generating curve as
 **Synthetic ground truth — not used by optimizer**. This curve is supplied only
 for evaluation and visualization; it is not passed to reference fitting, IVIVC

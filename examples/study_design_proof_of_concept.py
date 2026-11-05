@@ -54,12 +54,26 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from ivivc_core import (  # noqa: E402
     DEFAULT_PREDICTION_METHODS,
+    ObservationUncertainty,
     TimeCourse,
     fit_ivivc,
     fit_time_course,
     get_model_spec,
     iter_model_specs,
     prepare_data,
+    prepare_time_course,
+)
+from examples.study_design_poc_uncertainty import (  # noqa: E402
+    completed_with_historical_assumption,
+    future_observation_metadata,
+    future_observation_model,
+    load_future_sd_profile,
+    source_observation_columns,
+    source_observation_rows,
+    validate_future_sd_profile,
+)
+from examples.study_design_uncertainty_reporting import (  # noqa: E402
+    future_variability_table, uncertainty_metadata, uncertainty_summary_html,
 )
 from examples.study_design_poc_models import (  # noqa: E402
     generate_noisy_monotonic_responses,
@@ -258,6 +272,14 @@ class ProofOfConceptSettings:
     planning_input_mode: str = 'adaptive-in-vivo'
     planning_latest_fractions: tuple[float, ...] = (0.70, 0.90)
     planning_search_limit: int = 100000
+    use_measurement_uncertainty: bool = False
+    source_response_kind: str = 'individual'
+    reference_replicates_per_time: int = MEASURED_REFERENCE_REPLICATES_PER_TIME
+    completed_replicates_per_time: int = POC_FUTURE_REPLICATES_PER_TIME
+    future_replicates_per_time: int = POC_FUTURE_REPLICATES_PER_TIME
+    future_observation_sd: float | None = None
+    future_sd_profile: tuple[tuple[float, float], ...] | None = None
+    ivivc_prediction_sem: float | None = None
 
     def __post_init__(self) -> None:
         if int(self.n_reference_draws) != self.n_reference_draws or self.n_reference_draws < 2:
@@ -341,6 +363,37 @@ class ProofOfConceptSettings:
                 or self.planning_search_limit < 1):
             raise ValueError('planning_search_limit must be a positive integer.')
         object.__setattr__(self, 'planning_search_limit', int(self.planning_search_limit))
+        if not isinstance(self.use_measurement_uncertainty, (bool, np.bool_)):
+            raise ValueError('use_measurement_uncertainty must be a boolean.')
+        object.__setattr__(self, 'use_measurement_uncertainty', bool(self.use_measurement_uncertainty))
+        if self.source_response_kind not in ('individual', 'mean'):
+            raise ValueError('source_response_kind must be individual or mean.')
+        if self.source_response_kind == 'mean' and not self.use_measurement_uncertainty:
+            raise ValueError('Reported source means require use_measurement_uncertainty so their SEM is explicit.')
+        for name in ('reference_replicates_per_time', 'completed_replicates_per_time',
+                     'future_replicates_per_time'):
+            value = getattr(self, name)
+            if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)) or value < 1:
+                raise ValueError(f'{name} must be a positive integer.')
+            object.__setattr__(self, name, int(value))
+        if self.future_observation_sd is not None and (
+            isinstance(self.future_observation_sd, (bool, np.bool_))
+            or not np.isfinite(self.future_observation_sd) or self.future_observation_sd <= 0
+        ):
+            raise ValueError('future_observation_sd must be finite and positive.')
+        if self.future_observation_sd is not None:
+            object.__setattr__(self, 'future_observation_sd', float(self.future_observation_sd))
+        if self.future_sd_profile is not None:
+            if self.future_observation_sd is not None:
+                raise ValueError('Supply a future SD profile or a constant future SD, not both.')
+            object.__setattr__(self, 'future_sd_profile', validate_future_sd_profile(self.future_sd_profile))
+        if self.ivivc_prediction_sem is not None:
+            if (isinstance(self.ivivc_prediction_sem, (bool, np.bool_))
+                    or not np.isfinite(self.ivivc_prediction_sem) or self.ivivc_prediction_sem <= 0):
+                raise ValueError('ivivc_prediction_sem must be finite and positive.')
+            if self.ivivc_approach != 'approach2':
+                raise ValueError('Prediction-input SEM is supported only for Approach 2.')
+            object.__setattr__(self, 'ivivc_prediction_sem', float(self.ivivc_prediction_sem))
 
     @property
     def resolved_ivivc_model(self) -> str:
@@ -620,9 +673,9 @@ def _ivivc_in_vitro_preset(settings: ProofOfConceptSettings):
 def build_measured_in_vivo_scenario(
     settings: ProofOfConceptSettings,
 ) -> ScenarioDefinition:
-    """Fit replicate-level measured in vivo data and plan a new full study."""
+    """Fit measured in vivo data and plan a new full study."""
     study_min_time, study_max_time = MEASURED_TIME_RANGE
-    future_replicates = POC_FUTURE_REPLICATES_PER_TIME
+    future_replicates = settings.future_replicates_per_time
 
     rng = np.random.default_rng(settings.random_seed + 101)
     distinct_times = np.array([0.0, 4.0, 10.0, 16.0, 22.0, 28.0, 36.0, 48.0])
@@ -631,15 +684,20 @@ def build_measured_in_vivo_scenario(
 
     preset = _common_in_vivo_preset(settings)
     true_means = preset.evaluate(distinct_times)
-    replicate_count = MEASURED_REFERENCE_REPLICATES_PER_TIME
+    replicate_count = settings.reference_replicates_per_time
     observed = true_means[:, None] + rng.normal(
         0.0,
         settings.observation_sd,
         size=(len(distinct_times), replicate_count),
     )
-    observed = np.clip(observed, 0.002, None)
-    raw_time = np.repeat(distinct_times, replicate_count)
-    raw_response = observed.reshape(-1)
+    if not settings.use_measurement_uncertainty:
+        observed = np.clip(observed, 0.002, None)
+    source, replicate_ids, counts = source_observation_rows(
+        distinct_times, observed, settings.observation_sd,
+        enabled=settings.use_measurement_uncertainty, response_kind=settings.source_response_kind,
+        label='reference measured in vivo data',
+    )
+    raw_time, raw_response = source.time, source.value
 
     with _quiet_expected_numerical_warnings():
         fit_batch = fit_time_course(
@@ -649,6 +707,8 @@ def build_measured_in_vivo_scenario(
             selected_metrics=['rmse'],
             analysis_config=_analysis_config(settings.random_seed + 102),
             approach_id='approach2',
+            **({} if source.observation_uncertainty is None else
+               {'observation_uncertainty': source.observation_uncertainty}),
         )
     if fit_batch.errors:
         raise RuntimeError(
@@ -695,24 +755,20 @@ def build_measured_in_vivo_scenario(
     observed_data = pd.DataFrame({
         'time': raw_time,
         'response': raw_response,
-        'replicate_id': np.tile(np.arange(1, replicate_count + 1), len(distinct_times)),
+        'replicate_id': replicate_ids,
+        **source_observation_columns(source, counts),
         'role': 'reference measured in vivo data',
     })
     return ScenarioDefinition(
         name='measured_in_vivo',
         title='Measured in vivo reference data',
         description=(
-            'Replicate-level in vivo observations are fitted with the selected '
+            'Measured in vivo observations are fitted with the selected '
             'analysis model. Parameter uncertainty defines plausible reference '
             'trajectories, while future-study variability is specified separately.'
         ),
         reference=reference,
-        observation_model=ObservationModel(
-            kind='constant_sd',
-            value=settings.observation_sd,
-            replicates_per_time=future_replicates,
-            source='proof_of_concept_assumption',
-        ),
+        observation_model=future_observation_model(settings),
         constraints=constraints,
         analysis_model=settings.analysis_model,
         observed_data=observed_data,
@@ -725,8 +781,11 @@ def build_measured_in_vivo_scenario(
             'reference_data_time_points': distinct_times.tolist(),
             'reference_replicates_per_time': replicate_count,
             'reference_data_sd': settings.observation_sd,
-            'future_observation_sd': settings.observation_sd,
-            'future_replicates_per_time': future_replicates,
+            **future_observation_metadata(settings),
+            'source_measurement_uncertainty_included': bool(settings.use_measurement_uncertainty),
+            'source_response_kind': settings.source_response_kind,
+            'synthetic_source_noise_distribution': ('independent_normal' if settings.use_measurement_uncertainty
+                                                      else 'normal_clipped_at_0.002'),
             'study_time_range': MEASURED_TIME_RANGE,
             'candidate_time_step': MEASURED_CANDIDATE_STEP,
             'minimum_spacing': POC_MINIMUM_SPACING,
@@ -791,7 +850,7 @@ def build_ivivc_prediction_scenario(
 ) -> ScenarioDefinition:
     """Build the selected IVIVC prediction from noisy calibration profiles."""
     in_vitro_min_time, in_vitro_max_time = IVIVC_IN_VITRO_TIME_RANGE
-    future_replicates = POC_FUTURE_REPLICATES_PER_TIME
+    future_replicates = settings.future_replicates_per_time
     approach = settings.ivivc_approach
     model_name = settings.resolved_ivivc_model
     method = settings.resolved_ivivc_method
@@ -809,22 +868,40 @@ def build_ivivc_prediction_scenario(
     time_scale = IVIVC_TRUE_TIME_SCALE
     in_vitro_response_true = preset.evaluate(in_vitro_time)
     in_vivo_response_true = preset.evaluate_time_scaled(in_vivo_time, time_scale)
-    in_vitro_response, in_vitro_noise, in_vitro_noise_attempts = (
-        generate_noisy_monotonic_responses(
+    source_precision = settings.use_measurement_uncertainty and approach == 'approach2'
+    calibration_count = (settings.reference_replicates_per_time
+                         if source_precision and settings.source_response_kind == 'mean' else 1)
+    calibration_sigma = settings.ivivc_calibration_response_sd / np.sqrt(calibration_count)
+    uncertainty_options = {}
+    if source_precision:
+        if settings.ivivc_calibration_response_sd <= 0:
+            raise ValueError('IVIVC calibration SD must be positive when measurement uncertainty is enabled.')
+        in_vitro_noise = np.random.default_rng(settings.random_seed + 200).normal(
+            0., calibration_sigma, size=len(in_vitro_time))
+        in_vivo_noise = np.random.default_rng(settings.random_seed + 201).normal(
+            0., calibration_sigma, size=len(in_vivo_time))
+        in_vitro_response = in_vitro_response_true + in_vitro_noise
+        in_vivo_response = in_vivo_response_true + in_vivo_noise
+        in_vitro_noise_attempts = in_vivo_noise_attempts = 1
+        uncertainty = ObservationUncertainty(
+            calibration_sigma, response_kind=settings.source_response_kind,
+            replicate_counts=(calibration_count if settings.source_response_kind == 'mean' else None),
+            source='known_synthetic_measurement_sd',
+        )
+        uncertainty_options = {'in_vitro_uncertainty': uncertainty, 'in_vivo_uncertainty': uncertainty}
+    else:
+        in_vitro_response, in_vitro_noise, in_vitro_noise_attempts = generate_noisy_monotonic_responses(
             in_vitro_response_true,
             absolute_sd=settings.ivivc_calibration_response_sd,
             random_state=settings.random_seed + 200,
             minimum_response=0.0,
         )
-    )
-    in_vivo_response, in_vivo_noise, in_vivo_noise_attempts = (
-        generate_noisy_monotonic_responses(
+        in_vivo_response, in_vivo_noise, in_vivo_noise_attempts = generate_noisy_monotonic_responses(
             in_vivo_response_true,
             absolute_sd=settings.ivivc_calibration_response_sd,
             random_state=settings.random_seed + 201,
             minimum_response=0.0,
         )
-    )
 
     prepared = prepare_data(
         in_vitro_time,
@@ -832,6 +909,7 @@ def build_ivivc_prediction_scenario(
         in_vivo_time,
         in_vivo_response,
         selected_interpolation=[IVIVC_INTERPOLATION_METHOD if approach == 'approach1' else 'none'],
+        **uncertainty_options,
     )
     preprocessed_data = None
     if approach == 'approach1':
@@ -867,6 +945,14 @@ def build_ivivc_prediction_scenario(
         prediction_response,
         label='in_vitro_prediction',
     )
+    if settings.ivivc_prediction_sem is not None:
+        prediction, _ = prepare_time_course(
+            prediction.time, prediction.value, label=prediction.label,
+            observation_uncertainty=ObservationUncertainty(
+                settings.ivivc_prediction_sem, response_kind='mean',
+                source='proof_of_concept_prediction_input_assumption',
+            ),
+        )
     with _quiet_expected_numerical_warnings():
         reference = reference_from_ivivc(
             analysis, prediction, selection=selection, method=method,
@@ -909,6 +995,10 @@ def build_ivivc_prediction_scenario(
         'in_vivo_response': in_vivo_response,
         'in_vivo_response_true': in_vivo_response_true,
         'in_vivo_response_noise': in_vivo_noise,
+        'response_kind': settings.source_response_kind if source_precision else 'individual',
+        'replicate_count': calibration_count,
+        'in_vitro_standard_uncertainty': calibration_sigma if source_precision else np.nan,
+        'in_vivo_standard_uncertainty': calibration_sigma if source_precision else np.nan,
         'role': 'IVIVC calibration data',
     })
     prediction_data = pd.DataFrame({
@@ -920,6 +1010,11 @@ def build_ivivc_prediction_scenario(
         'in_vivo_response': np.nan,
         'in_vivo_response_true': np.nan,
         'in_vivo_response_noise': np.nan,
+        'response_kind': 'mean' if settings.ivivc_prediction_sem is not None else None,
+        'replicate_count': np.nan,
+        'in_vitro_standard_uncertainty': (np.nan if settings.ivivc_prediction_sem is None
+                                         else settings.ivivc_prediction_sem),
+        'in_vivo_standard_uncertainty': np.nan,
         'role': 'target in vitro prediction data',
     })
     observed_data = pd.concat(
@@ -946,12 +1041,7 @@ def build_ivivc_prediction_scenario(
             'alongside the schedules and Monte Carlo curve-recovery results.'
         ),
         reference=reference,
-        observation_model=ObservationModel(
-            kind='constant_sd',
-            value=settings.observation_sd,
-            replicates_per_time=future_replicates,
-            source='proof_of_concept_assumption',
-        ),
+        observation_model=future_observation_model(settings),
         constraints=constraints,
         analysis_model=settings.analysis_model,
         observed_data=observed_data,
@@ -967,8 +1057,12 @@ def build_ivivc_prediction_scenario(
             'prediction_method': method,
             'in_vitro_prediction_points': len(prediction_time),
             'ivivc_prediction_time_range': (float(prediction_time[0]), float(prediction_time[-1])),
-            'future_observation_sd': settings.observation_sd,
-            'future_replicates_per_time': future_replicates,
+            **future_observation_metadata(settings),
+            'source_measurement_uncertainty_included': bool(source_precision),
+            'source_response_kind': settings.source_response_kind if source_precision else 'individual',
+            'synthetic_source_noise_distribution': ('independent_normal' if source_precision
+                                                      else 'normal_conditioned_on_monotonic_nonnegative_responses'),
+            'ivivc_prediction_sem': settings.ivivc_prediction_sem,
             'ivivc_time_scale': time_scale,
             'ivivc_calibration_response_sd': settings.ivivc_calibration_response_sd,
             'ivivc_in_vitro_noise_generation_attempts': in_vitro_noise_attempts,
@@ -989,6 +1083,9 @@ def build_ivivc_prediction_scenario(
                         'rmse': fit.fit_metrics.get('rmse'),
                         'tau': fit.tau_estimate,
                         'tau_diagnostics': fit.tau_diagnostics,
+                        'observation_uncertainty': (None if fit.observation_uncertainty is None
+                                                    else fit.observation_uncertainty.to_metadata()),
+                        'fit_diagnostics': fit.fit_diagnostics,
                     }
                     for component, fit in model_fit.profile_fits.items()
                 }),
@@ -1009,8 +1106,10 @@ def _generate_completed_target_observations(
     replicate_count: int,
     observation_sd: float,
     random_state: int,
+    use_measurement_uncertainty: bool = False,
+    source_response_kind: str = 'individual',
 ) -> tuple[ExistingObservations, pd.DataFrame]:
-    """Generate replicate-level completed observations from synthetic truth."""
+    """Generate completed individual observations or reported means."""
     completed_times = np.asarray(completed_times, dtype=float)
     true_means = np.interp(
         completed_times,
@@ -1023,21 +1122,25 @@ def _generate_completed_target_observations(
         observation_sd,
         size=(len(completed_times), int(replicate_count)),
     )
-    observed = np.clip(observed, 0.002, None)
-    raw_time = np.repeat(completed_times, int(replicate_count))
-    raw_response = observed.reshape(-1)
+    if not use_measurement_uncertainty:
+        observed = np.clip(observed, 0.002, None)
+    source, replicate_ids, counts = source_observation_rows(
+        completed_times, observed, observation_sd,
+        enabled=use_measurement_uncertainty, response_kind=source_response_kind,
+        label='completed target-study in vivo data',
+    )
+    raw_time, raw_response = source.time, source.value
     existing = ExistingObservations(
         raw_time,
         raw_response,
         label='completed target-study in vivo data',
+        observation_uncertainty=source.observation_uncertainty,
     )
     table = pd.DataFrame({
         'time': raw_time,
         'response': raw_response,
-        'replicate_id': np.tile(
-            np.arange(1, int(replicate_count) + 1),
-            len(completed_times),
-        ),
+        'replicate_id': replicate_ids,
+        **source_observation_columns(source, counts),
         'role': 'completed target-study in vivo data',
     })
     return existing, table
@@ -1049,7 +1152,8 @@ def build_adaptive_in_vivo_only_scenario(
     """Use incomplete target in vivo data alone to select future times."""
     study_min_time, study_max_time = ADAPTIVE_IN_VIVO_TIME_RANGE
     completed_times = np.asarray(ADAPTIVE_COMPLETED_TIMES, dtype=float)
-    replicate_count = POC_FUTURE_REPLICATES_PER_TIME
+    replicate_count = settings.completed_replicates_per_time
+    future_replicates = settings.future_replicates_per_time
     if np.any(completed_times < study_min_time) or np.any(completed_times > study_max_time):
         raise ValueError('Adaptive completed times must lie within ADAPTIVE_IN_VIVO_TIME_RANGE.')
 
@@ -1070,6 +1174,8 @@ def build_adaptive_in_vivo_only_scenario(
         replicate_count=replicate_count,
         observation_sd=settings.observation_sd,
         random_state=settings.random_seed + 301,
+        **({} if not settings.use_measurement_uncertainty else
+           {'use_measurement_uncertainty': True, 'source_response_kind': settings.source_response_kind}),
     )
 
     with _quiet_expected_numerical_warnings():
@@ -1095,6 +1201,9 @@ def build_adaptive_in_vivo_only_scenario(
         n_samples=settings.n_reference_draws,
         random_state=settings.random_seed + 303,
     )
+    # Fit the legacy source before attaching its nominal completed-data SD.
+    # Future assumptions must not alter source weighting or covariance.
+    existing = completed_with_historical_assumption(existing, settings)
 
     candidates = _adaptive_candidate_grid(
         reference.supported_time_range[0],
@@ -1113,7 +1222,7 @@ def build_adaptive_in_vivo_only_scenario(
         minimum_spacing=POC_MINIMUM_SPACING,
         min_number_of_times=minimum_n,
         max_number_of_times=maximum_n,
-        replicates_per_time=replicate_count,
+        replicates_per_time=future_replicates,
     )
     return ScenarioDefinition(
         name='adaptive_in_vivo_only',
@@ -1124,12 +1233,7 @@ def build_adaptive_in_vivo_only_scenario(
             + _adaptive_candidate_description(settings.adaptive_candidate_policy)
         ),
         reference=reference,
-        observation_model=ObservationModel(
-            kind='constant_sd',
-            value=settings.observation_sd,
-            replicates_per_time=replicate_count,
-            source='proof_of_concept_assumption',
-        ),
+        observation_model=future_observation_model(settings),
         constraints=constraints,
         analysis_model=settings.analysis_model,
         observed_data=observed_data,
@@ -1146,8 +1250,11 @@ def build_adaptive_in_vivo_only_scenario(
             'latest_completed_time': existing.latest_time,
             'reference_replicates_per_time': replicate_count,
             'reference_data_sd': settings.observation_sd,
-            'future_observation_sd': settings.observation_sd,
-            'future_replicates_per_time': replicate_count,
+            **future_observation_metadata(settings),
+            'source_measurement_uncertainty_included': bool(settings.use_measurement_uncertainty),
+            'source_response_kind': settings.source_response_kind,
+            'synthetic_source_noise_distribution': ('independent_normal' if settings.use_measurement_uncertainty
+                                                      else 'normal_clipped_at_0.002'),
             'study_time_range': ADAPTIVE_IN_VIVO_TIME_RANGE,
             'candidate_time_step': ADAPTIVE_IN_VIVO_CANDIDATE_STEP,
             'minimum_spacing': POC_MINIMUM_SPACING,
@@ -1187,7 +1294,8 @@ def _build_adaptive_ivivc_scenario(
         raise RuntimeError('The synthetic IVIVC scenario did not provide ground truth.')
 
     completed_times = np.asarray(completed_times, dtype=float)
-    replicate_count = POC_FUTURE_REPLICATES_PER_TIME
+    replicate_count = settings.completed_replicates_per_time
+    future_replicates = settings.future_replicates_per_time
     if (
         np.any(completed_times < prior.reference.supported_time_range[0])
         or np.any(completed_times > prior.reference.supported_time_range[1])
@@ -1201,13 +1309,11 @@ def _build_adaptive_ivivc_scenario(
         replicate_count=replicate_count,
         observation_sd=settings.observation_sd,
         random_state=settings.random_seed + observation_seed_offset,
+        **({} if not settings.use_measurement_uncertainty else
+           {'use_measurement_uncertainty': True, 'source_response_kind': settings.source_response_kind}),
     )
-    observation_model = ObservationModel(
-        kind='constant_sd',
-        value=settings.observation_sd,
-        replicates_per_time=replicate_count,
-        source='proof_of_concept_assumption',
-    )
+    existing = completed_with_historical_assumption(existing, settings)
+    observation_model = future_observation_model(settings)
     update = reweight_reference_ensemble(
         prior.reference,
         existing,
@@ -1232,7 +1338,7 @@ def _build_adaptive_ivivc_scenario(
         minimum_spacing=POC_MINIMUM_SPACING,
         min_number_of_times=minimum_n,
         max_number_of_times=maximum_n,
-        replicates_per_time=replicate_count,
+        replicates_per_time=future_replicates,
     )
 
     completed_ivivc_table = pd.DataFrame({
@@ -1245,6 +1351,9 @@ def _build_adaptive_ivivc_scenario(
         'in_vivo_response_true': np.nan,
         'in_vivo_response_noise': np.nan,
         'replicate_id': completed_table['replicate_id'],
+        'response_kind': completed_table['response_kind'],
+        'replicate_count': completed_table['replicate_count'],
+        'in_vivo_standard_uncertainty': completed_table['standard_uncertainty'],
         'role': completed_table['role'],
     })
     observed_data = pd.concat(
@@ -1266,8 +1375,9 @@ def _build_adaptive_ivivc_scenario(
             'effective_sample_size_fraction'
         ],
         'prior_positive_weight_draws': update.metadata['positive_prior_draws'],
-        'future_observation_sd': settings.observation_sd,
-        'future_replicates_per_time': replicate_count,
+        **future_observation_metadata(settings),
+        'completed_measurement_uncertainty_included': bool(settings.use_measurement_uncertainty),
+        'completed_response_kind': settings.source_response_kind,
         'candidate_time_step': ADAPTIVE_IVIVC_CANDIDATE_STEP,
         'minimum_spacing': POC_MINIMUM_SPACING,
         'note': (
@@ -1387,16 +1497,25 @@ def build_empirical_time_scaling_scenario(
     """Fit target in vitro data and transfer the empirical scale distribution."""
     distribution, input_table = load_time_scale_distribution(settings.time_scaling_ratios_csv)
     source_times = np.array([0., 4., 8., 12., 16., 20., 24., 32., 40.])
-    replicates = POC_FUTURE_REPLICATES_PER_TIME
+    replicates = settings.reference_replicates_per_time
+    future_replicates = settings.future_replicates_per_time
     source_preset = _ivivc_in_vitro_preset(settings)
     rng = np.random.default_rng(settings.random_seed + 501)
     response = source_preset.evaluate(source_times)[:, None] + rng.normal(
         0., settings.ivivc_calibration_response_sd, size=(len(source_times), replicates),
     )
+    if not settings.use_measurement_uncertainty:
+        response = np.clip(response, 0.002, None)
+    source, replicate_ids, counts = source_observation_rows(
+        source_times, response, settings.ivivc_calibration_response_sd,
+        enabled=settings.use_measurement_uncertainty, response_kind=settings.source_response_kind,
+        label='target in vitro reference data',
+    )
     observed = pd.DataFrame({
-        'time': np.repeat(source_times, replicates),
-        'response': np.clip(response, 0.002, None).reshape(-1),
-        'replicate_id': np.tile(np.arange(1, replicates + 1), len(source_times)),
+        'time': source.time,
+        'response': source.value,
+        'replicate_id': replicate_ids,
+        **source_observation_columns(source, counts),
         'role': 'target in vitro reference data',
     })
     with _quiet_expected_numerical_warnings():
@@ -1405,6 +1524,8 @@ def build_empirical_time_scaling_scenario(
             model_names=settings.resolved_time_scaling_model, selected_metrics=['rmse'],
             analysis_config=_analysis_config(settings.random_seed + 502),
             approach_id='approach2',
+            **({} if source.observation_uncertainty is None else
+               {'observation_uncertainty': source.observation_uncertainty}),
         )
     if fitted.errors:
         raise RuntimeError('In vitro source fit failed: ' + '; '.join(
@@ -1424,16 +1545,16 @@ def build_empirical_time_scaling_scenario(
         )
     truth_preset = _common_in_vivo_preset(settings)
     ground_truth = TimeCourse(grid, truth_preset.evaluate(grid), label='synthetic_ground_truth')
-    observation_model = ObservationModel(
-        kind='constant_sd', value=settings.observation_sd,
-        replicates_per_time=replicates, source='proof_of_concept_assumption',
-    )
+    observation_model = future_observation_model(settings)
     reference, existing, agreement = prior, None, None
     if adaptive:
         existing, completed_table = _generate_completed_target_observations(
-            ground_truth, completed_times, replicate_count=replicates,
+            ground_truth, completed_times, replicate_count=settings.completed_replicates_per_time,
             observation_sd=settings.observation_sd, random_state=settings.random_seed + 505,
+            **({} if not settings.use_measurement_uncertainty else
+               {'use_measurement_uncertainty': True, 'source_response_kind': settings.source_response_kind}),
         )
+        existing = completed_with_historical_assumption(existing, settings)
         update = reweight_time_scaled_reference(prior, existing, observation_model)
         reference = update.reference
         agreement = update.metadata['observation_agreement']
@@ -1469,7 +1590,7 @@ def build_empirical_time_scaling_scenario(
             candidate_times=candidates, fixed_times=fixed, min_time=lower, max_time=upper,
             minimum_spacing=POC_MINIMUM_SPACING, min_number_of_times=minimum,
             max_number_of_times=_scenario_max_n(minimum, POC_DEFAULT_MAXIMUM_N, settings),
-            replicates_per_time=replicates,
+            replicates_per_time=future_replicates,
         ),
         analysis_model=settings.analysis_model, observed_data=observed,
         target_response=0.5, ground_truth=ground_truth, existing_observations=existing,
@@ -1484,6 +1605,13 @@ def build_empirical_time_scaling_scenario(
             'time_scaling_source_parameters': fit.parameters,
             'time_scaling_source_fit_rmse': fit.fit_metrics.get('rmse'),
             'time_scaling_source_response_sd': settings.ivivc_calibration_response_sd,
+            'reference_replicates_per_time': replicates,
+            'completed_replicates_per_time': settings.completed_replicates_per_time,
+            **future_observation_metadata(settings),
+            'source_measurement_uncertainty_included': bool(settings.use_measurement_uncertainty),
+            'source_response_kind': settings.source_response_kind,
+            'synthetic_source_noise_distribution': ('independent_normal' if settings.use_measurement_uncertainty
+                                                      else 'normal_clipped_at_0.002'),
             'time_scaling_parameter_draws': settings.time_scaling_parameter_draws,
             'time_scaling_allow_extrapolation': bool(settings.time_scaling_allow_extrapolation),
             'ratio_input_source': distribution.metadata['input_source'],
@@ -2419,6 +2547,10 @@ def _scenario_metadata(result: ScenarioResult) -> dict[str, Any]:
                 'time_point_count': definition.existing_observations.n_time_points,
                 'times': definition.existing_observations.unique_times,
                 'latest_time': definition.existing_observations.latest_time,
+                'observation_uncertainty': (
+                    None if definition.existing_observations.observation_uncertainty is None else
+                    definition.existing_observations.observation_uncertainty.to_metadata()
+                ),
             }
         ),
         'adaptive_summary': adaptive_summary,
@@ -2428,13 +2560,8 @@ def _scenario_metadata(result: ScenarioResult) -> dict[str, Any]:
             'supported_time_range': definition.reference.supported_time_range,
             'metadata': definition.reference.metadata,
         },
-        'observation_model': {
-            'kind': definition.observation_model.kind,
-            'value': definition.observation_model.value,
-            'minimum_sd': definition.observation_model.minimum_sd,
-            'replicates_per_time': definition.observation_model.replicates_per_time,
-            'source': definition.observation_model.source,
-        },
+        'observation_model': definition.observation_model.to_metadata(),
+        'uncertainty': uncertainty_metadata(definition),
         'constraints': {
             'candidate_times': definition.constraints.candidate_times,
             'fixed_times': definition.constraints.fixed_times,
@@ -2570,7 +2697,8 @@ def _plotly_summary_html(result: ScenarioResult) -> str:
     if result.planning_optimization is not None:
         return planning_summary_html(
             result, _reference_table(result.definition.reference, result.definition.ground_truth), go, to_html,
-            reference_summary_html=_ivivc_summary_html(result.definition),
+            reference_summary_html=(_ivivc_summary_html(result.definition)
+                                    + uncertainty_summary_html(result.definition)),
             supplementary_html=time_scaling_summary_html(result.definition, go, to_html, _reference_table),
         )
     if result.timing_summary is not None:
@@ -2953,9 +3081,10 @@ def _plotly_summary_html(result: ScenarioResult) -> str:
   <p>{model_summary};
      <strong>reference source:</strong> <code>{reference_source}</code>;
      <strong>reference draws:</strong> {definition.reference.n_valid_draws};
-     <strong>future observation model:</strong> <code>{definition.observation_model.kind}={definition.observation_model.value:g}</code>;
+     <strong>future observation model:</strong> <code>{definition.observation_model.kind}</code>;
      <strong>future replicates/time:</strong> {definition.constraints.replicates_per_time}.</p>
   {extra_summary_html}
+  {uncertainty_summary_html(definition)}
   {_ivivc_summary_html(definition)}
   <p><strong>Schedule generation:</strong> local I-optimality is evaluated at the fitted central reference trajectory. Reference-trajectory uncertainty is used in the Monte Carlo evaluation rather than averaged into the schedule generator.</p>
   <p><strong>{DESIGN_LABELS['optimized_nested']}:</strong> {DESIGN_EXPLANATIONS['optimized_nested']} <strong>{DESIGN_LABELS['optimized_refined']}:</strong> {DESIGN_EXPLANATIONS['optimized_refined']} Both schedules are information-based; Monte Carlo simulation evaluates their finite-sample curve-recovery performance.</p>
@@ -3088,9 +3217,10 @@ th {{background:#f3f3f3}} .scroll {{overflow-x:auto}}
 </style></head><body>
 <h1>{definition.title}</h1><p>{definition.description}</p>
 <p><strong>Model:</strong> <code>{model_label}</code> ({parameter_count} parameters).
-<strong>Observation SD:</strong> {definition.observation_model.value:g};
+<strong>Future observation model:</strong> {definition.observation_model.kind};
 <strong>replicates/time:</strong> {definition.constraints.replicates_per_time}.
 Historical observations construct the reference; they are not carried into the new study as completed observations.</p>
+{uncertainty_summary_html(definition)}
 <p><strong>{DESIGN_LABELS['optimized_nested']}:</strong> retains earlier choices when adding a point.
 <strong>{DESIGN_LABELS['optimized_refined']}:</strong> may move points at each study size.
 Both schedules are information-based. Time zero is a required baseline;
@@ -3238,6 +3368,7 @@ th {{background:#f3f3f3;}}</style></head><body>
 <p><strong>Analysis model:</strong> <code>{definition.analysis_model}</code>;
 <strong>completed times:</strong> {_format_times(definition.existing_observations.unique_times)};
 <strong>new times per schedule:</strong> 1; <strong>candidate policy:</strong> future_only.</p>
+{uncertainty_summary_html(definition)}
 <p><strong>Timing target:</strong> time to {100 * summary.degraded_fraction:g}% degradation,
 relative to each trajectory's response at time {summary.baseline_time:g};
 <strong>crossing-time quantile:</strong> {summary.quantile:g} ({100 * summary.quantile:g}%);
@@ -3318,6 +3449,9 @@ def write_proof_of_concept_outputs(
             scenario_directory / 'selected_times.csv',
             index=False,
         )
+        future_variability_table(result.definition).to_csv(
+            scenario_directory / 'future_measurement_variability.csv', index=False,
+        )
         if result.definition.metadata.get('presentation') == 'design_size_evolution':
             _t50_recovery_table(result).to_csv(
                 scenario_directory / 't50_recovery.csv', index=False,
@@ -3370,6 +3504,14 @@ def write_proof_of_concept_outputs(
             'max_design_sizes': run.settings.max_design_sizes,
             'analysis_model': run.settings.analysis_model,
             'observation_sd': run.settings.observation_sd,
+            'use_measurement_uncertainty': run.settings.use_measurement_uncertainty,
+            'source_response_kind': run.settings.source_response_kind,
+            'reference_replicates_per_time': run.settings.reference_replicates_per_time,
+            'completed_replicates_per_time': run.settings.completed_replicates_per_time,
+            'future_replicates_per_time': run.settings.future_replicates_per_time,
+            'future_observation_sd': run.settings.future_observation_sd,
+            'future_sd_profile': run.settings.future_sd_profile,
+            'ivivc_prediction_sem': run.settings.ivivc_prediction_sem,
             'fit_initialization': run.settings.fit_initialization,
             'ivivc_calibration_response_sd': run.settings.ivivc_calibration_response_sd,
             'ivivc_approach': run.settings.ivivc_approach,
@@ -3385,6 +3527,11 @@ def write_proof_of_concept_outputs(
         },
         'files': {
             'combined_performance': 'combined_design_performance.csv',
+            'uncertainty_by_scenario': {
+                name: {'future_measurement_variability': f'{name}/future_measurement_variability.csv',
+                       'metadata': f'{name}/metadata.json'}
+                for name in run.scenarios
+            },
             'combined_selected_times': 'combined_selected_times.csv',
         },
     }
@@ -3684,9 +3831,42 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=float,
         default=0.05,
         help=(
-            'Constant absolute SD used for built-in measured data and all future-study '
-            'simulations (default: 0.05).'
+            'Individual SD used to generate measured/completed synthetic in vivo data '
+            'and as the default future SD (default: 0.05).'
         ),
+    )
+    parser.add_argument(
+        '--use-measurement-uncertainty', action='store_true',
+        help='Supply known synthetic SD/SEM to source fits and completed-data likelihoods; generate independent unclipped normal data.',
+    )
+    parser.add_argument(
+        '--source-response-kind', choices=('individual', 'mean'), default='individual',
+        help='Report source/completed observations individually or as means with SEM; means require --use-measurement-uncertainty.',
+    )
+    parser.add_argument(
+        '--reference-replicates-per-time', type=int, default=MEASURED_REFERENCE_REPLICATES_PER_TIME,
+        help='Replicates for measured/empirical sources and Approach 2 calibration means (default: 3).',
+    )
+    parser.add_argument(
+        '--completed-replicates-per-time', type=int, default=POC_FUTURE_REPLICATES_PER_TIME,
+        help='Actual replicate count in generated completed target-study data (default: 3).',
+    )
+    parser.add_argument(
+        '--future-replicates-per-time', type=int, default=POC_FUTURE_REPLICATES_PER_TIME,
+        help='Planned independent future measurements per selected time (default: 3).',
+    )
+    future_sd = parser.add_mutually_exclusive_group()
+    future_sd.add_argument(
+        '--future-observation-sd', type=float,
+        help='Explicit constant individual SD for future in vivo measurements; otherwise use --observation-sd.',
+    )
+    future_sd.add_argument(
+        '--future-sd-profile-csv',
+        help='Future in vivo time,sd CSV: positive individual SD, nearest-time lookup with endpoint extension.',
+    )
+    parser.add_argument(
+        '--ivivc-prediction-sem', type=float,
+        help='Optional SEM of the target in vitro prediction responses, for Approach 2 only; independent of future in vivo SD.',
     )
     parser.add_argument(
         '--fit-initialization',
@@ -3795,6 +3975,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         planning_latest_fractions=(tuple(args.planning_latest_fraction)
                                    if args.planning_latest_fraction is not None else (0.70, 0.90)),
         planning_search_limit=args.planning_search_limit,
+        use_measurement_uncertainty=args.use_measurement_uncertainty,
+        source_response_kind=args.source_response_kind,
+        reference_replicates_per_time=args.reference_replicates_per_time,
+        completed_replicates_per_time=args.completed_replicates_per_time,
+        future_replicates_per_time=args.future_replicates_per_time,
+        future_observation_sd=args.future_observation_sd,
+        future_sd_profile=(None if args.future_sd_profile_csv is None else
+                           load_future_sd_profile(args.future_sd_profile_csv)),
+        ivivc_prediction_sem=args.ivivc_prediction_sem,
     )
     scenario_names = SCENARIO_NAMES if args.scenario == 'all' else (args.scenario,)
     run = run_proof_of_concept(scenario_names, settings=settings)

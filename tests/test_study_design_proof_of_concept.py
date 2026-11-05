@@ -149,6 +149,7 @@ def test_output_writer_creates_transparent_machine_readable_bundle(tmp_path):
     assert written.output_directory == tmp_path
     scenario_dir = tmp_path / 'ivivc_prediction'
     expected = {
+        'future_measurement_variability.csv',
         'observed_or_calibration_data.csv',
         'ivivc_preprocessed_pairs.csv',
         'reference_trajectory.csv',
