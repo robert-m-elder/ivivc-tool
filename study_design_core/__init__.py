@@ -1,6 +1,12 @@
 """Reusable numerical foundation for degradation study-design assessment."""
 
 from .adaptive import reweight_reference_ensemble
+from .calibration_assessment import (
+    CalibrationEvaluation,
+    IVIVCCalibrationAssessment,
+    assess_ivivc_calibration,
+)
+from .calibration_data import append_calibration_observations
 from .anchors import LatestBeforePoint, LatestBeforeSelectionResult, select_latest_before_times
 from .fitting import fit_model_once
 from .feasibility import ScheduleFeasibilityResult, check_schedule_feasibility
@@ -100,6 +106,10 @@ from .types import (
 )
 
 __all__ = [
+    'CalibrationEvaluation',
+    'IVIVCCalibrationAssessment',
+    'append_calibration_observations',
+    'assess_ivivc_calibration',
     'completed_observation_standard_deviation',
     'existing_observations_from_time_course',
     'CoordinateExchangeResult',

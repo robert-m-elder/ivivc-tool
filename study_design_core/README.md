@@ -154,6 +154,81 @@ use of earlier observations in the likelihood. Keep those same completed
 observations fixed in subsequent simulation and schedule constraints.
 Calibration observations are reference inputs, not completed target-study data.
 
+## Assessing one IVIVC calibration dataset
+
+`assess_ivivc_calibration()` assesses an assembled in vitro/in vivo dataset
+using Approach 2. It is independent of measurement generation: later study
+simulations can use the same observations for curve recovery and IVIVC
+assessment, or compare calibration additions in either environment.
+
+```python
+from study_design_core import (
+    append_calibration_observations, assess_ivivc_calibration,
+)
+
+# Each input is a TimeCourse on its original response scale, with any
+# supplied SD/SEM already resolved, for example by prepare_time_course().
+combined_vivo = append_calibration_observations(existing_vivo, added_vivo)
+assessment = assess_ivivc_calibration(
+    existing_vitro, combined_vivo,
+    model_name='exponential_normalized', method='value_ratio',
+    evaluation_times=[1., 2., 4.],
+    prediction=target_in_vitro,  # optional independent target dataset
+    n_samples=200, random_state=123,
+)
+if assessment.relationship is not None:
+    ratio = assessment.relationship.estimate
+    widths = assessment.relationship.interval_width
+    usable = assessment.relationship.interval_available
+```
+
+The assembly helper accepts `None` for an absent existing dataset or absent
+additions, and returns a copy sorted by time. At least one dataset is required.
+It retains old and new independent rows at duplicate times, including separate
+batch means; it does not pool them or reduce historical SEM. Both batches must
+have compatible individual/mean interpretations and either both supply errors
+or both omit them. Partial precision requires an explicit historical error
+assumption. If either batch lacks count metadata, the combined count field is
+omitted; the input datasets retain their original counts. Missing/nonfinite
+rows must be handled before assembly, without normalizing one batch separately
+from the other.
+
+Relationship assessment uses a computational probe, not experimental target
+data. `value_ratio` reports the fitted IVV/IV response ratio at
+`evaluation_times`; `tau_ratio` reports one dimensionless
+`time_constant_ratio` at a unit-time probe, with no grid required; and
+`observed_response_inverse` reports in vivo times at supplied
+`response_levels` on the analyzed in vivo response scale. Inverse assessment
+does not use the fitted in vitro curve. For value ratio and inverse mapping,
+omit the grid to request only target predictions. Use only models registered
+for Approach 2; a model whose time constant is unavailable can still be used
+with another explicitly selected method.
+
+Calibration and optional target inputs are cleaned and normalized through the
+shared IVIVC APIs. `selected_normalizations` supports initial-value, min-max,
+and one-minus operations; each dataset uses its own reference values, as in
+the browser. Do not normalize inputs twice. Outputs use analyzed coordinates;
+calibration normalization records remain in `assessment.analysis.prepared_data`
+and target records in `assessment.metadata['prediction_preprocessing']`.
+Compare different datasets only on a consistent response/time scale, rather
+than interpreting widths on different min-max scales as physical-unit widths.
+Logarithmic axis scaling and interpolated fitting observations are excluded.
+
+`assessment.analysis` retains component fits and their covariance, including
+uncertainty in a dataset held fixed. Relationship and target evaluations each
+retain point estimates, bounds, availability masks, and their full core
+`trajectory` with extrapolation and conditional-inverse diagnostics. A finite
+point need not have an available interval. `errors` records exceptions under
+`preprocessing`, `fit`, `relationship`, or `prediction`; failure of a target
+does not discard a usable relationship. Invalid configuration raises, and
+`fail_fast=True` also raises calculation failures. CV is off by default.
+
+Propagation uses a separate copy of the supplied RNG for each evaluation, so
+requesting a target does not alter relationship intervals or advance a study's
+measurement RNG. No future in vivo measurement noise is added. This function
+does not simulate studies, compare candidate schedules, or change the existing
+schedule-selection objective.
+
 ## Empirical time-scale reference
 
 `EmpiricalTimeScaleDistribution` and `reference_from_time_scaling()` provide
