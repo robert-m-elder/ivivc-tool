@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from numbers import Real
-from typing import Any, Literal, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
 
 import numpy as np
 
@@ -17,6 +17,9 @@ from ivivc_core.observations import (
     ObservationUncertainty, ResolvedObservationUncertainty,
     resolve_observation_uncertainty,
 )
+
+if TYPE_CHECKING:
+    from .calibration_performance import CalibrationSimulationResult
 
 
 InterpolationMethod = Literal['linear', 'pchip']
@@ -1097,6 +1100,7 @@ class DesignSimulationResult:
     failure_penalty: float
     penalized_integrated_rmse: np.ndarray
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    ivivc_assessment: CalibrationSimulationResult | None = None
 
     def __post_init__(self) -> None:
         self.design_times = np.unique(np.asarray(self.design_times, dtype=float))

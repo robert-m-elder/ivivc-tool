@@ -96,3 +96,46 @@ def append_calibration_observations(
         label=label if label is not None else old.label or new.label,
         observation_uncertainty=uncertainty,
     )
+
+
+def _new_calibration_batch(times, replicate_values, individual_sigma, *,
+                           response_kind='mean', source='simulated_calibration'):
+    """Represent already generated independent observations, without new noise."""
+    times = np.asarray(times, dtype=float)
+    values = np.asarray(replicate_values, dtype=float)
+    sigma = np.asarray(individual_sigma, dtype=float)
+    if (times.ndim != 1 or not len(times) or values.ndim != 2
+            or values.shape[1] != len(times) or not values.shape[0]
+            or sigma.shape != times.shape):
+        raise ValueError('Calibration replicates and individual SD must match the sampling times.')
+    if not np.isfinite(values).all() or not np.isfinite(sigma).all() or np.any(sigma < 0):
+        raise ValueError('Simulated observations and SD must be finite, with nonnegative SD.')
+    count = values.shape[0]
+    if response_kind == 'mean':
+        response = values.mean(axis=0)
+        errors = sigma / np.sqrt(count)
+        counts = np.full(len(times), count)
+    elif response_kind == 'individual':
+        times = np.tile(times, count)
+        response = values.reshape(-1)
+        errors = np.tile(sigma, count)
+        counts = None
+    else:
+        raise ValueError('Calibration batches require individual or mean responses.')
+    # Preserve the existing deterministic, wholly unweighted study case.
+    uncertainty = None if np.all(errors == 0) else ResolvedObservationUncertainty(
+        errors, response_kind=response_kind, replicate_counts=counts, source=source,
+    )
+    return TimeCourse(times, response, label=source, observation_uncertainty=uncertainty)
+
+
+def _completed_calibration_course(existing, completed_sigma):
+    """Retain completed rows and the precision actually used by study refitting."""
+    uncertainty = existing.observation_uncertainty
+    if uncertainty is None and completed_sigma is not None:
+        uncertainty = ResolvedObservationUncertainty(
+            completed_sigma, response_kind='individual',
+            source='study_refit_observation_model_fallback',
+        )
+    return TimeCourse(existing.time, existing.response, label=existing.label,
+                      observation_uncertainty=uncertainty)

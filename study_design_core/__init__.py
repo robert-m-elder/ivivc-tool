@@ -7,6 +7,17 @@ from .calibration_assessment import (
     assess_ivivc_calibration,
 )
 from .calibration_data import append_calibration_observations
+from .calibration_performance import (
+    CalibrationSimulationResult,
+    IVIVCAssessmentRequest,
+    summarize_calibration_simulation,
+)
+from .calibration_simulation import (
+    CalibrationDesign,
+    CalibrationSimulationComparison,
+    compare_calibration_designs,
+    create_calibration_simulation_plans,
+)
 from .anchors import LatestBeforePoint, LatestBeforeSelectionResult, select_latest_before_times
 from .fitting import fit_model_once
 from .feasibility import ScheduleFeasibilityResult, check_schedule_feasibility
@@ -106,6 +117,13 @@ from .types import (
 )
 
 __all__ = [
+    'CalibrationDesign',
+    'CalibrationSimulationComparison',
+    'CalibrationSimulationResult',
+    'IVIVCAssessmentRequest',
+    'compare_calibration_designs',
+    'create_calibration_simulation_plans',
+    'summarize_calibration_simulation',
     'CalibrationEvaluation',
     'IVIVCCalibrationAssessment',
     'append_calibration_observations',

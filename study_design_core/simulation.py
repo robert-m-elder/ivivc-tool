@@ -3,12 +3,23 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 
-from ivivc_core import get_model_spec
+from ivivc_core import AnalysisError, get_model_spec
+
+from .calibration_assessment import IVIVCCalibrationAssessment, assess_ivivc_calibration
+from .calibration_data import (
+    _completed_calibration_course, _new_calibration_batch,
+    append_calibration_observations,
+)
+from .calibration_performance import (
+    IVIVCAssessmentRequest, _finish_calibration_simulation,
+    _validate_assessment_options, _validate_output_truth,
+)
 
 from .fitting import fit_model_once
 from .observation import completed_observation_standard_deviation, observation_model_metadata
@@ -145,6 +156,39 @@ def _fit_start_parameters(
     )
 
 
+def _ivivc_reference_indices(request, reference, draw_indices):
+    """Choose companion truth draws without consuming study measurement RNGs."""
+    source = request.in_vitro_reference
+    if source is None:
+        if request.paired_reference_draws:
+            raise ValueError('Paired reference draws require an in vitro reference.')
+        return None
+    if not isinstance(source, ReferenceTrajectoryEnsemble):
+        raise TypeError('in_vitro_reference must be a ReferenceTrajectoryEnsemble.')
+    if source.n_draws == 1:
+        return np.zeros(len(draw_indices), dtype=int)
+    if request.paired_reference_draws and reference.n_draws > 1:
+        if (source.n_draws != reference.n_draws
+                or not np.array_equal(source.valid_draws, reference.valid_draws)
+                or not np.allclose(source.draw_weights, reference.draw_weights,
+                                   rtol=1e-12, atol=1e-15)):
+            raise ValueError('Paired references require matching draw counts, validity, and weights.')
+        return np.asarray(draw_indices, dtype=int).copy()
+    state = request.options.get('random_state', 12345)
+    if isinstance(state, np.random.Generator):
+        entropy = deepcopy(state).integers(0, 2**32, size=4, dtype=np.uint32)
+    elif isinstance(state, np.random.RandomState):
+        entropy = deepcopy(state).randint(0, 2**32, size=4, dtype=np.uint32)
+    else:
+        entropy = state
+    # A distinct child stream avoids accidentally pairing the sources when
+    # the study and assessment use the same integer seed.
+    rng = np.random.default_rng(np.random.SeedSequence(entropy, spawn_key=(731,)))
+    valid = np.flatnonzero(source.valid_draws & (source.draw_weights > 0))
+    weights = source.draw_weights[valid]
+    return rng.choice(valid, size=len(draw_indices), p=weights/np.sum(weights))
+
+
 def simulate_design(
     reference: ReferenceTrajectoryEnsemble,
     design_times,
@@ -166,6 +210,7 @@ def simulate_design(
     fallback_grid_search: bool = True,
     grid_search_config: Mapping[str, object] | None = None,
     fit_initialization: str = 'data_driven',
+    ivivc_assessment: IVIVCAssessmentRequest | None = None,
 ) -> DesignSimulationResult:
     """Simulate, refit, and score one proposed time-point design.
 
@@ -176,6 +221,12 @@ def simulate_design(
     Refits use absolute per-row uncertainty: completed SD/SEM where supplied,
     and individual SD for simulated replicate rows. Constant-CV fitting weights
     are fixed at the central analysis-model fit, as in local optimization.
+
+    Optional IVIVC assessment uses these same completed and simulated
+    observations, without changing the curve-recovery calculations or their
+    random draws. It retains a fixed companion in vitro dataset and runs even
+    when the curve-recovery fit fails. Its outcomes are returned separately in
+    ``result.ivivc_assessment``.
     """
     fit_initialization = str(fit_initialization).strip().lower()
     if fit_initialization not in {'data_driven', 'central_reference', 'oracle'}:
@@ -319,6 +370,24 @@ def simulate_design(
             'zero SD; mixed exact and noisy observations are not supported.'
         )
 
+    ivivc_options = None
+    if ivivc_assessment is not None:
+        if not isinstance(ivivc_assessment, IVIVCAssessmentRequest):
+            raise TypeError('ivivc_assessment must be an IVIVCAssessmentRequest.')
+        ivivc_options = _validate_assessment_options(ivivc_assessment.options)
+        _validate_output_truth(ivivc_options, ivivc_assessment.truth, n_simulations)
+        if ivivc_assessment.options.get('prediction') is ivivc_assessment.in_vitro:
+            raise ValueError('Target prediction measurements must be independent of calibration measurements.')
+        companion = append_calibration_observations(ivivc_assessment.in_vitro, None)
+        completed_course = (None if existing_observations is None else
+                            _completed_calibration_course(
+                                existing_observations,
+                                None if fit_sigma is None else completed_sigma))
+        response_kind = ('individual' if existing_observations is None
+                         else existing_observations.response_kind)
+        vitro_draw_indices = _ivivc_reference_indices(ivivc_assessment, reference, draw_indices)
+        assessments, vitro_datasets, vivo_datasets = [], [], []
+
     parameter_count = reference_model.n_parameters
     fitted_curves = np.full_like(true_curves, np.nan, dtype=float)
     parameter_estimates = np.full((n_simulations, parameter_count), np.nan, dtype=float)
@@ -332,6 +401,22 @@ def simulate_design(
             existing_fit_response,
             future_observations[simulation_index].reshape(-1),
         ])
+        if ivivc_options is not None:
+            try:
+                additions = (None if not len(future_design) else _new_calibration_batch(
+                    future_design, future_observations[simulation_index],
+                    np.zeros(len(future_design)) if fit_sigma is None else future_sigma,
+                    response_kind=response_kind, source='simulated_study_calibration'))
+                vivo = append_calibration_observations(completed_course, additions)
+            except Exception as exception:
+                vivo = None
+                assessment = IVIVCCalibrationAssessment(
+                    errors={'generation': AnalysisError.from_exception(exception)})
+            else:
+                assessment = assess_ivivc_calibration(companion, vivo, **ivivc_options)
+            assessments.append(assessment)
+            vitro_datasets.append(companion)
+            vivo_datasets.append(vivo)
         start = _fit_start_parameters(
             fit_initialization,
             reference_model,
@@ -411,6 +496,28 @@ def simulate_design(
     penalized_irmse = irmse.copy()
     penalized_irmse[~fit_success | ~np.isfinite(penalized_irmse)] = failure_penalty
 
+    ivivc_result = None
+    if ivivc_options is not None:
+        ivivc_result = _finish_calibration_simulation(
+            assessments, vitro_datasets, vivo_datasets, options=ivivc_options,
+            in_vitro_reference=ivivc_assessment.in_vitro_reference,
+            in_vivo_reference=reference, in_vitro_draw_indices=vitro_draw_indices,
+            in_vivo_draw_indices=draw_indices, truth=ivivc_assessment.truth,
+            metadata={
+                'source': 'study_design_optional_ivivc',
+                'study_model_name': model_name,
+                'design_times': design.copy(),
+                'additional_design_times': future_design.copy(),
+                'new_in_vitro_measurement_count': 0,
+                'new_in_vivo_measurement_count': len(future_design)*replicates,
+                'in_vivo_observation_model': observation_model.to_metadata(),
+                'in_vivo_refit_cv_weighting': ('fixed_at_central_study_analysis_model'
+                                               if observation_model.kind == 'constant_cv' else None),
+                'paired_reference_draws': bool(ivivc_assessment.paired_reference_draws),
+                'uses_same_study_measurements': True,
+            },
+        )
+
     return DesignSimulationResult(
         design_times=design,
         model_name=model_name,
@@ -435,6 +542,7 @@ def simulate_design(
         response_scale=response_scale,
         failure_penalty=failure_penalty,
         penalized_integrated_rmse=penalized_irmse,
+        ivivc_assessment=ivivc_result,
         metadata={
             'target_response': target_response,
             'target_direction': target_direction,

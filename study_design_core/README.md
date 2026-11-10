@@ -229,6 +229,144 @@ measurement RNG. No future in vivo measurement noise is added. This function
 does not simulate studies, compare candidate schedules, or change the existing
 schedule-selection objective.
 
+## Calibration sampling simulations
+
+C2 provides two entry points using the C1 assessor. Neither changes the
+schedule-selection objective or introduces joint optimization.
+
+For calibration comparisons, supply named `CalibrationDesign` candidates:
+
+```python
+from study_design_core import (
+    CalibrationDesign, ObservationModel, compare_calibration_designs,
+)
+
+options = dict(
+    model_name='exponential_normalized', method='value_ratio',
+    evaluation_times=[1., 2., 4.], n_samples=200, random_state=123,
+    analysis_config=dict(cv_scheme='none', grid_search_num_points=50,
+                         grid_search_num_cores=1),
+)
+comparison = compare_calibration_designs(
+    {
+        'three times': CalibrationDesign(
+            in_vivo_times=[0., 2., 4.],
+            in_vivo_observation_model=ObservationModel('constant_sd', .05, 3)),
+        'four times': CalibrationDesign(
+            in_vivo_times=[0., 1., 2., 4.],
+            in_vivo_observation_model=ObservationModel('constant_sd', .05, 3)),
+    },
+    assessment_options=options,
+    existing_in_vitro=measured_vitro,
+    in_vivo_reference=assumed_vivo_reference,
+    n_simulations=100, random_state=456,
+)
+precision = comparison.summaries['three times']['relationship']
+```
+
+Each candidate can add in vitro observations, in vivo observations, or both.
+An empty side holds its existing dataset fixed, including fitted uncertainty.
+Optional `existing_in_vivo` supports additions to collected data; proposed
+times may include previously measured times to add independent replicates.
+Omit both sets of additions for an existing-data-only baseline when both
+calibration datasets exist. A prospective environment requires an explicit
+generating reference: in vitro data alone cannot determine in vivo behavior.
+Existing observations are never resimulated or assigned future precision.
+
+Each observation model describes individual SD, CV, or a time-dependent SD
+profile, with a constant independent replicate count at its proposed times.
+New means use SEM = individual SD / sqrt(new count). Historical means and
+SEMs remain separate rows; raw historical individuals receive raw new rows.
+Appending weighted measurements to historical rows without supplied errors
+requires an explicit historical uncertainty assumption. Calibration noise
+follows the selected generating curve. For CV refitting, the direct comparator
+fixes errors at the central reference; the optional study assessment below
+retains the current study refitter's central analysis-model errors.
+Wholly zero-SD benchmark batches retain unweighted fitting and residual-scaled
+covariance: they are deterministic recovery checks, not absolute-zero-error
+inference. Mixed zero and positive errors are rejected rather than treated as
+exact constraints.
+
+The comparator shares underlying curve selections and standard-normal error
+draws across candidates, using the same first replicates when counts differ.
+`create_calibration_simulation_plans()` exposes those plans for reuse through
+`simulation_plans=`. Reference ensembles are independent by default. Set
+`paired_reference_draws=True` only for explicitly matched joint scenario rows
+with matching validity and weights; a deterministic one-row source broadcasts.
+Measurement errors remain independent between environments. The number of
+simulated experiments is `n_simulations`; `options['n_samples']` controls the
+separate propagation draws within each experiment.
+
+For an ordinary in vivo study, request additional IVIVC outputs from its exact
+simulated measurements:
+
+```python
+from study_design_core import (
+    IVIVCAssessmentRequest, simulate_design, summarize_calibration_simulation,
+)
+
+request = IVIVCAssessmentRequest(measured_vitro, options)
+recovery = simulate_design(
+    assumed_vivo_reference, proposed_times, observation_model,
+    model_name=study_analysis_model, ivivc_assessment=request,
+    n_simulations=100, random_state=456,
+)
+ivivc = recovery.ivivc_assessment
+ivivc_summary = summarize_calibration_simulation(ivivc)
+```
+
+Enabling this assessment preserves curve-recovery results, metadata, and
+measurement random draws. The IVIVC and curve fits can succeed or fail
+independently. The existing study simulator still samples at new times;
+use calibration-comparison candidates to add replicates at completed times.
+For completed rows without supplied errors, the optional assessment retains
+the study refitter's existing observation-model fallback and records its
+source; it does not estimate another historical error model.
+The companion in vitro dataset must belong to the system whose IVIVC is being
+assessed; a source IVIVC used to construct a transferred reference is not
+automatically recalibrated by target-study observations.
+
+Both entry points return every experiment's C1 assessment and assembled
+datasets. Summaries retain requested-count availability, conditional mean
+interval width and RMSE with their counts, and per-point results. Overall
+coverage counts unavailable intervals as not covering in every experiment
+with known truth; `conditional_coverage` separately considers available
+intervals. Coverage pools pointwise results, not simultaneous whole-curve
+coverage. Failed or unreachable calculations are not removed to improve
+these summaries. Core conditional-inverse and extrapolation details remain
+available on each C1 trajectory. There is no automatic design ranking or
+universal precision threshold.
+
+Reference-derived truth is available for value ratios when both source
+references are supplied, or inverse times from a uniquely invertible in vivo
+reference within its supported domain. Inverse truth honors the declared
+linear/PCHIP interpolation. A finite reference grid does not determine an
+integral time constant from zero to infinity: supply known tau-ratio truth
+explicitly if error/coverage for that quantity is needed. Fixed target inputs
+can also supply reference-based target truth. Uncertain target responses
+require explicit output truth for response or inverse-time recovery; they
+are not silently treated as known true values. Tau-ratio time predictions use
+fixed target times, so known ratio truth suffices regardless of response SEM.
+Otherwise precision and availability remain reportable, with truth counts
+zero and error/coverage unavailable.
+
+Pass `truth={'relationship': ..., 'prediction': ...}` to the comparator or
+assessment request to specify known output truth on the evaluation scale.
+Each value can be a scalar, a per-point vector, or an
+`(experiments, points)` array. Per-experiment scalar truth must have shape
+`(experiments, 1)`. Keep these arrays aligned with the shared reference
+selections. These are generating assumptions, not externally established
+evidence of transferability.
+
+Comparisons require common response scaling: use no normalization or fixed
+one-minus reversal. Apply any prespecified scaling consistently to measured
+data, references, target inputs, and SDs before comparison. Data-dependent
+initial-value/min-max normalization remains supported by C1 single-dataset
+assessment, but is rejected for C2 comparisons so changing reference values
+cannot masquerade as greater precision. Future calibration measurement noise
+is simulated; additional scatter of future downstream in vivo observations
+is excluded from the relationship/prediction intervals.
+
 ## Empirical time-scale reference
 
 `EmpiricalTimeScaleDistribution` and `reference_from_time_scaling()` provide
