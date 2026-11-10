@@ -1219,6 +1219,61 @@ python examples/study_design_proof_of_concept.py --quick
 The default output directory, `study_design_poc_output/`, contains transparent
 CSV and JSON files for each scenario and optional static Plotly HTML summaries.
 
+### Calibration sampling demonstrations
+
+Use the separate focused runner to demonstrate both C2 entry points:
+
+```bash
+python examples/study_design_calibration_poc.py --simulations 100 \
+    --interval-samples 200 --seed 12345
+```
+
+It writes `study_design_calibration_poc_output/index.html`, with CSV/JSON
+downloads and a page for each example. `--output-dir` changes the destination;
+`--no-html` writes only numerical outputs. HTML tables work without Plotly;
+when the project's Plotly dependency is installed, the pages also include
+interactive comparison charts with their scripts embedded for offline use.
+The console prints JSON containing the settings, candidates, and output paths.
+
+- `--scenario study` compares in vivo sampling with the optional IVIVC
+  assessment enabled. Four specified candidates use early times, spread times,
+  more times, or more replicates. The first two use the same nine independent
+  measurements; the other two use 15 and 18. Curve recovery over time 0–8 and
+  IVIVC/target prediction precision use the same generated observations, while
+  the measured companion in vitro dataset stays fixed with its supplied SEM.
+- `--scenario refinement` compares existing-data-only calibration with added
+  replicates at existing in vitro times, new in vitro times, new in vivo times,
+  or both. The three single-environment additions each use six measurements;
+  the combined addition uses twelve. Historical values, SEMs, and counts stay
+  fixed. Additions represent independent new cohorts: exposure/implantation
+  ages can repeat or precede ages already studied.
+
+The default `--scenario all` runs both. `--simulations` is the number of
+experiments; `--interval-samples` controls the separate parameter-propagation
+draws within each IVIVC assessment. Increasing either increases runtime.
+Role-specific seeds preserve historical observations when these counts change,
+and candidates share generating trajectories and measurement-error draws.
+
+The examples use `exponential_normalized`, Approach 2 value-ratio prediction,
+fraction-remaining responses, and no data-dependent normalization. The initial
+response is fixed at 1 by the model. One specified in vitro curve and three
+weighted in vivo curves define synthetic truth; a separate noiseless target
+in vitro dataset supplies target predictions. Its in vivo truth is imposed by
+the value-ratio assumption. These small examples illustrate the APIs; other
+supported model/method choices remain available through C1/C2.
+
+Each scenario exports candidate counts and performance, pointwise summaries,
+all experiment outcomes, fixed inputs, assembled calibration data, evaluation
+estimates/bounds/truth/status, and generating reference trajectories. JSON
+records settings, assumptions, reference weights, source precision, and failure
+details. Coverage is pooled pointwise coverage under the stated references,
+conditional on the fixed historical datasets; it is not external validation or
+simultaneous whole-curve coverage. Width/error summaries show availability and
+truth denominators. Missing intervals count against coverage when truth is
+known, and conditional coverage among available intervals is reported
+separately. Candidate costs differ, and no automatic ranking or universal
+precision threshold is applied.
+
 ### Measurement uncertainty controls
 
 The default source fits retain their existing uncertainty behavior. Add
