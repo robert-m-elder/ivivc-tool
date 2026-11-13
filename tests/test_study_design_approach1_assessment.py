@@ -11,7 +11,6 @@ from ivivc_core import (
 )
 from study_design_core import assess_ivivc_calibration
 from study_design_core.calibration_performance import IVIVCAssessmentRequest
-from study_design_core.calibration_simulation import compare_calibration_designs, CalibrationDesign
 
 
 CONFIG = dict(cv_scheme='none', grid_search_num_points=3,
@@ -299,18 +298,6 @@ class Approach1AssessmentTests(unittest.TestCase):
         ):
             with self.subTest(options=options), self.assertRaises((TypeError, ValueError)):
                 self.assess(**options)
-
-    def test_simulation_entry_points_reject_approach1_until_simulation_integration(self):
-        # The new assessor option must not enter the current Approach 2 truth
-        # and reporting route merely because signature binding now accepts it.
-        options = dict(approach_id='approach1', model_name='exponential',
-                       evaluation_times=GRID)
-        with self.assertRaisesRegex(ValueError, 'simulations currently support Approach 2'):
-            IVIVCAssessmentRequest(self.vitro, options)
-        with self.assertRaisesRegex(ValueError, 'simulations currently support Approach 2'):
-            compare_calibration_designs(
-                {'fixed': CalibrationDesign()}, assessment_options=options,
-                existing_in_vitro=self.vitro, existing_in_vivo=self.vivo)
 
     def test_approach2_simulations_reject_new_coordinate_changing_options_early(self):
         for changes in (dict(selected_interpolation=['default']),

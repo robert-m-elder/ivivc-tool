@@ -12,11 +12,13 @@ import numpy as np
 from scipy.interpolate import PchipInterpolator
 from scipy.optimize import brentq
 
-from ivivc_core import DEFAULT_PREDICTION_METHODS, TimeCourse, get_model_spec, prepare_time_course
+from ivivc_core import TimeCourse, get_model_spec, prepare_time_course
 from ivivc_core.intervals import validate_interval_settings
 from ivivc_core.predictions import _inverse_interval_settings
 
-from .calibration_assessment import IVIVCCalibrationAssessment, assess_ivivc_calibration
+from .calibration_assessment import (
+    IVIVCCalibrationAssessment, _assessment_method, assess_ivivc_calibration,
+)
 from .types import ReferenceTrajectoryEnsemble
 
 
@@ -27,7 +29,8 @@ class IVIVCAssessmentRequest:
     ``in_vitro`` is the companion calibration dataset for this study's system.
     ``options`` contains C1 assessor keyword arguments, including model_name.
     Optional source references/explicit output truth enable error and coverage
-    calculations. Holding measured in vitro data fixed retains fit covariance.
+    calculations. Approach 2 retains fitted source uncertainty; Approach 1
+    repeats ordinary time-mapping fits, with its existing regression intervals.
     """
 
     in_vitro: TimeCourse
@@ -93,20 +96,26 @@ def _validate_assessment_options(options):
     if 'in_vitro' in options or 'in_vivo' in options:
         raise ValueError('Calibration datasets are supplied separately from assessment_options.')
     signature(assess_ivivc_calibration).bind(None, None, **options)
-    # Single-dataset Approach 1 assessment is available, but simulation
-    # output/truth conventions still require Approach 2.
-    if options.get('approach_id', 'approach2') != 'approach2':
-        raise ValueError('Calibration simulations currently support Approach 2 only; '
-                         'use assess_ivivc_calibration for single-dataset Approach 1 assessment.')
-    interpolation = options.get('selected_interpolation') or ('none',)
+    approach_id = options.get('approach_id', 'approach2')
+    method = _assessment_method(approach_id, options.get('method'))
+    options['method'] = method
+    interpolation = options.get('selected_interpolation')
+    if interpolation is None:
+        interpolation = ('default',) if approach_id == 'approach1' else ('none',)
     interpolation = (interpolation,) if isinstance(interpolation, str) else tuple(interpolation)
-    if interpolation != ('none',) or options.get('selected_scalings'):
+    scalings = options.get('selected_scalings') or ()
+    scalings = (scalings,) if isinstance(scalings, str) else tuple(scalings)
+    if any(name not in ('none', 'default', 'alternative') for name in interpolation):
+        raise ValueError('Use none, default, or alternative interpolation.')
+    if any(name not in ('log_x', 'log_y') for name in scalings):
+        raise ValueError('Use log_x, log_y, or no axis scaling.')
+    if approach_id == 'approach2' and (interpolation not in ((), ('none',)) or scalings):
         raise ValueError('Calibration simulations use no interpolation or axis scaling.')
-    method = options.get('method', 'value_ratio')
-    if method not in DEFAULT_PREDICTION_METHODS['approach2']:
-        raise ValueError('Choose a supported Approach 2 prediction method.')
-    if 'approach2' not in get_model_spec(options['model_name']).approaches:
-        raise ValueError('The calibration model must support Approach 2.')
+    if 'log_x' in scalings and options.get('fallback_invalid_log_scaling', False):
+        raise ValueError('Log-time comparisons require fallback_invalid_log_scaling=False '
+                         'so every experiment uses the same time scale.')
+    if approach_id not in get_model_spec(options['model_name']).approaches:
+        raise ValueError(f'The calibration model must support {approach_id}.')
     validate_interval_settings(options.get('confidence_level', .95), options.get('n_samples', 1000))
     norms = options.get('selected_normalizations') or ()
     norms = (norms,) if isinstance(norms, str) else tuple(norms)
@@ -117,11 +126,12 @@ def _validate_assessment_options(options):
     options['selected_normalizations'] = norms
     if options.get('fail_fast', False):
         raise ValueError('Calibration simulations retain calculation failures; fail_fast must be false.')
-    for key, allowed in (('evaluation_times', 'value_ratio'), ('response_levels', 'observed_response_inverse')):
+    for key, allowed in (('evaluation_times', ('value_ratio', 'time_mapping')),
+                         ('response_levels', ('observed_response_inverse',))):
         grid = options.get(key)
         if grid is not None:
             array = np.asarray(grid, dtype=float)
-            if method != allowed or array.ndim != 1 or not len(array) or not np.isfinite(array).all():
+            if method not in allowed or array.ndim != 1 or not len(array) or not np.isfinite(array).all():
                 raise ValueError(f'{key} must be a finite vector for {allowed}.')
             options[key] = array.copy()
     if method == 'observed_response_inverse':
@@ -147,20 +157,27 @@ def _validate_assessment_options(options):
 
 
 def _evaluation_spec(options):
-    method = options.get('method', 'value_ratio')
+    method = _assessment_method(options.get('approach_id', 'approach2'), options.get('method'))
     spec = {}
     if method == 'tau_ratio':
         spec['relationship'] = {'quantity': 'time_constant_ratio', 'coordinate': np.array([1.])}
     elif method == 'value_ratio' and options.get('evaluation_times') is not None:
         spec['relationship'] = {'quantity': 'value_ratio', 'coordinate': np.asarray(options['evaluation_times'])}
+    elif method == 'time_mapping' and options.get('evaluation_times') is not None:
+        spec['relationship'] = {'quantity': 'in_vivo_time', 'coordinate': np.asarray(options['evaluation_times'])}
     elif method == 'observed_response_inverse' and options.get('response_levels') is not None:
         spec['relationship'] = {'quantity': 'in_vivo_time', 'coordinate': np.asarray(options['response_levels'])}
     target = None
     if options.get('prediction') is not None:
         raw = options['prediction']
+        # Only time scaling affects the time-mapping coordinate grid.
+        # Response transforms and fallback remain the assessor's job.
+        time_scalings = (('log_x',) if method == 'time_mapping'
+                         and 'log_x' in (options.get('selected_scalings') or ()) else ())
         try:
-            target, _ = prepare_time_course(raw.time, raw.value, selected_normalizations=options['selected_normalizations'],
-                                          observation_uncertainty=raw.observation_uncertainty)
+            target, _ = prepare_time_course(
+                raw.time, raw.value, selected_normalizations=options['selected_normalizations'],
+                selected_scalings=time_scalings, observation_uncertainty=raw.observation_uncertainty)
             if not len(target.time):
                 target = None
         except Exception:
@@ -170,6 +187,9 @@ def _evaluation_spec(options):
         source = raw if target is None else target
         try:
             coordinate = np.asarray(source.value if method == 'observed_response_inverse' else source.time, dtype=float)
+            if target is None and time_scalings:
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    coordinate = np.log10(coordinate)
         except (ValueError, TypeError):
             coordinate = np.full(len(raw.time), np.nan)
         spec['prediction'] = {
@@ -209,9 +229,14 @@ def _inverse_reference(reference, indices, levels, count, reverse):
     if reference is None:
         return None
     indices = _reference_indices(reference, indices, count)
+    levels = np.asarray(levels, dtype=float)
+    if levels.ndim == 1:
+        levels = np.broadcast_to(levels, (count, len(levels)))
+    if levels.ndim != 2 or levels.shape[0] != count:
+        raise ValueError('Reference response levels must match the requested experiments.')
     lo, hi = reference.supported_time_range
     times = np.unique(np.r_[lo, reference.time_grid[(reference.time_grid > lo) & (reference.time_grid < hi)], hi])
-    result = np.full((count, len(levels)), np.nan)
+    result = np.full(levels.shape, np.nan)
     for row, source in enumerate(indices):
         values = reference.value_draws[source]
         values = 1. - values if reverse else values
@@ -223,12 +248,33 @@ def _inverse_reference(reference, indices, levels, count, reverse):
         differences = np.diff(on_grid)
         if not (np.all(differences >= 0) or np.all(differences <= 0)) or np.all(differences == 0):
             continue  # A reference with ambiguous crossings supplies no inverse truth.
-        for column, level in enumerate(levels):
+        for column, level in enumerate(levels[row]):
+            if not np.isfinite(level):
+                continue
             if not min(on_grid[0], on_grid[-1]) <= level <= max(on_grid[0], on_grid[-1]):
                 continue
             if np.count_nonzero(on_grid == level) > 1:
                 continue  # A response plateau does not define a unique time.
             result[row, column] = brentq(lambda t: float(function(t)) - level, lo, hi)
+    return result
+
+
+def _time_mapping_truth(in_vitro_reference, in_vivo_reference,
+                        in_vitro_indices, in_vivo_indices, times, count, reverse,
+                        *, log_time=False):
+    """Equal-response mapping of generating curves, independent of noisy fits."""
+    if in_vitro_reference is None or in_vivo_reference is None:
+        return None
+    times = np.asarray(times, dtype=float)
+    if log_time:
+        with np.errstate(over='ignore', under='ignore', invalid='ignore'):
+            times = np.power(10., times)
+    levels = _reference_values(in_vitro_reference, in_vitro_indices, times, count, reverse)
+    result = _inverse_reference(in_vivo_reference, in_vivo_indices, levels, count, reverse)
+    if log_time:
+        with np.errstate(divide='ignore', invalid='ignore'):
+            result = np.log10(result)
+        result[~np.isfinite(result)] = np.nan
     return result
 
 
@@ -261,8 +307,10 @@ def _finish_calibration_simulation(assessments, in_vitro_data, in_vivo_data, *, 
                                    truth=None, metadata=None):
     count = len(assessments)
     spec, target = _evaluation_spec(options)
-    method = options.get('method', 'value_ratio')
+    approach_id = options.get('approach_id', 'approach2')
+    method = _assessment_method(approach_id, options.get('method'))
     reverse = 'one_minus' in options['selected_normalizations']
+    log_time = 'log_x' in (options.get('selected_scalings') or ())
     truths, sources = {}, {}
     supplied = dict(truth or {})
     if set(supplied) - set(spec):
@@ -273,7 +321,14 @@ def _finish_calibration_simulation(assessments, in_vitro_data, in_vivo_data, *, 
             sources[key] = 'explicit_output_truth'
     if 'relationship' in spec and 'relationship' not in truths:
         grid = spec['relationship']['coordinate']
-        if method == 'value_ratio':
+        if method == 'time_mapping':
+            values = _time_mapping_truth(
+                in_vitro_reference, in_vivo_reference,
+                in_vitro_draw_indices, in_vivo_draw_indices, grid, count, reverse,
+                log_time=log_time)
+            if values is not None:
+                truths['relationship'] = values
+        elif method == 'value_ratio':
             first = _reference_values(in_vitro_reference, in_vitro_draw_indices, grid, count, reverse)
             second = _reference_values(in_vivo_reference, in_vivo_draw_indices, grid, count, reverse)
             if first is not None and second is not None:
@@ -291,7 +346,14 @@ def _finish_calibration_simulation(assessments, in_vitro_data, in_vivo_data, *, 
         if method == 'tau_ratio' and 'relationship' in truths:
             truths['prediction'] = truths['relationship'] * target.time[None, :]
         elif target.observation_uncertainty is None:
-            if method == 'value_ratio':
+            if method == 'time_mapping':
+                values = _time_mapping_truth(
+                    in_vitro_reference, in_vivo_reference,
+                    in_vitro_draw_indices, in_vivo_draw_indices, target.time, count, reverse,
+                    log_time=log_time)
+                if values is not None:
+                    truths['prediction'] = values
+            elif method == 'value_ratio':
                 first = _reference_values(in_vitro_reference, in_vitro_draw_indices, target.time, count, reverse)
                 second = _reference_values(in_vivo_reference, in_vivo_draw_indices, target.time, count, reverse)
                 if first is not None and second is not None:
@@ -310,6 +372,12 @@ def _finish_calibration_simulation(assessments, in_vitro_data, in_vivo_data, *, 
                   confidence_level=float(options.get('confidence_level', .95)),
                   propagation_samples=int(options.get('n_samples', 1000)),
                   future_observation_variability_included=False)
+    if approach_id == 'approach1':
+        record.update(approach_id=approach_id, method=method,
+                      evaluation_scale='analyzed_time',
+                      calibration_uncertainty_usage='simulation_only',
+                      interval_interpretation='mapping_regression_parameter_uncertainty',
+                      empirical_interpretation='across_simulated_studies_conditional_on_fixed_historical_data')
     for key, values in (('in_vitro_draw_indices', in_vitro_draw_indices),
                         ('in_vivo_draw_indices', in_vivo_draw_indices)):
         if values is not None:
@@ -321,6 +389,16 @@ def _divide(values, counts):
     return np.divide(values, counts, out=np.full(np.shape(values), np.nan, dtype=float), where=np.asarray(counts) > 0)
 
 
+def _pointwise_quantiles(values, probabilities):
+    """Keep empty evaluation points missing, without all-NaN percentile warnings."""
+    result = np.full((len(probabilities), values.shape[1]), np.nan)
+    for column in range(values.shape[1]):
+        finite = values[:, column][np.isfinite(values[:, column])]
+        if len(finite):
+            result[:, column] = np.quantile(finite, probabilities)
+    return result
+
+
 def summarize_calibration_simulation(result: CalibrationSimulationResult) -> dict:
     """Summarize precision and reliability without dropping failed experiments.
 
@@ -329,8 +407,15 @@ def summarize_calibration_simulation(result: CalibrationSimulationResult) -> dic
     with known truth; unavailable intervals count as not covering. Conditional
     coverage among available intervals is reported separately. No ranking or
     sufficiency threshold is imposed.
+
+    Approach 1 additionally reports pointwise estimate and error quantiles
+    across simulated studies. These are empirical ranges, separate from each
+    fit's mapping-regression parameter intervals. Error quantiles subtract
+    the generating truth for that experiment; estimate spread may also include
+    variation between reference trajectories. Historical rows remain fixed.
     """
     count = result.n_simulations
+    is_approach1 = result.metadata.get('approach_id') == 'approach1'
     summary = {
         'n_simulations': count, 'n_fit_successful': int(result.fit_success.sum()),
         'fit_failure_rate': result.failure_rate,
@@ -392,4 +477,16 @@ def summarize_calibration_simulation(result: CalibrationSimulationResult) -> dic
             'pointwise_coverage': _divide(covered.sum(axis=0), truth_counts),
             'pointwise_conditional_coverage': _divide(covered.sum(axis=0), interval_truth.sum(axis=0)),
         }
+        if is_approach1:
+            tail = (1. - float(result.metadata.get('confidence_level', .95))) / 2.
+            probabilities = np.array([tail, .5, 1. - tail])
+            summary[key].update(
+                interval_interpretation='mapping_regression_parameter_uncertainty',
+                empirical_interpretation='across_simulated_studies_conditional_on_fixed_historical_data',
+                empirical_quantiles=probabilities,
+                bias=float(_divide(np.where(paired, errors, 0.).sum(), paired.sum())),
+                pointwise_bias=_divide(np.where(paired, errors, 0.).sum(axis=0), error_counts),
+                pointwise_estimate_quantiles=_pointwise_quantiles(np.where(points, estimates, np.nan), probabilities),
+                pointwise_error_quantiles=_pointwise_quantiles(errors, probabilities),
+            )
     return summary

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import dataclass, field
 from numbers import Integral
 
@@ -212,6 +213,12 @@ def compare_calibration_designs(
     assigned a future SD or divided again. Future CV fitting errors are fixed
     at the central reference; measurement noise follows each generating draw.
 
+    Approach 1 uses the same generated measurements with its ordinary shared
+    time-mapping fit. When old and new rows have incomplete combined precision,
+    numerical copies are assembled without inventing historical errors. Both
+    original batches remain in each assessment's ``calibration_batches``
+    metadata. Supplied precision drives simulation, not Approach 1 weighting.
+
     Only common response scaling is supported for comparisons: apply any
     prespecified normalization to data and references first. The shared
     assessment options permit no normalization or fixed one-minus reversal.
@@ -224,6 +231,7 @@ def compare_calibration_designs(
         if target is not None and (target is existing_in_vitro or target is existing_in_vivo):
             raise ValueError('Target prediction measurements must be independent of calibration measurements.')
     options = _validate_assessment_options(assessment_options)
+    approach1 = options.get('approach_id', 'approach2') == 'approach1'
     if (isinstance(n_simulations, (bool, np.bool_)) or not isinstance(n_simulations, Integral)
             or n_simulations < 1):
         raise ValueError('n_simulations must be a positive integer.')
@@ -250,7 +258,7 @@ def compare_calibration_designs(
                 raise ValueError('Calibration fitting requires positive errors or an entirely zero-noise model.')
             if np.all(sigma == 0) and model.kind == 'constant_cv' and model.value > 0:
                 raise ValueError('Set a positive minimum_sd for zero central CV responses.')
-            if existing[side] is not None:
+            if existing[side] is not None and not approach1:
                 known = existing[side].observation_uncertainty is not None
                 if known != bool(np.any(sigma > 0)):
                     raise ValueError('Specify compatible historical uncertainty explicitly before appending weighted measurements.')
@@ -283,6 +291,7 @@ def compare_calibration_designs(
         assessments, datasets = [], {side: [] for side in _ENVIRONMENTS}
         for experiment in range(count):
             assembled = {side: None for side in _ENVIRONMENTS}
+            batches = {}
             try:
                 for side in _ENVIRONMENTS:
                     additions = None
@@ -294,11 +303,24 @@ def compare_calibration_designs(
                             getattr(design, side + '_times'), generated[side][experiment],
                             fit_errors[side], response_kind=kind, source='simulated_' + side + '_calibration',
                         )
-                    assembled[side] = append_calibration_observations(existing[side], additions)
+                    old = existing[side]
+                    if approach1:
+                        batches[side] = {'existing': old, 'additions': additions}
+                    if (approach1 and old is not None and additions is not None
+                            and ((old.observation_uncertainty is None)
+                                 != (additions.observation_uncertainty is None))):
+                        # Precision is not used by this fit. Retain the full
+                        # source batches below instead of fabricating missing SD.
+                        old = TimeCourse(old.time, old.value, label=old.label)
+                        additions = TimeCourse(additions.time, additions.value,
+                                               label=additions.label)
+                    assembled[side] = append_calibration_observations(old, additions)
             except (ValueError, TypeError, FloatingPointError) as exception:
                 assessment = IVIVCCalibrationAssessment(errors={'generation': AnalysisError.from_exception(exception)})
             else:
                 assessment = assess_ivivc_calibration(assembled['in_vitro'], assembled['in_vivo'], **options)
+            if approach1:
+                assessment.metadata['calibration_batches'] = deepcopy(batches)
             assessments.append(assessment)
             for side in _ENVIRONMENTS:
                 datasets[side].append(assembled[side])
@@ -307,6 +329,9 @@ def compare_calibration_designs(
                     'calibration_measurement_noise_simulated': bool(generated),
                     'future_observation_variability_included': False,
                     'weighting': 'fixed_at_central_reference', 'n_simulations': count}
+        if approach1:
+            metadata.update(weighting='unweighted',
+                            calibration_uncertainty_usage='simulation_only')
         for side in _ENVIRONMENTS:
             times = getattr(design, side + '_times')
             model = getattr(design, side + '_observation_model')

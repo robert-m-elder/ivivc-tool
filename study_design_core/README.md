@@ -213,9 +213,9 @@ preprocessing. `fallback_invalid_log_scaling=True` matches the browser's
 calibration fallback; the target uses only axes actually scaled in calibration.
 `evaluation_times` are already on the analyzed in vitro time axis, including
 log time when applied. Reported mapped times use the analyzed in vivo axis.
-Computational probes are not normalized or scaled again. Approach 1 is
-currently available in this single-dataset assessor; simulation/comparison
-and POC reporting still support Approach 2 only.
+Computational probes are not normalized or scaled again. Both calibration
+simulation entry points below also support Approach 1. The current POC reports
+still demonstrate Approach 2.
 
 The assembly helper accepts `None` for an absent existing dataset or absent
 additions, and returns a copy sorted by time. At least one dataset is required.
@@ -267,7 +267,7 @@ schedule-selection objective.
 
 ## Calibration sampling simulations
 
-C2 provides two entry points using the C1 assessor. Neither changes the
+Two simulation entry points use the same calibration assessor. Neither changes the
 schedule-selection objective or introduces joint optimization.
 
 For calibration comparisons, supply named `CalibrationDesign` candidates:
@@ -300,8 +300,29 @@ comparison = compare_calibration_designs(
 precision = comparison.summaries['three times']['relationship']
 ```
 
+For Approach 1, use the same entry points with these assessment options:
+
+```python
+options = dict(
+    approach_id='approach1', model_name='linear',
+    selected_interpolation=['default'], evaluation_times=[1., 2., 4.],
+    n_samples=200, random_state=123,
+)
+```
+
+The default method is `time_mapping`; `model_name` selects the time-to-time
+relationship rather than the study's curve-recovery model. Calibration rows
+use the existing IVIVC pipeline, including noisy and repeated-time rows. The
+observation model determines simulated measurement errors; SD/SEM does not
+weight Approach 1 fitting. Historical observations remain fixed. Approach 1
+can append proposed observations to historical data without error bars: the
+combined numerical rows are fitted, and original batches with any known
+precision are retained in each assessment's `metadata['calibration_batches']`.
+Approach 2 continues to require compatible historical and new precision.
+
 Each candidate can add in vitro observations, in vivo observations, or both.
-An empty side holds its existing dataset fixed, including fitted uncertainty.
+An empty side holds its existing dataset fixed. Approach 2 retains fitted
+uncertainty in that dataset; Approach 1 retains its ordinary regression scope.
 Optional `existing_in_vivo` supports additions to collected data; proposed
 times may include previously measured times to add independent replicates.
 Omit both sets of additions for an existing-data-only baseline when both
@@ -313,7 +334,7 @@ Each observation model describes individual SD, CV, or a time-dependent SD
 profile, with a constant independent replicate count at its proposed times.
 New means use SEM = individual SD / sqrt(new count). Historical means and
 SEMs remain separate rows; raw historical individuals receive raw new rows.
-Appending weighted measurements to historical rows without supplied errors
+For Approach 2, appending weighted measurements to historical rows without supplied errors
 requires an explicit historical uncertainty assumption. Calibration noise
 follows the selected generating curve. For CV refitting, the direct comparator
 fixes errors at the central reference; the optional study assessment below
@@ -373,6 +394,24 @@ these summaries. Core conditional-inverse and extrapolation details remain
 available on each C1 trajectory. There is no automatic design ranking or
 universal precision threshold.
 
+Approach 1 additionally reports `bias`, `pointwise_bias`,
+`pointwise_estimate_quantiles`, and `pointwise_error_quantiles`. Quantile arrays
+have shape `(3, evaluation_points)`; `empirical_quantiles` gives the lower,
+median, and upper probabilities derived from `confidence_level` (2.5%, 50%,
+and 97.5% by default). These describe variation across simulated studies,
+conditional on fixed historical observations. `point_counts` gives the number
+of available estimates and `error_counts` the number with known truth; failed
+experiments remain in availability/failure denominators. Missing intervals
+do not discard usable point estimates or timing errors.
+
+Estimate ranges can include variation between generating reference curves;
+error ranges subtract each experiment's own generating truth. A fixed-history
+baseline can have zero estimate spread and still have nonzero error. Existing
+interval widths and coverage continue to describe each ordinary mapping fit's
+regression-parameter intervals, not propagated response uncertainty. The
+empirical ranges are kept separate from those intervals; their draws are not
+combined and no second measurement-error draw is added.
+
 Reference-derived truth is available for value ratios when both source
 references are supplied, or inverse times from a uniquely invertible in vivo
 reference within its supported domain. Inverse truth honors the declared
@@ -385,6 +424,24 @@ are not silently treated as known true values. Tau-ratio time predictions use
 fixed target times, so known ratio truth suffices regardless of response SEM.
 Otherwise precision and availability remain reportable, with truth counts
 zero and error/coverage unavailable.
+
+For Approach 1, both generating references define the true mapping as the
+in vivo time at the in vitro curve's response at each evaluation time. Truth
+is available only where the response has a unique inverse within the supplied
+in vivo reference domain. This checks the generating truth, not noisy
+calibration inputs: ordinary IVIVC fits and predictions are still retained
+when reference truth is unavailable. Fixed target data use the same time
+mapping; their response column is carried through by the predictor.
+
+Comparisons retain the existing common-response-scale convention: no
+normalization or fixed one-minus reversal. Approach 1 accepts shared axis
+scaling; grids and outputs then use analyzed coordinates. With `log_x`, truth
+is evaluated at `10**evaluation_times` and mapped times are returned as
+`log10(time)`. Log-time comparisons require
+`fallback_invalid_log_scaling=False`, so experiments cannot silently switch
+between physical and log time. Invalid data still produce the shared
+pipeline's calculation failures. Other preprocessing selections remain
+available in the single-dataset assessor.
 
 Pass `truth={'relationship': ..., 'prediction': ...}` to the comparator or
 assessment request to specify known output truth on the evaluation scale.

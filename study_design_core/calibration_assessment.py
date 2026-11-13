@@ -100,6 +100,17 @@ def _evaluation(trajectory, *, quantity, coordinate, value_axis):
     )
 
 
+def _assessment_method(approach_id, method):
+    """Resolve the same method defaults for direct and simulated assessments."""
+    if approach_id not in ('approach1', 'approach2'):
+        raise ValueError('Choose approach1 or approach2 for calibration assessment.')
+    if method is None:
+        method = 'time_mapping' if approach_id == 'approach1' else 'value_ratio'
+    if method not in DEFAULT_PREDICTION_METHODS[approach_id]:
+        raise ValueError(f'Choose a supported {approach_id} prediction method.')
+    return method
+
+
 def assess_ivivc_calibration(
     in_vitro: TimeCourse,
     in_vivo: TimeCourse,
@@ -179,12 +190,7 @@ def assess_ivivc_calibration(
         raise TypeError('prediction must be a TimeCourse or None.')
     if prediction is in_vitro or prediction is in_vivo:
         raise ValueError('Target prediction measurements must be independent of calibration measurements.')
-    if approach_id not in ('approach1', 'approach2'):
-        raise ValueError('Choose approach1 or approach2 for calibration assessment.')
-    if method is None:
-        method = 'time_mapping' if approach_id == 'approach1' else 'value_ratio'
-    if method not in DEFAULT_PREDICTION_METHODS[approach_id]:
-        raise ValueError(f'Choose a supported {approach_id} prediction method.')
+    method = _assessment_method(approach_id, method)
     if approach_id not in get_model_spec(model_name).approaches:
         raise ValueError(f'The selected model must support {approach_id}.')
     confidence_level, n_samples = validate_interval_settings(confidence_level, n_samples)
