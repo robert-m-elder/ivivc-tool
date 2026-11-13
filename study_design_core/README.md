@@ -214,8 +214,7 @@ calibration fallback; the target uses only axes actually scaled in calibration.
 `evaluation_times` are already on the analyzed in vitro time axis, including
 log time when applied. Reported mapped times use the analyzed in vivo axis.
 Computational probes are not normalized or scaled again. Both calibration
-simulation entry points below also support Approach 1. The current POC reports
-still demonstrate Approach 2.
+simulation entry points and the focused POC below support Approach 1.
 
 The assembly helper accepts `None` for an absent existing dataset or absent
 additions, and returns a copy sorted by time. At least one dataset is required.
@@ -1314,15 +1313,24 @@ CSV and JSON files for each scenario and optional static Plotly HTML summaries.
 
 ### Calibration sampling demonstrations
 
-Use the separate focused runner to demonstrate both C2 entry points:
+Use the separate focused runner to demonstrate both calibration-assessment workflows:
 
 ```bash
 python examples/study_design_calibration_poc.py --simulations 100 \
     --interval-samples 200 --seed 12345
 ```
 
-It writes `study_design_calibration_poc_output/index.html`, with CSV/JSON
-downloads and a page for each example. `--output-dir` changes the destination;
+This retains the Approach 2 value-ratio demonstration. To assess the same
+sampling candidates with Approach 1, run:
+
+```bash
+python examples/study_design_calibration_poc.py --approach approach1 \
+    --simulations 100 --interval-samples 200 --seed 12345 \
+    --output-dir study_design_calibration_poc_output/approach1
+```
+
+By default, the runner writes `study_design_calibration_poc_output/index.html`,
+with CSV/JSON downloads and a page for each example. `--output-dir` changes the destination;
 `--no-html` writes only numerical outputs. HTML tables work without Plotly;
 when the project's Plotly dependency is installed, the pages also include
 interactive comparison charts with their scripts embedded for offline use.
@@ -1332,7 +1340,7 @@ The console prints JSON containing the settings, candidates, and output paths.
   assessment enabled. Four specified candidates use early times, spread times,
   more times, or more replicates. The first two use the same nine independent
   measurements; the other two use 15 and 18. Curve recovery over time 0–8 and
-  IVIVC/target prediction precision use the same generated observations, while
+  IVIVC/target prediction assessment use the same generated observations, while
   the measured companion in vitro dataset stays fixed with its supplied SEM.
 - `--scenario refinement` compares existing-data-only calibration with added
   replicates at existing in vitro times, new in vitro times, new in vivo times,
@@ -1342,18 +1350,28 @@ The console prints JSON containing the settings, candidates, and output paths.
   ages can repeat or precede ages already studied.
 
 The default `--scenario all` runs both. `--simulations` is the number of
-experiments; `--interval-samples` controls the separate parameter-propagation
-draws within each IVIVC assessment. Increasing either increases runtime.
+experiments; `--interval-samples` controls the separate parameter draws for
+each fit's intervals. Approach 1's empirical timing-error ranges use the
+simulated experiments, not these parameter draws. Increasing either increases runtime.
 Role-specific seeds preserve historical observations when these counts change,
 and candidates share generating trajectories and measurement-error draws.
 
-The examples use `exponential_normalized`, Approach 2 value-ratio prediction,
-fraction-remaining responses, and no data-dependent normalization. The initial
-response is fixed at 1 by the model. One specified in vitro curve and three
-weighted in vivo curves define synthetic truth; a separate noiseless target
-in vitro dataset supplies target predictions. Its in vivo truth is imposed by
-the value-ratio assumption. These small examples illustrate the APIs; other
-supported model/method choices remain available through C1/C2.
+Both approaches use the same specified `exponential_normalized` generating
+curves, fraction-remaining responses, and no data-dependent normalization.
+The study's curve-recovery model fixes the initial response at 1. One in vitro
+curve and three weighted in vivo curves define synthetic truth; a separate
+noiseless target in vitro dataset supplies target predictions.
+
+Approach 2 fits those degradation curves and uses the value-ratio assumption
+for target in vivo response truth. Approach 1 fits a `linear` time mapping
+using the shared default interpolation; its target predictions are in vivo
+times, with the target responses carried unchanged. Approach 1 evaluates
+in vitro times `[0.5, 1, 2, 3, 4]` so reference-derived timing truth is within
+all generating reference domains. Its separate target dataset uses times
+`[0.75, 1.5, 2.5, 3.5]`. Approach 2 retains its grid `[1, 2, 4, 6, 8]`.
+Historical SD/SEM contributes to Approach 2 fitting and propagation; it is
+retained as provenance for Approach 1's ordinary fit. These examples compare
+specified candidates, not optimized schedules or automatic IVIVC objectives.
 
 Each scenario exports candidate counts and performance, pointwise summaries,
 all experiment outcomes, fixed inputs, assembled calibration data, evaluation
@@ -1366,6 +1384,17 @@ truth denominators. Missing intervals count against coverage when truth is
 known, and conditional coverage among available intervals is reported
 separately. Candidate costs differ, and no automatic ranking or universal
 precision threshold is applied.
+
+For Approach 1, the main comparisons show mapped-time and target-timing bias,
+RMSE, and available-result counts. Pointwise empirical estimate/error quantiles
+are exported in `pointwise_performance.csv`; individual estimates, errors,
+regression bounds, and extrapolation details remain in `evaluations.csv`.
+Regression-parameter interval widths and coverage are labeled separately from
+the across-study error ranges. The mapping plot reuses recorded results: it
+shows generating mappings and experiment 0 for every candidate, without
+replacing failed fits. The error-range plots show pointwise medians and
+empirical ranges across available simulations. Historical data stay fixed,
+and none of these displays establish reliability for a new material or system.
 
 ### Measurement uncertainty controls
 

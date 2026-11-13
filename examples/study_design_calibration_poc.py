@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Demonstrate curve recovery plus IVIVC assessment, and calibration refinement.
 
-This focused POC compares specified candidates using a normalized exponential
-and Approach 2 value-ratio prediction. It complements the general study-design
-POC; it does not change its scenarios or perform joint optimization.
+This focused POC compares specified candidates using normalized exponential
+generating curves and either Approach 2 value-ratio prediction (the default)
+or Approach 1 time mapping. It complements the general study-design POC;
+it does not change its scenarios or perform joint optimization.
 """
 from __future__ import annotations
 
@@ -34,6 +35,8 @@ VITRO_RATE = .35
 VIVO_RATES = np.array([.15, .16, .17])
 REFERENCE_WEIGHTS = np.array([.25, .5, .25])
 EVALUATION_TIMES = np.array([1., 2., 4., 6., 8.])
+APPROACH1_EVALUATION_TIMES = np.array([.5, 1., 2., 3., 4.])
+APPROACH1_TARGET_TIMES = np.array([.75, 1.5, 2.5, 3.5])
 
 
 def _integer(value, name, minimum):
@@ -91,8 +94,8 @@ def _descriptor(vitro_times=(), vitro_count=0, vivo_times=(), vivo_count=0):
     }
 
 
-def _assumptions():
-    return {
+def _assumptions(approach_id='approach2'):
+    assumptions = {
         'model': 'fraction remaining = exp(b*time), with initial response fixed at 1',
         'reference': 'one specified in vitro curve and three weighted in vivo curves; not an inferred posterior',
         'in_vitro_rate': VITRO_RATE, 'in_vivo_rates': VIVO_RATES.tolist(),
@@ -114,6 +117,20 @@ def _assumptions():
         'time_zero': 'measurements at time zero count toward resources but do not identify the rate in this fixed-initial-response model',
         'interpretation': 'illustrative assumed example, not external validation, a sufficiency threshold, or evidence of transferability',
     }
+    if approach_id == 'approach1':
+        assumptions.update(
+            ivivc='Approach 1 linear time-to-time fit after shared default response-aligned interpolation',
+            fixed_data_uncertainty='historical observations remain fixed; supplied SD/SEM is retained as provenance but does not weight the mapping fit or propagate through its regression intervals',
+            target_transfer='synthetic target in vivo timing truth is the calibration equal-response time mapping; target responses are carried unchanged',
+            uncertainty_intervals='ordinary pointwise mapping-regression parameter intervals, separate from across-study variability',
+            empirical_ranges='pointwise estimate and timing-error quantiles across simulated studies; each error subtracts its own generating truth',
+            coverage='pooled pointwise coverage of ordinary mapping-regression parameter intervals, conditional on fixed historical observations',
+            ivivc_evaluation_times=APPROACH1_EVALUATION_TIMES.tolist(),
+            target_evaluation_times=APPROACH1_TARGET_TIMES.tolist(),
+            evaluation_domain='in vitro times chosen so true mapped in vivo times remain inside every generating reference domain; fitted predictions may still extrapolate beyond calibration data',
+            time_zero='time-zero measurements count toward resources and may contribute to the time mapping; they do not identify the curve-recovery rate in this fixed-initial-response model',
+        )
+    return assumptions
 
 
 def _study(settings, refs, target, options):
@@ -149,7 +166,7 @@ def _study(settings, refs, target, options):
         recovery_summaries[name] = summarize_simulation(recovery[name])
         calibrations[name] = recovery[name].ivivc_assessment
         summaries[name] = summarize_calibration_simulation(calibrations[name])
-    assumptions = _assumptions()
+    assumptions = _assumptions(settings.get('approach_id', 'approach2'))
     assumptions.update(historical_in_vitro_individual_sd=.03,
                        historical_in_vitro_count=3, proposed_in_vivo_individual_sd=.05,
                        curve_recovery_evaluation_range=[0., 8.],
@@ -202,7 +219,7 @@ def _refinement(settings, refs, target, options):
         in_vitro_reference=refs['in_vitro'], in_vivo_reference=refs['in_vivo'],
         n_simulations=settings['n_simulations'], random_state=_seed(seed, 401),
     )
-    assumptions = _assumptions()
+    assumptions = _assumptions(settings.get('approach_id', 'approach2'))
     assumptions.update(historical_in_vitro_individual_sd=.06, historical_in_vivo_individual_sd=.05,
                        historical_count_per_time=3, added_count_per_time=3,
                        backend_entry_point='compare_calibration_designs',
@@ -220,27 +237,38 @@ def _refinement(settings, refs, target, options):
 
 
 def run_calibration_poc(n_simulations=100, n_interval_samples=200,
-                        random_seed=12345, scenario='all') -> dict:
+                        random_seed=12345, scenario='all', *, approach_id='approach2') -> dict:
     """Run the two focused examples without creating output files."""
     n_simulations = _integer(n_simulations, 'n_simulations', 1)
     n_interval_samples = _integer(n_interval_samples, 'n_interval_samples', 2)
     random_seed = _integer(random_seed, 'random_seed', 0)
     if scenario not in ('all', 'study', 'refinement'):
         raise ValueError('scenario must be all, study, or refinement.')
+    if approach_id not in ('approach1', 'approach2'):
+        raise ValueError('approach_id must be approach1 or approach2.')
+    evaluation_times = (APPROACH1_EVALUATION_TIMES if approach_id == 'approach1'
+                        else EVALUATION_TIMES)
+    target_times = APPROACH1_TARGET_TIMES if approach_id == 'approach1' else evaluation_times
     settings = dict(n_simulations=n_simulations, n_interval_samples=n_interval_samples,
                     random_seed=random_seed, model_name=MODEL, prediction_method='value_ratio',
                     response_scale='fraction remaining', time_units='arbitrary time units')
     refs = _references()
-    target = TimeCourse(EVALUATION_TIMES, np.exp(-.25*EVALUATION_TIMES),
+    target = TimeCourse(target_times, np.exp(-.25*target_times),
                         label='separate fixed target in vitro data')
-    options = dict(model_name=MODEL, method='value_ratio', evaluation_times=EVALUATION_TIMES,
+    options = dict(model_name=MODEL, method='value_ratio', evaluation_times=evaluation_times,
                    prediction=target, n_samples=n_interval_samples, random_state=random_seed,
                    confidence_level=.95,
                    analysis_config=dict(cv_scheme='none', grid_search_num_points=12,
                                         grid_search_num_cores=1, grid_search_random_state=random_seed))
+    if approach_id == 'approach1':
+        options.update(approach_id=approach_id, model_name='linear',
+                       method='time_mapping', selected_interpolation=['default'])
+        settings.update(approach_id=approach_id, model_name='linear',
+                        generating_model_name=MODEL, study_analysis_model_name=MODEL,
+                        prediction_method='time_mapping', selected_interpolation=['default'])
     settings.update(analysis_config=dict(options['analysis_config']),
                     selected_normalizations=[], confidence_level=.95,
-                    evaluation_times=EVALUATION_TIMES.tolist(),
+                    evaluation_times=evaluation_times.tolist(),
                     seed_roles=dict(study_historical_vitro=101, study_measurements=201,
                                     refinement_historical_vitro=301,
                                     refinement_historical_vivo=302, refinement_measurements=401))
@@ -257,6 +285,7 @@ def run_calibration_poc(n_simulations=100, n_interval_samples=200,
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--scenario', choices=('all', 'study', 'refinement'), default='all')
+    parser.add_argument('--approach', choices=('approach1', 'approach2'), default='approach2')
     parser.add_argument('--simulations', type=int, default=100)
     parser.add_argument('--interval-samples', type=int, default=200)
     parser.add_argument('--seed', type=int, default=12345)
@@ -264,7 +293,8 @@ def main(argv=None):
     parser.add_argument('--no-html', action='store_true')
     args = parser.parse_args(argv)
     try:
-        run = run_calibration_poc(args.simulations, args.interval_samples, args.seed, args.scenario)
+        run = run_calibration_poc(args.simulations, args.interval_samples, args.seed,
+                                  args.scenario, approach_id=args.approach)
     except ValueError as error:
         parser.error(str(error))
     from examples.study_design_calibration_reporting import write_calibration_poc_outputs
