@@ -93,6 +93,15 @@ def _validate_assessment_options(options):
     if 'in_vitro' in options or 'in_vivo' in options:
         raise ValueError('Calibration datasets are supplied separately from assessment_options.')
     signature(assess_ivivc_calibration).bind(None, None, **options)
+    # Single-dataset Approach 1 assessment is available, but simulation
+    # output/truth conventions still require Approach 2.
+    if options.get('approach_id', 'approach2') != 'approach2':
+        raise ValueError('Calibration simulations currently support Approach 2 only; '
+                         'use assess_ivivc_calibration for single-dataset Approach 1 assessment.')
+    interpolation = options.get('selected_interpolation') or ('none',)
+    interpolation = (interpolation,) if isinstance(interpolation, str) else tuple(interpolation)
+    if interpolation != ('none',) or options.get('selected_scalings'):
+        raise ValueError('Calibration simulations use no interpolation or axis scaling.')
     method = options.get('method', 'value_ratio')
     if method not in DEFAULT_PREDICTION_METHODS['approach2']:
         raise ValueError('Choose a supported Approach 2 prediction method.')

@@ -157,7 +157,8 @@ Calibration observations are reference inputs, not completed target-study data.
 ## Assessing one IVIVC calibration dataset
 
 `assess_ivivc_calibration()` assesses an assembled in vitro/in vivo dataset
-using Approach 2. It is independent of measurement generation: later study
+using Approach 2 by default, or Approach 1 with `approach_id='approach1'`.
+It is independent of measurement generation: later study
 simulations can use the same observations for curve recovery and IVIVC
 assessment, or compare calibration additions in either environment.
 
@@ -182,6 +183,40 @@ if assessment.relationship is not None:
     usable = assessment.relationship.interval_available
 ```
 
+For Approach 1, select a time-mapping model and evaluate in vitro times:
+
+```python
+assessment = assess_ivivc_calibration(
+    existing_vitro, combined_vivo,
+    approach_id='approach1', model_name='linear',
+    selected_interpolation=['default'],  # match the IVIVC app selection
+    evaluation_times=[1., 2., 4.], prediction=target_in_vitro,
+    n_samples=200, random_state=123,
+)
+mapped_in_vivo_times = assessment.relationship.estimate
+```
+
+The default method is `time_mapping` for Approach 1 and `value_ratio` for
+Approach 2. Approach 1 uses the shared interpolation, ordinary time-to-time
+fit, predictions, intervals, and extrapolation diagnostics. Interpolation
+defaults to `default`; `alternative` and `none` retain their shared meanings.
+Rows, including repeated sampling times, are passed without additional sorting,
+pooling, or response filtering. Calibration SD/SEM is retained in independent
+`assessment.metadata['calibration_inputs']` snapshots; numerical copies without
+precision enter the ordinary fit. Supplied errors do not weight that fit or
+propagate into its existing mapping-regression parameter intervals. The
+metadata explicitly records this interpretation. Target data remain fixed;
+supplied target-response uncertainty is reported as a prediction-stage error.
+
+Approach 1 accepts `selected_scalings=['log_x', 'log_y']` through shared
+preprocessing. `fallback_invalid_log_scaling=True` matches the browser's
+calibration fallback; the target uses only axes actually scaled in calibration.
+`evaluation_times` are already on the analyzed in vitro time axis, including
+log time when applied. Reported mapped times use the analyzed in vivo axis.
+Computational probes are not normalized or scaled again. Approach 1 is
+currently available in this single-dataset assessor; simulation/comparison
+and POC reporting still support Approach 2 only.
+
 The assembly helper accepts `None` for an absent existing dataset or absent
 additions, and returns a copy sorted by time. At least one dataset is required.
 It retains old and new independent rows at duplicate times, including separate
@@ -200,9 +235,9 @@ data. `value_ratio` reports the fitted IVV/IV response ratio at
 `observed_response_inverse` reports in vivo times at supplied
 `response_levels` on the analyzed in vivo response scale. Inverse assessment
 does not use the fitted in vitro curve. For value ratio and inverse mapping,
-omit the grid to request only target predictions. Use only models registered
-for Approach 2; a model whose time constant is unavailable can still be used
-with another explicitly selected method.
+omit the grid to request only target predictions. These three methods require
+models registered for Approach 2; a model whose time constant is unavailable
+can still be used with another explicitly selected method.
 
 Calibration and optional target inputs are cleaned and normalized through the
 shared IVIVC APIs. `selected_normalizations` supports initial-value, min-max,
@@ -212,11 +247,12 @@ calibration normalization records remain in `assessment.analysis.prepared_data`
 and target records in `assessment.metadata['prediction_preprocessing']`.
 Compare different datasets only on a consistent response/time scale, rather
 than interpreting widths on different min-max scales as physical-unit widths.
-Logarithmic axis scaling and interpolated fitting observations are excluded.
+Approach 2 excludes logarithmic axis scaling and interpolated fitting
+observations.
 
-`assessment.analysis` retains component fits and their covariance, including
-uncertainty in a dataset held fixed. Relationship and target evaluations each
-retain point estimates, bounds, availability masks, and their full core
+`assessment.analysis` retains the selected approach's fits and covariance.
+Approach 2 retains fitted uncertainty in a dataset held fixed. Relationship and
+target evaluations each retain point estimates, bounds, availability masks, and their full core
 `trajectory` with extrapolation and conditional-inverse diagnostics. A finite
 point need not have an available interval. `errors` records exceptions under
 `preprocessing`, `fit`, `relationship`, or `prediction`; failure of a target

@@ -105,11 +105,15 @@ def assess_ivivc_calibration(
     in_vivo: TimeCourse,
     *,
     model_name: str,
-    method: str = 'value_ratio',
+    approach_id: str = 'approach2',
+    method: str | None = None,
     evaluation_times=None,
     response_levels=None,
     prediction: TimeCourse | None = None,
     selected_normalizations: Sequence[str] | None = (),
+    selected_interpolation: Sequence[str] | None = None,
+    selected_scalings: Sequence[str] | None = (),
+    fallback_invalid_log_scaling: bool = False,
     analysis_config: Mapping[str, object] | None = None,
     confidence_level: float = .95,
     n_samples: int = 1000,
@@ -118,16 +122,34 @@ def assess_ivivc_calibration(
     inverse_min_valid_fraction: float | None = None,
     fail_fast: bool = False,
 ) -> IVIVCCalibrationAssessment:
-    """Preprocess, fit Approach 2, and assess one assembled calibration pair.
+    """Preprocess, fit, and assess one assembled calibration pair.
 
     Inputs, including an optional independent target ``prediction``, are on
     their original response scale. Each dataset is normalized separately with
-    the same selected operations, as in the IVIVC browser. Calibration uses
-    observed rows only, without interpolation or logarithmic axis scaling.
-    Supplied individual SD or mean SEM is transported by the existing APIs.
+    the same selected operations, as in the IVIVC browser. Approach 2 remains
+    the default: it fits observed rows without interpolation or axis scaling
+    and transports supplied individual SD or mean SEM through the existing APIs.
+
+    Approach 1 uses ordinary response-aligned time-to-time fitting and the
+    shared ``time_mapping`` predictor. Interpolation defaults to ``default``;
+    choose ``none`` or ``alternative`` explicitly to match another app run.
+    Calibration SD/SEM is retained in metadata['calibration_inputs'], but
+    numerical copies without precision enter this unweighted pipeline. No
+    sorting, pooling, monotonicity checks, or extra response filtering is
+    performed here. Existing mapping-regression intervals are retained; they
+    do not propagate supplied response uncertainty. Target response uncertainty
+    remains unsupported by the shared Approach 1 predictor.
+
+    Approach 1 also accepts shared log-axis scaling and its optional invalid-
+    log fallback. The target uses only scalings actually applied to calibration,
+    as in the browser. Evaluation grids are already on analyzed coordinates;
+    computational probes are not normalized or scaled again.
 
     Relationship assessment does not require experimental target data:
 
+    * Approach 1 ``time_mapping`` reports in vivo times at ``evaluation_times``
+      (in vitro times). Its model_name names the time-mapping model, not a
+      degradation-curve model.
     * ``value_ratio`` uses unit responses at ``evaluation_times`` to evaluate
       the fitted in vivo/in vitro response ratio.
     * ``tau_ratio`` uses a unit-time probe to report one dimensionless
@@ -136,8 +158,8 @@ def assess_ivivc_calibration(
     * ``observed_response_inverse`` evaluates in vivo time at ``response_levels``
       on the analyzed in vivo response scale. It does not use the in vitro fit.
 
-    For value ratio and inverse mapping, omit the grid to request target-only
-    assessment. A grid or a target is required. An optional target is evaluated
+    For time mapping, value ratio and inverse mapping, omit the grid to request
+    target-only assessment. A grid or a target is required. A target is evaluated
     with the same model and method, independently of relationship evaluation.
 
     Estimates and bounds use analyzed coordinates; normalization records are
@@ -157,10 +179,14 @@ def assess_ivivc_calibration(
         raise TypeError('prediction must be a TimeCourse or None.')
     if prediction is in_vitro or prediction is in_vivo:
         raise ValueError('Target prediction measurements must be independent of calibration measurements.')
-    if method not in DEFAULT_PREDICTION_METHODS['approach2']:
-        raise ValueError('Choose a supported Approach 2 prediction method.')
-    if 'approach2' not in get_model_spec(model_name).approaches:
-        raise ValueError('The selected model must support Approach 2.')
+    if approach_id not in ('approach1', 'approach2'):
+        raise ValueError('Choose approach1 or approach2 for calibration assessment.')
+    if method is None:
+        method = 'time_mapping' if approach_id == 'approach1' else 'value_ratio'
+    if method not in DEFAULT_PREDICTION_METHODS[approach_id]:
+        raise ValueError(f'Choose a supported {approach_id} prediction method.')
+    if approach_id not in get_model_spec(model_name).approaches:
+        raise ValueError(f'The selected model must support {approach_id}.')
     confidence_level, n_samples = validate_interval_settings(confidence_level, n_samples)
     if isinstance(random_state, (bool, np.bool_)):
         raise TypeError('random_state must be an integer, Generator, RandomState, or None.')
@@ -172,8 +198,20 @@ def assess_ivivc_calibration(
                       else tuple(() if selected_normalizations is None else selected_normalizations))
     if any(name not in ('initial_value', 'min_max', 'one_minus') for name in normalizations):
         raise ValueError('Use initial_value, min_max, one_minus, or no normalization.')
-    if evaluation_times is not None and method != 'value_ratio':
-        raise ValueError('evaluation_times is used only for value_ratio relationships.')
+    if selected_interpolation is None:
+        selected_interpolation = ('default',) if approach_id == 'approach1' else ('none',)
+    interpolation = ((selected_interpolation,) if isinstance(selected_interpolation, str)
+                     else tuple(selected_interpolation) or ('none',))
+    scalings = ((selected_scalings,) if isinstance(selected_scalings, str)
+                else tuple(() if selected_scalings is None else selected_scalings))
+    if any(name not in ('none', 'default', 'alternative') for name in interpolation):
+        raise ValueError('Use none, default, or alternative interpolation.')
+    if any(name not in ('log_x', 'log_y') for name in scalings):
+        raise ValueError('Use log_x, log_y, or no axis scaling.')
+    if approach_id == 'approach2' and (interpolation != ('none',) or scalings):
+        raise ValueError('Approach 2 calibration assessment uses no interpolation or axis scaling.')
+    if evaluation_times is not None and method not in ('value_ratio', 'time_mapping'):
+        raise ValueError('evaluation_times is used only for value_ratio or time_mapping relationships.')
     if response_levels is not None and method != 'observed_response_inverse':
         raise ValueError('response_levels is used only for observed_response_inverse relationships.')
     if method == 'observed_response_inverse':
@@ -186,10 +224,10 @@ def assess_ivivc_calibration(
     probe = None
     quantity = None
     coordinate = None
-    if method == 'value_ratio' and evaluation_times is not None:
+    if method in ('value_ratio', 'time_mapping') and evaluation_times is not None:
         coordinate = _evaluation_grid(evaluation_times, 'evaluation_times')
         probe = TimeCourse(coordinate, np.ones(len(coordinate)))
-        quantity = 'value_ratio'
+        quantity = 'value_ratio' if method == 'value_ratio' else 'in_vivo_time'
     elif method == 'tau_ratio':
         coordinate = np.array([1.])
         probe = TimeCourse(coordinate, np.ones(1))
@@ -204,7 +242,7 @@ def assess_ivivc_calibration(
     # Avoid default CV work and process pools in a repeated-study caller.
     config = {'cv_scheme': 'none', 'grid_search_num_cores': 1}
     config.update(analysis_config or {})
-    selection = f'approach2:{model_name}'
+    selection = f'{approach_id}:{model_name}'
     result = IVIVCCalibrationAssessment(metadata={
         'selection': selection, 'method': method,
         'evaluation_scale': 'analyzed',
@@ -217,6 +255,18 @@ def assess_ivivc_calibration(
         'confidence_level': confidence_level, 'n_samples': n_samples,
     })
 
+    # Preserve supplied precision outside PreparedIVIVCData: attaching it there
+    # would imply that the ordinary Approach 1 fit can consume it. Numerical
+    # copies deliberately follow the app's existing no-uncertainty cleaning.
+    if approach_id == 'approach1':
+        result.metadata.update(
+            calibration_inputs=deepcopy({'in_vitro': in_vitro, 'in_vivo': in_vivo}),
+            calibration_uncertainty_used_in_fit=False,
+            interval_interpretation='mapping_regression_parameter_uncertainty',
+        )
+        in_vitro = TimeCourse(in_vitro.time, in_vitro.value, label=in_vitro.label)
+        in_vivo = TimeCourse(in_vivo.time, in_vivo.value, label=in_vivo.label)
+
     def record(stage, exception):
         if fail_fast:
             raise exception
@@ -224,8 +274,10 @@ def assess_ivivc_calibration(
 
     try:
         prepared = prepare_ivivc_data(
-            in_vitro, in_vivo, selected_interpolation=['none'],
+            in_vitro, in_vivo, selected_interpolation=interpolation,
             selected_normalizations=normalizations,
+            selected_scalings=scalings,
+            fallback_invalid_log_scaling=fallback_invalid_log_scaling,
         )
     except Exception as exception:
         record('preprocessing', exception)
@@ -248,7 +300,7 @@ def assess_ivivc_calibration(
 
     def evaluate(course):
         batch = predict_in_vivo(
-            result.analysis, course, methods={'approach2': method},
+            result.analysis, course, methods={approach_id: method},
             confidence_level=confidence_level, n_samples=n_samples,
             random_state=deepcopy(state), fail_fast=True,
             inverse_interval_policy=inverse_interval_policy,
@@ -269,6 +321,7 @@ def assess_ivivc_calibration(
             target, target_preprocessing = prepare_time_course(
                 prediction.time, prediction.value, label=prediction.label,
                 selected_normalizations=normalizations,
+                selected_scalings=prepared.preprocessing.applied_scalings,
                 observation_uncertainty=prediction.observation_uncertainty,
             )
             result.metadata['prediction_preprocessing'] = target_preprocessing
