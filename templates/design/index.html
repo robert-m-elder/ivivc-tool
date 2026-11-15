@@ -1,4 +1,5 @@
 {% from 'design/_data_upload.html' import data_upload %}
+{% from 'design/_planning_inputs.html' import reference_inputs, measurement_inputs, sampling_inputs, draws_input %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -14,12 +15,12 @@
     <header class="design-site-header">
         <div class="design-page-width">
             <h1>Study Design for Absorbable Materials</h1>
-            <p class="design-muted">Development version · data import and setup review</p>
+            <p class="design-muted">Development version · measured-reference study planning</p>
         </div>
     </header>
 
     <main id="design-workspace" class="design-page-width" tabindex="-1">
-        <p class="design-notice">Import and interpret data, then review setup settings. Numerical analysis is not yet available.</p>
+        <p class="design-notice">Plan a new in vivo study using measured reference data, then compare sampling schedules and simulated curve recovery. This interface currently supports new studies with measured reference data.</p>
         <noscript><p class="design-notice">Enable JavaScript to review setup and retain selected files while moving between inputs and comparisons.</p></noscript>
 
         <form id="design-setup-form" action="{{ url_for('review_setup') }}" method="post" enctype="multipart/form-data" novalidate>
@@ -70,7 +71,7 @@
                         </div>
                         <div class="design-field">
                             <label class="design-checkbox-label" for="has_completed"><input id="has_completed" name="has_completed" type="checkbox" value="on"> This target study already has completed observations</label>
-                            <p class="design-help">Completed target-study measurements have a different role from prior reference or calibration data.</p>
+                            <p class="design-help">Completed target-study measurements have a different role from prior reference or calibration data. Import is available; numerical planning with completed observations will be connected later.</p>
                         </div>
                         <div data-completed-dataset hidden>
                             {{ data_upload(datasets['completed-target-file']) }}
@@ -79,17 +80,15 @@
 
                     <section class="design-section" aria-labelledby="study-reference-heading">
                         <h3 id="study-reference-heading">2 · Reference and preprocessing</h3>
-                        <p>Reference fitting, preprocessing options, and the trajectory preview will appear here when numerical planning is connected. Data previews above retain the uploaded response scale.</p>
+                        {{ reference_inputs(planning_models) }}
                     </section>
                     <section class="design-section" aria-labelledby="study-measurements-heading">
                         <h3 id="study-measurements-heading">3 · Future measurements</h3>
-                        <p>Future measurement variability and independent replicate counts will be configured separately from reference uncertainty.</p>
-                        {{ data_upload(datasets['future-sd-profile-file']) }}
-                        <p class="design-help">The optional SD profile describes individual future measurements. It does not supply uncertainty for the reference data.</p>
+                        {{ measurement_inputs(datasets) }}
                     </section>
                     <section class="design-section" aria-labelledby="study-sampling-heading">
                         <h3 id="study-sampling-heading">4 · Sampling choices</h3>
-                        <p>Suggested schedules, multiple manual comparisons, sampling restrictions, and timing requirements will be configured here.</p>
+                        {{ sampling_inputs() }}
                     </section>
                 </div>
 
@@ -131,24 +130,25 @@
                     <details class="design-advanced">
                         <summary>Advanced calculation settings</summary>
                         <div class="design-field-grid">
+                            {{ draws_input() }}
                             <div class="design-field">
                                 <label for="n_simulations">Monte Carlo studies per candidate</label>
                                 <input id="n_simulations" name="n_simulations" type="number" min="2" step="1" value="{{ settings.n_simulations }}" aria-describedby="n-simulations-help">
-                                <p id="n-simulations-help" class="design-help">This is a proposed setting; no simulations run during setup review.</p>
+                                <p id="n-simulations-help" class="design-help">More simulations reduce simulation noise and take longer. No simulations run during setup review.</p>
                                 <p id="n-simulations-error" class="design-field-error" data-error-for="n_simulations" hidden></p>
                             </div>
                             <div class="design-field">
                                 <label for="random_seed">Random seed</label>
                                 <input id="random_seed" name="random_seed" type="number" min="0" step="1" value="{{ settings.random_seed }}" aria-describedby="random-seed-help">
-                                <p id="random-seed-help" class="design-help">A reproducible seed for the eventual numerical comparison.</p>
+                                <p id="random-seed-help" class="design-help">A reproducible seed for reference sampling and the numerical comparison.</p>
                                 <p id="random-seed-error" class="design-field-error" data-error-for="random_seed" hidden></p>
                             </div>
                         </div>
                     </details>
                     <div class="design-action-row">
-                        <button id="review-setup" class="design-primary" type="submit" disabled>Review setup</button>
-                        <button type="button" disabled>Calculate comparison</button>
-                        <span class="design-help">Numerical calculation is not available yet.</span>
+                        <button id="review-setup" type="submit" disabled>Review setup</button>
+                        <button id="calculate-comparison" class="design-primary" type="submit" name="action" value="calculate" formaction="{{ url_for('calculate_comparison') }}" aria-describedby="design-calculation-help" disabled>Calculate comparison</button>
+                        <p id="design-calculation-help" class="design-help" data-planning-availability>Calculation is available for a new study using measured in vivo reference data. It runs within this request; keep the page open.</p>
                     </div>
                 </section>
             </section>
@@ -157,9 +157,12 @@
         <p id="design-request-status" class="design-request-status" role="status" aria-live="polite"></p>
         <section id="design-results" aria-labelledby="design-results-heading" hidden>
             <h2 id="design-results-heading" tabindex="-1">Comparisons</h2>
+            <p id="design-results-status" class="design-status" role="status" aria-live="polite"></p>
             <div id="design-results-content" tabindex="-1">
-                <p class="design-empty-state">No setup review yet. Select inputs and choose Review setup.</p>
+                <p class="design-empty-state">No comparison yet. Import reference data, select study settings, and choose Calculate comparison.</p>
             </div>
+            <div id="design-review-content" tabindex="-1"></div>
+            <div class="design-action-row"><button type="button" disabled title="Report generation will be added after the analysis workflows are settled.">Generate report</button></div>
         </section>
     </main>
 </body>

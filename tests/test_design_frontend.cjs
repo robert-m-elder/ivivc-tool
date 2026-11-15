@@ -10,7 +10,7 @@ const source = fs.readFileSync(path.join(__dirname, "../static/js/design.js"), "
 
 // Minimal DOM for the behavior used by this frontend. No browser or extra
 // JavaScript dependency is needed to exercise its request/state handling.
-function fixture() {
+function fixture({planning = false} = {}) {
     const document = {readyState: "complete", activeElement: null};
     const dataAttribute = key => "data-" + key.replace(/[A-Z]/g, letter => "-" + letter.toLowerCase());
 
@@ -105,6 +105,22 @@ function fixture() {
     const simulations = element("input", {id: "n_simulations", name: "n_simulations", type: "number", value: "100", "aria-describedby": "n-simulations-help"}, details);
     const seed = element("input", {id: "random_seed", name: "random_seed", type: "number", value: "12345", "aria-describedby": "random-seed-help"}, details);
     const submit = element("button", {id: "review-setup", disabled: ""}, inputs);
+    let calculate, completed, planningGroup, observationKind, observationValue, minimumSd, profileFile;
+    let availability;
+    if (planning) {
+        completed = element("input", {id: "has_completed", name: "has_completed", type: "checkbox", value: "on"}, studyGroup);
+        completed.checked = false;
+        planningGroup = element("div", {"data-planning-controls": ""}, studyGroup);
+        observationKind = element("select", {id: "observation_kind", name: "observation_kind", value: "constant_sd"}, planningGroup);
+        const constant = element("div", {"data-observation-kind": "constant_sd constant_cv"}, planningGroup);
+        observationValue = element("input", {id: "observation_value", name: "observation_value", value: ".05"}, constant);
+        const cv = element("div", {"data-observation-kind": "constant_cv"}, planningGroup);
+        minimumSd = element("input", {id: "minimum_sd", name: "minimum_sd", value: ".001"}, cv);
+        const profile = element("div", {"data-observation-kind": "time_profile_sd"}, planningGroup);
+        profileFile = element("input", {id: "profile-file", name: "profile_file", type: "file"}, profile);
+        calculate = element("button", {id: "calculate-comparison", formaction: "/calculate", disabled: ""}, inputs);
+        availability = element("p", {"data-planning-availability": ""}, inputs);
+    }
     const errors = {};
     for (const field of [task, sourceField, environment, simulations, seed]) {
         errors[field.id] = element("p", {id: field.id + "-error", "data-error-for": field.id, hidden: ""}, inputs);
@@ -113,6 +129,8 @@ function fixture() {
     const results = element("section", {id: "design-results", hidden: ""}, root);
     const content = element("div", {id: "design-results-content"}, results);
     content.innerHTML = "<p>No review yet.</p>";
+    const reviewContent = planning ? element("div", {id: "design-review-content"}, results) : content;
+    const resultStatus = planning ? element("p", {id: "design-results-status"}, results) : null;
 
     document.getElementById = id => root.id === id ? root :
         root.querySelectorAll("[id]").find(node => node.id === id) || null;
@@ -124,6 +142,7 @@ function fixture() {
             this.items = [];
             for (const field of submittedForm.querySelectorAll("input, select, textarea")) {
                 if (field.disabled || !field.name) continue;
+                if (["checkbox", "radio"].includes(field.getAttribute("type")) && !field.checked) continue;
                 if (field.getAttribute("type") === "file") {
                     this.items.push([field.name, field.files[0] || {name: "", size: 0, lastModified: 0}]);
                 } else this.items.push([field.name, field.value]);
@@ -143,8 +162,8 @@ function fixture() {
         },
     }, {filename: "design.js"});
 
-    async function emit(node, type) {
-        const event = {type, target: node, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; }};
+    async function emit(node, type, extra = {}) {
+        const event = {type, target: node, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; }, ...extra};
         const ancestors = [];
         for (let parent = node; parent; parent = parent.parentElement) ancestors.push(parent);
         const pending = [];
@@ -159,9 +178,17 @@ function fixture() {
         await response;
     }
 
+    async function successfulCalculation(html = "<section>Calculated original settings</section>") {
+        const response = emit(form, "submit", {submitter: calculate});
+        requests.at(-1).resolve({ok: true, json: async () => ({ok: true, html})});
+        await response;
+    }
+
     return {root, form, task, sourceField, sourceGroups, fileInputs, calibrationGroup, environment,
         calibrationFile, details, simulations, seed, inputs, results, content, summary, draftStatus,
-        requestStatus, submit, errors, requests, document, inputsButton, resultsButton, emit, successfulReview};
+        requestStatus, submit, errors, requests, document, inputsButton, resultsButton, emit, successfulReview,
+        calculate, completed, planningGroup, observationKind, observationValue, minimumSd, profileFile,
+        availability, reviewContent, resultStatus, successfulCalculation};
 }
 
 test("task and reference changes enable only active inputs without fetching", async () => {
@@ -336,4 +363,146 @@ test("failed submitted settings do not mark changed or inactive fields as invali
     assert.equal(page.summary.querySelectorAll("a").length, 0);
     assert.match(page.summary.textContent, /Inputs changed during the request/);
     assert.equal(page.inputs.hidden, false);
+});
+
+test("calculation posts the mounted form to its own endpoint and preserves selected files", async () => {
+    const page = fixture({planning: true});
+    const file = {name: "reference.csv", size: 42, lastModified: 123};
+    page.fileInputs.measured.files = [file];
+    assert.equal(page.calculate.disabled, false);
+    const pending = page.emit(page.form, "submit", {submitter: page.calculate});
+    assert.equal(page.requests[0].url, "/calculate");
+    assert.equal(page.requests[0].options.method, "POST");
+    assert.equal(Array.from(page.requests[0].options.body.entries()).find(([name]) => name === "measured_file")[1], file);
+    assert.equal(page.submit.disabled, true);
+    assert.equal(page.calculate.disabled, true);
+    await page.emit(page.form, "submit");
+    assert.equal(page.requests.length, 1);
+    page.requests[0].resolve({ok: true, json: async () => ({ok: true, html: "<section>Curve recovery</section>"})});
+    await pending;
+    assert.equal(page.content.innerHTML, "<section>Curve recovery</section>");
+    assert.equal(page.fileInputs.measured.files[0], file);
+    assert.equal(page.results.hidden, false);
+    assert.equal(page.document.activeElement, page.content);
+    assert.match(page.resultStatus.textContent, /current inputs/);
+    assert.equal(page.calculate.disabled, false);
+});
+
+test("setup review never replaces an existing numerical comparison or its freshness", async () => {
+    const page = fixture({planning: true});
+    await page.successfulCalculation("<section>Simulation seed 12345</section>");
+    page.seed.value = "999";
+    await page.emit(page.seed, "change");
+    await page.successfulReview("<section>Reviewed seed 999</section>");
+    assert.equal(page.content.innerHTML, "<section>Simulation seed 12345</section>");
+    assert.equal(page.reviewContent.innerHTML, "<section>Reviewed seed 999</section>");
+    assert.match(page.resultStatus.textContent, /original inputs/);
+    assert.match(page.draftStatus.textContent, /Inputs changed/);
+});
+
+test("calculation availability follows source and completed-study choices without running requests", async () => {
+    const page = fixture({planning: true});
+    for (const mode of ["ivivc", "scaling"]) {
+        page.sourceField.value = mode;
+        await page.emit(page.sourceField, "change");
+        assert.equal(page.calculate.disabled, true);
+        assert.equal(page.observationKind.disabled, true);
+        assert.equal(page.submit.disabled, false);
+        assert.match(page.availability.textContent, /not connected yet/);
+    }
+    page.sourceField.value = "measured";
+    await page.emit(page.sourceField, "change");
+    assert.equal(page.calculate.disabled, false);
+    page.completed.checked = true;
+    await page.emit(page.completed, "change");
+    assert.equal(page.calculate.disabled, true);
+    assert.equal(page.observationValue.disabled, true);
+    await page.emit(page.form, "submit", {submitter: page.calculate});
+    assert.equal(page.requests.length, 0);
+    assert.match(page.summary.textContent, /without completed/);
+    page.completed.checked = false;
+    await page.emit(page.completed, "change");
+    assert.equal(page.calculate.disabled, false);
+    page.task.value = "calibration";
+    await page.emit(page.task, "change");
+    assert.equal(page.calculate.disabled, true);
+});
+
+test("only the selected future-error controls are submitted after repeated visibility updates", async () => {
+    const page = fixture({planning: true});
+    assert.equal(page.observationValue.disabled, false);
+    assert.equal(page.minimumSd.disabled, true);
+    assert.equal(page.profileFile.disabled, true);
+    page.observationKind.value = "constant_cv";
+    await page.emit(page.observationKind, "change");
+    assert.equal(page.observationValue.disabled, false);
+    assert.equal(page.minimumSd.disabled, false);
+    page.observationKind.value = "time_profile_sd";
+    await page.emit(page.observationKind, "change");
+    assert.equal(page.observationValue.disabled, true);
+    assert.equal(page.minimumSd.disabled, true);
+    assert.equal(page.profileFile.disabled, false);
+    page.seed.value = "456";
+    await page.emit(page.seed, "change");
+    const pending = page.emit(page.form, "submit", {submitter: page.calculate});
+    const names = Array.from(page.requests[0].options.body.entries()).map(([name]) => name);
+    assert(names.includes("profile_file"));
+    assert(!names.includes("observation_value"));
+    assert(!names.includes("minimum_sd"));
+    page.requests[0].resolve({ok: true, json: async () => ({ok: true, html: "<p>Profile calculation</p>"})});
+    await pending;
+});
+
+test("a completed calculation retains submitted settings when the current draft changes", async () => {
+    const page = fixture({planning: true});
+    const pending = page.emit(page.form, "submit", {submitter: page.calculate});
+    page.seed.value = "999";
+    await page.emit(page.seed, "input");
+    page.requests[0].resolve({ok: true, json: async () => ({ok: true, html: "<section>Seed 12345</section>"})});
+    await pending;
+    assert.equal(page.seed.value, "999");
+    assert.equal(page.content.innerHTML, "<section>Seed 12345</section>");
+    assert.equal(page.inputs.hidden, false);
+    assert.match(page.resultStatus.textContent, /original inputs/);
+    assert.match(page.requestStatus.textContent, /Inputs changed during the request/);
+});
+
+test("a same-name replacement File makes calculation output stale and prevents obsolete field errors", async () => {
+    const page = fixture({planning: true});
+    page.fileInputs.measured.files = [{name: "reference.csv", size: 42, lastModified: 123}];
+    await page.successfulCalculation("<section>Original file results</section>");
+    const pending = page.emit(page.form, "submit", {submitter: page.calculate});
+    page.fileInputs.measured.files = [{name: "reference.csv", size: 42, lastModified: 123}];
+    await page.emit(page.fileInputs.measured, "change");
+    page.requests.at(-1).resolve({ok: false, json: async () => ({ok: false, errors: [
+        {field_id: "random_seed", message: "An obsolete field error"},
+    ]})});
+    await pending;
+    assert.equal(page.content.innerHTML, "<section>Original file results</section>");
+    assert.match(page.resultStatus.textContent, /original inputs/);
+    assert.notEqual(page.seed.getAttribute("aria-invalid"), "true");
+    assert.equal(page.summary.querySelectorAll("a").length, 0);
+    assert.match(page.summary.textContent, /Inputs changed during the request/);
+    assert.equal(page.calculate.disabled, false);
+});
+
+test("failed calculations retain both earlier numerical results and setup review", async () => {
+    for (const failure of ["network", "invalid-json", "missing-html", "validation"]) {
+        const page = fixture({planning: true});
+        await page.successfulCalculation("<section>Earlier comparison</section>");
+        await page.successfulReview("<section>Earlier review</section>");
+        const pending = page.emit(page.form, "submit", {submitter: page.calculate});
+        const request = page.requests.at(-1);
+        if (failure === "network") request.reject(new Error("offline"));
+        if (failure === "invalid-json") request.resolve({ok: false, json: async () => { throw new Error("not JSON"); }});
+        if (failure === "missing-html") request.resolve({ok: true, json: async () => ({ok: true})});
+        if (failure === "validation") request.resolve({ok: false, json: async () => ({ok: false, errors: [{field_id: "random_seed", message: "Invalid seed"}]})});
+        await pending;
+        assert.equal(page.content.innerHTML, "<section>Earlier comparison</section>");
+        assert.equal(page.reviewContent.innerHTML, "<section>Earlier review</section>");
+        assert.equal(page.form.getAttribute("aria-busy"), "false");
+        assert.equal(page.calculate.disabled, false);
+        assert.equal(page.submit.disabled, false);
+        assert.match(page.summary.textContent, /planning comparison/);
+    }
 });

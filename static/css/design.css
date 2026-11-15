@@ -189,3 +189,32 @@
     .design-page button { min-height: 44px; }
     .design-page .design-settings-table th { width: 42%; }
 }
+
+/* Planning inputs share the existing form layout and error treatment. */
+.design-page .design-three-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.design-page .design-comparison-options {
+    min-width: 0;
+    margin: 1.2rem 0 0;
+    padding: 1rem;
+    border: 1px solid var(--design-border);
+    border-radius: .3rem;
+}
+.design-page .design-comparison-options > legend { padding-inline: .35rem; font-weight: 600; }
+.design-page textarea {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    resize: vertical;
+    padding: .6rem;
+    border: 1px solid var(--design-border);
+    border-radius: .25rem;
+    background: var(--design-panel);
+    color: var(--design-text);
+    font: inherit;
+}
+.design-page textarea[aria-invalid="true"] { border-color: var(--design-error); }
+.design-page [data-planning-controls] > h4 { margin-top: .25rem; }
+.design-page #design-review-content:not(:empty) { margin-top: 1.5rem; }
+@media (max-width: 640px) {
+    .design-page .design-three-fields { grid-template-columns: 1fr; }
+}

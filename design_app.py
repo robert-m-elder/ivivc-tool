@@ -1,7 +1,7 @@
 """Separate, request-scoped Flask frontend for study-design assessment.
 
-Data imports are interpreted within individual requests. Numerical planning is
-connected in subsequent patches; this module does not import the IVIVC web app.
+Data imports and measured-reference planning complete within individual
+requests. This module does not import the IVIVC web application.
 """
 
 import json
@@ -94,7 +94,10 @@ def create_app(config=None):
 
     @app.get('/')
     def index():
-        return render_template('design/index.html', settings=_default_settings(), datasets=DATASETS)
+        from utilities.design_planning import model_options
+
+        return render_template('design/index.html', settings=_default_settings(),
+                               datasets=DATASETS, planning_models=model_options())
 
     def import_error(message, field_id=None):
         return jsonify(ok=False, errors=[{'field_id': field_id, 'message': message}]), 400
@@ -184,6 +187,68 @@ def create_app(config=None):
             selected_sheet=loaded.sheet, imports=imports,
         )
         return jsonify(ok=True, html=html, dataset_id=dataset['id'], filename=loaded.filename)
+
+    @app.post('/calculate')
+    def calculate_comparison():
+        from utilities.design_data import (
+            DataImportError, interpret_sd_profile, interpret_time_course, read_upload,
+        )
+        from utilities.design_planning import PlanningInputError, run_measured_planning
+        from utilities.design_planning_results import present_planning_result
+
+        settings, errors = _review_settings(request.form)
+        if errors:
+            return jsonify(ok=False, errors=errors), 400
+        if settings['task'] != 'study':
+            return import_error('Calibration comparisons are not connected to this frontend yet.', 'task')
+        if settings['reference_source'] != 'measured':
+            return import_error('Numerical planning currently requires measured in vivo reference data.',
+                                'reference_source')
+        if request.form.get('has_completed'):
+            return import_error('Planning with completed target-study observations will be connected in a later patch.',
+                                'has_completed')
+
+        def planning_input(identifier):
+            """Rebuild a typed input from this request, without relying on a preview."""
+            dataset = DATASETS[identifier]
+            sheet = request.form.get(identifier + '__sheet') or None
+            try:
+                loaded = read_upload(request.files.get(dataset['file_field']), sheet=sheet)
+            except DataImportError as error:
+                field = identifier + '__sheet' if error.field == 'sheet' and sheet else identifier
+                raise PlanningInputError(str(error), field) from error
+            if loaded.frame is None:
+                raise PlanningInputError('Select a worksheet and read its columns first.', identifier + '__sheet')
+            prefix = identifier + '__'
+            if dataset['kind'] == 'course':
+                prefix += 'profile__'
+                options = options_for(request.form, prefix, COURSE_FIELDS)
+                interpreter = interpret_time_course
+            else:
+                options = options_for(request.form, prefix, ('time_column', 'sd_column'))
+                interpreter = interpret_sd_profile
+            try:
+                interpreted = interpreter(loaded.frame, options)
+            except DataImportError as error:
+                field = identifier if error.field == 'file' else prefix + error.field
+                raise PlanningInputError(str(error), field) from error
+            summary = dict(interpreted.summary, filename=loaded.filename, worksheet=loaded.sheet)
+            return interpreted.value, summary
+
+        try:
+            source, source_summary = planning_input('reference-file')
+            profile, profile_summary = None, None
+            if request.form.get('observation_kind') == 'time_profile_sd':
+                profile, profile_summary = planning_input('future-sd-profile-file')
+            result = run_measured_planning(source, request.form, profile=profile)
+        except PlanningInputError as error:
+            return import_error(str(error), error.field_id)
+        context = present_planning_result(
+            result, source_filename=source_summary['filename'],
+            source_summary=source_summary, profile_summary=profile_summary,
+        )
+        html = render_template('design/_planning_results.html', **context)
+        return jsonify(ok=True, html=html)
 
     @app.post('/review')
     def review_setup():

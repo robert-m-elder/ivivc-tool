@@ -1,0 +1,91 @@
+{% macro chart(plot, title, x_label, y_label, identifier) %}
+{% if plot %}
+<figure>
+    <svg viewBox="0 0 760 300" width="100%" role="img" aria-labelledby="{{ identifier }}-title {{ identifier }}-description">
+        <title id="{{ identifier }}-title">{{ title }}</title>
+        <desc id="{{ identifier }}-description">{{ y_label }} versus {{ x_label }}. Numerical values are provided in the accompanying text and tables.</desc>
+        <rect x="70" y="25" width="650" height="210" fill="white" stroke="#d3dde5"></rect>
+        {% for position, label in plot.y_ticks %}
+        <line x1="70" y1="{{ position }}" x2="720" y2="{{ position }}" stroke="#e5ebef"></line>
+        <text x="63" y="{{ position + 4 }}" text-anchor="end" font-size="12" fill="#20313d">{{ label }}</text>
+        {% endfor %}
+        {% for position, label in plot.x_ticks %}
+        <line x1="{{ position }}" y1="235" x2="{{ position }}" y2="240" stroke="#506371"></line>
+        <text x="{{ position }}" y="258" text-anchor="middle" font-size="12" fill="#20313d">{{ label }}</text>
+        {% endfor %}
+        {% if plot.band %}<polygon points="{{ plot.band }}" fill="#b7d3d8" fill-opacity=".65"></polygon>{% endif %}
+        {% for line in plot.series %}
+        {% if line.join %}<path d="{{ line.path }}" fill="none" stroke="{{ line.color }}" stroke-width="2" stroke-dasharray="{{ line.dash }}"></path>{% endif %}
+        {% for x, y in line.circles %}<circle cx="{{ x }}" cy="{{ y }}" r="{{ 3 if line.join else 5 }}" fill="{{ line.color }}"{% if line.dash %} fill-opacity=".45"{% endif %}></circle>{% endfor %}
+        {% endfor %}
+        {% for x, y in plot.observations %}<circle cx="{{ x }}" cy="{{ y }}" r="4" fill="#20313d" stroke="white" stroke-width="1"></circle>{% endfor %}
+        <text x="395" y="286" text-anchor="middle" font-size="14" fill="#20313d">{{ x_label }}</text>
+        <text transform="translate(16 130) rotate(-90)" text-anchor="middle" font-size="13" fill="#20313d">{{ y_label }}</text>
+    </svg>
+    <figcaption class="design-help">{{ title }}. {% for line in plot.series %}<span style="color: {{ line.color }}">{{ line.label }}{% if line.dash %} (dashed){% endif %}</span>{% if not loop.last %}; {% endif %}{% endfor %}.</figcaption>
+</figure>
+{% endif %}
+{% endmacro %}
+<div data-planning-result>
+    <section class="design-section" aria-labelledby="planning-result-heading">
+        <h3 id="planning-result-heading">Study-planning comparison</h3>
+        <p>Measured in vivo reference: <strong>{{ source_filename }}</strong>. These results retain the inputs submitted for this calculation.</p>
+        <p class="design-help">Suggested schedules use a local information criterion for the chosen fitted curve, followed by coordinate exchange. This search does not establish a globally optimal schedule. Simulated recovery depends on the reference, model, and future measurement assumptions.</p>
+        {% if warnings %}<aside class="design-notice" aria-labelledby="planning-cautions-heading">
+            <h4 id="planning-cautions-heading">Interpretation and cautions</h4>
+            <ul>{% for warning in warnings %}<li>{{ warning }}</li>{% endfor %}</ul>
+        </aside>{% endif %}
+    </section>
+
+    <section class="design-section" aria-labelledby="planning-reference-result-heading">
+        <h3 id="planning-reference-result-heading">Reference curve and fitted uncertainty</h3>
+        {{ chart(reference_plot, 'Fitted reference and pointwise 2.5th–97.5th percentiles', 'Time', 'Analyzed response', 'planning-reference-plot') }}
+        <p class="design-help">Dark points are the supplied reference observations after preprocessing. The shaded band summarizes usable complete reference draws sampled from fitted parameter uncertainty. It excludes future measurement variability and is not a simultaneous band or a range for individual future measurements.</p>
+        <div class="design-preview-table">
+            <table class="design-settings-table">
+                <caption>Milestones relative to the response at the first planning time</caption>
+                <thead><tr><th scope="col">Milestone</th><th scope="col">Reference median time</th><th scope="col">Reference weight reaching by the end</th></tr></thead>
+                <tbody>{% for endpoint in endpoints %}<tr><th scope="row">{{ endpoint.name }}</th><td>{{ endpoint.median }}</td><td>{{ endpoint.reached }}</td></tr>{% endfor %}</tbody>
+            </table>
+        </div>
+        <p class="design-help">T50 and T90 mean 50% and 90% decrease from that baseline. Reference weight describes uncertainty in the assumed curve, not a fraction of animals. Trajectories that do not reach a milestone remain beyond the horizon when determining its median. A dash indicates unavailable information. These milestones do not determine the suggested schedules.</p>
+    </section>
+
+    <section class="design-section" aria-labelledby="planning-performance-heading">
+        <h3 id="planning-performance-heading">Curve recovery versus study size</h3>
+        {{ chart(performance_plot, 'Simulated recovery error versus number of sampling times', 'Distinct planned times, including fixed times', 'IRMSE', 'planning-performance-plot') }}
+        <p class="design-help">IRMSE is the root mean square difference between a recovered curve and its simulated true curve across the planning range, in analyzed response units. Lower error means closer curve recovery under these assumptions. Solid traces show mean error; dashed traces show the 90th percentile. Manual schedules are separate points.</p>
+        <div class="design-preview-table">
+            <table>
+                <caption>Schedule performance; recovery errors use successful simulated fits</caption>
+                <thead><tr><th scope="col">Schedule</th><th scope="col">Times</th><th scope="col">Sampling times</th><th scope="col">Independent units</th><th scope="col">Successful fits</th><th scope="col">Failure rate</th><th scope="col">Mean IRMSE</th><th scope="col">90th percentile IRMSE</th><th scope="col">Mean fitted curve interval width</th></tr></thead>
+                <tbody>{% for row in rows %}<tr>
+                    <th scope="row">{{ row.name }}</th><td>{{ row.number_of_times }}</td><td>{{ row.times }}</td><td>{{ row.experimental_units }}</td>
+                    <td>{{ row.n_successful }} / {{ row.n_simulations }}</td><td>{{ row.failure_rate }}</td><td>{{ row.mean_irmse }}</td><td>{{ row.p90_irmse }}</td><td>{{ row.mean_curve_interval_width }} ({{ row.interval_count }} fits)</td>
+                </tr>{% endfor %}</tbody>
+            </table>
+        </div>
+        <p class="design-help">Units equal distinct times × independent replicates per time. Fixed times are proposed measurements, not completed observations. The last column averages approximate 95% fitted mean-curve interval widths across time and usable successful fits; it excludes individual measurement scatter. Unavailable errors or widths appear as a dash. Compare error with failure rates rather than interpreting error alone.</p>
+        <p class="design-help">All schedules share simulated reference trajectories and measurement-error draws at common times. Small differences may reflect Monte Carlo variation. No automatic overall ranking is assigned.</p>
+    </section>
+
+    <section class="design-section" aria-labelledby="planning-settings-heading">
+        <h3 id="planning-settings-heading">Inputs used for this calculation</h3>
+        {% if source_summary.get('worksheet') %}<p>Reference worksheet: {{ source_summary.worksheet }}.</p>{% endif %}
+        {% if source_summary.get('interpretation') %}<p>{{ source_summary.interpretation }}</p>{% endif %}
+        {% if source_summary.get('mapping') %}<p class="design-help">Reference mapping: {% for label, value in source_summary.mapping.items() %}{{ label }} → {{ value }}{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
+        {% if source_summary.get('retained_rows') %}<p class="design-help">Reference rows: {{ source_summary.retained_rows }} retained, {{ source_summary.omitted_rows }} omitted.</p>{% endif %}
+        {% if profile_summary %}
+        <p class="design-help">Future SD profile{% if profile_summary.get('filename') %}: {{ profile_summary.filename }}{% endif %}{% if profile_summary.get('worksheet') %} · Worksheet: {{ profile_summary.worksheet }}{% endif %}. Individual SD uses the analyzed response scale.</p>
+        {% if profile_summary.get('mapping') %}<p class="design-help">Profile mapping: {% for label, value in profile_summary.mapping.items() %}{{ label }} → {{ value }}{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
+        {% if profile_summary.get('time_range') %}<p class="design-help">Profile time range: {{ profile_summary.time_range[0] }}–{{ profile_summary.time_range[1] }}{% if profile_summary.get('individual_sd_range') %} · Individual SD range: {{ profile_summary.individual_sd_range[0] }}–{{ profile_summary.individual_sd_range[1] }}{% endif %}.</p>{% endif %}
+        {% endif %}
+        <div class="design-preview-table"><table class="design-settings-table">
+            <caption>Submitted assumptions and numerical settings</caption>
+            <tbody>{% for label, value in settings_rows %}<tr><th scope="row">{{ label }}</th><td>{{ value }}</td></tr>{% endfor %}</tbody>
+        </table></div>
+        {% if ranks %}<p class="design-help">Local information rank for suggested schedules: {% for rank in ranks %}{{ rank.number_of_times }} times: {{ rank.rank }}/{{ rank.parameters }} parameters{% if not loop.last %}; {% endif %}{% endfor %}. Full rank alone does not establish adequate precision or scientific plausibility.</p>{% endif %}
+        <p class="design-help">Historical observation uncertainty determines the source fit and reference uncertainty. Future individual SD/CV and replicate counts determine new measurement simulation and refitting. They are separate inputs. Response normalization constants are treated as fixed.</p>
+        <div class="design-action-row"><button type="button" disabled>Generate report</button><span class="design-help">Report generation deferred.</span></div>
+    </section>
+</div>

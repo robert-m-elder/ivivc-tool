@@ -1,0 +1,116 @@
+{% from 'design/_data_upload.html' import data_upload %}
+
+{% macro field_error(id) -%}
+<p id="{{ id }}-error" class="design-field-error" data-error-for="{{ id }}" hidden></p>
+{%- endmacro %}
+
+{% macro number_field(id, label, value, minimum, step='any', help='', maximum=none) -%}
+<div class="design-field">
+    <label for="{{ id }}">{{ label }}</label>
+    <input id="{{ id }}" name="{{ id }}" type="number" min="{{ minimum }}"{% if maximum is not none %} max="{{ maximum }}"{% endif %} step="{{ step }}" value="{{ value }}"{% if help %} aria-describedby="{{ id }}-help"{% endif %}>
+    {% if help %}<p id="{{ id }}-help" class="design-help">{{ help }}</p>{% endif %}
+    {{ field_error(id) }}
+</div>
+{%- endmacro %}
+
+{% macro reference_inputs(planning_models) -%}
+<div data-planning-controls>
+    <div class="design-field-grid">
+        <div class="design-field">
+            <label for="model_name">Reference and study analysis model</label>
+            <select id="model_name" name="model_name" aria-describedby="model-name-help">
+                {% for model in planning_models %}<option value="{{ model.id }}"{% if model.id == 'exponential' %} selected{% endif %}>{{ model.label }}</option>{% endfor %}
+            </select>
+            <p id="model-name-help" class="design-help">Fit the prior data and refit each simulated study using this model. Choose a form appropriate for the response and available observations.</p>
+            {{ field_error('model_name') }}
+        </div>
+        <div class="design-field">
+            <label for="normalization">Response normalization</label>
+            <select id="normalization" name="normalization" aria-describedby="normalization-help">
+                <option value="none" selected>None</option>
+                <option value="initial_value">Divide by initial value</option>
+                <option value="min_max">Min–max normalization</option>
+            </select>
+            <p id="normalization-help" class="design-help">Apply shared IVIVC preprocessing once to the reference data and their supplied uncertainty. Initial-value normalization uses the first retained row; place the intended baseline first. Normalization constants are treated as fixed.</p>
+            {{ field_error('normalization') }}
+        </div>
+    </div>
+    <div class="design-field">
+        <label class="design-checkbox-label" for="one_minus"><input id="one_minus" name="one_minus" type="checkbox" value="on"> Apply one minus response after normalization</label>
+        <p class="design-help">For example, convert fraction degraded to fraction remaining. Logarithmic axis scaling is unavailable in study planning.</p>
+        {{ field_error('one_minus') }}
+    </div>
+    <p class="design-help">The calculation will show the fitted reference and its uncertainty alongside expected recovery from the proposed studies. Prior reference observations are not counted as measurements in a new study.</p>
+</div>
+{%- endmacro %}
+
+{% macro measurement_inputs(datasets) -%}
+<div data-planning-controls>
+    <div class="design-field-grid">
+        <div class="design-field">
+            <label for="observation_kind">Future individual measurement variability</label>
+            <select id="observation_kind" name="observation_kind" aria-describedby="observation-kind-help">
+                <option value="constant_sd" selected>Constant SD</option>
+                <option value="constant_cv">Constant coefficient of variation</option>
+                <option value="time_profile_sd">SD profile over time</option>
+            </select>
+            <p id="observation-kind-help" class="design-help">Specify variability among independent future observations separately from uncertainty in the reference curve.</p>
+            {{ field_error('observation_kind') }}
+        </div>
+        {{ number_field('replicates_per_time', 'Independent replicates at each study time', 3, 1, '1', 'The same count applies at every proposed time. Simulated observations and refitting use this count.') }}
+    </div>
+    <div class="design-field-grid" data-observation-kind="constant_sd constant_cv">
+        {{ number_field('observation_value', 'Individual SD or coefficient of variation', '0.05', 0, 'any', 'For SD, use the analyzed response scale after preprocessing. For CV, enter a fraction: 0.05 means 5%.') }}
+        <div data-observation-kind="constant_cv" hidden>
+            {{ number_field('minimum_sd', 'Minimum individual SD for CV', '0.001', 0, 'any', 'An absolute SD floor on the analyzed scale prevents zero variance near zero response.') }}
+        </div>
+    </div>
+    <div data-observation-kind="time_profile_sd" hidden>
+        {{ data_upload(datasets['future-sd-profile-file']) }}
+        <p class="design-help">Profile SDs use the analyzed response scale. The nearest supplied time determines SD; endpoint SDs extend beyond the profile. Replicate counts are applied separately.</p>
+    </div>
+    <p class="design-help">Future error SDs are assumptions for individual experimental units, not SEMs of reported means. The calculation simulates independent observations and uses the selected variability model when refitting.</p>
+</div>
+{%- endmacro %}
+
+{% macro sampling_inputs() -%}
+<div data-planning-controls>
+    <h4>Feasible sampling opportunities</h4>
+    <div class="design-field-grid design-three-fields">
+        {{ number_field('first_time', 'First time', 0, 0, 'any') }}
+        {{ number_field('last_time', 'Last time', 52, 0, 'any') }}
+        {{ number_field('time_step', 'Step between opportunities', 2, 0, 'any') }}
+    </div>
+    <p class="design-help">Use the same time units as the source data. This range also defines where curve recovery is assessed. Extending beyond observed times relies on the fitted model.</p>
+    <div class="design-field-grid">
+        {{ number_field('min_times', 'Fewest distinct study times', 3, 1, '1', 'Total distinct times, including fixed times.') }}
+        {{ number_field('max_times', 'Most distinct study times', 6, 1, '1', 'Compare every study size from the fewest through the most.') }}
+    </div>
+    <div class="design-field">
+        <label for="fixed_times">Fixed study times</label>
+        <input id="fixed_times" name="fixed_times" type="text" value="0" aria-describedby="fixed-times-help">
+        <p id="fixed-times-help" class="design-help">Optional comma-separated times that every schedule must include, such as a baseline. These are proposed measurements, not completed observations.</p>
+        {{ field_error('fixed_times') }}
+    </div>
+    <p class="design-help">Suggested times are selected for expected curve recovery using a local I-optimal heuristic. They are candidates for assessment rather than a guarantee of a globally optimal schedule. Detailed windows and milestone deadlines will be connected in a later workflow.</p>
+    <fieldset class="design-comparison-options">
+        <legend>Alternative comparison schedules</legend>
+        <div class="design-field">
+            <label class="design-checkbox-label" for="include_even"><input id="include_even" name="include_even" type="checkbox" value="on" checked> Include an evenly spaced comparison at each study size</label>
+            {{ field_error('include_even') }}
+        </div>
+        <div class="design-field">
+            <label for="manual_schedules">Add manually specified schedules</label>
+            <textarea id="manual_schedules" name="manual_schedules" rows="4" placeholder="Early emphasis: 0, 4, 10, 24&#10;Longer follow-up: 0, 12, 24, 52" aria-describedby="manual-schedules-help"></textarea>
+            <p id="manual-schedules-help" class="design-help">Optional: one named schedule per line, in the form Name: time, time, time. Each schedule must include every fixed time, use feasible opportunities in the selected range, and have a total number of times within the study-size range.</p>
+            {{ field_error('manual_schedules') }}
+        </div>
+    </fieldset>
+</div>
+{%- endmacro %}
+
+{% macro draws_input() -%}
+<div data-planning-controls>
+    {{ number_field('reference_draws', 'Reference parameter draws', 100, 2, '1', 'Complete fitted curves sampled from parameter uncertainty. Future measurement errors are added separately during study simulation.') }}
+</div>
+{%- endmacro %}

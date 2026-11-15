@@ -1,4 +1,4 @@
-/* Study-design setup. Each POST completes in its request; no saved application state. */
+/* Study-design requests complete synchronously; state lives in this browser page. */
 (() => {
     'use strict';
 
@@ -12,12 +12,30 @@
         const inputs = document.getElementById('design-inputs');
         const results = document.getElementById('design-results');
         const content = document.getElementById('design-results-content');
+        const reviewContent = document.getElementById('design-review-content') || content;
+        const resultStatus = document.getElementById('design-results-status');
         const summary = document.getElementById('design-errors');
         const draftStatus = document.getElementById('design-draft-status');
         const requestStatus = document.getElementById('design-request-status');
         const submit = document.getElementById('review-setup');
+        const calculate = document.getElementById('calculate-comparison');
+        const completed = document.getElementById('has_completed');
+        const observationKind = document.getElementById('observation_kind');
+        const files = new WeakMap();
+        let nextFile = 0;
         let pending = false;
         let reviewedSignature = null;
+        let calculatedSignature = null;
+
+        function planningAvailable() {
+            return task.value === 'study' && source.value === 'measured' &&
+                !(completed && completed.checked);
+        }
+
+        function syncButtons() {
+            submit.disabled = pending;
+            if (calculate) calculate.disabled = pending || !planningAvailable();
+        }
 
         function setActive(container, active) {
             container.hidden = !active;
@@ -33,13 +51,32 @@
             root.querySelectorAll('[data-reference-source]').forEach(group => {
                 setActive(group, task.value === 'study' && group.dataset.referenceSource === source.value);
             });
+            const available = planningAvailable();
+            root.querySelectorAll('[data-planning-controls]').forEach(group => {
+                group.querySelectorAll('input, select, textarea').forEach(field => {
+                    field.disabled = !available;
+                });
+            });
+            root.querySelectorAll('[data-observation-kind]').forEach(group => {
+                const kinds = group.dataset.observationKind.split(/\s+/);
+                setActive(group, available && observationKind && kinds.includes(observationKind.value));
+            });
+            root.querySelectorAll('[data-planning-availability]').forEach(note => {
+                note.textContent = available ?
+                    'Ready to calculate a prospective study using measured in vivo reference data.' :
+                    'Numerical planning currently supports measured in vivo reference data for a prospective study. Other sources, completed-study updates, and calibration comparisons can be imported and reviewed; their calculations are not connected yet.';
+            });
+            syncButtons();
             root.dispatchEvent(new CustomEvent('design-visibility-updated'));
         }
 
         function signature(data = new FormData(form)) {
             return JSON.stringify(Array.from(data.entries(), ([key, value]) => [key,
-                typeof value === 'string' ? value :
-                    (value.name ? [value.name, value.size, value.lastModified] : null),
+                typeof value === 'string' ? value : (() => {
+                    if (!value.name) return null;
+                    if (!files.has(value)) files.set(value, ++nextFile);
+                    return [value.name, value.size, value.lastModified, files.get(value)];
+                })(),
             ]));
         }
 
@@ -52,6 +89,17 @@
         }
 
         function updateDraftStatus() {
+            if (calculatedSignature !== null) {
+                const current = signature() === calculatedSignature;
+                draftStatus.textContent = current ?
+                    'The displayed comparison matches these settings.' :
+                    'Inputs changed. The displayed comparison retains its original settings; calculate again to assess these choices.';
+                if (resultStatus) resultStatus.textContent = current ?
+                    'Comparison for the current inputs.' :
+                    'Inputs changed. This comparison still uses its original inputs and settings.';
+                return;
+            }
+            if (resultStatus) resultStatus.textContent = 'No numerical comparison has been calculated.';
             draftStatus.textContent = reviewedSignature === null ?
                 'Draft settings. Review setup to check these choices.' :
                 signature() === reviewedSignature ?
@@ -143,43 +191,56 @@
         form.addEventListener('submit', async event => {
             event.preventDefault();
             if (pending) return;
+            const calculating = Boolean(calculate && event.submitter === calculate);
+            const context = calculating ? {
+                heading: 'The planning comparison could not be completed',
+                status: 'Calculation failed. Earlier displayed results remain available.',
+            } : {};
+            if (calculating && !planningAvailable()) {
+                showErrors([{message: 'Choose measured in vivo reference data without completed target-study observations to calculate this workflow.'}], context);
+                return;
+            }
             const data = new FormData(form);
             const submittedSignature = signature(data);
             pending = true;
-            submit.disabled = true;
+            syncButtons();
             form.setAttribute('aria-busy', 'true');
             clearErrors();
-            requestStatus.textContent = 'Reviewing setup.';
+            requestStatus.textContent = calculating ? 'Calculating the study comparison. This request runs to completion.' : 'Reviewing setup.';
             try {
-                const response = await fetch(form.action, {
+                const response = await fetch(calculating ? calculate.getAttribute('formaction') : form.action, {
                     method: 'POST', body: data, headers: {'Accept': 'application/json'},
                 });
                 const payload = await response.json();
                 if (!response.ok || payload.ok !== true) {
                     showErrors(signature() !== submittedSignature ? [{
-                        message: 'Submitted settings could not be reviewed. Inputs changed during the request; review the current choices again.',
+                        message: 'Submitted settings could not be ' + (calculating ? 'calculated' : 'reviewed') + '. Inputs changed during the request; check the current choices again.',
                     }] : Array.isArray(payload.errors) && payload.errors.length ? payload.errors :
-                        [{message: 'The request could not be completed. Try again.'}]);
+                        [{message: 'The request could not be completed. Try again.'}], context);
                     return;
                 }
-                if (typeof payload.html !== 'string') throw new Error('Missing setup review.');
+                if (typeof payload.html !== 'string') throw new Error('Missing response HTML.');
                 // Only this app's server-rendered, escaped template is inserted here.
-                content.innerHTML = payload.html;
-                reviewedSignature = submittedSignature;
+                const destination = calculating ? content : reviewContent;
+                destination.innerHTML = payload.html;
+                if (calculating) calculatedSignature = submittedSignature;
+                else reviewedSignature = submittedSignature;
                 updateDraftStatus();
                 const unchanged = signature() === submittedSignature;
-                requestStatus.textContent = unchanged ?
-                    'Setup reviewed. No numerical calculation has run.' :
+                requestStatus.textContent = calculating ? (unchanged ?
+                    'Study comparison calculated.' :
+                    'Submitted study comparison calculated. Inputs changed during the request; calculate again to assess the current choices.') : unchanged ?
+                    'Setup reviewed. This request did not run a numerical calculation.' :
                     'Submitted settings reviewed. Inputs changed during the request; review again to check the current choices.';
                 if (unchanged) {
                     showView('results');
-                    content.focus();
+                    destination.focus();
                 }
             } catch (error) {
-                showErrors([{message: 'The request could not be completed. Check the connection and try again.'}]);
+                showErrors([{message: 'The request could not be completed. Check the connection and try again.'}], context);
             } finally {
                 pending = false;
-                submit.disabled = false;
+                syncButtons();
                 form.setAttribute('aria-busy', 'false');
             }
         });
@@ -187,7 +248,7 @@
         syncInputs();
         showView('inputs');
         updateDraftStatus();
-        submit.disabled = false;
+        syncButtons();
         root.dataset.ready = 'true';
     }
 
