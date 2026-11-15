@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Study Design for Absorbable Materials</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/design.css') }}">
+    <script src="{{ url_for('static', filename='js/design.js') }}" defer></script>
+</head>
+<body class="design-page">
+    <a class="design-skip-link" href="#design-workspace">Skip to workspace</a>
+    <header class="design-site-header">
+        <div class="design-page-width">
+            <h1>Study Design for Absorbable Materials</h1>
+            <p class="design-muted">Development version · setup review</p>
+        </div>
+    </header>
+
+    <main id="design-workspace" class="design-page-width" tabindex="-1">
+        <p class="design-notice">This version reviews setup settings. Data import and numerical analysis are not yet available.</p>
+        <noscript><p class="design-notice">Enable JavaScript to review setup and retain selected files while moving between inputs and comparisons.</p></noscript>
+
+        <form id="design-setup-form" action="{{ url_for('review_setup') }}" method="post" enctype="multipart/form-data" novalidate>
+            <div class="design-toolbar">
+                <div class="design-field design-task-field">
+                    <label for="task">Analysis task</label>
+                    <select id="task" name="task" aria-describedby="task-help">
+                        <option value="study"{% if settings.task == 'study' %} selected{% endif %}>Plan or extend an in vivo study</option>
+                        <option value="calibration"{% if settings.task == 'calibration' %} selected{% endif %}>Compare calibration sampling</option>
+                    </select>
+                    <p id="task-help" class="design-help">Choose the question to address with the study-design backend.</p>
+                    <p id="task-error" class="design-field-error" data-error-for="task" hidden></p>
+                </div>
+                <nav class="design-view-navigation" aria-label="Workspace views">
+                    <button type="button" data-design-view="inputs" aria-pressed="true" aria-controls="design-inputs">Inputs</button>
+                    <button type="button" data-design-view="results" aria-pressed="false" aria-controls="design-results">Comparisons</button>
+                </nav>
+            </div>
+
+            <section id="design-inputs" aria-labelledby="design-inputs-heading">
+                <h2 id="design-inputs-heading">Analysis inputs</h2>
+                <p id="design-draft-status" class="design-status" aria-live="polite">Review the draft setup. No calculations run when inputs change.</p>
+                <section id="design-errors" class="design-error-summary" role="alert" tabindex="-1" hidden></section>
+
+                <div data-design-task="study"{% if settings.task != 'study' %} hidden{% endif %}>
+                    <section class="design-section" aria-labelledby="study-data-heading">
+                        <h3 id="study-data-heading">1 · Data</h3>
+                        <div class="design-field">
+                            <label for="reference_source">Source of expected in vivo behavior</label>
+                            <select id="reference_source" name="reference_source" aria-describedby="reference-source-help">
+                                <option value="measured"{% if settings.reference_source == 'measured' %} selected{% endif %}>Measured in vivo data</option>
+                                <option value="ivivc"{% if settings.reference_source == 'ivivc' %} selected{% endif %}>IVIVC prediction</option>
+                                <option value="scaling"{% if settings.reference_source == 'scaling' %} selected{% endif %}>Empirical time scaling</option>
+                            </select>
+                            <p id="reference-source-help" class="design-help">The reference will describe expected behavior and its uncertainty, separately from future measurement variability.</p>
+                            <p id="reference-source-error" class="design-field-error" data-error-for="reference_source" hidden></p>
+                        </div>
+                        <div data-reference-source="measured"{% if settings.reference_source != 'measured' %} hidden{% endif %}>
+                            <div class="design-field">
+                                <label for="reference-file">Prior in vivo reference data</label>
+                                <input id="reference-file" name="reference_file" type="file" accept=".csv,.xls,.xlsx" aria-describedby="file-reading-help">
+                            </div>
+                        </div>
+                        <div data-reference-source="ivivc"{% if settings.reference_source != 'ivivc' %} hidden{% endif %}>
+                            <div class="design-field">
+                                <label for="ivivc-calibration-file">Paired in vitro/in vivo calibration data</label>
+                                <input id="ivivc-calibration-file" name="ivivc_calibration_file" type="file" accept=".csv,.xls,.xlsx" aria-describedby="file-reading-help">
+                            </div>
+                            <div class="design-field">
+                                <label for="prediction-file">Target in vitro data</label>
+                                <input id="prediction-file" name="prediction_file" type="file" accept=".csv,.xls,.xlsx" aria-describedby="file-reading-help">
+                            </div>
+                        </div>
+                        <div data-reference-source="scaling"{% if settings.reference_source != 'scaling' %} hidden{% endif %}>
+                            <div class="design-field">
+                                <label for="scaling-source-file">Target in vitro time-course data</label>
+                                <input id="scaling-source-file" name="scaling_source_file" type="file" accept=".csv,.xls,.xlsx" aria-describedby="file-reading-help">
+                            </div>
+                            <div class="design-field">
+                                <label for="time-scale-file">Empirical time-scale distribution</label>
+                                <input id="time-scale-file" name="time_scale_file" type="file" accept=".csv" aria-describedby="file-reading-help">
+                            </div>
+                        </div>
+                        <p id="file-reading-help" class="design-help">File selections stay in this page while you review setup. Files are not read by this version.</p>
+                    </section>
+
+                    <section class="design-section" aria-labelledby="study-reference-heading">
+                        <h3 id="study-reference-heading">2 · Reference and preprocessing</h3>
+                        <p>Reference fitting, preprocessing options, and the trajectory preview will appear here when data import is available.</p>
+                    </section>
+                    <section class="design-section" aria-labelledby="study-measurements-heading">
+                        <h3 id="study-measurements-heading">3 · Future measurements</h3>
+                        <p>Future measurement variability and independent replicate counts will be configured separately from reference uncertainty.</p>
+                    </section>
+                    <section class="design-section" aria-labelledby="study-sampling-heading">
+                        <h3 id="study-sampling-heading">4 · Sampling choices</h3>
+                        <p>Suggested schedules, multiple manual comparisons, sampling restrictions, and timing requirements will be configured here.</p>
+                    </section>
+                </div>
+
+                <div data-design-task="calibration"{% if settings.task != 'calibration' %} hidden{% endif %}>
+                    <section class="design-section" aria-labelledby="calibration-data-heading">
+                        <h3 id="calibration-data-heading">1 · Calibration data and what changes</h3>
+                        <div class="design-field">
+                            <label for="varied_environment">Compare proposed sampling in</label>
+                            <select id="varied_environment" name="varied_environment" aria-describedby="varied-environment-help">
+                                <option value="in_vivo"{% if settings.varied_environment == 'in_vivo' %} selected{% endif %}>In vivo only — keep in vitro data fixed</option>
+                                <option value="in_vitro"{% if settings.varied_environment == 'in_vitro' %} selected{% endif %}>In vitro only — keep in vivo data fixed</option>
+                                <option value="both"{% if settings.varied_environment == 'both' %} selected{% endif %}>Both environments</option>
+                            </select>
+                            <p id="varied-environment-help" class="design-help">Existing measurements will stay fixed when evaluating proposed additions.</p>
+                            <p id="varied-environment-error" class="design-field-error" data-error-for="varied_environment" hidden></p>
+                        </div>
+                        <div class="design-field-grid">
+                            <div class="design-field">
+                                <label for="existing-in-vitro-file">Existing in vitro calibration data, if available</label>
+                                <input id="existing-in-vitro-file" name="existing_in_vitro_file" type="file" accept=".csv,.xls,.xlsx" aria-describedby="calibration-file-reading-help">
+                            </div>
+                            <div class="design-field">
+                                <label for="existing-in-vivo-file">Existing in vivo calibration data, if available</label>
+                                <input id="existing-in-vivo-file" name="existing_in_vivo_file" type="file" accept=".csv,.xls,.xlsx" aria-describedby="calibration-file-reading-help">
+                            </div>
+                        </div>
+                        <p id="calibration-file-reading-help" class="design-help">These file selections identify their intended roles. Files and uncertainty columns are not read by this version.</p>
+                    </section>
+                    <section class="design-section" aria-labelledby="calibration-reference-heading">
+                        <h3 id="calibration-reference-heading">2 · Expected behavior and future measurements</h3>
+                        <p>Reference trajectories and future measurement variability will be specified for each environment receiving simulated measurements.</p>
+                    </section>
+                    <section class="design-section" aria-labelledby="calibration-assessment-heading">
+                        <h3 id="calibration-assessment-heading">3 · IVIVC assessment</h3>
+                        <p>Approach 1/2 selection, compatible preprocessing, and relationship or target-prediction assessment will appear here.</p>
+                    </section>
+                    <section class="design-section" aria-labelledby="calibration-candidates-heading">
+                        <h3 id="calibration-candidates-heading">4 · Candidate calibration designs</h3>
+                        <p>Named candidates will use specified schedules or schedules generated for curve recovery. Their effects on the IVIVC will be assessed afterward.</p>
+                    </section>
+                </div>
+
+                <section class="design-section" aria-labelledby="design-review-heading">
+                    <h3 id="design-review-heading">5 · Calculation and review</h3>
+                    <details class="design-advanced">
+                        <summary>Advanced calculation settings</summary>
+                        <div class="design-field-grid">
+                            <div class="design-field">
+                                <label for="n_simulations">Monte Carlo studies per candidate</label>
+                                <input id="n_simulations" name="n_simulations" type="number" min="2" step="1" value="{{ settings.n_simulations }}" aria-describedby="n-simulations-help">
+                                <p id="n-simulations-help" class="design-help">This is a proposed setting; no simulations run during setup review.</p>
+                                <p id="n-simulations-error" class="design-field-error" data-error-for="n_simulations" hidden></p>
+                            </div>
+                            <div class="design-field">
+                                <label for="random_seed">Random seed</label>
+                                <input id="random_seed" name="random_seed" type="number" min="0" step="1" value="{{ settings.random_seed }}" aria-describedby="random-seed-help">
+                                <p id="random-seed-help" class="design-help">A reproducible seed for the eventual numerical comparison.</p>
+                                <p id="random-seed-error" class="design-field-error" data-error-for="random_seed" hidden></p>
+                            </div>
+                        </div>
+                    </details>
+                    <div class="design-action-row">
+                        <button id="review-setup" class="design-primary" type="submit" disabled>Review setup</button>
+                        <button type="button" disabled>Calculate comparison</button>
+                        <span class="design-help">Numerical calculation is not available yet.</span>
+                    </div>
+                </section>
+            </section>
+        </form>
+
+        <p id="design-request-status" class="design-request-status" role="status" aria-live="polite"></p>
+        <section id="design-results" aria-labelledby="design-results-heading" hidden>
+            <h2 id="design-results-heading" tabindex="-1">Comparisons</h2>
+            <div id="design-results-content" tabindex="-1">
+                <p class="design-empty-state">No setup review yet. Select inputs and choose Review setup.</p>
+            </div>
+        </section>
+    </main>
+</body>
+</html>
