@@ -6,7 +6,8 @@ templates, and numerical backend are unchanged.
 
 ## Run locally
 
-From the repository root, with `requirements.txt` installed:
+From the repository root, using the project's Python 3.12 environment with
+`requirements.txt` installed:
 
 ```bash
 python design_app.py
@@ -14,11 +15,34 @@ python design_app.py
 
 Open `http://127.0.0.1:5001`. The separate port permits running the IVIVC app
 on its usual port at the same time. Debug mode is off by default.
+The existing double-click launchers start the IVIVC app; use the command above
+to start the design app. Both use the same installed Python dependencies.
 
 For a hosted installation, use the hosting service's normal WSGI configuration
 with `design_app:app`, or import `app` from `design_app` as its application
 object. The built-in development server is for local use. A future landing
 page can link to the two applications without combining their entry points.
+
+The checkout must be importable by the WSGI worker. Templates and static files
+are located relative to `design_app.py`, so the worker's current directory need
+not be the checkout. Importing `design_app:app` creates the application without
+starting the development server. `create_app(config)` is also available for a
+host's application factory or a deployment-specific wrapper.
+
+A deployment may serve the app at `/` or mount it at a prefix such as `/design`.
+For a prefixed mount, the WSGI server or middleware must set `SCRIPT_NAME` to the
+mount prefix and pass the remaining route in `PATH_INFO`. Flask then generates
+prefixed links for scripts, styles, uploads, generation, and calculation. Merely
+adding a prefix to the public URL without the corresponding WSGI mount is not
+sufficient. No proxy-header middleware is enabled automatically.
+
+Allow the web server's request body limit to accommodate the configured Flask
+upload limit, including multipart overhead, and allow enough request time for
+the selected numerical workload. All work finishes in the same request; a
+server timeout does not create a result that can be retrieved later. Reducing
+draws, simulated studies, candidate designs, or grid size can shorten a trial
+calculation. No session affinity is needed between requests: required files
+and settings are submitted each time.
 
 ## Setup and request handling
 
@@ -518,18 +542,57 @@ interval draws, simulated experiments, and the seed.
 
 ## Checks
 
+Install the test dependencies in the same environment used to run the app:
+
 ```bash
-python -m pytest tests/test_design_app.py
-python -m pytest tests/test_design_data.py tests/test_design_data_routes.py
-python -m pytest tests/test_design_planning.py tests/test_design_planning_results.py tests/test_design_planning_routes.py
-python -m pytest tests/test_design_reference_*.py
-python -m pytest tests/test_design_adaptive_*.py tests/test_design_timing.py
-python -m pytest tests/test_design_calibration*.py
-python -m pytest tests/test_design_candidate*.py tests/test_design_generation_http.py
-node tests/test_design_frontend.cjs
-node tests/test_design_data_frontend.cjs
+python -m pip install -r requirements-test.txt
+python -m pytest tests/test_design_*.py
+python -m pytest tests/test_study_design*.py
+node --test tests/test_design_frontend.cjs tests/test_design_data_frontend.cjs
 ```
 
 The frontend checks use Node's built-in test runner and a small DOM fixture;
 they require no additional JavaScript packages. Existing numerical and IVIVC
 tests should continue to run in the usual application environment.
+
+The integration tests run small real numerical workflows through Flask's test
+client: import and uncertainty preview, schedule generation, adoption of
+explicit times, calibration comparison, completed-only adaptive planning, and
+switching reference sources. They check that each request uses its own current
+uploads and that reported SEM is not divided by a new replicate count.
+The deployment tests exercise a real WSGI prefix mount, static files, all POST
+upload limits, JSON errors, and import/startup from a different working
+directory. They use the WSGI application directly; they do not start a network
+server or verify a particular hosting provider. Run the repository's full test
+suite with `python -m pytest` when checking integration with other app changes.
+
+### Browser and hosting smoke checks
+
+Before using a deployment, run these checks in an actual browser against that
+installation. DOM-fixture tests do not replace this check of both browser
+controllers working together.
+
+1. Open the workspace and check that styles and both JavaScript files load.
+   If using a prefix, complete the remaining checks at that prefixed URL.
+2. Import a small CSV and a workbook with multiple sheets. Read the columns,
+   select the sheet and mappings, and preview mean/SD/count and mean/SEM data.
+   Confirm the selected files remain available when changing workspace views.
+3. Calculate a small measured-reference study comparison. Exercise an IVIVC
+   reference and an empirical time-scale reference with their own input files.
+   Add completed observations and one timing requirement, then recalculate.
+4. In calibration comparison, generate a candidate, copy it to editable times,
+   and assess it alongside an explicit candidate. Check both Approach 1 and
+   Approach 2 when they are to be used. Varying both environments should retain
+   their separate source and measurement assumptions.
+5. After a successful calculation, change an input, replace a file, and submit
+   an invalid request. Earlier output should remain visible with its original
+   provenance and an out-of-date label. Stale generated times must not be
+   copied into the current inputs. Check that validation links reach the
+   relevant control and that requests work again after correcting the inputs.
+6. Open a second tab to confirm it starts with a separate draft. Refreshing the
+   original tab should start a new workspace; uploads and results are not
+   restored. If running the IVIVC app too, verify it remains available at its
+   own entry point and port.
+
+Reports remain a disabled placeholder. Long-running jobs and saved workspaces
+are outside this synchronous interface.
