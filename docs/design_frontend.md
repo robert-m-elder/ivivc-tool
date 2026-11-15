@@ -36,9 +36,9 @@ page can link to the two applications without combining their entry points.
 - **Calculate comparison** supports new studies and additions to completed
   observations, using measured reference data, an IVIVC prediction, or empirical
   time scaling. Timing windows and deadlines can constrain proposed future times.
-  Calibration comparisons retain import/setup review but their numerical
-  calculations are not yet connected to this frontend. Report generation remains
-  unavailable.
+  The separate **Compare calibration sampling** task compares candidate in vitro
+  and in vivo calibration studies through the shared IVIVC workflow. Report
+  generation remains unavailable.
 
 JavaScript is required for the workspace. It leaves the input form mounted,
 including selected browser files, while a normal request runs to completion.
@@ -367,6 +367,123 @@ planning. Gap filling can be assessed without timing requirements; their
 combination is rejected explicitly because the shared timing scheduler defines
 new points as occurring after the latest completed time.
 
+## Calibration-sampling comparison
+
+Choose **Compare calibration sampling** to assess how proposed measurements may
+affect an IVIVC relationship or target prediction. The inputs have four roles:
+fixed existing calibration observations, assumed generating trajectories,
+future calibration measurement variability, and optional independent target
+in vitro observations. They are not interchangeable.
+
+1. Choose whether in vitro, in vivo, or both environments receive proposed
+   measurements. For each varied environment, choose a prospective study or
+   additions to existing calibration data. The other environment remains fixed
+   at its uploaded calibration observations. Existing observations are held
+   fixed in every simulation; additions never reduce historical SEM.
+2. Specify expected behavior using a fitted source curve for each varied
+   environment. Its source may be the existing calibration data or a separate
+   uploaded time course. Select its generating model independently of the
+   IVIVC model. A fixed environment may omit a generating reference when only
+   precision and calculation success are needed; error or coverage calculations
+   requiring that missing reference remain unavailable.
+3. Specify individual future measurement variability in each varied environment
+   using constant SD, constant CV with an SD floor, or a time/SD profile. Values
+   use the analyzed response scale. Existing reported SD/SEM takes precedence.
+   If old precision is missing and needed for weighted additions or schedule
+   generation, supply it or explicitly assume the future error model for those
+   historical rows. That assumption treats unqualified rows as individuals,
+   evaluates SD at their observed responses/times once, and holds it fixed.
+4. Choose Approach 1 or 2, the IVIVC model, and the prediction method. Define
+   relationship evaluation times or response levels as appropriate, and
+   optionally supply a separate target in vitro dataset. The same target inputs
+   are used for every candidate and experiment.
+5. Add named candidates, specifying proposed times and independent replicates
+   per time in each varied environment. Alternatively, generate a candidate
+   schedule from a first/last/step grid and a number of proposed times. Then
+   calculate the comparison.
+
+There are at most six candidates per request. Manually specified times may
+include times already measured: the requested replicates are additional
+independent observations, not replacements for the old measurements. In
+additions mode, an empty manual schedule requests no additional measurements
+in that environment. This permits an existing-data-only baseline when both
+environments already have calibration observations. A prospective environment
+must receive proposed measurements.
+
+Synchronous requests are limited to 200 simulated experiments per candidate,
+200 source parameter draws, 500 propagated interval draws, and 200 optional
+target observations. Combined simulation/propagation limits can require smaller
+settings when several candidates or many output coordinates are requested.
+
+Generated schedules use the existing local information criterion for expected
+**curve recovery**, followed by calibration assessment. Existing observations
+contribute their actual precision and remain fixed. Generated additions use
+previously unmeasured times; use manual schedules to request more replicates at
+existing times. With both environments varied, their candidate schedules are
+generated separately. This is not optimization specifically for IVIVC quality
+or joint optimization of a complete paired study.
+
+### Response scales and uncertainty
+
+Initial-value or min-max normalization uses constants calculated once from each
+environment's selected source, or its existing data when no generating curve is
+requested. The same affine transformation is applied to its existing values,
+source values, and SD/SEM. Optional one-minus reversal is also fixed. Those
+constants remain unchanged across candidates and simulated experiments; each
+newly simulated calibration dataset is not normalized by its own noisy extrema
+or baseline. Optional target data use their own fixed preprocessing constants,
+as in the IVIVC app. Logarithmic axis scaling is unavailable in this workflow.
+
+The numerical adapter calls the shared calibration-simulation and IVIVC APIs.
+Each experiment samples complete generating curves, simulates only the proposed
+calibration measurements, assembles them with the fixed historical rows, and
+repeats the selected IVIVC fit and prediction. New mean observations have
+SD divided by the square root of their own replicate count; already supplied
+historical SEM is never divided again. Independent raw observations and
+reported means retain the existing backend's row/precision conventions.
+
+Approach 2 uses observation uncertainty in its fitted curves and propagates
+fitted and supported target-input uncertainty. Approach 1 repeats the ordinary
+interpolation and time-to-time fit used by the IVIVC app. Measurement variability
+affects the simulated datasets, but supplied response SD/SEM does not weight
+that mapping fit or enter its regression-parameter intervals. Its variation
+across simulated studies is reported separately from those fitted intervals.
+Target response uncertainty is not supported for Approach 1.
+
+Source-curve uncertainty is distinct from future calibration measurement noise.
+Separate environment reference ensembles and measurement errors are treated as
+independent. Candidates share trajectory selections and standard-normal errors
+at common times, including shared replicate draws when counts differ. Future
+calibration noise does not add scatter for individual downstream in vivo target
+measurements to the target prediction intervals.
+
+### Reading calibration results
+
+Results retain explicit proposed times/counts, fixed-data and source provenance,
+normalization constants, generating-model assumptions, and whether schedules
+were specified or generated. The comparison reports fit success, point and
+interval availability, interval widths, and error/coverage where generating
+truth is available. Coordinates and units identify whether an output is an
+in vivo response, an in vivo time, or a dimensionless ratio.
+
+Widths and errors are conditional on the corresponding calculations being
+available, with their counts retained. Coverage uses the backend's stated
+denominator: every experiment with known truth, including unavailable intervals
+as not covering; conditional coverage among available intervals is separate.
+Missing truth produces unavailable error/coverage, not zero error. Calculation
+failures remain in success and availability denominators, with stage details.
+For example, a finite reference time grid does not define a time-constant
+integral to infinity, and uncertain target observations do not by themselves
+specify the latent target truth. Precision can still be reported when those
+error or coverage quantities are unavailable.
+
+Generating curves are assumptions, not externally observed truth for a future
+study. A narrow interval or favorable simulated error does not establish an
+overall best model, transferability, or sufficient calibration data. Compare
+the tradeoffs and check scientific plausibility. Small differences can reflect
+Monte Carlo variation; advanced controls set source parameter draws, propagated
+interval draws, simulated experiments, and the seed.
+
 ## Checks
 
 ```bash
@@ -375,6 +492,7 @@ python -m pytest tests/test_design_data.py tests/test_design_data_routes.py
 python -m pytest tests/test_design_planning.py tests/test_design_planning_results.py tests/test_design_planning_routes.py
 python -m pytest tests/test_design_reference_*.py
 python -m pytest tests/test_design_adaptive_*.py tests/test_design_timing.py
+python -m pytest tests/test_design_calibration*.py
 node tests/test_design_frontend.cjs
 node tests/test_design_data_frontend.cjs
 ```

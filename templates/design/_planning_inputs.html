@@ -197,7 +197,7 @@
 {%- endmacro %}
 
 {% macro draws_input() -%}
-<div data-planning-controls>
-    {{ number_field('reference_draws', 'Reference parameter draws', 100, 2, '1', 'Complete curves sampled from fitted uncertainty. For empirical scaling, this many parameter draws are paired with each positive-weight ratio (at most 2000 resulting curves). Approach 3 uses one deterministic reference. Future measurement errors are added separately during study simulation.') }}
+<div data-shared-draws>
+    {{ number_field('reference_draws', 'Source / reference parameter draws', 100, 2, '1', 'Complete curves sampled from fitted uncertainty, separately from future measurement errors. Calibration comparison uses this count for each generating source. Empirical scaling pairs it with each positive-weight ratio (at most 2000 curves); Approach 3 uses one deterministic reference.') }}
 </div>
 {%- endmacro %}

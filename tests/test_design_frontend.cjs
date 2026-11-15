@@ -10,7 +10,7 @@ const source = fs.readFileSync(path.join(__dirname, "../static/js/design.js"), "
 
 // Minimal DOM for the behavior used by this frontend. No browser or extra
 // JavaScript dependency is needed to exercise its request/state handling.
-function fixture({planning = false} = {}) {
+function fixture({planning = false, calibration = false} = {}) {
     const document = {readyState: "complete", activeElement: null};
     const dataAttribute = key => "data-" + key.replace(/[A-Z]/g, letter => "-" + letter.toLowerCase());
 
@@ -179,6 +179,89 @@ function fixture({planning = false} = {}) {
         calculate = element("button", {id: "calculate-comparison", formaction: "/calculate", disabled: ""}, inputs);
         availability = element("p", {"data-planning-availability": ""}, inputs);
     }
+    let calibrationControls = null;
+    if (calibration) {
+        const cal = calibrationControls = {sides: {}, candidates: []};
+        function field(id, value, parent, tag = "input", type) {
+            return element(tag, {id, name: id, value, ...(type ? {type} : {})}, parent);
+        }
+        for (const side of ["in_vitro", "in_vivo"]) {
+            const container = element("section", {"data-calibration-side": side}, calibrationGroup);
+            const modeGroup = element("div", {"data-calibration-mode": side}, container);
+            const mode = field("cal_" + side + "_mode", "prospective", modeGroup, "select");
+            const existingGroup = element("div", {"data-calibration-existing": side}, container);
+            const existing = field("existing_" + side + "_file", "", existingGroup, "input", "file");
+            const source = field("cal_" + side + "_source", "existing", container, "select");
+            for (const value of ["existing", "file", "none"]) element("option", {value}, source);
+            const sourceGroup = element("div", {"data-calibration-source-file": side}, container);
+            const sourceFile = field("cal_" + side + "_source_file", "", sourceGroup, "input", "file");
+            const sourceControls = element("div", {"data-calibration-source-controls": side}, container);
+            const model = field("cal_" + side + "_model", "exponential", sourceControls, "select");
+            const first = field("cal_" + side + "_first_time", "0", sourceControls);
+            const future = element("div", {"data-calibration-future": side}, container);
+            const observation = field("cal_" + side + "_observation_kind", "constant_sd", future, "select");
+            const constant = element("div", {"data-calibration-observation-side": side,
+                "data-calibration-observation-kinds": "constant_sd constant_cv"}, future);
+            const value = field("cal_" + side + "_observation_value", ".05", constant);
+            const cv = element("div", {"data-calibration-observation-side": side,
+                "data-calibration-observation-kinds": "constant_cv"}, future);
+            const minimum = field("cal_" + side + "_minimum_sd", ".001", cv);
+            const profileGroup = element("div", {"data-calibration-observation-side": side,
+                "data-calibration-observation-kinds": "time_profile_sd"}, future);
+            const profile = field("calibration_" + side + "_sd_profile_file", "", profileGroup, "input", "file");
+            const historyGroup = element("div", {"data-calibration-historical": side}, container);
+            const history = field("cal_" + side + "_historical_error", "supplied", historyGroup, "select");
+            cal.sides[side] = {container, mode, existing, source, sourceFile, model, first,
+                observation, value, minimum, profile, history};
+        }
+        cal.approach = field("cal_approach", "approach2", calibrationGroup, "select");
+        cal.model = field("cal_model", "exponential", calibrationGroup, "select");
+        for (const [value, approaches] of [["linear", "approach1"], ["exponential", "approach1 approach2"], ["normalized", "approach2"]]) {
+            element("option", {value, "data-calibration-approaches": approaches}, cal.model);
+        }
+        cal.method = field("cal_method", "value_ratio", calibrationGroup, "select");
+        for (const [approach, methods] of [["approach1", ["time_mapping"]], ["approach2", ["value_ratio", "tau_ratio", "observed_response_inverse"]]]) {
+            for (const method of methods) element("option", {value: method, "data-calibration-method-approach": approach}, cal.method);
+        }
+        const interpolationGroup = element("div", {"data-calibration-interpolation": ""}, calibrationGroup);
+        cal.interpolation = field("cal_interpolation", "default", interpolationGroup, "select");
+        cal.relationship = field("cal_relationship", "on", calibrationGroup, "input", "checkbox");
+        cal.relationship.checked = true;
+        const relationshipGroup = element("div", {"data-calibration-relationship": ""}, calibrationGroup);
+        const evaluationGroup = element("div", {"data-calibration-evaluation": "time"}, relationshipGroup);
+        cal.times = field("cal_evaluation_times", "0,2,4", evaluationGroup);
+        const responseGroup = element("div", {"data-calibration-evaluation": "response"}, relationshipGroup);
+        cal.levels = field("cal_response_levels", ".9,.5,.1", responseGroup);
+        cal.target = field("cal_assess_target", "on", calibrationGroup, "input", "checkbox");
+        cal.target.checked = false;
+        const targetGroup = element("div", {"data-calibration-target": ""}, calibrationGroup);
+        cal.targetFile = field("cal_target_file", "", targetGroup, "input", "file");
+        cal.intervalDraws = field("cal_interval_draws", "100", calibrationGroup);
+        cal.referenceDraws = field("reference_draws", "100", details);
+        cal.add = element("button", {type: "button", "data-add-calibration-candidate": ""}, calibrationGroup);
+        for (let index = 0; index < 6; index++) {
+            const prefix = "cal_candidate_" + index + "_";
+            const row = element("fieldset", {"data-calibration-candidate": String(index),
+                "data-calibration-active": String(index === 0)}, calibrationGroup);
+            const name = field(prefix + "name", "Design " + (index + 1), row);
+            element("p", {id: name.id + "-error", "data-error-for": name.id, hidden: ""}, row);
+            const sides = {};
+            for (const side of ["in_vitro", "in_vivo"]) {
+                const container = element("div", {"data-calibration-candidate-side": side}, row);
+                const kind = field(prefix + side + "_kind", "manual", container, "select");
+                const manual = element("div", {"data-calibration-schedule-side": side,
+                    "data-calibration-schedule-kind": "manual"}, container);
+                const times = field(prefix + side + "_times", "0,4,12", manual);
+                const generated = element("div", {"data-calibration-schedule-side": side,
+                    "data-calibration-schedule-kind": "generated"}, container);
+                const count = field(prefix + side + "_number_of_times", "3", generated);
+                const replicates = field(prefix + side + "_replicates", "3", container);
+                sides[side] = {kind, times, count, replicates};
+            }
+            const remove = element("button", {type: "button", "data-remove-calibration-candidate": String(index)}, row);
+            cal.candidates.push({row, name, sides, remove});
+        }
+    }
     const errors = {};
     for (const field of [task, sourceField, environment, simulations, seed]) {
         errors[field.id] = element("p", {id: field.id + "-error", "data-error-for": field.id, hidden: ""}, inputs);
@@ -249,7 +332,8 @@ function fixture({planning = false} = {}) {
         availability, reviewContent, resultStatus, successfulCalculation,
         ivivcGroup, scalingGroup, ivivcApproach, ivivcModel, ivivcMethod,
         interpolation, scalingModel, extrapolation, ivivcTarget, ratioFile,
-        measuredMode, completedError, completedFile, completedScaleHelp, firstMode, firstTime, futurePolicy, addTiming, timingRows};
+        measuredMode, completedError, completedFile, completedScaleHelp, firstMode, firstTime, futurePolicy, addTiming, timingRows,
+        calibration: calibrationControls};
 }
 
 test("task and reference changes enable only active inputs without fetching", async () => {
@@ -487,8 +571,8 @@ test("calculation availability follows source and completed-study choices withou
     assert.equal(page.calculate.disabled, false);
     page.task.value = "calibration";
     await page.emit(page.task, "change");
-    assert.equal(page.calculate.disabled, true);
-    await page.emit(page.form, "submit", {submitter: page.calculate});
+    assert.equal(page.calculate.disabled, false);
+    assert.equal(page.observationValue.disabled, true);
     assert.equal(page.requests.length, 0);
 });
 
@@ -831,4 +915,217 @@ test("timing validation targets current controls and ignores obsolete errors aft
     assert.notEqual(row.bounds.upper.quantile.getAttribute("aria-invalid"), "true");
     assert(!page.summary.textContent.includes("Obsolete error."));
     assert.equal(page.content.innerHTML, previous);
+});
+
+test("calibration comparison enables only the varied environments and their active source roles", async () => {
+    const page = fixture({planning: true, calibration: true});
+    const cal = page.calibration, vitro = cal.sides.in_vitro, vivo = cal.sides.in_vivo;
+    assert.equal(cal.approach.disabled, true);
+    page.task.value = "calibration";
+    await page.emit(page.task, "change");
+    assert.equal(page.calculate.disabled, false);
+    assert.equal(page.observationValue.disabled, true);
+    assert.equal(page.sourceField.disabled, true);
+    assert.equal(cal.referenceDraws.disabled, false);
+    assert.equal(vitro.mode.disabled, true);
+    assert.equal(vitro.existing.disabled, false);
+    assert.equal(vitro.source.value, "existing");
+    assert.equal(vitro.sourceFile.disabled, true);
+    assert.equal(vitro.value.disabled, true);
+    assert.equal(vivo.mode.disabled, false);
+    assert.equal(vivo.existing.disabled, true);
+    assert.equal(vivo.source.value, "file");
+    assert.equal(vivo.sourceFile.disabled, false);
+    assert.equal(vivo.value.disabled, false);
+    assert.equal(vivo.history.disabled, true);
+    assert.equal(cal.candidates[0].sides.in_vitro.replicates.disabled, true);
+    assert.equal(cal.candidates[0].sides.in_vivo.replicates.disabled, false);
+    vivo.mode.value = "additions";
+    vivo.source.value = "existing";
+    await page.emit(vivo.mode, "change");
+    assert.equal(vivo.existing.disabled, false);
+    assert.equal(vivo.history.disabled, false);
+    assert.equal(vivo.sourceFile.disabled, true);
+    vivo.source.value = "none";
+    await page.emit(vivo.source, "change");
+    assert.notEqual(vivo.source.value, "none");
+    vitro.source.value = "none";
+    await page.emit(vitro.source, "change");
+    assert.equal(vitro.model.disabled, true);
+    assert.equal(vitro.first.disabled, true);
+    assert.equal(vitro.existing.disabled, false);
+    assert.equal(page.requests.length, 0);
+});
+
+test("calibration measurement models exclude inactive fields and preserve selected files", async () => {
+    const page = fixture({planning: true, calibration: true});
+    const cal = page.calibration, vitro = cal.sides.in_vitro, vivo = cal.sides.in_vivo;
+    const historical = {name: "historical.csv", size: 30, lastModified: 1};
+    const source = {name: "expected.csv", size: 40, lastModified: 2};
+    const profile = {name: "precision.csv", size: 15, lastModified: 3};
+    vivo.existing.files = [historical];
+    vivo.sourceFile.files = [source];
+    vivo.profile.files = [profile];
+    page.task.value = "calibration";
+    page.environment.value = "both";
+    await page.emit(page.task, "change");
+    vivo.mode.value = "additions";
+    vivo.observation.value = "time_profile_sd";
+    vitro.observation.value = "constant_cv";
+    await page.emit(vivo.observation, "change");
+    assert.equal(vivo.profile.disabled, false);
+    assert.equal(vivo.value.disabled, true);
+    assert.equal(vivo.minimum.disabled, true);
+    assert.equal(vitro.minimum.disabled, false);
+    let pending = page.emit(page.form, "submit", {submitter: page.calculate});
+    let values = new Map(page.requests.at(-1).options.body.entries());
+    assert.equal(values.get(vivo.existing.name), historical);
+    assert.equal(values.get(vivo.sourceFile.name), source);
+    assert.equal(values.get(vivo.profile.name), profile);
+    assert(!values.has(vivo.value.name));
+    assert(!values.has(vivo.minimum.name));
+    assert.equal(values.get(vitro.minimum.name), ".001");
+    assert(!values.has("observation_kind"));
+    page.requests.at(-1).resolve({ok: true, json: async () => ({ok: true, html: "<p>Calibration uncertainty</p>"})});
+    await pending;
+    page.environment.value = "in_vitro";
+    await page.emit(page.environment, "change");
+    assert.equal(vivo.profile.disabled, true);
+    assert.equal(vivo.value.disabled, true);
+    assert.equal(vivo.existing.disabled, false);
+    assert.equal(vivo.profile.files[0], profile);
+    assert.equal(vivo.sourceFile.files[0], source);
+    assert.equal(vivo.existing.files[0], historical);
+});
+
+test("calibration approach and target choices submit compatible assessment controls", async () => {
+    const page = fixture({planning: true, calibration: true});
+    const cal = page.calibration;
+    page.task.value = "calibration";
+    await page.emit(page.task, "change");
+    assert.equal(cal.times.disabled, false);
+    assert.equal(cal.levels.disabled, true);
+    assert.equal(cal.interpolation.disabled, true);
+    assert.equal(cal.targetFile.disabled, true);
+    cal.model.value = "normalized";
+    cal.method.value = "observed_response_inverse";
+    cal.target.checked = true;
+    await page.emit(cal.method, "change");
+    assert.equal(cal.times.disabled, true);
+    assert.equal(cal.levels.disabled, false);
+    assert.equal(cal.targetFile.disabled, false);
+    cal.approach.value = "approach1";
+    await page.emit(cal.approach, "change");
+    assert.equal(cal.method.value, "time_mapping");
+    assert.equal(cal.model.value, "linear");
+    assert.equal(cal.interpolation.disabled, false);
+    assert.equal(cal.times.disabled, false);
+    assert.equal(cal.levels.disabled, true);
+    cal.approach.value = "approach2";
+    await page.emit(cal.approach, "change");
+    assert.equal(cal.model.value, "normalized");
+    assert.equal(cal.method.value, "observed_response_inverse");
+    cal.method.value = "tau_ratio";
+    await page.emit(cal.method, "change");
+    assert.equal(cal.times.disabled, true);
+    assert.equal(cal.levels.disabled, true);
+    cal.relationship.checked = false;
+    await page.emit(cal.relationship, "change");
+    assert.equal(cal.targetFile.disabled, false);
+    const pending = page.emit(page.form, "submit", {submitter: page.calculate});
+    const names = new Map(page.requests.at(-1).options.body.entries());
+    assert.equal(names.get("cal_method"), "tau_ratio");
+    assert(!names.has("cal_relationship"));
+    assert(!names.has("cal_evaluation_times"));
+    assert(!names.has("cal_response_levels"));
+    assert(!names.has("cal_interpolation"));
+    page.requests.at(-1).resolve({ok: true, json: async () => ({ok: true, html: "<p>Target prediction comparison</p>"})});
+    await pending;
+});
+
+test("calibration candidates retain manual or generated choices while inactive rows stay excluded", async () => {
+    const page = fixture({planning: true, calibration: true});
+    const cal = page.calibration;
+    page.task.value = "calibration";
+    await page.emit(page.task, "change");
+    assert.equal(cal.candidates[0].remove.disabled, true);
+    assert.equal(cal.candidates[1].name.disabled, true);
+    await page.emit(cal.add, "click");
+    const row = cal.candidates[1], side = row.sides.in_vivo;
+    assert.equal(page.document.activeElement, row.name);
+    row.name.value = "Generated later times";
+    side.kind.value = "generated";
+    side.count.value = "7";
+    side.times.value = "2,5,8";
+    await page.emit(side.kind, "change");
+    assert.equal(side.times.disabled, true);
+    assert.equal(side.count.disabled, false);
+    assert.equal(row.sides.in_vitro.kind.disabled, true);
+    await page.emit(row.remove, "click");
+    assert.equal(row.name.disabled, true);
+    assert.equal(side.count.disabled, true);
+    await page.emit(cal.add, "click");
+    assert.equal(row.name.value, "Generated later times");
+    assert.equal(side.kind.value, "generated");
+    assert.equal(side.count.value, "7");
+    for (let index = 2; index < 6; index++) await page.emit(cal.add, "click");
+    assert.equal(cal.add.disabled, true);
+    assert.equal(cal.candidates.filter(item => !item.row.hidden).length, 6);
+    const pending = page.emit(page.form, "submit", {submitter: page.calculate});
+    const values = new Map(page.requests.at(-1).options.body.entries());
+    assert.equal(values.get("cal_candidate_1_in_vivo_number_of_times"), "7");
+    assert(!values.has("cal_candidate_1_in_vivo_times"));
+    assert(!values.has("cal_candidate_1_in_vitro_times"));
+    assert(!values.has("cal_candidate_6_name"));
+    page.requests.at(-1).resolve({ok: true, json: async () => ({ok: true, html: "<p>Six candidates</p>"})});
+    await pending;
+    await page.emit(row.remove, "click");
+    assert.match(page.resultStatus.textContent, /Inputs changed/);
+});
+
+test("calibration errors retain earlier results and do not mark removed candidates invalid", async () => {
+    const page = fixture({planning: true, calibration: true});
+    const cal = page.calibration;
+    page.task.value = "calibration";
+    await page.emit(page.task, "change");
+    await page.emit(cal.add, "click");
+    await page.successfulCalculation("<p>Existing calibration result</p>");
+    let pending = page.emit(page.form, "submit", {submitter: page.calculate});
+    assert.equal(page.calculate.disabled, true);
+    await page.emit(cal.candidates[1].remove, "click");
+    page.requests.at(-1).resolve({ok: false, json: async () => ({ok: false, errors: [
+        {field_id: "cal_candidate_1_name", message: "Obsolete candidate name error"},
+    ]})});
+    await pending;
+    assert.equal(page.content.innerHTML, "<p>Existing calibration result</p>");
+    assert.notEqual(cal.candidates[1].name.getAttribute("aria-invalid"), "true");
+    assert(!page.summary.textContent.includes("Obsolete candidate name error"));
+    pending = page.emit(page.form, "submit", {submitter: page.calculate});
+    page.requests.at(-1).reject(new Error("Request failed"));
+    await pending;
+    assert.equal(page.content.innerHTML, "<p>Existing calibration result</p>");
+    assert.equal(page.calculate.disabled, false);
+});
+
+test("a calibration request preserves submitted results when the user returns to study planning", async () => {
+    const page = fixture({planning: true, calibration: true});
+    const cal = page.calibration;
+    const expected = {name: "expected.csv", size: 20, lastModified: 1};
+    cal.sides.in_vivo.sourceFile.files = [expected];
+    page.task.value = "calibration";
+    await page.emit(page.task, "change");
+    const pending = page.emit(page.form, "submit", {submitter: page.calculate});
+    assert.equal(page.requests.at(-1).url, "/calculate");
+    assert.equal(new Map(page.requests.at(-1).options.body.entries()).get("task"), "calibration");
+    page.task.value = "study";
+    await page.emit(page.task, "change");
+    page.requests.at(-1).resolve({ok: true, json: async () => ({ok: true, html: "<p>Submitted calibration candidates</p>"})});
+    await pending;
+    assert.equal(page.content.innerHTML, "<p>Submitted calibration candidates</p>");
+    assert.equal(page.inputs.hidden, false);
+    assert.equal(page.observationValue.disabled, false);
+    assert.equal(cal.candidates[0].name.disabled, true);
+    assert.equal(cal.sides.in_vivo.sourceFile.files[0], expected);
+    assert.match(page.resultStatus.textContent, /original inputs/);
+    assert.match(page.requestStatus.textContent, /Submitted calibration comparison/);
 });

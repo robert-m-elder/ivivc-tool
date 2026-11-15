@@ -1,0 +1,229 @@
+{% from 'design/_data_upload.html' import data_upload %}
+{% from 'design/_planning_inputs.html' import field_error, number_field %}
+
+{% macro calibration_data(datasets) -%}
+<p class="design-help">Keep existing calibration observations fixed, or compare new calibration studies. Expected trajectories and future measurement variability are specified separately below.</p>
+{% for side, title, identifier in [('in_vitro', 'In vitro', 'existing-in-vitro-file'), ('in_vivo', 'In vivo', 'existing-in-vivo-file')] %}
+<fieldset class="design-comparison-options" data-calibration-side="{{ side }}">
+    <legend>{{ title }} calibration data</legend>
+    <div class="design-field" data-calibration-mode="{{ side }}">
+        <label for="cal_{{ side }}_mode">Proposed {{ title|lower }} study</label>
+        <select id="cal_{{ side }}_mode" name="cal_{{ side }}_mode">
+            <option value="prospective" selected>New calibration study</option>
+            <option value="additions">Add observations to existing calibration data</option>
+        </select>
+        {{ field_error('cal_' ~ side ~ '_mode') }}
+    </div>
+    <div data-calibration-existing="{{ side }}">
+        {{ data_upload(datasets[identifier]) }}
+        <p class="design-help">These measured rows remain unchanged in every simulated experiment. Additional measurements at an existing time are separate observations; they do not replace earlier rows or divide historical SEM again.</p>
+    </div>
+</fieldset>
+{% endfor %}
+{%- endmacro %}
+
+{% macro calibration_references(planning_models, datasets) -%}
+<div class="design-field-grid">
+    <div class="design-field">
+        <label for="cal_normalization">Common response normalization</label>
+        <select id="cal_normalization" name="cal_normalization" aria-describedby="cal-normalization-help">
+            <option value="none" selected>None</option>
+            <option value="initial_value">Divide by initial value</option>
+            <option value="min_max">Min–max normalization</option>
+        </select>
+        {{ field_error('cal_normalization') }}
+    </div>
+    <div class="design-field">
+        <label class="design-checkbox-label" for="cal_one_minus"><input id="cal_one_minus" name="cal_one_minus" type="checkbox" value="on"> Apply one minus response after normalization</label>
+        {{ field_error('cal_one_minus') }}
+    </div>
+</div>
+<p id="cal-normalization-help" class="design-help">Each environment uses fixed constants from its selected source or existing data. The same constants transform its calibration values and SD/SEM before simulation; they are not estimated again from each simulated study. Target prediction data use their own constants once. Initial-value normalization uses the first retained source row. Logarithmic axis scaling is unavailable here.</p>
+{% for side, title, source_id, profile_id in [('in_vitro', 'In vitro', 'cal-in-vitro-source-file', 'calibration-in-vitro-sd-profile-file'), ('in_vivo', 'In vivo', 'cal-in-vivo-source-file', 'calibration-in-vivo-sd-profile-file')] %}
+<fieldset class="design-comparison-options" data-calibration-side="{{ side }}">
+    <legend>{{ title }} expected behavior</legend>
+    <div class="design-field">
+        <label for="cal_{{ side }}_source">Source of expected {{ title|lower }} behavior</label>
+        <select id="cal_{{ side }}_source" name="cal_{{ side }}_source" aria-describedby="cal-{{ side }}-source-help">
+            <option value="existing"{% if side == 'in_vitro' %} selected{% endif %}>Fit the existing calibration observations</option>
+            <option value="file"{% if side == 'in_vivo' %} selected{% endif %}>Fit a separate source dataset</option>
+            <option value="none">No generating reference for this fixed environment</option>
+        </select>
+        <p id="cal-{{ side }}-source-help" class="design-help">A varied environment needs an explicit generating curve. A fixed environment can omit its reference, but error or coverage requiring its assumed true trajectory will then be unavailable. Separate environment references are treated as independent.</p>
+        {{ field_error('cal_' ~ side ~ '_source') }}
+    </div>
+    <div data-calibration-source-file="{{ side }}"{% if side == 'in_vitro' %} hidden{% endif %}>
+        {{ data_upload(datasets[source_id]) }}
+        <p class="design-help">This source describes expected behavior. Its observations are not added to the proposed calibration dataset.</p>
+    </div>
+    <div data-calibration-source-controls="{{ side }}">
+        <div class="design-field">
+            <label for="cal_{{ side }}_model">{{ title }} source model</label>
+            <select id="cal_{{ side }}_model" name="cal_{{ side }}_model">
+                {% for model in planning_models %}<option value="{{ model.id }}"{% if model.id == 'exponential' %} selected{% endif %}>{{ model.label }}</option>{% endfor %}
+            </select>
+            {{ field_error('cal_' ~ side ~ '_model') }}
+        </div>
+        <div class="design-field">
+            <label class="design-checkbox-label" for="cal_{{ side }}_allow_extrapolation"><input id="cal_{{ side }}_allow_extrapolation" name="cal_{{ side }}_allow_extrapolation" type="checkbox" value="on"> Allow fitted {{ title|lower }} source extrapolation</label>
+            <p class="design-help">Enable only when extending the fitted source beyond its observed times is a reasonable planning assumption.</p>
+            {{ field_error('cal_' ~ side ~ '_allow_extrapolation') }}
+        </div>
+        <details>
+            <summary>Opportunities for generated {{ title|lower }} schedules</summary>
+            <div class="design-field-grid design-three-fields">
+                {{ number_field('cal_' ~ side ~ '_first_time', 'First opportunity', 0, 0, 'any') }}
+                {{ number_field('cal_' ~ side ~ '_last_time', 'Last opportunity', 52, 0, 'any') }}
+                {{ number_field('cal_' ~ side ~ '_time_step', 'Step', 2, 0, 'any') }}
+            </div>
+            <p class="design-help">These opportunities are used only when a candidate requests generated times. Use compatible elapsed-time units and origin for the source, calibration, and prediction data.</p>
+        </details>
+    </div>
+    <div data-calibration-future="{{ side }}">
+        <h4>Future {{ title|lower }} measurements</h4>
+        <div class="design-field">
+            <label for="cal_{{ side }}_observation_kind">Individual measurement variability</label>
+            <select id="cal_{{ side }}_observation_kind" name="cal_{{ side }}_observation_kind">
+                <option value="constant_sd" selected>Constant SD</option>
+                <option value="constant_cv">Constant coefficient of variation</option>
+                <option value="time_profile_sd">SD profile over time</option>
+            </select>
+            {{ field_error('cal_' ~ side ~ '_observation_kind') }}
+        </div>
+        <div data-calibration-observation-side="{{ side }}" data-calibration-observation-kinds="constant_sd constant_cv">
+            {{ number_field('cal_' ~ side ~ '_observation_value', 'Individual SD or coefficient of variation', '.05', 0, 'any', 'SD uses the analyzed response scale after preprocessing. CV is a fraction: 0.05 means 5%.') }}
+        </div>
+        <div data-calibration-observation-side="{{ side }}" data-calibration-observation-kinds="constant_cv" hidden>
+            {{ number_field('cal_' ~ side ~ '_minimum_sd', 'Minimum individual SD for CV', '.001', 0, 'any', 'An absolute SD floor on the analyzed response scale.') }}
+        </div>
+        <div data-calibration-observation-side="{{ side }}" data-calibration-observation-kinds="time_profile_sd" hidden>
+            {{ data_upload(datasets[profile_id]) }}
+            <p class="design-help">Use individual SD on the analyzed response scale. Nearest-time lookup and endpoint extension apply; each candidate supplies its replicate count.</p>
+        </div>
+        <div class="design-field" data-calibration-historical="{{ side }}" hidden>
+            <label for="cal_{{ side }}_historical_error">Precision for existing {{ title|lower }} observations</label>
+            <select id="cal_{{ side }}_historical_error" name="cal_{{ side }}_historical_error">
+                <option value="supplied" selected>Use supplied historical SD/SEM</option>
+                <option value="future_model">Assume future variability where historical precision is missing</option>
+            </select>
+            <p class="design-help">Supplied SD/SEM takes precedence. The explicit fallback treats each unqualified historical row as one independent observation, with SD evaluated once at its observed response and time. Planned replicate counts apply only to new measurements.</p>
+            {{ field_error('cal_' ~ side ~ '_historical_error') }}
+        </div>
+    </div>
+</fieldset>
+{% endfor %}
+{%- endmacro %}
+
+{% macro calibration_assessment(cal_options, datasets) -%}
+<div class="design-field-grid">
+    <div class="design-field">
+        <label for="cal_approach">IVIVC approach</label>
+        <select id="cal_approach" name="cal_approach" aria-describedby="cal-approach-help">
+            {% for approach in cal_options.approaches %}<option value="{{ approach.id }}"{% if approach.id == 'approach2' %} selected{% endif %}>{{ approach.label }}</option>{% endfor %}
+        </select>
+        {{ field_error('cal_approach') }}
+    </div>
+    <div class="design-field">
+        <label for="cal_model">IVIVC model</label>
+        <select id="cal_model" name="cal_model">
+            {% for model in cal_options.models %}<option value="{{ model.id }}" data-calibration-approaches="{% for approach in cal_options.approaches %}{% if model.id in approach.models|map(attribute='id') %}{{ approach.id }} {% endif %}{% endfor %}"{% if model.id == 'exponential' %} selected{% endif %}>{{ model.label }}</option>{% endfor %}
+        </select>
+        {{ field_error('cal_model') }}
+    </div>
+    <div class="design-field">
+        <label for="cal_method">Prediction / relationship method</label>
+        <select id="cal_method" name="cal_method">
+            {% for approach in cal_options.approaches %}{% for method in approach.methods %}<option value="{{ method.id }}" data-calibration-method-approach="{{ approach.id }}"{% if method.id == 'value_ratio' %} selected{% endif %}>{{ method.label }}</option>{% endfor %}{% endfor %}
+        </select>
+        {{ field_error('cal_method') }}
+    </div>
+    <div class="design-field" data-calibration-interpolation hidden>
+        <label for="cal_interpolation">Approach 1 interpolation</label>
+        <select id="cal_interpolation" name="cal_interpolation">
+            <option value="default" selected>Default response alignment</option>
+            <option value="alternative">Alternative response alignment</option>
+            <option value="none">No response interpolation</option>
+        </select>
+        {{ field_error('cal_interpolation') }}
+    </div>
+</div>
+<p id="cal-approach-help" class="design-help">Each simulated calibration dataset goes through the shared IVIVC pipeline. Approach 2 weights fits and propagates supported SD/SEM. Approach 1 uses simulated measurement variability, then applies its ordinary time-mapping fit and fitted relationship uncertainty; response SD/SEM does not weight that mapping. Source models above describe expected data and are independent of this IVIVC model.</p>
+<div class="design-field">
+    <label class="design-checkbox-label" for="cal_relationship"><input id="cal_relationship" name="cal_relationship" type="checkbox" value="on" checked> Assess the fitted relationship</label>
+    {{ field_error('cal_relationship') }}
+</div>
+<div data-calibration-relationship>
+    <div class="design-field" data-calibration-evaluation="time">
+        <label for="cal_evaluation_times">Relationship evaluation times</label>
+        <input id="cal_evaluation_times" name="cal_evaluation_times" type="text" value="0,2,4" aria-describedby="cal-evaluation-help">
+        <p id="cal-evaluation-help" class="design-help">Comma-separated in vitro times. Approach 1 evaluates mapped in vivo time; Approach 2 response-ratio assessment evaluates the in vivo / in vitro response ratio at these times.</p>
+        {{ field_error('cal_evaluation_times') }}
+    </div>
+    <div class="design-field" data-calibration-evaluation="response" hidden>
+        <label for="cal_response_levels">Inverse-mapping response levels</label>
+        <input id="cal_response_levels" name="cal_response_levels" type="text" value=".9,.5,.1" aria-describedby="cal-response-levels-help">
+        <p id="cal-response-levels-help" class="design-help">Comma-separated values on the analyzed in vivo response scale. The relationship output is the in vivo time to each response. A time-constant-ratio assessment instead reports one dimensionless ratio.</p>
+        {{ field_error('cal_response_levels') }}
+    </div>
+</div>
+<div class="design-field">
+    <label class="design-checkbox-label" for="cal_assess_target"><input id="cal_assess_target" name="cal_assess_target" type="checkbox" value="on"> Assess predictions for a specified target in vitro dataset</label>
+    {{ field_error('cal_assess_target') }}
+</div>
+<div data-calibration-target hidden>
+    {{ data_upload(datasets['cal-target-file']) }}
+    <p class="design-help">This target stays fixed across calibration simulations. Its measurements and their errors are assumed independent of calibration measurements. Approach 2 supports target-input SD/SEM; leave target uncertainty unspecified for Approach 1.</p>
+</div>
+<p class="design-help">Error and coverage outputs require corresponding assumed true reference trajectories within their supported range. Precision and calculation-success outputs remain informative when a truth-based quantity is unavailable. These comparisons assess the supplied assumptions; they do not establish scientific validity or select an overall best IVIVC.</p>
+{%- endmacro %}
+
+{% macro calibration_candidates() -%}
+<fieldset id="calibration-candidates" class="design-comparison-options" tabindex="-1" data-calibration-candidates>
+    <legend>Named candidate designs</legend>
+    <p class="design-help">Specify times directly or generate them for curve recovery. Generated schedules use a local information heuristic, then their IVIVC effects are assessed; the search does not optimize IVIVC performance. Compare at most six candidates per request.</p>
+    {{ field_error('calibration-candidates') }}
+    {% for index in range(6) %}{% set prefix = 'cal_candidate_' ~ index ~ '_' %}
+    <fieldset class="design-comparison-options" data-calibration-candidate="{{ index }}" data-calibration-active="{{ 'true' if index == 0 else 'false' }}"{% if index != 0 %} hidden{% endif %}>
+        <legend>Candidate {{ index + 1 }}</legend>
+        <div class="design-field">
+            <label for="{{ prefix }}name">Candidate name</label>
+            <input id="{{ prefix }}name" name="{{ prefix }}name" type="text" value="Design {{ index + 1 }}"{% if index != 0 %} disabled{% endif %}>
+            {{ field_error(prefix ~ 'name') }}
+        </div>
+        <div class="design-field-grid">
+            {% for side, title in [('in_vitro', 'In vitro'), ('in_vivo', 'In vivo')] %}
+            <fieldset class="design-course-options" data-calibration-candidate-side="{{ side }}">
+                <legend>Additional {{ title|lower }} measurements</legend>
+                <div class="design-field">
+                    <label for="{{ prefix }}{{ side }}_kind">Time selection</label>
+                    <select id="{{ prefix }}{{ side }}_kind" name="{{ prefix }}{{ side }}_kind"{% if index != 0 %} disabled{% endif %}>
+                        <option value="manual" selected>Specify times</option>
+                        <option value="generated">Generate a curve-recovery schedule</option>
+                    </select>
+                    {{ field_error(prefix ~ side ~ '_kind') }}
+                </div>
+                <div class="design-field" data-calibration-schedule-side="{{ side }}" data-calibration-schedule-kind="manual">
+                    <label for="{{ prefix }}{{ side }}_times">Proposed {{ title|lower }} times</label>
+                    <input id="{{ prefix }}{{ side }}_times" name="{{ prefix }}{{ side }}_times" type="text" value="0,4,12,24,52"{% if index != 0 %} disabled{% endif %}>
+                    <p class="design-help">Comma-separated additional times. An already measured time requests more independent measurements there; old observations remain fixed. Leave blank to add nothing when existing calibration data are available; a new calibration study needs proposed times.</p>
+                    {{ field_error(prefix ~ side ~ '_times') }}
+                </div>
+                <div data-calibration-schedule-side="{{ side }}" data-calibration-schedule-kind="generated" hidden>
+                    {{ number_field(prefix ~ side ~ '_number_of_times', 'Number of additional distinct times', 3, 1, '1', 'Generated times use the source model and opportunity grid. When extending calibration, generated times exclude already measured times; specify times manually to add replicates there.', 20) }}
+                </div>
+                {{ number_field(prefix ~ side ~ '_replicates', 'Independent replicates per proposed time', 3, 1, '1', 'Applies only to this candidate’s new measurements in this environment.', 100) }}
+            </fieldset>
+            {% endfor %}
+        </div>
+        <button type="button" data-remove-calibration-candidate="{{ index }}">Remove this candidate</button>
+    </fieldset>
+    {% endfor %}
+    <button type="button" data-add-calibration-candidate>Add a candidate design</button>
+</fieldset>
+{%- endmacro %}
+
+{% macro calibration_advanced() -%}
+<div data-design-task="calibration" hidden>
+    {{ number_field('cal_interval_draws', 'IVIVC uncertainty draws per simulated calibration', 100, 2, '1', 'Used for fitted relationship and target-prediction intervals. More draws take longer; this is separate from generating-source parameter draws.') }}
+</div>
+{%- endmacro %}

@@ -33,6 +33,12 @@ DATASETS = {
                                      'Existing in vitro calibration data'),
     'existing-in-vivo-file': _course('existing-in-vivo-file', 'existing_in_vivo_file',
                                     'Existing in vivo calibration data'),
+    'cal-in-vitro-source-file': _course('cal-in-vitro-source-file', 'cal_in_vitro_source_file',
+                                       'Expected in vitro calibration trajectory source'),
+    'cal-in-vivo-source-file': _course('cal-in-vivo-source-file', 'cal_in_vivo_source_file',
+                                      'Expected in vivo calibration trajectory source'),
+    'cal-target-file': _course('cal-target-file', 'cal_target_file',
+                               'Independent target in vitro prediction data'),
     'completed-target-file': _course('completed-target-file', 'completed_target_file',
                                     'Completed target-study observations'),
 }

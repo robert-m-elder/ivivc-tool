@@ -1,6 +1,6 @@
 """Separate, request-scoped Flask frontend for study-design assessment.
 
-Data imports and prospective planning complete within individual requests.
+Data imports, study planning, and calibration comparisons complete within individual requests.
 This module does not import the IVIVC web application.
 """
 
@@ -94,12 +94,14 @@ def create_app(config=None):
 
     @app.get('/')
     def index():
+        from utilities.design_calibration import calibration_options
         from utilities.design_planning import model_options
         from utilities.design_reference_sources import reference_options
 
         return render_template('design/index.html', settings=_default_settings(),
                                datasets=DATASETS, planning_models=model_options(),
-                               reference_options=reference_options())
+                               reference_options=reference_options(),
+                               cal_options=calibration_options())
 
     def import_error(message, field_id=None):
         return jsonify(ok=False, errors=[{'field_id': field_id, 'message': message}]), 400
@@ -204,13 +206,11 @@ def create_app(config=None):
         settings, errors = _review_settings(request.form)
         if errors:
             return jsonify(ok=False, errors=errors), 400
-        if settings['task'] != 'study':
-            return import_error('Calibration comparisons are not connected to this frontend yet.', 'task')
         has_completed = str(request.form.get('has_completed', '')).strip().lower() in (
             '1', 'on', 'true', 'yes',
         )
         measured_mode = request.form.get('measured_adaptive_mode', 'refit_completed')
-        if (has_completed and settings['reference_source'] == 'measured'
+        if (settings['task'] == 'study' and has_completed and settings['reference_source'] == 'measured'
                 and measured_mode not in ('refit_completed', 'reweight_prior')):
             return import_error('Select how completed data update the measured reference.',
                                 'measured_adaptive_mode')
@@ -267,6 +267,50 @@ def create_app(config=None):
                                     worksheet=loaded.sheet),
                 })
             return value, summaries
+
+        if settings['task'] == 'calibration':
+            from utilities.design_calibration import run_calibration_comparison
+            from utilities.design_calibration_results import present_calibration_result
+
+            arguments, source_summaries, profile_summaries = {}, [], []
+            varied = ({'in_vitro', 'in_vivo'} if settings['varied_environment'] == 'both'
+                      else {settings['varied_environment']})
+            try:
+                for side in ('in_vitro', 'in_vivo'):
+                    prefix = 'cal_' + side + '_'
+                    mode = request.form.get(prefix + 'mode', 'prospective') if side in varied else 'fixed'
+                    if mode not in ('fixed', 'prospective', 'additions') or (side in varied and mode == 'fixed'):
+                        raise PlanningInputError('Choose prospective calibration or additions to existing data.', prefix + 'mode')
+                    needs_existing = mode in ('fixed', 'additions')
+                    source_kind = request.form.get(prefix + 'source',
+                                                   'existing' if needs_existing else 'file')
+                    if (source_kind not in ('existing', 'file', 'none')
+                            or (source_kind == 'none' and side in varied)
+                            or (source_kind == 'existing' and not needs_existing)):
+                        raise PlanningInputError('Choose an available source of expected behavior for this environment.', prefix + 'source')
+                    role_side = side.replace('_', '-')
+                    if needs_existing:
+                        value, summaries = planning_input('existing-' + role_side + '-file')
+                        arguments['existing_' + side] = value
+                        source_summaries.extend(summaries)
+                    if source_kind == 'file':
+                        value, summaries = planning_input('cal-' + role_side + '-source-file')
+                        arguments[side + '_source'] = value
+                        source_summaries.extend(summaries)
+                    if side in varied and request.form.get(prefix + 'observation_kind') == 'time_profile_sd':
+                        value, summaries = planning_input('calibration-' + role_side + '-sd-profile-file')
+                        arguments[side + '_profile'] = value
+                        profile_summaries.extend(summaries)
+                if str(request.form.get('cal_assess_target', '')).strip().lower() in ('1', 'on', 'true', 'yes'):
+                    arguments['prediction'], summaries = planning_input('cal-target-file')
+                    source_summaries.extend(summaries)
+                result = run_calibration_comparison(request.form, **arguments)
+            except PlanningInputError as error:
+                return import_error(str(error), error.field_id)
+            context = present_calibration_result(result, source_summaries=source_summaries,
+                                                 profile_summaries=profile_summaries)
+            html = render_template('design/_calibration_results.html', **context)
+            return jsonify(ok=True, html=html)
 
         try:
             source_kind = settings['reference_source']

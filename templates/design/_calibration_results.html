@@ -1,0 +1,126 @@
+{% from 'design/_charts.html' import chart %}
+<div data-calibration-result>
+    <section class="design-section" aria-labelledby="calibration-result-heading">
+        <h3 id="calibration-result-heading">Calibration comparison</h3>
+        <p>Each candidate repeats calibration measurement generation, the selected preprocessing, and IVIVC fitting. Existing calibration rows stay fixed; only the proposed measurements are regenerated.</p>
+        {% if warnings %}<aside class="design-notice" aria-labelledby="calibration-cautions-heading">
+            <h4 id="calibration-cautions-heading">Interpretation and cautions</h4>
+            <ul>{% for warning in warnings %}<li>{{ warning }}</li>{% endfor %}</ul>
+        </aside>{% endif %}
+        <p class="design-help">These results compare the specified candidates under the assumed generating curves and measurement variability. They do not select the best IVIVC overall or establish transferability to a new material.</p>
+    </section>
+
+    <section class="design-section" aria-labelledby="calibration-design-results-heading">
+        <h3 id="calibration-design-results-heading">Candidate designs and calculation success</h3>
+        <div class="design-preview-table"><table>
+            <caption>Proposed calibration measurements and fitting outcomes</caption>
+            <thead><tr><th scope="col">Candidate</th><th scope="col">Additional in vitro times</th><th scope="col">Replicates at each</th><th scope="col">Additional in vivo times</th><th scope="col">Replicates at each</th><th scope="col">Total new independent units</th><th scope="col">Successful IVIVC fits</th><th scope="col">Fit failure rate</th></tr></thead>
+            <tbody>{% for row in rows %}<tr>
+                <th scope="row">{{ row.name }}</th><td>{{ row.sides.in_vitro.times }}</td><td>{{ row.sides.in_vitro.replicates }}</td>
+                <td>{{ row.sides.in_vivo.times }}</td><td>{{ row.sides.in_vivo.replicates }}</td><td>{{ row.new_units }}</td>
+                <td>{{ row.n_fit_successful }} / {{ row.n_simulations }}</td><td>{{ row.fit_failure_rate }}</td>
+            </tr>{% endfor %}</tbody>
+        </table></div>
+        <p class="design-help">New units equal proposed times × independent replicates in each environment. Sampling again at an existing time adds independent observations; it does not replace the old rows or reduce their SEM. A zero-addition candidate can retain the same fitted relationship while its error remains nonzero.</p>
+        <details><summary>Future calibration variability used for each candidate</summary>
+            <div class="design-preview-table"><table><thead><tr><th scope="col">Candidate</th><th scope="col">In vitro</th><th scope="col">In vivo</th></tr></thead>
+            <tbody>{% for row in rows %}<tr><th scope="row">{{ row.name }}</th><td>{{ row.sides.in_vitro.observation }}</td><td>{{ row.sides.in_vivo.observation }}</td></tr>{% endfor %}</tbody></table></div>
+            <p class="design-help">SDs use the analyzed response scale. CV is a fraction of absolute response. The replicate counts above apply separately to the generated measurements.</p>
+        </details>
+        <div class="design-preview-table"><table class="design-settings-table">
+            <caption>Existing observations retained in every simulated calibration dataset</caption>
+            <thead><tr><th scope="col">Environment</th><th scope="col">Rows</th><th scope="col">Times</th><th scope="col">Reported independent units</th><th scope="col">Precision</th></tr></thead>
+            <tbody>{% for row in existing_rows %}<tr><th scope="row">{{ row.side }}</th><td>{{ row.rows }}</td><td>{{ row.times }}</td><td>{{ row.units }}</td><td>{{ row.precision }}</td></tr>{% endfor %}</tbody>
+        </table></div>
+        {% if generation_outcomes %}<details><summary>How candidate times were specified or generated</summary>
+            <div class="design-preview-table"><table>
+                <thead><tr><th scope="col">Candidate</th><th scope="col">Environment</th><th scope="col">Origin</th><th scope="col">Outcome</th><th scope="col">New times</th></tr></thead>
+                <tbody>{% for outcome in generation_outcomes %}<tr><th scope="row">{{ outcome.candidate }}</th><td>{{ outcome.side_label }}</td><td>{{ outcome.kind }}</td><td>{{ outcome.status }}: {{ outcome.message }}</td><td>{{ outcome.times_text }}</td></tr>{% endfor %}</tbody>
+            </table></div>
+            <p class="design-help">Generated times use the existing local curve-recovery information heuristic for each environment. Their IVIVC effects are assessed afterward. This is not optimization for IVIVC performance or a joint optimization of the two environments.</p>
+        </details>{% endif %}
+    </section>
+
+    {% for output in output_sections %}
+    <section class="design-section" aria-labelledby="calibration-{{ output.key }}-heading">
+        <h3 id="calibration-{{ output.key }}-heading">{{ output.title }}</h3>
+        <p>Output: <strong>{{ output.quantity_label }}</strong>. Evaluation coordinate: {{ output.coordinate_label }}.</p>
+        {% if output.key == 'prediction' %}<p class="design-help">The same independent target in vitro dataset is used for every calibration candidate. Response-ratio prediction uses target times and responses to predict in vivo responses. Time mapping and time-constant scaling use target times to predict in vivo times; inverse mapping uses target responses to predict in vivo times.</p>{% endif %}
+        {% if output.width_plot %}{{ chart(output.width_plot, 'Mean fitted interval width among available calculations', output.coordinate_label, 'Interval width', 'calibration-' ~ output.key ~ '-width') }}{% endif %}
+        <div class="design-preview-table"><table>
+            <caption>{{ output.title }}: precision, availability, and error under the generating assumptions</caption>
+            <thead><tr><th scope="col">Candidate</th><th scope="col">All points available</th><th scope="col">All fitted intervals available</th><th scope="col">Mean interval width</th><th scope="col">RMSE</th><th scope="col">Pointwise coverage over all known truth</th><th scope="col">Coverage among available intervals</th></tr></thead>
+            <tbody>{% for candidate in output.candidates %}<tr>
+                <th scope="row">{{ candidate.name }}</th><td>{{ candidate.complete_point_rate }}</td><td>{{ candidate.complete_interval_rate }}</td>
+                <td>{{ candidate.width }} ({{ candidate.width_count }} point calculations)</td><td>{{ candidate.rmse }} ({{ candidate.error_count }} estimate/truth pairs)</td>
+                <td>{{ candidate.coverage }} ({{ candidate.truth_count }} truth points)</td><td>{{ candidate.conditional_coverage }} ({{ candidate.interval_truth_count }} interval/truth pairs)</td>
+            </tr>{% endfor %}</tbody>
+        </table></div>
+        <p class="design-help">Availability rates include every requested simulated calibration study. Widths use available fitted intervals; errors require both an estimate and assumed truth. Coverage over all known truth treats an unavailable interval as not covering. Conditional coverage uses only available interval/truth pairs. These are pooled pointwise summaries, not simultaneous whole-curve coverage. A dash means unavailable, not zero error.</p>
+        {% if is_approach1 %}<p class="design-help">Approach 1 repeats the ordinary interpolation and time-to-time fit. Experimental response SD/SEM controls simulated measurements but does not weight that mapping fit. Empirical estimate and error ranges below describe variation across simulated studies, separately from each fit's mapping-regression parameter intervals. Estimate spread can also include differences between generating reference trajectories.</p>{% endif %}
+        {% for candidate in output.candidates %}
+        <details><summary>{{ candidate.name }} — pointwise values and calculation status</summary>
+            <div class="design-preview-table"><table>
+                <caption>{{ candidate.quantity_label }}; {{ candidate.n_simulations }} requested studies</caption>
+                <thead><tr><th scope="col">{{ candidate.coordinate_label }}</th><th scope="col">Available estimates</th><th scope="col">Available intervals</th><th scope="col">Mean width</th><th scope="col">RMSE</th><th scope="col">Coverage / truth count</th><th scope="col">Conditional coverage / interval-truth count</th>{% if candidate.empirical %}<th scope="col">Empirical estimate median / range</th><th scope="col">Empirical error median / range</th>{% endif %}</tr></thead>
+                <tbody>{% for point in candidate.points %}<tr>
+                    <th scope="row">{{ point.coordinate }}</th><td>{{ point.point_count }} / {{ candidate.n_simulations }}</td><td>{{ point.interval_count }} / {{ candidate.n_simulations }}</td>
+                    <td>{{ point.width }} ({{ point.width_count }})</td><td>{{ point.rmse }} ({{ point.error_count }})</td><td>{{ point.coverage }} / {{ point.truth_count }}</td><td>{{ point.conditional_coverage }} / {{ point.interval_truth_count }}</td>
+                    {% if candidate.empirical %}<td>{{ point.estimate_median }} / {{ point.estimate_range }}</td><td>{{ point.error_median }} / {{ point.error_range }}</td>{% endif %}
+                </tr>{% endfor %}</tbody>
+            </table></div>
+            {% if candidate.empirical %}<p class="design-help">Empirical ranges use the backend's configured pointwise quantiles across available simulations. Errors subtract each simulation's own generating truth; they do not subtract one common central curve. Fixed historical data are not regenerated.</p>{% endif %}
+            {% if candidate.example %}<div class="design-preview-table"><table>
+                <caption>Example simulated study {{ candidate.example.experiment }}: first available {{ output.key }} evaluation</caption>
+                <thead><tr><th scope="col">{{ candidate.coordinate_label }}</th><th scope="col">Estimate</th><th scope="col">Lower fitted bound</th><th scope="col">Upper fitted bound</th><th scope="col">Assumed generating truth</th><th scope="col">Estimate / interval available</th><th scope="col">Point / interval status</th></tr></thead>
+                <tbody>{% for point in candidate.example.points %}<tr><th scope="row">{{ point.coordinate }}</th><td>{{ point.estimate }}</td><td>{{ point.lower }}</td><td>{{ point.upper }}</td><td>{{ point.truth }}</td><td>{{ point.point_available }} / {{ point.interval_available }}</td><td>{{ point.status }} / {{ point.interval_status }}{% if point.conditional %}; conditional interval ({{ point.valid_samples }} valid draws){% endif %}</td></tr>{% endfor %}</tbody>
+            </table></div><p class="design-help">This is one available simulated evaluation, not an average or a representative-study selection. Use the availability and performance summaries above to compare candidates.</p>{% endif %}
+            {% if candidate.diagnostics.statuses %}<p class="design-help">Point calculation statuses: {% for status in candidate.diagnostics.statuses %}{{ status.label }}: {{ status.count }}{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
+            {% if candidate.diagnostics.conditional_count %}<p class="design-help">{{ candidate.diagnostics.conditional_count }} point calculations used conditional intervals from successful Monte Carlo draws. Reported valid-draw counts range from {{ candidate.diagnostics.valid_samples }}{% if candidate.diagnostics.min_valid_fraction %}; minimum valid fraction: {{ candidate.diagnostics.min_valid_fraction }}{% endif %}. Missing intervals remain unavailable under the backend's configured policy.</p>{% endif %}
+        </details>
+        {% endfor %}
+    </section>
+    {% endfor %}
+
+    <section class="design-section" aria-labelledby="calibration-failures-heading">
+        <h3 id="calibration-failures-heading">Unavailable calculations and failures</h3>
+        {% for row in rows %}<details><summary>{{ row.name }} — {{ row.n_fit_successful }} / {{ row.n_simulations }} fits available</summary>
+            {% if row.stages %}<p>{% for stage in row.stages %}{{ stage.stage }}: {{ stage.count }}{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% else %}<p>No stage exceptions were recorded. Point and interval availability are reported separately above.</p>{% endif %}
+            {% if row.error_examples %}<ul>{% for error in row.error_examples %}<li>{{ error.stage }} ({{ error.type }}): {{ error.message }}</li>{% endfor %}</ul>{% endif %}
+        </details>{% endfor %}
+        <p class="design-help">Stage counts may overlap within a simulated study. Failed fits and missing intervals remain in their respective availability denominators. A usable relationship can remain available when an optional target calculation fails.</p>
+    </section>
+
+    <section class="design-section" aria-labelledby="calibration-source-heading">
+        <h3 id="calibration-source-heading">Expected behavior and fixed response scales</h3>
+        {% for source in source_previews %}<h4>{{ source.side }}</h4>
+        <p class="design-help">Mode: {{ source.mode }}. Generating source: {{ source.source_kind }}. Source model: {{ source.model }}. Usable reference draws: {{ source.draws }}. Reference time range: {{ source.range }}.</p>
+        {% if source.generation_grid %}<p class="design-help">Candidate-generation grid: first {{ source.generation_grid.first_time }}, last bound {{ source.generation_grid.last_time_bound }}, step {{ source.generation_grid.time_step }}. Explicit added times at already measured times are possible in manual schedules; generated additions use unmeasured opportunities.</p>{% endif %}
+        {{ chart(source.plot, source.side ~ ' generating reference and calibration observations', source.side ~ ' time', 'Analyzed response', source.identifier) }}
+        {% if source.parameters %}<div class="design-preview-table"><table>
+            <caption>{{ source.side }} source fit parameters</caption>
+            <thead><tr><th scope="col">Parameter</th><th scope="col">Estimate</th><th scope="col">Standard error</th></tr></thead>
+            <tbody>{% for parameter in source.parameters %}<tr><th scope="row">{{ parameter.name }}</th><td>{{ parameter.value }}</td><td>{{ parameter.se }}</td></tr>{% endfor %}</tbody>
+        </table></div>{% endif %}
+        <p class="design-help">Fixed response transformation: analyzed response = {{ source.slope }} × supplied response + {{ source.intercept }}. The same constants are used for every candidate and simulation. {% if not source.has_reference %}No generating reference was supplied in this environment; truth-based errors or coverage that require it are unavailable.{% endif %}</p>
+        {% endfor %}
+        <p class="design-help">Source observations describe generating assumptions and do not automatically become calibration measurements. Shaded reference bands, where present, summarize source-parameter uncertainty and exclude future measurement scatter. Generating curves are independent between environments; they are not assumed to be paired joint scenarios.</p>
+    </section>
+
+    <section class="design-section" aria-labelledby="calibration-settings-heading">
+        <h3 id="calibration-settings-heading">Inputs used for this comparison</h3>
+        <div class="design-preview-table"><table class="design-settings-table">
+            <caption>Selected analysis and simulation settings</caption>
+            <tbody>{% for label, value in settings_rows %}<tr><th scope="row">{{ label }}</th><td>{{ value }}</td></tr>{% endfor %}</tbody>
+        </table></div>
+        {% for imported in source_summaries + profile_summaries %}{% set summary = imported.get('summary', imported) %}
+        <h4>{{ imported.get('label', 'Input data') }}</h4>
+        <p class="design-help">File: {{ imported.get('filename', summary.get('filename', '')) }}{% if imported.get('worksheet', summary.get('worksheet')) %} · Worksheet: {{ imported.get('worksheet', summary.get('worksheet')) }}{% endif %}.</p>
+        {% if summary.get('interpretation') %}<p>{{ summary.interpretation }}</p>{% endif %}
+        {% if summary.get('mapping') %}<p class="design-help">Mapping: {% for label, value in summary.mapping.items() %}{{ label }} → {{ value }}{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
+        {% if summary.get('retained_rows') is not none %}<p class="design-help">Rows: {{ summary.retained_rows }} retained, {{ summary.get('omitted_rows', 0) }} omitted.</p>{% endif %}
+        {% endfor %}
+        <p class="design-help">All candidates share source selections and measurement-error draws at common times; small differences can reflect Monte Carlo noise. Future SD/CV/profile inputs here describe calibration measurements. Downstream target intervals propagate the selected fitted and target-input uncertainty; they exclude scatter of additional future individual in vivo target measurements. Assumed-truth errors and coverage are model-based comparisons, not external validation or universal data-sufficiency thresholds.</p>
+        <div class="design-action-row"><button type="button" disabled>Generate report</button><span class="design-help">Report generation deferred.</span></div>
+    </section>
+</div>

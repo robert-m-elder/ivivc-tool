@@ -29,6 +29,15 @@
         const ivivcMethod = document.getElementById('ivivc_method');
         const ivivcChoices = new Map();
         let previousApproach = null;
+        const calibrationEnvironment = document.getElementById('varied_environment');
+        const calibrationApproach = document.getElementById('cal_approach');
+        const calibrationModel = document.getElementById('cal_model');
+        const calibrationMethod = document.getElementById('cal_method');
+        const calibrationRelationship = document.getElementById('cal_relationship');
+        const calibrationTarget = document.getElementById('cal_assess_target');
+        const calibrationCandidates = Array.from(root.querySelectorAll('[data-calibration-candidate]'));
+        const calibrationChoices = new Map();
+        let previousCalibrationApproach = null;
         const files = new WeakMap();
         let nextFile = 0;
         let pending = false;
@@ -39,9 +48,18 @@
             return task.value === 'study' && ['measured', 'ivivc', 'scaling'].includes(source.value);
         }
 
+        function calibrationAvailable() {
+            return task.value === 'calibration' && calibrationEnvironment &&
+                ['in_vitro', 'in_vivo', 'both'].includes(calibrationEnvironment.value);
+        }
+
+        function calculationAvailable() {
+            return planningAvailable() || calibrationAvailable();
+        }
+
         function syncButtons() {
             submit.disabled = pending;
-            if (calculate) calculate.disabled = pending || !planningAvailable();
+            if (calculate) calculate.disabled = pending || !calculationAvailable();
         }
 
         function setActive(container, active) {
@@ -51,6 +69,17 @@
             });
         }
 
+        function filterOptions(select, allowed, preferred) {
+            const options = Array.from(select.querySelectorAll('option'));
+            options.forEach(option => {
+                option.hidden = !allowed(option);
+                option.disabled = option.hidden;
+            });
+            const valid = options.filter(option => !option.disabled);
+            const choice = [preferred, select.value].find(value => valid.some(option => option.value === value));
+            select.value = choice || (valid.length ? valid[0].value : '');
+        }
+
         function syncIVIVC(available) {
             if (!ivivcApproach || !ivivcModel || !ivivcMethod) return;
             const approach = ivivcApproach.value;
@@ -58,18 +87,8 @@
                 ivivcChoices.set(previousApproach, {model: ivivcModel.value, method: ivivcMethod.value});
             }
             const remembered = previousApproach !== approach && ivivcChoices.get(approach);
-            function filter(select, allowed, preferred) {
-                const options = Array.from(select.querySelectorAll('option'));
-                options.forEach(option => {
-                    option.hidden = !allowed(option);
-                    option.disabled = option.hidden;
-                });
-                const valid = options.filter(option => !option.disabled);
-                const choice = [preferred, select.value].find(value => valid.some(option => option.value === value));
-                select.value = choice || (valid.length ? valid[0].value : '');
-            }
-            filter(ivivcModel, option => (option.dataset.ivivcApproaches || '').split(/\s+/).includes(approach), remembered && remembered.model);
-            filter(ivivcMethod, option => option.dataset.ivivcMethodApproach === approach, remembered && remembered.method);
+            filterOptions(ivivcModel, option => (option.dataset.ivivcApproaches || '').split(/\s+/).includes(approach), remembered && remembered.model);
+            filterOptions(ivivcMethod, option => option.dataset.ivivcMethodApproach === approach, remembered && remembered.method);
             const enabled = available && source.value === 'ivivc';
             root.querySelectorAll('[data-ivivc-model-fields]').forEach(group => {
                 setActive(group, enabled && approach !== 'approach3');
@@ -128,6 +147,92 @@
             });
         }
 
+        function calibrationVaries(side) {
+            return calibrationEnvironment &&
+                (calibrationEnvironment.value === 'both' || calibrationEnvironment.value === side);
+        }
+
+        function syncCalibration(available) {
+            for (const side of ['in_vitro', 'in_vivo']) {
+                const varied = calibrationVaries(side);
+                const mode = document.getElementById('cal_' + side + '_mode');
+                const sourceMode = document.getElementById('cal_' + side + '_source');
+                const observation = document.getElementById('cal_' + side + '_observation_kind');
+                const existing = !varied || Boolean(mode && mode.value === 'additions');
+                if (sourceMode) {
+                    filterOptions(sourceMode, option => option.value === 'file' ||
+                        (option.value === 'existing' && existing) ||
+                        (option.value === 'none' && !varied));
+                }
+                for (const [attribute, shown] of [
+                    ['data-calibration-mode', varied],
+                    ['data-calibration-existing', existing],
+                    ['data-calibration-source-file', sourceMode && sourceMode.value === 'file'],
+                    ['data-calibration-source-controls', sourceMode && sourceMode.value !== 'none'],
+                    ['data-calibration-future', varied],
+                    ['data-calibration-historical', varied && existing],
+                ]) {
+                    root.querySelectorAll('[' + attribute + '="' + side + '"]').forEach(group => {
+                        setActive(group, available && shown);
+                    });
+                }
+                root.querySelectorAll('[data-calibration-observation-side="' + side + '"]').forEach(group => {
+                    const kinds = (group.dataset.calibrationObservationKinds || '').split(/\s+/);
+                    setActive(group, available && varied && observation && kinds.includes(observation.value));
+                });
+            }
+            if (calibrationApproach && calibrationModel && calibrationMethod) {
+                const approach = calibrationApproach.value;
+                if (previousCalibrationApproach && previousCalibrationApproach !== approach) {
+                    calibrationChoices.set(previousCalibrationApproach,
+                        {model: calibrationModel.value, method: calibrationMethod.value});
+                }
+                const remembered = previousCalibrationApproach !== approach && calibrationChoices.get(approach);
+                filterOptions(calibrationModel, option =>
+                    (option.dataset.calibrationApproaches || '').split(/\s+/).includes(approach), remembered && remembered.model);
+                filterOptions(calibrationMethod, option =>
+                    option.dataset.calibrationMethodApproach === approach, remembered && remembered.method);
+                root.querySelectorAll('[data-calibration-interpolation]').forEach(group => {
+                    setActive(group, available && approach === 'approach1');
+                });
+                const relationship = available && calibrationRelationship && calibrationRelationship.checked;
+                root.querySelectorAll('[data-calibration-relationship]').forEach(group => {
+                    setActive(group, relationship);
+                });
+                root.querySelectorAll('[data-calibration-evaluation]').forEach(group => {
+                    const kind = group.dataset.calibrationEvaluation;
+                    setActive(group, relationship && (kind === 'time' ?
+                        approach === 'approach1' || calibrationMethod.value === 'value_ratio' :
+                        kind === 'response' && calibrationMethod.value === 'observed_response_inverse'));
+                });
+                previousCalibrationApproach = approach;
+            }
+            root.querySelectorAll('[data-calibration-target]').forEach(group => {
+                setActive(group, available && calibrationTarget && calibrationTarget.checked);
+            });
+            const activeCount = calibrationCandidates.filter(row => row.dataset.calibrationActive === 'true').length;
+            calibrationCandidates.forEach(row => {
+                const enabled = available && row.dataset.calibrationActive === 'true';
+                setActive(row, enabled);
+                for (const side of ['in_vitro', 'in_vivo']) {
+                    const sideEnabled = enabled && calibrationVaries(side);
+                    row.querySelectorAll('[data-calibration-candidate-side="' + side + '"]').forEach(group => {
+                        setActive(group, sideEnabled);
+                    });
+                    const kind = document.getElementById('cal_candidate_' + row.dataset.calibrationCandidate + '_' + side + '_kind');
+                    row.querySelectorAll('[data-calibration-schedule-side="' + side + '"]').forEach(group => {
+                        setActive(group, sideEnabled && kind && kind.value === group.dataset.calibrationScheduleKind);
+                    });
+                }
+                row.querySelectorAll('[data-remove-calibration-candidate]').forEach(button => {
+                    button.disabled = !enabled || activeCount === 1;
+                });
+            });
+            root.querySelectorAll('[data-add-calibration-candidate]').forEach(button => {
+                button.disabled = !available || activeCount >= calibrationCandidates.length;
+            });
+        }
+
         function syncInputs() {
             root.querySelectorAll('[data-design-task]').forEach(group => {
                 setActive(group, group.dataset.designTask === task.value);
@@ -146,16 +251,18 @@
             });
             syncIVIVC(available);
             syncAdaptive(available);
+            syncCalibration(calibrationAvailable());
             root.querySelectorAll('[data-observation-kind]').forEach(group => {
                 const kinds = group.dataset.observationKind.split(/\s+/);
                 setActive(group, available && observationKind && kinds.includes(observationKind.value));
             });
             root.querySelectorAll('[data-planning-availability]').forEach(note => {
-                note.textContent = available ?
+                note.textContent = calibrationAvailable() ?
+                    'Ready to compare calibration sampling candidates through the selected IVIVC workflow.' : available ?
                     (completed && completed.checked ?
                         'Ready to assess additional sampling using completed observations and the selected reference source.' :
                         'Ready to calculate a prospective study using the selected reference source.') :
-                    'Calculation supports in vivo study planning and refinement. Calibration comparisons can be imported and reviewed; their calculations are not connected yet.';
+                    'Select a supported study-planning or calibration-comparison task.';
             });
             syncTiming(available);
             syncButtons();
@@ -283,6 +390,19 @@
             updateDraftStatus();
             if (add) document.getElementById('timing_' + row.dataset.timingRow + '_kind').focus();
         });
+        root.addEventListener('click', event => {
+            const add = event.target.closest('[data-add-calibration-candidate]');
+            const remove = event.target.closest('[data-remove-calibration-candidate]');
+            if ((!add && !remove) || !calibrationAvailable() || (remove && remove.disabled)) return;
+            event.preventDefault();
+            const row = add ? calibrationCandidates.find(item => item.dataset.calibrationActive !== 'true') :
+                calibrationCandidates.find(item => item.dataset.calibrationCandidate === remove.dataset.removeCalibrationCandidate);
+            if (!row) return;
+            row.dataset.calibrationActive = add ? 'true' : 'false';
+            syncInputs();
+            updateDraftStatus();
+            if (add) document.getElementById('cal_candidate_' + row.dataset.calibrationCandidate + '_name').focus();
+        });
         task.addEventListener('change', () => {
             syncInputs();
             clearErrors();
@@ -297,12 +417,13 @@
             event.preventDefault();
             if (pending) return;
             const calculating = Boolean(calculate && event.submitter === calculate);
+            const comparisonName = task.value === 'calibration' ? 'calibration' : 'study';
             const context = calculating ? {
                 heading: 'The planning comparison could not be completed',
                 status: 'Calculation failed. Earlier displayed results remain available.',
             } : {};
-            if (calculating && !planningAvailable()) {
-                showErrors([{message: 'Choose an in vivo study with a supported reference source to calculate this workflow.'}], context);
+            if (calculating && !calculationAvailable()) {
+                showErrors([{message: 'Choose a supported study-planning or calibration-comparison task.'}], context);
                 return;
             }
             const data = new FormData(form);
@@ -311,7 +432,7 @@
             syncButtons();
             form.setAttribute('aria-busy', 'true');
             clearErrors();
-            requestStatus.textContent = calculating ? 'Calculating the study comparison. This request runs to completion.' : 'Reviewing setup.';
+            requestStatus.textContent = calculating ? 'Calculating the ' + comparisonName + ' comparison. This request runs to completion.' : 'Reviewing setup.';
             try {
                 const response = await fetch(calculating ? calculate.getAttribute('formaction') : form.action, {
                     method: 'POST', body: data, headers: {'Accept': 'application/json'},
@@ -333,8 +454,8 @@
                 updateDraftStatus();
                 const unchanged = signature() === submittedSignature;
                 requestStatus.textContent = calculating ? (unchanged ?
-                    'Study comparison calculated.' :
-                    'Submitted study comparison calculated. Inputs changed during the request; calculate again to assess the current choices.') : unchanged ?
+                    comparisonName[0].toUpperCase() + comparisonName.slice(1) + ' comparison calculated.' :
+                    'Submitted ' + comparisonName + ' comparison calculated. Inputs changed during the request; calculate again to assess the current choices.') : unchanged ?
                     'Setup reviewed. This request did not run a numerical calculation.' :
                     'Submitted settings reviewed. Inputs changed during the request; review again to check the current choices.';
                 if (unchanged) {

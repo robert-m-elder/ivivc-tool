@@ -136,12 +136,9 @@ class DesignPlanningRoutes(unittest.TestCase):
             uncertainty='individual_sd', error_source='constant', error_value='0')),
                    'reference-file__profile__error_value')
 
-    def test_numerically_unsupported_workflows_are_rejected_explicitly(self):
-        for options, field in (
-            ({'task': 'calibration'}, 'task'),
-        ):
-            with self.subTest(options=options):
-                self.error(self.calculate(content=None, **options), field)
+    def test_calibration_task_uses_its_own_required_files(self):
+        self.error(self.calculate(content=None, task='calibration'),
+                   'existing-in-vitro-file')
 
     def test_invalid_settings_and_oversized_work_are_linked_to_their_fields(self):
         for options, field in (

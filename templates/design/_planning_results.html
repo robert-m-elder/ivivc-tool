@@ -1,31 +1,4 @@
-{% macro chart(plot, title, x_label, y_label, identifier) %}
-{% if plot %}
-<figure>
-    <svg viewBox="0 0 760 300" width="100%" role="img" aria-labelledby="{{ identifier }}-title {{ identifier }}-description">
-        <title id="{{ identifier }}-title">{{ title }}</title>
-        <desc id="{{ identifier }}-description">{{ y_label }} versus {{ x_label }}. Numerical values are provided in the accompanying text and tables.</desc>
-        <rect x="70" y="25" width="650" height="210" fill="white" stroke="#d3dde5"></rect>
-        {% for position, label in plot.y_ticks %}
-        <line x1="70" y1="{{ position }}" x2="720" y2="{{ position }}" stroke="#e5ebef"></line>
-        <text x="63" y="{{ position + 4 }}" text-anchor="end" font-size="12" fill="#20313d">{{ label }}</text>
-        {% endfor %}
-        {% for position, label in plot.x_ticks %}
-        <line x1="{{ position }}" y1="235" x2="{{ position }}" y2="240" stroke="#506371"></line>
-        <text x="{{ position }}" y="258" text-anchor="middle" font-size="12" fill="#20313d">{{ label }}</text>
-        {% endfor %}
-        {% if plot.band %}<polygon points="{{ plot.band }}" fill="#b7d3d8" fill-opacity=".65"></polygon>{% endif %}
-        {% for line in plot.series %}
-        {% if line.join %}<path d="{{ line.path }}" fill="none" stroke="{{ line.color }}" stroke-width="2" stroke-dasharray="{{ line.dash }}"></path>{% endif %}
-        {% for x, y in line.circles %}<circle cx="{{ x }}" cy="{{ y }}" r="{{ 3 if line.join else 5 }}" fill="{{ line.color }}"{% if line.dash %} fill-opacity=".45"{% endif %}></circle>{% endfor %}
-        {% endfor %}
-        {% for x, y in plot.observations %}<circle cx="{{ x }}" cy="{{ y }}" r="4" fill="#20313d" stroke="white" stroke-width="1"></circle>{% endfor %}
-        <text x="395" y="286" text-anchor="middle" font-size="14" fill="#20313d">{{ x_label }}</text>
-        <text transform="translate(16 130) rotate(-90)" text-anchor="middle" font-size="13" fill="#20313d">{{ y_label }}</text>
-    </svg>
-    <figcaption class="design-help">{{ title }}. {% for line in plot.series %}<span style="color: {{ line.color }}">{{ line.label }}{% if line.dash %} (dashed){% endif %}</span>{% if not loop.last %}; {% endif %}{% endfor %}.</figcaption>
-</figure>
-{% endif %}
-{% endmacro %}
+{% from 'design/_charts.html' import chart %}
 <div data-planning-result>
     <section class="design-section" aria-labelledby="planning-result-heading">
         <h3 id="planning-result-heading">Study-planning comparison</h3>
