@@ -1,4 +1,4 @@
-"""Request-independent adapter for the first measured-reference planning workflow.
+"""Request-independent adapters for prospective study-planning workflows.
 
 This module assembles the existing numerical APIs. It does not store uploads,
 choose an IVIVC, or define a second fitting, optimization, or simulation method.
@@ -8,7 +8,7 @@ Future SD inputs use the analyzed response scale after selected preprocessing.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 import re
 
 import numpy as np
@@ -43,6 +43,7 @@ class PlanningResult:
     comparison: object
     schedules: dict
     warnings: list[str]
+    source_details: dict = field(default_factory=dict)
 
 
 def model_options() -> list[dict]:
@@ -102,8 +103,9 @@ def _times(text, field, *, allow_empty=True):
 def _settings(form):
     if form.get('task', 'study') != 'study':
         raise PlanningInputError('Numerical planning currently supports the in vivo study task.', 'task')
-    if form.get('reference_source', 'measured') != 'measured':
-        raise PlanningInputError('Numerical planning currently requires measured in vivo reference data.', 'reference_source')
+    reference_source = form.get('reference_source', 'measured')
+    if reference_source not in ('measured', 'ivivc', 'scaling'):
+        raise PlanningInputError('Select a supported source of expected in vivo behavior.', 'reference_source')
     if _checked(form, 'has_completed'):
         raise PlanningInputError('Completed target-study observations are not connected to planning yet. Use prior reference data for a prospective study.', 'has_completed')
     models = {item['id'] for item in model_options()}
@@ -117,7 +119,7 @@ def _settings(form):
     if kind not in ('constant_sd', 'constant_cv', 'time_profile_sd'):
         raise PlanningInputError('Select a supported future measurement model.', 'observation_kind')
     settings = {
-        'task': 'study', 'reference_source': 'measured', 'model_name': model,
+        'task': 'study', 'reference_source': reference_source, 'model_name': model,
         'normalization': normalization, 'one_minus': _checked(form, 'one_minus'),
         'observation_kind': kind,
         'first_time': _number(form, 'first_time', 0., minimum=0.),
@@ -146,15 +148,7 @@ def _settings(form):
     return settings
 
 
-def run_measured_planning(source: TimeCourse, form: Mapping, *, profile=None) -> PlanningResult:
-    """Reconstruct one prospective measured-reference comparison from current inputs.
-
-    Reference uncertainty is sampled from the source fit. Optimized schedules
-    use local I-optimality at its central fit; complete reference draws and new
-    independent measurement errors enter the shared Monte Carlo comparison.
-    Counts refer to all distinct planned times, including fixed times.
-    """
-    settings = _settings(form)
+def _planning_constraints(settings, form):
     first, last, step = (settings[key] for key in ('first_time', 'last_time', 'time_step'))
     span_steps = (last - first) / step
     if not np.isfinite(span_steps) or span_steps > 999 + 1e-10:
@@ -197,6 +191,94 @@ def run_measured_planning(source: TimeCourse, form: Mapping, *, profile=None) ->
         raise PlanningInputError('Limit each request to 20000 simulated refits; reduce simulations, schedule sizes, or manual schedules.', 'n_simulations')
     if (len(candidates) + len(fixed)) * settings['replicates_per_time'] * settings['n_simulations'] > 2_000_000:
         raise PlanningInputError('The candidate grid, replicates, and simulations are too large for one synchronous request. Reduce one of these settings.', 'n_simulations')
+    settings['fixed_times'] = fixed.tolist()
+    settings['candidate_time_count'] = len(candidates)
+    settings['manual_schedules'] = {key: value.tolist() for key, value in manual.items()}
+    return constraints, manual
+
+
+def _future_observation_model(settings, profile):
+    if settings['observation_kind'] == 'time_profile_sd':
+        if not isinstance(profile, ObservationModel) or profile.kind != 'time_profile_sd':
+            raise PlanningInputError('Import a future individual-SD profile for the selected variability model.', 'future-sd-profile-file')
+        observation_model = replace(profile, replicates_per_time=settings['replicates_per_time'], minimum_sd=settings['minimum_sd'])
+    else:
+        observation_model = ObservationModel(
+            settings['observation_kind'], settings['observation_value'],
+            replicates_per_time=settings['replicates_per_time'], minimum_sd=settings['minimum_sd'],
+        )
+    return observation_model
+
+
+def _assess_reference(reference, settings, constraints, manual, observation_model, *, initial_parameters=None):
+    """Use one optimization and simulation path for every reference source."""
+    try:
+        reference_model = fit_reference_model_ensemble(
+            reference, model_name=settings['model_name'], initial_parameters=initial_parameters,
+            fallback_grid_search=False,
+        )
+    except (ValueError, RuntimeError, FloatingPointError) as error:
+        raise PlanningInputError(f'The study analysis model could not represent the reference: {error}', 'model_name') from error
+    sigma = observation_model.standard_deviation(reference.evaluate_central(constraints.all_available_times), times=constraints.all_available_times)
+    if not np.isfinite(sigma).all() or np.any(sigma <= 0):
+        field = ('future-sd-profile-file' if observation_model.kind == 'time_profile_sd'
+                 else 'minimum_sd' if observation_model.kind == 'constant_cv' else 'observation_value')
+        raise PlanningInputError('Future SD must be positive at every selectable time. Check the selected variability model.', field)
+    try:
+        optimization = optimize_local_i_optimal_designs(
+            reference_model, observation_model, constraints,
+            refine=True, max_exchange_iterations=10,
+        )
+    except (ValueError, RuntimeError, FloatingPointError) as error:
+        raise PlanningInputError(f'The requested schedules could not be generated: {error}', 'max_times') from error
+    schedules = {}
+    for count in range(settings['min_times'], settings['max_times'] + 1):
+        schedules[f'Suggested · {count} times'] = optimization.design_for_n(count, refined=True).times.copy()
+        if settings['include_even']:
+            try:
+                schedules[f'Evenly spaced · {count} times'] = equally_spaced_design(constraints, count)
+            except ValueError as error:
+                raise PlanningInputError(f'Evenly spaced comparison could not be generated: {error}', 'include_even') from error
+    for label, values in manual.items():
+        schedules['Manual · ' + label] = values.copy()
+    try:
+        # Source-parameter sampling uses the user seed. Give measurement
+        # simulation a separate reproducible stream while sharing it across
+        # all schedules in this comparison.
+        simulation_seed = int(np.random.SeedSequence(
+            [settings['random_seed'], 1]).generate_state(1)[0])
+        comparison = compare_designs_by_simulation(
+            reference, schedules, observation_model, model_name=settings['model_name'],
+            constraints=constraints, reference_model=reference_model,
+            n_simulations=settings['n_simulations'], random_state=simulation_seed,
+            fallback_grid_search=False,
+        )
+    except (ValueError, RuntimeError, FloatingPointError) as error:
+        raise PlanningInputError(f'The simulation comparison could not be completed: {error}', 'n_simulations') from error
+    return reference_model, optimization, comparison, schedules
+
+
+def _comparison_warnings(reference, reference_model, optimization, comparison, settings):
+    warnings = []
+    if reference.n_valid_draws < reference.n_draws:
+        warnings.append(f'{reference.n_draws - reference.n_valid_draws} reference draws were unavailable over the planning range and excluded.')
+    if reference_model.n_valid_draws < reference_model.n_draws:
+        warnings.append(f'{reference_model.n_draws - reference_model.n_valid_draws} reference trajectories could not be fitted by the analysis model.')
+    if np.any([summary.failure_rate > 0 for summary in comparison.summaries.values()]):
+        warnings.append('Some simulated studies could not be fitted. Recovery-error summaries use successful fits; compare their failure rates as well.')
+    if any(not item.score.is_full_rank for item in optimization.refined_steps):
+        warnings.append('At least one suggested schedule has rank-deficient information at the central reference fit. Its parameters may not be distinguishable from those sampling times.')
+    if settings['normalization'] != 'none':
+        warnings.append('Response normalization constants are treated as fixed. Future SD and minimum SD must be supplied on this analyzed response scale.')
+    return warnings
+
+
+def run_measured_planning(source: TimeCourse, form: Mapping, *, profile=None) -> PlanningResult:
+    """Construct a prospective study from measured in vivo reference data."""
+    settings = _settings(form)
+    if settings['reference_source'] != 'measured':
+        raise PlanningInputError('Use the corresponding reference-source workflow for these inputs.', 'reference_source')
+    constraints, manual = _planning_constraints(settings, form)
     if not isinstance(source, TimeCourse):
         raise TypeError('source must be an imported TimeCourse.')
     if len(source.time) > 5000:
@@ -221,18 +303,7 @@ def run_measured_planning(source: TimeCourse, form: Mapping, *, profile=None) ->
         raise PlanningInputError(f'Response preprocessing could not be applied: {error}', 'normalization') from error
     if not np.isfinite(analyzed.value).all():
         raise PlanningInputError('Normalization produced nonfinite values; check the initial value or response range.', 'normalization')
-    if settings['observation_kind'] == 'time_profile_sd':
-        if not isinstance(profile, ObservationModel) or profile.kind != 'time_profile_sd':
-            raise PlanningInputError('Import a future individual-SD profile for the selected variability model.', 'future-sd-profile-file')
-        observation_model = replace(profile, replicates_per_time=settings['replicates_per_time'], minimum_sd=settings['minimum_sd'])
-    else:
-        observation_model = ObservationModel(
-            settings['observation_kind'], settings['observation_value'],
-            replicates_per_time=settings['replicates_per_time'], minimum_sd=settings['minimum_sd'],
-        )
-    settings['fixed_times'] = fixed.tolist()
-    settings['candidate_time_count'] = len(candidates)
-    settings['manual_schedules'] = {key: value.tolist() for key, value in manual.items()}
+    observation_model = _future_observation_model(settings, profile)
     try:
         fit = fit_reference_profile(analyzed, model_name=settings['model_name'], analysis_config={
             'cv_scheme': 'none', 'grid_search_num_points': 25, 'grid_search_num_cores': 1,
@@ -242,68 +313,58 @@ def run_measured_planning(source: TimeCourse, form: Mapping, *, profile=None) ->
         raise PlanningInputError(f'Reference fitting failed: {error}', 'model_name') from error
     if not np.isfinite(fit.covariance).all():
         raise PlanningInputError('Fitted parameter covariance is unavailable. Check the reference observations or try a simpler model.', 'model_name')
-    evaluation_grid = np.linspace(first, last, 101)
+    evaluation_grid = np.linspace(settings['first_time'], settings['last_time'], 101)
     try:
         reference = reference_from_profile_fit(
             fit, evaluation_grid, n_samples=settings['reference_draws'], random_state=settings['random_seed'],
         )
-        reference_model = fit_reference_model_ensemble(
-            reference, model_name=settings['model_name'], initial_parameters=fit.parameter_vector,
-            fallback_grid_search=False,
-        )
     except (ValueError, RuntimeError, FloatingPointError) as error:
         raise PlanningInputError(f'The reference ensemble could not be constructed over the planning range: {error}', 'model_name') from error
-    sigma = observation_model.standard_deviation(reference.evaluate_central(constraints.all_available_times), times=constraints.all_available_times)
-    if not np.isfinite(sigma).all() or np.any(sigma <= 0):
-        field = ('future-sd-profile-file' if observation_model.kind == 'time_profile_sd'
-                 else 'minimum_sd' if observation_model.kind == 'constant_cv' else 'observation_value')
-        raise PlanningInputError('Future SD must be positive at every selectable time. Check the selected variability model.', field)
-    try:
-        optimization = optimize_local_i_optimal_designs(
-            reference_model, observation_model, constraints,
-            refine=True, max_exchange_iterations=10,
-        )
-    except (ValueError, RuntimeError, FloatingPointError) as error:
-        raise PlanningInputError(f'The requested schedules could not be generated: {error}', 'max_times') from error
-    schedules = {}
-    for count in range(settings['min_times'], settings['max_times'] + 1):
-        schedules[f'Suggested · {count} times'] = optimization.design_for_n(count, refined=True).times.copy()
-        if settings['include_even']:
-            try:
-                schedules[f'Evenly spaced · {count} times'] = equally_spaced_design(constraints, count)
-            except ValueError as error:
-                raise PlanningInputError(f'Evenly spaced comparison could not be generated: {error}', 'include_even') from error
-    for label, values in manual.items():
-        schedules['Manual · ' + label] = values.copy()
-    try:
-        comparison = compare_designs_by_simulation(
-            reference, schedules, observation_model, model_name=settings['model_name'],
-            constraints=constraints, reference_model=reference_model,
-            n_simulations=settings['n_simulations'], random_state=settings['random_seed'],
-            fallback_grid_search=False,
-        )
-    except (ValueError, RuntimeError, FloatingPointError) as error:
-        raise PlanningInputError(f'The simulation comparison could not be completed: {error}', 'n_simulations') from error
-    warnings = []
-    if first < np.min(analyzed.time) or last > np.max(analyzed.time):
+    reference_model, optimization, comparison, schedules = _assess_reference(
+        reference, settings, constraints, manual, observation_model,
+        initial_parameters=fit.parameter_vector,
+    )
+    warnings = _comparison_warnings(reference, reference_model, optimization, comparison, settings)
+    if settings['first_time'] < np.min(analyzed.time) or settings['last_time'] > np.max(analyzed.time):
         warnings.append('The planning range extends beyond the measured reference times. Results there depend on extrapolation of the selected fitted model.')
-    covariance_rank = np.linalg.matrix_rank(fit.covariance)
-    if covariance_rank < fit.n_parameters:
+    if np.linalg.matrix_rank(fit.covariance) < fit.n_parameters:
         warnings.append('The fitted parameter covariance is rank deficient. Reference draws may underrepresent uncertainty; review the data and model in the IVIVC app.')
-    if reference.n_valid_draws < reference.n_draws:
-        warnings.append(f'{reference.n_draws - reference.n_valid_draws} reference draws were unavailable over the planning range and excluded.')
     if reference.n_draws < settings['reference_draws']:
         warnings.append(f'Only {reference.n_draws} of {settings["reference_draws"]} requested reference parameter draws were available.')
-    if reference_model.n_valid_draws < reference_model.n_draws:
-        warnings.append(f'{reference_model.n_draws - reference_model.n_valid_draws} reference trajectories could not be fitted by the analysis model.')
-    if np.any([summary.failure_rate > 0 for summary in comparison.summaries.values()]):
-        warnings.append('Some simulated studies could not be fitted. Recovery-error summaries use successful fits; compare their failure rates as well.')
-    if any(not item.score.is_full_rank for item in optimization.refined_steps):
-        warnings.append('At least one suggested schedule has rank-deficient information at the central reference fit. Its parameters may not be distinguishable from those sampling times.')
-    if settings['normalization'] != 'none':
-        warnings.append('Response normalization constants are treated as fixed. Future SD and minimum SD must be supplied on this analyzed response scale.')
     if any(record.name == 'initial_value' and not record.in_vitro_parameters.get('applied', True)
            for record in preprocessing.normalizations):
         warnings.append('Initial response was zero; initial-value normalization was not applied.')
     return PlanningResult(settings, analyzed, preprocessing, fit, reference, reference_model,
                           observation_model, constraints, optimization, comparison, schedules, warnings)
+
+
+def run_reference_planning(form: Mapping, *, in_vitro=None, in_vivo=None, prediction=None,
+                           scaling_source=None, distribution=None, profile=None) -> PlanningResult:
+    """Construct a prospective study using IVIVC or empirical time scaling.
+
+    Inputs are typed, freshly imported data. Source construction applies shared
+    preprocessing exactly once; the generated reference is not normalized again.
+    Future measurement variability enters only the common planning assessment.
+    """
+    from .design_reference_sources import build_ivivc_reference, build_scaling_reference
+
+    settings = _settings(form)
+    if settings['reference_source'] == 'measured':
+        raise PlanningInputError('Supply measured data through the measured-reference workflow.', 'reference_source')
+    constraints, manual = _planning_constraints(settings, form)
+    observation_model = _future_observation_model(settings, profile)
+    grid = np.linspace(settings['first_time'], settings['last_time'], 101)
+    if settings['reference_source'] == 'ivivc':
+        inputs = build_ivivc_reference(in_vitro, in_vivo, prediction, form, settings, grid)
+    else:
+        inputs = build_scaling_reference(scaling_source, distribution, form, settings, grid)
+    reference = inputs.reference
+    reference_model, optimization, comparison, schedules = _assess_reference(
+        reference, settings, constraints, manual, observation_model,
+    )
+    warnings = list(inputs.warnings) + _comparison_warnings(
+        reference, reference_model, optimization, comparison, settings,
+    )
+    return PlanningResult(settings, inputs.analyzed_source, inputs.preprocessing, inputs.fit,
+                          reference, reference_model, observation_model, constraints,
+                          optimization, comparison, schedules, warnings, inputs.details)

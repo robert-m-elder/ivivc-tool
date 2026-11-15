@@ -21,6 +21,11 @@
         const calculate = document.getElementById('calculate-comparison');
         const completed = document.getElementById('has_completed');
         const observationKind = document.getElementById('observation_kind');
+        const ivivcApproach = document.getElementById('ivivc_approach');
+        const ivivcModel = document.getElementById('ivivc_model');
+        const ivivcMethod = document.getElementById('ivivc_method');
+        const ivivcChoices = new Map();
+        let previousApproach = null;
         const files = new WeakMap();
         let nextFile = 0;
         let pending = false;
@@ -28,7 +33,7 @@
         let calculatedSignature = null;
 
         function planningAvailable() {
-            return task.value === 'study' && source.value === 'measured' &&
+            return task.value === 'study' && ['measured', 'ivivc', 'scaling'].includes(source.value) &&
                 !(completed && completed.checked);
         }
 
@@ -44,6 +49,35 @@
             });
         }
 
+        function syncIVIVC(available) {
+            if (!ivivcApproach || !ivivcModel || !ivivcMethod) return;
+            const approach = ivivcApproach.value;
+            if (previousApproach && previousApproach !== approach) {
+                ivivcChoices.set(previousApproach, {model: ivivcModel.value, method: ivivcMethod.value});
+            }
+            const remembered = previousApproach !== approach && ivivcChoices.get(approach);
+            function filter(select, allowed, preferred) {
+                const options = Array.from(select.querySelectorAll('option'));
+                options.forEach(option => {
+                    option.hidden = !allowed(option);
+                    option.disabled = option.hidden;
+                });
+                const valid = options.filter(option => !option.disabled);
+                const choice = [preferred, select.value].find(value => valid.some(option => option.value === value));
+                select.value = choice || (valid.length ? valid[0].value : '');
+            }
+            filter(ivivcModel, option => (option.dataset.ivivcApproaches || '').split(/\s+/).includes(approach), remembered && remembered.model);
+            filter(ivivcMethod, option => option.dataset.ivivcMethodApproach === approach, remembered && remembered.method);
+            const enabled = available && source.value === 'ivivc';
+            root.querySelectorAll('[data-ivivc-model-fields]').forEach(group => {
+                setActive(group, enabled && approach !== 'approach3');
+            });
+            root.querySelectorAll('[data-ivivc-interpolation-fields]').forEach(group => {
+                setActive(group, enabled && approach !== 'approach2');
+            });
+            previousApproach = approach;
+        }
+
         function syncInputs() {
             root.querySelectorAll('[data-design-task]').forEach(group => {
                 setActive(group, group.dataset.designTask === task.value);
@@ -57,14 +91,18 @@
                     field.disabled = !available;
                 });
             });
+            root.querySelectorAll('[data-reference-options]').forEach(group => {
+                setActive(group, available && group.dataset.referenceOptions === source.value);
+            });
+            syncIVIVC(available);
             root.querySelectorAll('[data-observation-kind]').forEach(group => {
                 const kinds = group.dataset.observationKind.split(/\s+/);
                 setActive(group, available && observationKind && kinds.includes(observationKind.value));
             });
             root.querySelectorAll('[data-planning-availability]').forEach(note => {
                 note.textContent = available ?
-                    'Ready to calculate a prospective study using measured in vivo reference data.' :
-                    'Numerical planning currently supports measured in vivo reference data for a prospective study. Other sources, completed-study updates, and calibration comparisons can be imported and reviewed; their calculations are not connected yet.';
+                    'Ready to calculate a prospective study using the selected reference source.' :
+                    'Calculation supports prospective in vivo studies. Completed-study updates and calibration comparisons can be imported and reviewed; their calculations are not connected yet.';
             });
             syncButtons();
             root.dispatchEvent(new CustomEvent('design-visibility-updated'));
@@ -197,7 +235,7 @@
                 status: 'Calculation failed. Earlier displayed results remain available.',
             } : {};
             if (calculating && !planningAvailable()) {
-                showErrors([{message: 'Choose measured in vivo reference data without completed target-study observations to calculate this workflow.'}], context);
+                showErrors([{message: 'Choose an in vivo study with a supported reference source and without completed target-study observations to calculate this workflow.'}], context);
                 return;
             }
             const data = new FormData(form);

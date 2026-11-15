@@ -29,7 +29,7 @@
 <div data-planning-result>
     <section class="design-section" aria-labelledby="planning-result-heading">
         <h3 id="planning-result-heading">Study-planning comparison</h3>
-        <p>Measured in vivo reference: <strong>{{ source_filename }}</strong>. These results retain the inputs submitted for this calculation.</p>
+        <p>{{ source_label }}{% if source_filename %}: <strong>{{ source_filename }}</strong>{% endif %}. These results retain the inputs submitted for this calculation.</p>
         <p class="design-help">Suggested schedules use a local information criterion for the chosen fitted curve, followed by coordinate exchange. This search does not establish a globally optimal schedule. Simulated recovery depends on the reference, model, and future measurement assumptions.</p>
         {% if warnings %}<aside class="design-notice" aria-labelledby="planning-cautions-heading">
             <h4 id="planning-cautions-heading">Interpretation and cautions</h4>
@@ -38,9 +38,11 @@
     </section>
 
     <section class="design-section" aria-labelledby="planning-reference-result-heading">
-        <h3 id="planning-reference-result-heading">Reference curve and fitted uncertainty</h3>
-        {{ chart(reference_plot, 'Fitted reference and pointwise 2.5th–97.5th percentiles', 'Time', 'Analyzed response', 'planning-reference-plot') }}
-        <p class="design-help">Dark points are the supplied reference observations after preprocessing. The shaded band summarizes usable complete reference draws sampled from fitted parameter uncertainty. It excludes future measurement variability and is not a simultaneous band or a range for individual future measurements.</p>
+        <h3 id="planning-reference-result-heading">Expected in vivo reference and uncertainty</h3>
+        {{ chart(reference_plot, 'Central reference and pointwise 2.5th–97.5th percentiles' if reference_range_available else 'Central reference; no sampled uncertainty range', 'In vivo time', 'Analyzed response', 'planning-reference-plot') }}
+        {% if source_kind == 'measured' %}<p class="design-help">Dark points are the supplied reference observations after preprocessing.</p>{% endif %}
+        {% if reference_range_available %}<p class="design-help">The shaded band summarizes pointwise weighted percentiles of usable complete reference trajectories. {% if source_kind == 'scaling' %}These preserve the supplied empirical time-scale weights and source-fit parameter uncertainty.{% elif source_kind == 'ivivc' %}These retain the uncertainty supported by the selected IVIVC approach and prediction method.{% else %}These are sampled from fitted parameter uncertainty.{% endif %} The band excludes future measurement variability and is not a simultaneous band or a range for individual future measurements.</p>
+        {% else %}<p class="design-help">One complete reference trajectory is available. No sampled reference-uncertainty band is displayed. Future measurement variability still enters the study simulations; a single reference curve does not establish that the underlying behavior is known.</p>{% endif %}
         <div class="design-preview-table">
             <table class="design-settings-table">
                 <caption>Milestones relative to the response at the first planning time</caption>
@@ -50,6 +52,32 @@
         </div>
         <p class="design-help">T50 and T90 mean 50% and 90% decrease from that baseline. Reference weight describes uncertainty in the assumed curve, not a fraction of animals. Trajectories that do not reach a milestone remain beyond the horizon when determining its median. A dash indicates unavailable information. These milestones do not determine the suggested schedules.</p>
     </section>
+
+    {% if source_details_rows or source_plots or source_fit_rows %}
+    <section class="design-section" aria-labelledby="planning-source-details-heading">
+        <h3 id="planning-source-details-heading">How the reference was constructed</h3>
+        {% if source_details_rows %}<div class="design-preview-table"><table class="design-settings-table">
+            <caption>Source selection and reference construction</caption>
+            <tbody>{% for label, value in source_details_rows %}<tr><th scope="row">{{ label }}</th><td>{{ value }}</td></tr>{% endfor %}</tbody>
+        </table></div>{% endif %}
+        {% if scale_records %}<div class="design-preview-table"><table>
+            <caption>Empirical ratio records and normalized weights</caption>
+            <thead><tr><th scope="col">Record</th><th scope="col">In vivo / in vitro ratio</th><th scope="col">Weight</th><th scope="col">Source identifier</th></tr></thead>
+            <tbody>{% for record in scale_records %}<tr><th scope="row">{{ record.row }}</th><td>{{ record.ratio }}</td><td>{{ record.weight }}</td><td>{{ record.source }}</td></tr>{% endfor %}</tbody>
+        </table></div>
+        <p class="design-help">Showing {{ scale_records|length }} of {{ scale_record_count }} supplied records. All positive-weight records enter the reference; zero-weight records and duplicate ratios remain in the source data.</p>{% endif %}
+        {% for source_plot in source_plots %}
+        {{ chart(source_plot.plot, source_plot.title, source_plot.x_label, 'Analyzed source response', source_plot.identifier) }}
+        {% endfor %}
+        {% if source_plots %}<p class="design-help">Source points and fitted curves are shown on their own time axes after the selected preprocessing. In vitro source observations are not in vivo reference measurements.</p>{% endif %}
+        {% if source_fit_rows %}<div class="design-preview-table"><table>
+            <caption>Source fit parameters; standard errors describe fitted parameters</caption>
+            <thead><tr><th scope="col">Fit</th><th scope="col">Parameter</th><th scope="col">Estimate</th><th scope="col">Standard error</th></tr></thead>
+            <tbody>{% for row in source_fit_rows %}<tr><th scope="row">{{ row.label }}</th><td>{{ row.parameter }}</td><td>{{ row.value }}</td><td>{{ row.se }}</td></tr>{% endfor %}</tbody>
+        </table></div>{% endif %}
+        {% if source_kind == 'ivivc' %}<p class="design-help">This is a basic preview of the selected IVIVC. Examine the calibration data, model choices, and detailed diagnostics in the IVIVC app when interpretation or fit quality is uncertain. The study analysis model below is a separate choice from the IVIVC model.</p>{% elif source_kind == 'scaling' %}<p class="design-help">Empirical scale weights express the supplied assumptions about transferable time scaling. The fitted in vitro source and empirical scale are assumed independent. Their complete reference curves are combined without resampling the empirical ratios or adding future measurement noise.</p>{% endif %}
+    </section>
+    {% endif %}
 
     <section class="design-section" aria-labelledby="planning-performance-heading">
         <h3 id="planning-performance-heading">Curve recovery versus study size</h3>
@@ -71,10 +99,21 @@
 
     <section class="design-section" aria-labelledby="planning-settings-heading">
         <h3 id="planning-settings-heading">Inputs used for this calculation</h3>
+        {% for imported in source_summaries %}
+        {% set summary = imported.get('summary', imported) %}
+        <h4>{{ imported.get('label', 'Source input') }}</h4>
+        <p class="design-help">File: {{ imported.get('filename', summary.get('filename', '')) }}{% if imported.get('worksheet', summary.get('worksheet')) %} · Worksheet: {{ imported.get('worksheet', summary.get('worksheet')) }}{% endif %}.</p>
+        {% if summary.get('interpretation') %}<p>{{ summary.interpretation }}</p>{% endif %}
+        {% if summary.get('mapping') %}<p class="design-help">Mapping: {% for label, value in summary.mapping.items() %}{{ label }} → {{ value }}{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
+        {% if summary.get('retained_rows') is not none %}<p class="design-help">Rows: {{ summary.retained_rows }} retained, {{ summary.get('omitted_rows', 0) }} omitted.</p>{% endif %}
+        {% if summary.get('response_units') %}<p class="design-help">Supplied response units: {{ summary.response_units }}. Normalized outputs use the analyzed response scale.</p>{% endif %}
+        {% endfor %}
+        {% if not source_summaries %}
         {% if source_summary.get('worksheet') %}<p>Reference worksheet: {{ source_summary.worksheet }}.</p>{% endif %}
         {% if source_summary.get('interpretation') %}<p>{{ source_summary.interpretation }}</p>{% endif %}
         {% if source_summary.get('mapping') %}<p class="design-help">Reference mapping: {% for label, value in source_summary.mapping.items() %}{{ label }} → {{ value }}{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
         {% if source_summary.get('retained_rows') %}<p class="design-help">Reference rows: {{ source_summary.retained_rows }} retained, {{ source_summary.omitted_rows }} omitted.</p>{% endif %}
+        {% endif %}
         {% if profile_summary %}
         <p class="design-help">Future SD profile{% if profile_summary.get('filename') %}: {{ profile_summary.filename }}{% endif %}{% if profile_summary.get('worksheet') %} · Worksheet: {{ profile_summary.worksheet }}{% endif %}. Individual SD uses the analyzed response scale.</p>
         {% if profile_summary.get('mapping') %}<p class="design-help">Profile mapping: {% for label, value in profile_summary.mapping.items() %}{{ label }} → {{ value }}{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
@@ -85,7 +124,7 @@
             <tbody>{% for label, value in settings_rows %}<tr><th scope="row">{{ label }}</th><td>{{ value }}</td></tr>{% endfor %}</tbody>
         </table></div>
         {% if ranks %}<p class="design-help">Local information rank for suggested schedules: {% for rank in ranks %}{{ rank.number_of_times }} times: {{ rank.rank }}/{{ rank.parameters }} parameters{% if not loop.last %}; {% endif %}{% endfor %}. Full rank alone does not establish adequate precision or scientific plausibility.</p>{% endif %}
-        <p class="design-help">Historical observation uncertainty determines the source fit and reference uncertainty. Future individual SD/CV and replicate counts determine new measurement simulation and refitting. They are separate inputs. Response normalization constants are treated as fixed.</p>
+        <p class="design-help">Historical observation uncertainty is used only where supported by the selected source analysis. Future individual SD/CV and replicate counts determine new measurement simulation and refitting, separately from the reference uncertainty. Response normalization constants are treated as fixed.</p>
         <div class="design-action-row"><button type="button" disabled>Generate report</button><span class="design-help">Report generation deferred.</span></div>
     </section>
 </div>

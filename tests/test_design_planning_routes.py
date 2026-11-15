@@ -139,8 +139,6 @@ class DesignPlanningRoutes(unittest.TestCase):
     def test_numerically_unsupported_workflows_are_rejected_explicitly(self):
         for options, field in (
             ({'task': 'calibration'}, 'task'),
-            ({'reference_source': 'ivivc'}, 'reference_source'),
-            ({'reference_source': 'scaling'}, 'reference_source'),
             ({'has_completed': 'on'}, 'has_completed'),
         ):
             with self.subTest(options=options):

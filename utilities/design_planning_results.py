@@ -1,4 +1,4 @@
-"""Presentation values for the request-scoped measured-reference comparison.
+"""Presentation values for request-scoped study-planning comparisons.
 
 Plot geometry contains finite numbers only. Templates escape all uploaded names
 and text, and render the small SVG plots without remote scripts or new packages.
@@ -89,11 +89,18 @@ def _reference_band(reference):
             for q in (.025, .975)]
 
 
-def present_planning_result(result, *, source_filename, source_summary=None, profile_summary=None):
+def present_planning_result(result, *, source_filename=None, source_summary=None,
+                            profile_summary=None, source_summaries=None):
     """Return template context without changing the calculation or ranking designs."""
     settings = result.settings
     reference = result.reference
     source = result.analyzed_source
+    details = getattr(result, 'source_details', {}) or {}
+    source_kind = details.get('kind', settings.get('reference_source', 'measured'))
+    source_label = details.get('label', {
+        'measured': 'Measured in vivo reference', 'ivivc': 'IVIVC-derived in vivo reference',
+        'scaling': 'Empirically time-scaled in vivo reference',
+    }.get(source_kind, 'In vivo reference'))
     warnings = list(result.warnings)
     replicates = int(settings['replicates_per_time'])
     rows, performance = [], {}
@@ -124,13 +131,36 @@ def present_planning_result(result, *, source_filename, source_summary=None, pro
             lines.append({'label': f'{kind}: {metric}', 'color': colors[kind],
                           'dash': '' if index == 1 else '6 4', 'join': kind != 'Manual',
                           'values': [(value[0], value[index]) for value in values]})
-    lower, upper = _reference_band(reference)
+    available_draws = np.count_nonzero(reference.valid_draws & (reference.draw_weights > 0))
+    reference_range_available = available_draws > 1
+    if reference_range_available:
+        lower, upper = _reference_band(reference)
+        reference_band = list(zip(reference.time_grid, lower, upper))
+    else:
+        reference_band = None
+        warnings.append('Only one usable reference trajectory is available. It supplies no '
+                        'sampled reference-uncertainty range; this does not mean the true curve is known.')
     reference_plot = _plot(
         [{'label': 'Central reference', 'color': '#24535c', 'dash': '', 'join': True,
           'values': list(zip(reference.time_grid, reference.central_curve))}],
-        band=list(zip(reference.time_grid, lower, upper)),
-        observations=list(zip(source.time, source.value)),
+        band=reference_band,
+        observations=(list(zip(source.time, source.value))
+                      if source_kind == 'measured' and source is not None else None),
     )
+    source_plots = []
+    for index, curve in enumerate(details.get('source_curves', ())):
+        series = []
+        if curve.get('fitted_time') is not None and curve.get('fitted_value') is not None:
+            series.append({'label': 'Fitted source curve', 'color': '#24535c', 'dash': '',
+                           'join': True, 'values': list(zip(curve['fitted_time'], curve['fitted_value']))})
+        environment = curve.get('environment', '')
+        x_label = ('In vivo time' if environment == 'in_vivo' else
+                   'In vitro time' if environment == 'in_vitro' else 'Source time')
+        source_plots.append({
+            'title': curve.get('label', 'Source data'), 'x_label': x_label,
+            'identifier': f'planning-source-{index}',
+            'plot': _plot(series, observations=list(zip(curve['time'], curve['value']))),
+        })
     endpoints = []
     for label, degraded_fraction in (('T50', .5), ('T90', .9)):
         milestone = reference_crossing_time_summary(
@@ -144,8 +174,9 @@ def present_planning_result(result, *, source_filename, source_summary=None, pro
                           'reached': _percent(milestone.reached_weight)
                           if milestone.status != 'invalid_reference' else '—',
                           'median': _number(milestone.deadline), 'status': milestone.message})
-    source_range = float(np.min(source.time)), float(np.max(source.time))
-    if reference.time_grid[0] < source_range[0] or reference.time_grid[-1] > source_range[1]:
+    source_range = ((float(np.min(source.time)), float(np.max(source.time)))
+                    if source_kind == 'measured' and source is not None else None)
+    if source_range is not None and (reference.time_grid[0] < source_range[0] or reference.time_grid[-1] > source_range[1]):
         warnings.append('The planning horizon extends beyond the measured time range. '
                         'Curve recovery there depends on the chosen model and its extrapolation.')
     if reference.n_valid_draws < reference.n_draws:
@@ -181,23 +212,43 @@ def present_planning_result(result, *, source_filename, source_summary=None, pro
     if settings.get('one_minus'):
         normalization += '; apply one minus response'
     requested = settings['reference_draws']
+    settings_rows = [
+        ('Model', settings['model_name']), ('Normalization', normalization),
+        ('Future variability', future), ('Independent replicates at each time', str(replicates)),
+        ('Minimum future individual SD', _number(settings['minimum_sd'])),
+        ('Planning and recovery evaluation range', f'{_number(reference.time_grid[0])}–{_number(reference.time_grid[-1])}'),
+    ]
+    if source_range is not None:
+        settings_rows.append(('Measured time range', f'{_number(source_range[0])}–{_number(source_range[1])}'))
+    settings_rows.extend([
+        ('Candidate-time grid', f'{_number(settings["first_time"])} to {_number(settings["last_time"])} in steps of {_number(settings["time_step"])}'),
+        ('Fixed proposed times', ', '.join(_number(value) for value in result.constraints.fixed_times) or 'None'),
+        ('Requested parameter draws per active ratio' if source_kind == 'scaling' else
+         'Requested reference draws', str(requested)),
+        ('Usable reference draws', f'{reference.n_valid_draws} of {reference.n_draws} generated'),
+        ('Usable analysis-model draws', f'{result.reference_model.n_valid_draws} of {result.reference_model.n_draws}'),
+        ('Monte Carlo studies per schedule', str(settings['n_simulations'])),
+        ('Random seed', str(settings['random_seed'])),
+    ])
+    scale_records = []
+    ratios, scale_weights = details.get('ratios', []), details.get('weights', [])
+    identifiers = details.get('source_ids')
+    for index, (ratio, weight) in enumerate(zip(ratios[:10], scale_weights[:10])):
+        scale_records.append({'row': index + 1, 'ratio': _number(ratio),
+                              'weight': _number(weight),
+                              'source': identifiers[index] if identifiers is not None else '—'})
     return {
         'source_filename': source_filename, 'source_summary': source_summary or {},
+        'source_summaries': source_summaries or [], 'source_kind': source_kind,
+        'source_label': source_label, 'source_plots': source_plots,
+        'scale_records': scale_records, 'scale_record_count': len(ratios),
+        'source_details_rows': [(label, _number(value) if isinstance(value, (int, float, np.number))
+                                else value) for label, value in details.get('rows', [])],
+        'source_fit_rows': [{**row, 'value': _number(row.get('value')),
+                             'se': _number(row.get('se'))} for row in details.get('fit_rows', [])],
+        'reference_range_available': reference_range_available,
         'profile_summary': profile_summary or {}, 'rows': rows,
         'reference_plot': reference_plot, 'performance_plot': _plot(lines),
         'warnings': list(dict.fromkeys(warnings)), 'endpoints': endpoints, 'ranks': ranks,
-        'settings_rows': [
-            ('Model', settings['model_name']), ('Normalization', normalization),
-            ('Future variability', future), ('Independent replicates at each time', str(replicates)),
-            ('Minimum future individual SD', _number(settings['minimum_sd'])),
-            ('Planning and recovery evaluation range', f'{_number(reference.time_grid[0])}–{_number(reference.time_grid[-1])}'),
-            ('Measured time range', f'{_number(source_range[0])}–{_number(source_range[1])}'),
-            ('Candidate-time grid', f'{_number(settings["first_time"])} to {_number(settings["last_time"])} in steps of {_number(settings["time_step"])}'),
-            ('Fixed proposed times', ', '.join(_number(value) for value in result.constraints.fixed_times) or 'None'),
-            ('Requested reference draws', str(requested)),
-            ('Usable reference draws', f'{reference.n_valid_draws} of {reference.n_draws} generated'),
-            ('Usable analysis-model draws', f'{result.reference_model.n_valid_draws} of {result.reference_model.n_draws}'),
-            ('Monte Carlo studies per schedule', str(settings['n_simulations'])),
-            ('Random seed', str(settings['random_seed'])),
-        ],
+        'settings_rows': settings_rows,
     }

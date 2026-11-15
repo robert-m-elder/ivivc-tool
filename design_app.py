@@ -1,7 +1,7 @@
 """Separate, request-scoped Flask frontend for study-design assessment.
 
-Data imports and measured-reference planning complete within individual
-requests. This module does not import the IVIVC web application.
+Data imports and prospective planning complete within individual requests.
+This module does not import the IVIVC web application.
 """
 
 import json
@@ -95,9 +95,11 @@ def create_app(config=None):
     @app.get('/')
     def index():
         from utilities.design_planning import model_options
+        from utilities.design_reference_sources import reference_options
 
         return render_template('design/index.html', settings=_default_settings(),
-                               datasets=DATASETS, planning_models=model_options())
+                               datasets=DATASETS, planning_models=model_options(),
+                               reference_options=reference_options())
 
     def import_error(message, field_id=None):
         return jsonify(ok=False, errors=[{'field_id': field_id, 'message': message}]), 400
@@ -191,9 +193,12 @@ def create_app(config=None):
     @app.post('/calculate')
     def calculate_comparison():
         from utilities.design_data import (
-            DataImportError, interpret_sd_profile, interpret_time_course, read_upload,
+            DataImportError, interpret_sd_profile, interpret_time_course,
+            interpret_time_scales, read_upload,
         )
-        from utilities.design_planning import PlanningInputError, run_measured_planning
+        from utilities.design_planning import (
+            PlanningInputError, run_measured_planning, run_reference_planning,
+        )
         from utilities.design_planning_results import present_planning_result
 
         settings, errors = _review_settings(request.form)
@@ -201,9 +206,6 @@ def create_app(config=None):
             return jsonify(ok=False, errors=errors), 400
         if settings['task'] != 'study':
             return import_error('Calibration comparisons are not connected to this frontend yet.', 'task')
-        if settings['reference_source'] != 'measured':
-            return import_error('Numerical planning currently requires measured in vivo reference data.',
-                                'reference_source')
         if request.form.get('has_completed'):
             return import_error('Planning with completed target-study observations will be connected in a later patch.',
                                 'has_completed')
@@ -219,33 +221,79 @@ def create_app(config=None):
                 raise PlanningInputError(str(error), field) from error
             if loaded.frame is None:
                 raise PlanningInputError('Select a worksheet and read its columns first.', identifier + '__sheet')
-            prefix = identifier + '__'
-            if dataset['kind'] == 'course':
-                prefix += 'profile__'
-                options = options_for(request.form, prefix, COURSE_FIELDS)
-                interpreter = interpret_time_course
+            values, summaries = {}, []
+            if dataset['kind'] in ('course', 'pair'):
+                for series in dataset['series']:
+                    prefix = identifier + '__' + series['key'] + '__'
+                    options = options_for(request.form, prefix, COURSE_FIELDS)
+                    for field, index in (('time_column', series['time_default']),
+                                         ('response_column', series['response_default'])):
+                        if field not in options:
+                            options[field] = (loaded.frame.columns[index]
+                                              if index < len(loaded.frame.columns) else '')
+                    try:
+                        interpreted = interpret_time_course(loaded.frame, options, label=series['label'])
+                    except DataImportError as error:
+                        field = identifier if error.field == 'file' else prefix + error.field
+                        raise PlanningInputError(str(error), field) from error
+                    values[series['key']] = interpreted.value
+                    summaries.append({
+                        'role': identifier, 'label': series['label'],
+                        'filename': loaded.filename, 'worksheet': loaded.sheet,
+                        'summary': dict(interpreted.summary, filename=loaded.filename,
+                                        worksheet=loaded.sheet),
+                    })
+                value = values if dataset['kind'] == 'pair' else values['profile']
             else:
-                options = options_for(request.form, prefix, ('time_column', 'sd_column'))
-                interpreter = interpret_sd_profile
-            try:
-                interpreted = interpreter(loaded.frame, options)
-            except DataImportError as error:
-                field = identifier if error.field == 'file' else prefix + error.field
-                raise PlanningInputError(str(error), field) from error
-            summary = dict(interpreted.summary, filename=loaded.filename, worksheet=loaded.sheet)
-            return interpreted.value, summary
+                prefix = identifier + '__'
+                fields = (('ratio_column', 'weight_column', 'source_column')
+                          if dataset['kind'] == 'ratios' else ('time_column', 'sd_column'))
+                interpreter = interpret_time_scales if dataset['kind'] == 'ratios' else interpret_sd_profile
+                try:
+                    interpreted = interpreter(loaded.frame, options_for(request.form, prefix, fields))
+                except DataImportError as error:
+                    field = identifier if error.field == 'file' else prefix + error.field
+                    raise PlanningInputError(str(error), field) from error
+                value = interpreted.value
+                summaries.append({
+                    'role': identifier, 'label': dataset['label'],
+                    'filename': loaded.filename, 'worksheet': loaded.sheet,
+                    'summary': dict(interpreted.summary, filename=loaded.filename,
+                                    worksheet=loaded.sheet),
+                })
+            return value, summaries
 
         try:
-            source, source_summary = planning_input('reference-file')
+            source_kind = settings['reference_source']
+            arguments, source_summaries = {}, []
+            if source_kind == 'measured':
+                source, source_summaries = planning_input('reference-file')
+            elif source_kind == 'ivivc':
+                calibration, source_summaries = planning_input('ivivc-calibration-file')
+                prediction, prediction_summaries = planning_input('prediction-file')
+                source_summaries.extend(prediction_summaries)
+                arguments = dict(in_vitro=calibration['in_vitro'], in_vivo=calibration['in_vivo'],
+                                 prediction=prediction)
+            else:
+                scaling_source, source_summaries = planning_input('scaling-source-file')
+                distribution, distribution_summaries = planning_input('time-scale-file')
+                source_summaries.extend(distribution_summaries)
+                arguments = dict(scaling_source=scaling_source, distribution=distribution)
             profile, profile_summary = None, None
             if request.form.get('observation_kind') == 'time_profile_sd':
-                profile, profile_summary = planning_input('future-sd-profile-file')
-            result = run_measured_planning(source, request.form, profile=profile)
+                profile, profile_summaries = planning_input('future-sd-profile-file')
+                profile_summary = profile_summaries[0]['summary']
+            result = (run_measured_planning(source, request.form, profile=profile)
+                      if source_kind == 'measured' else
+                      run_reference_planning(request.form, profile=profile, **arguments))
         except PlanningInputError as error:
             return import_error(str(error), error.field_id)
+        source_summary = source_summaries[0]['summary']
         context = present_planning_result(
-            result, source_filename=source_summary['filename'],
+            result, source_filename=(source_summary['filename'] if source_kind == 'measured'
+                                     else None),
             source_summary=source_summary, profile_summary=profile_summary,
+            source_summaries=source_summaries,
         )
         html = render_template('design/_planning_results.html', **context)
         return jsonify(ok=True, html=html)

@@ -31,13 +31,13 @@ page can link to the two applications without combining their entry points.
   it does not fit curves, generate schedules, or run simulations. A setup review
   is not an analysis result.
 - `POST /calculate` imports and validates the current files and settings, then
-  completes measured-reference planning synchronously. It returns server-rendered
+  completes prospective study planning synchronously. It returns server-rendered
   comparison HTML or field-linked errors.
-- **Calculate comparison** currently supports new in vivo studies using measured
-  reference data. IVIVC-derived references, empirical scaling, completed-study
-  updates, and calibration comparisons retain import/setup review but are not
-  yet connected to numerical calculation in this frontend. Report generation
-  remains unavailable.
+- **Calculate comparison** supports new in vivo studies using measured reference
+  data, an IVIVC prediction, or empirical time scaling. Completed-study updates
+  and calibration comparisons retain import/setup review but are not yet
+  connected to numerical calculation in this frontend. Report generation remains
+  unavailable.
 
 JavaScript is required for the workspace. It leaves the input form mounted,
 including selected browser files, while a normal request runs to completion.
@@ -78,8 +78,8 @@ For each active file role:
 Data roles remain separate: prior reference data, IVIVC calibration/prediction
 inputs, completed target-study observations, future individual-SD profiles,
 and empirical time-scale distributions. Existing calibration files are also
-available for the calibration-comparison task. Numerical planning currently
-uses only the measured reference and, when selected, its future SD profile.
+available for the calibration-comparison task. Calculation imports only the
+files required by the selected reference source and future measurement model.
 
 ### Reported observation uncertainty
 
@@ -137,7 +137,7 @@ values for subsequent request handlers. Later calculations must reconstruct
 and validate these values from the current uploaded file and form settings,
 rather than trusting browser preview output.
 
-## First complete planning workflow
+## Measured-reference planning
 
 1. Choose **Plan or extend an in vivo study**, **Measured in vivo data**, and
    supply prior reference observations. These observations inform expected
@@ -171,8 +171,8 @@ The request helper in `utilities/design_planning.py` fits the measured reference
 samples joint fitted parameters into complete trajectories, and fits the study
 analysis model to that ensemble. It uses the existing local I-optimal heuristic
 to propose times and the existing simulation/refitting APIs to assess schedules.
-The same model form is used for the source fit and study refits in this first
-workflow. This is an assessment under the selected assumptions, not independent
+The same model form is used for the measured source fit and study refits.
+This is an assessment under the selected assumptions, not independent
 evidence that a model or schedule is correct.
 
 All schedules share trajectory selections and simulated measurement-error draws.
@@ -192,12 +192,90 @@ Calculation rebuilds typed inputs from the current upload and mapping on every
 request; a previously generated preview is not required or trusted as input.
 Neither reference construction nor simulation changes the original files.
 
+## IVIVC-derived references
+
+Select **IVIVC prediction**, supply the paired calibration file and target in vitro
+file, and choose one approach, model where applicable, and prediction method.
+The app fits that selection using the shared IVIVC pipeline. It does not select
+a model or substitute a different method if the requested prediction fails.
+
+The **study analysis model** controls schedule optimization and simulated-study
+refitting. It is independent of the IVIVC model. The selected response
+normalization and one-minus operation apply once to each calibration dataset
+and the target dataset, using each dataset's own constants as in the IVIVC app.
+Time and response logarithms remain unavailable for study planning.
+
+- **Approach 1** uses the shared interpolation and fitted time mapping. Its
+  reference uncertainty comes from that fitted relationship, without propagation
+  of experimental response SD/SEM.
+- **Approach 2** uses supplied calibration SD/SEM and target-input uncertainty
+  through its existing response-ratio, time-constant-ratio, or inverse-response
+  prediction. Target measurement errors are assumed independent of calibration
+  measurement errors; overlapping experimental units are not detected.
+- **Approach 3** supplies a deterministic reference, using response or time
+  scaling. Its calibration and interpolation uncertainty are not quantified.
+
+Supplied response SD/SEM is rejected for Approaches 1 and 3. Select Approach 2
+to use that precision, or explicitly choose unspecified uncertainty for those
+datasets when evaluating the other approaches. Nothing is silently discarded.
+Future in vivo measurement variability remains a separate planning input for
+every approach; it does not make an uncertain reference fully characterized.
+
+The requested planning range, including fixed times, must fit inside the common
+supported domain of the usable IVIVC trajectories. An error reports the
+available range rather than moving the baseline or extending the reference.
+Changing the prediction dataset or method can change this domain. Existing
+method-specific extrapolation diagnostics remain relevant even within the
+converted reference's numerical domain.
+
+Results include basic source-data/fitting previews, the selected IVIVC settings,
+input provenance, and the reference used for planning. These are planning aids.
+Use the IVIVC app for detailed diagnostics and investigation of questionable
+data or model choices.
+
+## Empirical time scaling
+
+Select **Empirical time scaling** and supply both an in vitro source file and
+an empirical ratio file. Ratios are `tau_in_vivo / tau_in_vitro`, with optional
+weights and source identifiers. Their definitions, time units, and elapsed-time
+origin must be compatible with the source and planned study.
+
+Choose the in vitro source model separately from the study analysis model.
+The source is preprocessed and fitted using its supplied SD/SEM. The reference
+then evaluates each complete curve as `f_in_vitro(in_vivo_time / ratio)`.
+Source-parameter uncertainty and empirical ratios are assumed independent.
+Every positive-weight ratio is crossed with the requested parameter draws;
+the original ratio weights are preserved rather than replaced by random draws
+of the empirical records. Duplicate and zero-weight records remain in provenance.
+
+The **Reference parameter draws** setting is the number per positive-weight ratio,
+so the total reference-curve count can exceed that setting. A request is limited
+to 2000 complete curves and 5000 ratio records; reduce the parameter draw count
+if needed. Results distinguish requested parameter draws from generated curves
+and report the ratio distribution used.
+
+Extrapolation beyond the observed in vitro source times requires explicitly
+selecting **Allow source-model extrapolation**. The default rejects a horizon
+that any positive-weight ratio cannot support. No empirical mass is dropped to
+make the horizon fit. The results show any permitted extrapolation and keep
+future in vivo measurement variability separate from source/ratio uncertainty.
+
+All three sources enter the same schedule-generation and Monte Carlo assessment
+path. Changing source or construction settings marks an earlier comparison as
+out of date; requests continue to use the current files and mappings.
+
+Source-parameter sampling and future-study simulation use separate reproducible
+random streams derived from the entered seed. Schedules still share the same
+simulation plan. This separation can change seeded Monte Carlo values relative
+to F3, while preserving reproducibility within this version.
+
 ## Checks
 
 ```bash
 python -m pytest tests/test_design_app.py
 python -m pytest tests/test_design_data.py tests/test_design_data_routes.py
 python -m pytest tests/test_design_planning.py tests/test_design_planning_results.py tests/test_design_planning_routes.py
+python -m pytest tests/test_design_reference_*.py
 node tests/test_design_frontend.cjs
 node tests/test_design_data_frontend.cjs
 ```
