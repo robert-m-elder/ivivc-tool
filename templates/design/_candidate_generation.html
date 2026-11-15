@@ -1,0 +1,31 @@
+<section class="design-section" aria-label="Generated candidate schedules">
+    <h4>Generated candidate schedules</h4>
+    <p>These times use the local I-optimal curve-recovery heuristic in each environment. They are not optimized for IVIVC performance, and a globally optimal schedule is not guaranteed. No calibration-study simulations or target-prediction assessments have been run in this preview.</p>
+    <p class="design-help">Copy a candidate to the editable schedule fields to keep these exact times. Calculate comparison then assesses its IVIVC effects. Leaving a schedule set to generated makes Calculate comparison generate it again from the current inputs.</p>
+    {% for candidate in generation_candidates %}
+    <h5>{{ candidate.name }}</h5>
+    <div class="design-preview-table"><table>
+        <caption>Proposed new observations for {{ candidate.name }}</caption>
+        <thead><tr><th scope="col">Environment</th><th scope="col">New sampling times</th><th scope="col">Number of new times</th><th scope="col">Replicates per time</th><th scope="col">New independent units</th><th scope="col">Local I-optimality criterion</th></tr></thead>
+        <tbody>{% for row in candidate.rows %}<tr><th scope="row">{{ row.side }}</th><td>{{ row.times }}</td><td>{{ row.time_count }}</td><td>{{ row.replicates }}</td><td>{{ row.new_units }}</td><td>{{ row.criterion }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    <p class="design-help">Total proposed new independent units in this candidate: {{ candidate.total_new_units }} (including any manually specified environment). The information criterion is a curve-recovery approximation under this environment's model and variability assumptions; it does not measure IVIVC error or support cross-environment comparisons.</p>
+    {% for row in candidate.rows %}
+    <p class="design-help"><strong>{{ row.side }}:</strong> {{ row.observation }} on the analyzed response scale. Existing measurements remain fixed: {{ row.existing_rows }} rows, {{ row.existing_units }} reported independent units, at times {{ row.fixed_times }}. {{ row.existing_precision }}. Curve-recovery assessment range: {{ row.range }}. Generated additions use unmeasured opportunities; existing observations are counted once.</p>
+    {% endfor %}
+    <button type="button" data-copy-generated-candidate="{{ candidate.index }}" aria-label="Copy {{ candidate.name }} to editable schedule">Copy to editable schedule</button>
+    {% endfor %}
+    <details><summary>Generation inputs and assumptions</summary>
+        {% for source in generation_sources %}
+        <p><strong>{{ source.side }}:</strong> {{ source.mode }}; generating source {{ source.source_kind }}; model {{ source.model }}. Source observation range {{ source.observed_range }}; reference range {{ source.reference_range }}. Usable source-parameter draws: {{ source.draws }}.</p>
+        <p class="design-help">Opportunity grid: first {{ source.first_time }}, last bound {{ source.last_time_bound }}, step {{ source.time_step }}; {{ source.opportunity_count }} grid opportunities, last actual opportunity {{ source.last_opportunity }}. Existing measurement times are removed from eligible additions. Fixed normalization: analyzed response = {{ source.slope }} × supplied response + {{ source.intercept }}.</p>
+        {% endfor %}
+        <p class="design-help">Random seed: {{ generation_settings.random_seed }}. Requested source-parameter draws: {{ generation_settings.reference_draws }}. Source-trajectory uncertainty is separate from future individual-measurement variability; replicate counts reduce the uncertainty of new means once.</p>
+        {% for imported in source_summaries + profile_summaries %}{% set summary = imported.get('summary', imported) %}
+        <p class="design-help">{{ imported.get('label', 'Input data') }}: {{ imported.get('filename', summary.get('filename', '')) }}{% if imported.get('worksheet', summary.get('worksheet')) %} · Worksheet: {{ imported.get('worksheet', summary.get('worksheet')) }}{% endif %}.</p>
+        {% if summary.get('interpretation') %}<p class="design-help">{{ summary.interpretation }}</p>{% endif %}
+        {% if summary.get('mapping') %}<p class="design-help">Mapping: {% for label, value in summary.mapping.items() %}{{ label }} → {{ value }}{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
+        {% endfor %}
+    </details>
+    {% if generation_warnings %}<aside class="design-notice"><p><strong>Generation cautions</strong></p><ul>{% for warning in generation_warnings %}<li>{{ warning }}</li>{% endfor %}</ul></aside>{% endif %}
+</section>

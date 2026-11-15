@@ -33,6 +33,10 @@ page can link to the two applications without combining their entry points.
 - `POST /calculate` imports and validates the current files and settings, then
   completes prospective or adaptive study planning synchronously. It returns server-rendered
   comparison HTML or field-linked errors.
+- `POST /generate-candidates` imports the varied calibration environments and
+  returns proposed curve-recovery schedules with a review preview. It uses the
+  same generation path as calibration comparison, without calibration
+  simulations or target assessment.
 - **Calculate comparison** supports new studies and additions to completed
   observations, using measured reference data, an IVIVC prediction, or empirical
   time scaling. Timing windows and deadlines can constrain proposed future times.
@@ -399,8 +403,10 @@ in vitro observations. They are not interchangeable.
    are used for every candidate and experiment.
 5. Add named candidates, specifying proposed times and independent replicates
    per time in each varied environment. Alternatively, generate a candidate
-   schedule from a first/last/step grid and a number of proposed times. Then
-   calculate the comparison.
+   schedule from a first/last/step grid and a number of proposed times. Use
+   **Generate and preview candidate times** to review the proposed times before calculating
+   the full comparison, or calculate directly to generate and assess them
+   in one request.
 
 There are at most six candidates per request. Manually specified times may
 include times already measured: the requested replicates are additional
@@ -422,6 +428,32 @@ previously unmeasured times; use manual schedules to request more replicates at
 existing times. With both environments varied, their candidate schedules are
 generated separately. This is not optimization specifically for IVIVC quality
 or joint optimization of a complete paired study.
+
+### Reviewing generated candidates
+
+The separate generation action fits the selected generating sources and uses
+the same curve-recovery optimizer as the full comparison. It does not simulate
+new calibration datasets, fit an IVIVC, or assess target predictions. Only
+inputs for the varied environments are needed; the fixed environment, target
+uploads, relationship evaluation settings, and simulation/interval-draw
+settings can be completed later. Source parameter draws and the random seed
+still apply. All active candidates in the varied environments are interpreted
+so generation uses the same source domains as the subsequent comparison.
+
+The preview reports proposed times, new replicate counts, existing times held
+fixed, source and measurement assumptions, and feasible generation grids.
+Existing data contribute their supplied precision; the proposed replicate
+count does not replace that precision. With both environments varied,
+generation runs independently in each environment.
+
+Use **Copy to editable schedule** to transfer a candidate's generated times to
+its manual inputs. This is an explicit schedule snapshot: later source or
+measurement changes do not silently optimize it again. Leave the candidate
+in generated mode when it should be regenerated during calculation. After
+changing inputs, the old preview remains visible and is marked out of date;
+generate again before copying it. A failed generation preserves both the
+previous preview and the last successful comparison. No preview is required
+or trusted as numerical input by the calculation endpoint.
 
 ### Response scales and uncertainty
 
@@ -493,6 +525,7 @@ python -m pytest tests/test_design_planning.py tests/test_design_planning_result
 python -m pytest tests/test_design_reference_*.py
 python -m pytest tests/test_design_adaptive_*.py tests/test_design_timing.py
 python -m pytest tests/test_design_calibration*.py
+python -m pytest tests/test_design_candidate*.py tests/test_design_generation_http.py
 node tests/test_design_frontend.cjs
 node tests/test_design_data_frontend.cjs
 ```

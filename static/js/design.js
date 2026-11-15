@@ -36,6 +36,9 @@
         const calibrationRelationship = document.getElementById('cal_relationship');
         const calibrationTarget = document.getElementById('cal_assess_target');
         const calibrationCandidates = Array.from(root.querySelectorAll('[data-calibration-candidate]'));
+        const generateCandidates = document.getElementById('generate-calibration-candidates');
+        const generationStatus = document.getElementById('calibration-generation-status');
+        const generationContent = document.getElementById('calibration-generation-content');
         const calibrationChoices = new Map();
         let previousCalibrationApproach = null;
         const files = new WeakMap();
@@ -43,6 +46,10 @@
         let pending = false;
         let reviewedSignature = null;
         let calculatedSignature = null;
+        let generating = false;
+        let generatedSignature = null;
+        let generatedSchedules = [];
+        let generationNotice = '';
 
         function planningAvailable() {
             return task.value === 'study' && ['measured', 'ivivc', 'scaling'].includes(source.value);
@@ -58,8 +65,34 @@
         }
 
         function syncButtons() {
-            submit.disabled = pending;
-            if (calculate) calculate.disabled = pending || !calculationAvailable();
+            submit.disabled = pending || generating;
+            if (calculate) calculate.disabled = pending || generating || !calculationAvailable();
+            if (generateCandidates) {
+                const requested = calibrationCandidates.some(row =>
+                    row.dataset.calibrationActive === 'true' && ['in_vitro', 'in_vivo'].some(side => {
+                        const kind = document.getElementById('cal_candidate_' + row.dataset.calibrationCandidate + '_' + side + '_kind');
+                        return calibrationVaries(side) && kind && !kind.disabled && kind.value === 'generated';
+                    }));
+                generateCandidates.disabled = pending || generating || !calibrationAvailable() || !requested;
+            }
+            if (generationContent) generationContent.querySelectorAll('[data-copy-generated-candidate]').forEach(button => {
+                button.disabled = pending || generating || generatedSignature === null || signature() !== generatedSignature;
+            });
+        }
+
+        function updateGenerationStatus() {
+            if (!generationStatus) return;
+            if (generating) {
+                generationStatus.textContent = 'Generating curve-recovery schedules. This request runs to completion without calibration simulations.';
+            } else if (generatedSignature !== null) {
+                generationStatus.textContent = signature() === generatedSignature ?
+                    'Generated schedules match these inputs. Review the times, then copy a candidate to edit it or calculate the comparison.' :
+                    'Inputs changed. The preview retains its original settings; generate again before copying a candidate.';
+                if (generationNotice) generationStatus.textContent += ' ' + generationNotice;
+            } else {
+                generationStatus.textContent = generationNotice || 'Choose “Generate a curve-recovery schedule” for at least one environment to preview its times before comparison.';
+            }
+            syncButtons();
         }
 
         function setActive(container, active) {
@@ -288,6 +321,7 @@
         }
 
         function updateDraftStatus() {
+            updateGenerationStatus();
             if (calculatedSignature !== null) {
                 const current = signature() === calculatedSignature;
                 draftStatus.textContent = current ?
@@ -403,6 +437,75 @@
             updateDraftStatus();
             if (add) document.getElementById('cal_candidate_' + row.dataset.calibrationCandidate + '_name').focus();
         });
+        root.addEventListener('click', event => {
+            const button = event.target.closest('[data-copy-generated-candidate]');
+            if (!button || button.disabled || pending || generating || !calibrationAvailable() ||
+                    generatedSignature === null || signature() !== generatedSignature) return;
+            event.preventDefault();
+            const index = button.dataset.copyGeneratedCandidate;
+            const schedules = generatedSchedules.filter(row => String(row.candidate_index) === index);
+            if (!schedules.length) return;
+            for (const schedule of schedules) {
+                const prefix = 'cal_candidate_' + index + '_' + schedule.side + '_';
+                document.getElementById(prefix + 'times').value = schedule.times.join(', ');
+                document.getElementById(prefix + 'kind').value = 'manual';
+            }
+            syncInputs();
+            generationNotice = 'Copied times are now explicitly specified and can be edited. Calculate to assess them.';
+            updateDraftStatus();
+            document.getElementById('cal_candidate_' + index + '_' + schedules[0].side + '_times').focus();
+        });
+        if (generateCandidates) generateCandidates.addEventListener('click', async event => {
+            event.preventDefault();
+            if (generateCandidates.disabled || pending || generating || !calibrationAvailable()) return;
+            const data = new FormData(form);
+            const submittedSignature = signature(data);
+            generating = true;
+            generationNotice = '';
+            clearErrors();
+            form.setAttribute('aria-busy', 'true');
+            updateGenerationStatus();
+            try {
+                const response = await fetch(generateCandidates.dataset.generationUrl, {
+                    method: 'POST', body: data, headers: {'Accept': 'application/json'},
+                });
+                const payload = await response.json();
+                if (signature() !== submittedSignature) {
+                    generationNotice = 'Inputs changed during generation; the submitted preview was not applied. Generate again for the current choices.';
+                    return;
+                }
+                if (!response.ok || payload.ok !== true) {
+                    generationNotice = 'Generation failed. Earlier generated schedules and comparison results remain available.';
+                    showErrors(Array.isArray(payload.errors) && payload.errors.length ? payload.errors :
+                        [{message: 'Schedule generation could not be completed. Check the inputs and try again.'}], {
+                            heading: 'Candidate schedules could not be generated', status: generationNotice,
+                        });
+                    return;
+                }
+                if (typeof payload.html !== 'string' || !Array.isArray(payload.schedules) ||
+                        payload.schedules.some(row => !['in_vitro', 'in_vivo'].includes(row.side) ||
+                            !Array.isArray(row.times) || !row.times.length ||
+                            row.times.some(time => typeof time !== 'number' || !Number.isFinite(time)) ||
+                            !calibrationCandidates.some(candidate => candidate.dataset.calibrationCandidate === String(row.candidate_index) &&
+                                candidate.dataset.calibrationActive === 'true'))) throw new Error('Invalid generation response.');
+                // Server-rendered escaped markup stays separate from saved comparison results.
+                generationContent.innerHTML = payload.html;
+                generatedSchedules = payload.schedules;
+                generatedSignature = submittedSignature;
+                generationContent.focus();
+            } catch (error) {
+                generationNotice = signature() !== submittedSignature ?
+                    'Inputs changed during generation; generate again for the current choices.' :
+                    'Generation could not be completed. Check the connection and try again. Earlier previews and comparisons remain available.';
+                if (signature() === submittedSignature) showErrors([{message: generationNotice}], {
+                    heading: 'Candidate schedules could not be generated', status: generationNotice,
+                });
+            } finally {
+                generating = false;
+                form.setAttribute('aria-busy', 'false');
+                updateGenerationStatus();
+            }
+        });
         task.addEventListener('change', () => {
             syncInputs();
             clearErrors();
@@ -415,7 +518,7 @@
 
         form.addEventListener('submit', async event => {
             event.preventDefault();
-            if (pending) return;
+            if (pending || generating) return;
             const calculating = Boolean(calculate && event.submitter === calculate);
             const comparisonName = task.value === 'calibration' ? 'calibration' : 'study';
             const context = calculating ? {

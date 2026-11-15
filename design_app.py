@@ -193,6 +193,7 @@ def create_app(config=None):
         return jsonify(ok=True, html=html, dataset_id=dataset['id'], filename=loaded.filename)
 
     @app.post('/calculate')
+    @app.post('/generate-candidates', endpoint='generate_candidates')
     def calculate_comparison():
         from utilities.design_data import (
             DataImportError, interpret_sd_profile, interpret_time_course,
@@ -203,7 +204,18 @@ def create_app(config=None):
         )
         from utilities.design_planning_results import present_planning_result
 
-        settings, errors = _review_settings(request.form)
+        generating = request.path == '/generate-candidates'
+        if generating:
+            # Generation needs source curves and sampling choices, not target
+            # uploads or Monte Carlo assessment settings.
+            if request.form.get('task') != 'calibration':
+                return import_error('Choose calibration comparison to generate candidates.', 'task')
+            environment = request.form.get('varied_environment', 'in_vivo')
+            if environment not in ENVIRONMENT_LABELS:
+                return import_error('Select which calibration environment will vary.', 'varied_environment')
+            settings, errors = dict(task='calibration', varied_environment=environment), []
+        else:
+            settings, errors = _review_settings(request.form)
         if errors:
             return jsonify(ok=False, errors=errors), 400
         has_completed = str(request.form.get('has_completed', '')).strip().lower() in (
@@ -269,7 +281,7 @@ def create_app(config=None):
             return value, summaries
 
         if settings['task'] == 'calibration':
-            from utilities.design_calibration import run_calibration_comparison
+            from utilities.design_calibration import run_calibration_comparison, run_calibration_generation
             from utilities.design_calibration_results import present_calibration_result
 
             arguments, source_summaries, profile_summaries = {}, [], []
@@ -277,6 +289,8 @@ def create_app(config=None):
                       else {settings['varied_environment']})
             try:
                 for side in ('in_vitro', 'in_vivo'):
+                    if generating and side not in varied:
+                        continue
                     prefix = 'cal_' + side + '_'
                     mode = request.form.get(prefix + 'mode', 'prospective') if side in varied else 'fixed'
                     if mode not in ('fixed', 'prospective', 'additions') or (side in varied and mode == 'fixed'):
@@ -301,12 +315,23 @@ def create_app(config=None):
                         value, summaries = planning_input('calibration-' + role_side + '-sd-profile-file')
                         arguments[side + '_profile'] = value
                         profile_summaries.extend(summaries)
-                if str(request.form.get('cal_assess_target', '')).strip().lower() in ('1', 'on', 'true', 'yes'):
+                if not generating and str(request.form.get('cal_assess_target', '')).strip().lower() in ('1', 'on', 'true', 'yes'):
                     arguments['prediction'], summaries = planning_input('cal-target-file')
                     source_summaries.extend(summaries)
-                result = run_calibration_comparison(request.form, **arguments)
+                calculate = run_calibration_generation if generating else run_calibration_comparison
+                result = calculate(request.form, **arguments)
             except PlanningInputError as error:
                 return import_error(str(error), error.field_id)
+            if generating:
+                from utilities.design_candidate_results import present_generation_result
+
+                context = present_generation_result(result, source_summaries=source_summaries,
+                                                    profile_summaries=profile_summaries)
+                html = render_template('design/_candidate_generation.html', **context)
+                schedules = [dict(candidate_index=row['candidate_index'], side=row['side'],
+                                  times=[float(time) for time in row['times']])
+                             for row in result.generation_outcomes if row['kind'] == 'generated']
+                return jsonify(ok=True, html=html, schedules=schedules)
             context = present_calibration_result(result, source_summaries=source_summaries,
                                                  profile_summaries=profile_summaries)
             html = render_template('design/_calibration_results.html', **context)

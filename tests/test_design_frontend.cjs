@@ -239,6 +239,12 @@ function fixture({planning = false, calibration = false} = {}) {
         cal.intervalDraws = field("cal_interval_draws", "100", calibrationGroup);
         cal.referenceDraws = field("reference_draws", "100", details);
         cal.add = element("button", {type: "button", "data-add-calibration-candidate": ""}, calibrationGroup);
+        cal.generate = element("button", {id: "generate-calibration-candidates", type: "button",
+            "data-generation-url": "/generate-candidates"}, calibrationGroup);
+        cal.generationStatus = element("p", {id: "calibration-generation-status"}, calibrationGroup);
+        cal.generationContent = element("div", {id: "calibration-generation-content"}, calibrationGroup);
+        cal.copyButton = index => element("button", {type: "button",
+            "data-copy-generated-candidate": String(index)}, cal.generationContent);
         for (let index = 0; index < 6; index++) {
             const prefix = "cal_candidate_" + index + "_";
             const row = element("fieldset", {"data-calibration-candidate": String(index),
@@ -1128,4 +1134,176 @@ test("a calibration request preserves submitted results when the user returns to
     assert.equal(cal.sides.in_vivo.sourceFile.files[0], expected);
     assert.match(page.resultStatus.textContent, /original inputs/);
     assert.match(page.requestStatus.textContent, /Submitted calibration comparison/);
+});
+
+async function generationPage({both = false} = {}) {
+    const page = fixture({planning: true, calibration: true});
+    page.task.value = 'calibration';
+    page.environment.value = both ? 'both' : 'in_vivo';
+    await page.emit(page.task, 'change');
+    const sides = both ? ['in_vitro', 'in_vivo'] : ['in_vivo'];
+    for (const side of sides) page.calibration.candidates[0].sides[side].kind.value = 'generated';
+    await page.emit(page.calibration.candidates[0].sides.in_vivo.kind, 'change');
+    return page;
+}
+
+function generationPayload(schedules = [{candidate_index: 0, side: 'in_vivo', times: [0, 6, 12]}]) {
+    return {ok: true, html: '<section>Generated proposed times and source assumptions</section>', schedules};
+}
+
+async function successfulGeneration(page, payload = generationPayload()) {
+    const pending = page.emit(page.calibration.generate, 'click');
+    page.requests.at(-1).resolve({ok: true, json: async () => payload});
+    await pending;
+    return page.calibration.copyButton(0);
+}
+
+test('generation is enabled only for active generated environments', async () => {
+    const page = fixture({planning: true, calibration: true});
+    const cal = page.calibration;
+    assert.equal(cal.generate.disabled, true);
+    page.task.value = 'calibration';
+    await page.emit(page.task, 'change');
+    assert.equal(cal.generate.disabled, true);
+    cal.candidates[0].sides.in_vitro.kind.value = 'generated';
+    await page.emit(cal.candidates[0].sides.in_vitro.kind, 'change');
+    assert.equal(cal.generate.disabled, true);
+    cal.candidates[0].sides.in_vivo.kind.value = 'generated';
+    await page.emit(cal.candidates[0].sides.in_vivo.kind, 'change');
+    assert.equal(cal.generate.disabled, false);
+    assert.equal(page.requests.length, 0);
+});
+
+test('generation previews without modifying candidates, files, or the saved comparison', async () => {
+    const page = await generationPage();
+    const cal = page.calibration;
+    const file = {name: 'expected.csv', size: 40, lastModified: 2};
+    cal.sides.in_vivo.sourceFile.files = [file];
+    await page.successfulCalculation('<p>Original comparison remains</p>');
+    await page.emit(page.inputsButton, 'click');
+    const pending = page.emit(cal.generate, 'click');
+    assert.equal(page.requests.at(-1).url, '/generate-candidates');
+    assert.equal(new Map(page.requests.at(-1).options.body.entries()).get('cal_in_vivo_source_file'), file);
+    assert.equal(page.calculate.disabled, true);
+    assert.equal(page.submit.disabled, true);
+    assert.equal(cal.generate.disabled, true);
+    assert.match(cal.generationStatus.textContent, /without calibration simulations/);
+    const count = page.requests.length;
+    await page.emit(page.form, 'submit', {submitter: page.calculate});
+    assert.equal(page.requests.length, count);
+    page.requests.at(-1).resolve({ok: true, json: async () => generationPayload()});
+    await pending;
+    assert.equal(page.content.innerHTML, '<p>Original comparison remains</p>');
+    assert.match(cal.generationContent.innerHTML, /Generated proposed times/);
+    assert.match(cal.generationStatus.textContent, /match these inputs/);
+    assert.equal(cal.candidates[0].sides.in_vivo.kind.value, 'generated');
+    assert.equal(cal.candidates[0].sides.in_vivo.times.value, '0,4,12');
+    assert.equal(cal.sides.in_vivo.sourceFile.files[0], file);
+    assert.equal(page.calculate.disabled, false);
+    assert.equal(page.document.activeElement, cal.generationContent);
+});
+
+test('copying a candidate makes only its generated sides editable and marks the comparison stale', async () => {
+    const page = await generationPage({both: true});
+    const cal = page.calibration;
+    await page.emit(cal.add, 'click');
+    const second = cal.candidates[1];
+    second.sides.in_vivo.times.value = '2, 8';
+    await page.emit(second.sides.in_vivo.times, 'input');
+    await page.successfulCalculation('<p>Comparison before copying</p>');
+    const copy = await successfulGeneration(page, generationPayload([
+        {candidate_index: 0, side: 'in_vitro', times: [0, 3, 12]},
+        {candidate_index: 0, side: 'in_vivo', times: [1, 5, 10]},
+    ]));
+    await page.emit(copy, 'click');
+    assert.equal(cal.candidates[0].sides.in_vitro.times.value, '0, 3, 12');
+    assert.equal(cal.candidates[0].sides.in_vivo.times.value, '1, 5, 10');
+    assert.equal(cal.candidates[0].sides.in_vitro.kind.value, 'manual');
+    assert.equal(cal.candidates[0].sides.in_vivo.kind.value, 'manual');
+    assert.equal(cal.candidates[0].sides.in_vivo.times.disabled, false);
+    assert.equal(second.sides.in_vivo.times.value, '2, 8');
+    assert.equal(cal.candidates[0].sides.in_vivo.replicates.value, '3');
+    assert.match(cal.generationStatus.textContent, /explicitly specified/);
+    assert.match(page.resultStatus.textContent, /Inputs changed/);
+    assert.equal(page.content.innerHTML, '<p>Comparison before copying</p>');
+    assert.equal(copy.disabled, true);
+});
+
+test('generation preview becomes stale when a same-name same-size file is replaced', async () => {
+    const page = await generationPage();
+    const cal = page.calibration;
+    const file = {name: 'expected.csv', size: 40, lastModified: 2};
+    cal.sides.in_vivo.sourceFile.files = [file];
+    const copy = await successfulGeneration(page);
+    cal.sides.in_vivo.sourceFile.files = [{...file}];
+    await page.emit(cal.sides.in_vivo.sourceFile, 'change');
+    assert.equal(copy.disabled, true);
+    assert.match(cal.generationStatus.textContent, /Inputs changed/);
+    await page.emit(copy, 'click');
+    assert.equal(cal.candidates[0].sides.in_vivo.kind.value, 'generated');
+    cal.sides.in_vivo.sourceFile.files = [file];
+    await page.emit(cal.sides.in_vivo.sourceFile, 'change');
+    assert.equal(copy.disabled, false);
+});
+
+test('failed generation retains both earlier preview and comparison and restores actions', async () => {
+    const page = await generationPage();
+    const cal = page.calibration;
+    await page.successfulCalculation('<p>Saved comparison</p>');
+    await successfulGeneration(page);
+    const preview = cal.generationContent.innerHTML;
+    let pending = page.emit(cal.generate, 'click');
+    page.requests.at(-1).resolve({ok: false, json: async () => ({ok: false, errors: [
+        {field_id: 'cal_candidate_0_in_vivo_number_of_times', message: 'Too many new times.'},
+    ]})});
+    await pending;
+    assert.equal(cal.generationContent.innerHTML, preview);
+    assert.equal(page.content.innerHTML, '<p>Saved comparison</p>');
+    assert.match(page.summary.textContent, /Too many new times/);
+    assert.equal(page.calculate.disabled, false);
+    assert.equal(cal.generate.disabled, false);
+    pending = page.emit(cal.generate, 'click');
+    page.requests.at(-1).reject(new Error('Connection lost'));
+    await pending;
+    assert.equal(cal.generationContent.innerHTML, preview);
+    assert.equal(page.content.innerHTML, '<p>Saved comparison</p>');
+    assert.match(cal.generationStatus.textContent, /Check the connection/);
+});
+
+test('superseded generated times and field errors cannot replace the current draft or preview', async () => {
+    const page = await generationPage();
+    const cal = page.calibration;
+    await successfulGeneration(page);
+    const previous = cal.generationContent.innerHTML;
+    let pending = page.emit(cal.generate, 'click');
+    cal.candidates[0].sides.in_vivo.count.value = '4';
+    await page.emit(cal.candidates[0].sides.in_vivo.count, 'input');
+    page.requests.at(-1).resolve({ok: true, json: async () => ({...generationPayload(), html: '<p>Obsolete four times</p>'})});
+    await pending;
+    assert.equal(cal.generationContent.innerHTML, previous);
+    assert.match(cal.generationStatus.textContent, /not applied/);
+    assert.equal(cal.candidates[0].sides.in_vivo.kind.value, 'generated');
+    pending = page.emit(cal.generate, 'click');
+    await page.emit(cal.add, 'click');
+    page.requests.at(-1).resolve({ok: false, json: async () => ({ok: false, errors: [
+        {field_id: 'cal_candidate_0_name', message: 'Obsolete server error'},
+    ]})});
+    await pending;
+    assert.equal(cal.generationContent.innerHTML, previous);
+    assert(!page.summary.textContent.includes('Obsolete server error'));
+    assert.notEqual(cal.candidates[0].name.getAttribute('aria-invalid'), 'true');
+});
+
+test('changing task during generation cannot apply or copy an obsolete calibration preview', async () => {
+    const page = await generationPage();
+    const cal = page.calibration;
+    const pending = page.emit(cal.generate, 'click');
+    page.task.value = 'study';
+    await page.emit(page.task, 'change');
+    page.requests.at(-1).resolve({ok: true, json: async () => generationPayload()});
+    await pending;
+    assert.equal(cal.generationContent.innerHTML, '');
+    assert.equal(cal.generate.disabled, true);
+    assert.equal(page.inputs.hidden, false);
+    assert.equal(page.calculate.disabled, false);
 });

@@ -219,6 +219,12 @@
     </fieldset>
     {% endfor %}
     <button type="button" data-add-calibration-candidate>Add a candidate design</button>
+    <div class="design-comparison-options">
+        <button id="generate-calibration-candidates" type="button" data-generation-url="{{ url_for('generate_candidates') }}" aria-describedby="calibration-generation-help" disabled>Generate and preview candidate times</button>
+        <p id="calibration-generation-help" class="design-help">Uses the same curve-recovery search as Calculate, without running calibration simulations. Review the preview and optionally copy generated times into a candidate to edit them. Leaving time selection as “Generate” makes Calculate run the search again using the current inputs. Explicitly specified schedules remain available alongside generated alternatives.</p>
+        <p id="calibration-generation-status" class="design-help" role="status" aria-live="polite"></p>
+        <div id="calibration-generation-content" tabindex="-1"></div>
+    </div>
 </fieldset>
 {%- endmacro %}
 

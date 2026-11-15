@@ -48,7 +48,7 @@ def _seed(seed, stream):
     return int(np.random.SeedSequence([seed, stream]).generate_state(1)[0])
 
 
-def _settings(form):
+def _settings(form, *, generation_only=False):
     if form.get('task', 'calibration') != 'calibration':
         raise PlanningInputError('Choose the calibration-comparison task.', 'task')
     varied = form.get('varied_environment', 'in_vivo')
@@ -58,6 +58,15 @@ def _settings(form):
     catalog = {row['id']: row for row in calibration_options()['approaches']}
     if approach not in catalog:
         raise PlanningInputError('Choose Approach 1 or Approach 2.', 'cal_approach')
+    normalization = form.get('cal_normalization', 'none')
+    if normalization not in ('none', 'initial_value', 'min_max'):
+        raise PlanningInputError('Choose a supported fixed response normalization.', 'cal_normalization')
+    result = dict(varied_environment=varied, approach_id=approach, normalization=normalization,
+                  one_minus=_checked(form, 'cal_one_minus'),
+                  reference_draws=_number(form, 'reference_draws', 100, integer=True, minimum=2, maximum=200),
+                  random_seed=_number(form, 'random_seed', 12345, integer=True, minimum=0, maximum=2**32-1))
+    if generation_only:
+        return result
     model = form.get('cal_model', 'linear' if approach == 'approach1' else 'exponential')
     if model not in {row['id'] for row in catalog[approach]['models']}:
         raise PlanningInputError('Choose a model registered for this approach.', 'cal_model')
@@ -67,18 +76,11 @@ def _settings(form):
     interpolation = form.get('cal_interpolation', 'default') if approach == 'approach1' else 'none'
     if interpolation not in ('none', 'default', 'alternative'):
         raise PlanningInputError('Choose a supported interpolation scheme.', 'cal_interpolation')
-    normalization = form.get('cal_normalization', 'none')
-    if normalization not in ('none', 'initial_value', 'min_max'):
-        raise PlanningInputError('Choose a supported fixed response normalization.', 'cal_normalization')
-    result = dict(varied_environment=varied, approach_id=approach, model_name=model,
-                  method=method, interpolation=interpolation, normalization=normalization,
-                  one_minus=_checked(form, 'cal_one_minus'),
+    result.update(model_name=model, method=method, interpolation=interpolation,
                   relationship=_checked(form, 'cal_relationship'),
                   assess_target=_checked(form, 'cal_assess_target'),
-                  reference_draws=_number(form, 'reference_draws', 100, integer=True, minimum=2, maximum=200),
                   interval_draws=_number(form, 'cal_interval_draws', 100, integer=True, minimum=2, maximum=500),
-                  n_simulations=_number(form, 'n_simulations', 100, integer=True, minimum=2, maximum=200),
-                  random_seed=_number(form, 'random_seed', 12345, integer=True, minimum=0, maximum=2**32-1))
+                  n_simulations=_number(form, 'n_simulations', 100, integer=True, minimum=2, maximum=200))
     if not result['relationship'] and not result['assess_target']:
         raise PlanningInputError('Assess the relationship, target predictions, or both.', 'cal_relationship')
     if result['relationship'] and method in ('time_mapping', 'value_ratio'):
@@ -162,7 +164,7 @@ def _future_model(form, side, profile):
     return ObservationModel(kind, value, minimum_sd=floor)
 
 
-def _candidate_requests(form, settings):
+def _candidate_requests(form, settings, *, generation_only=False):
     for key in form:
         match = re.fullmatch(r'cal_candidate_(\d+)_name', key)
         if match and int(match[1]) >= MAX_CANDIDATES:
@@ -196,6 +198,8 @@ def _candidate_requests(form, settings):
         candidates.append(row)
     if not candidates:
         raise PlanningInputError('Add at least one named calibration candidate.', 'calibration-candidates')
+    if generation_only:
+        return candidates
     if len(candidates) * settings['n_simulations'] > 1200:
         raise PlanningInputError('Use at most 1200 candidate simulations per request.', 'n_simulations')
     if len(candidates) * settings['n_simulations'] * settings['interval_draws'] > 100000:
@@ -220,26 +224,11 @@ def _grid(form, side):
     return grid
 
 
-def run_calibration_comparison(form: Mapping, *, existing_in_vitro=None, existing_in_vivo=None,
-                               in_vitro_source=None, in_vivo_source=None,
-                               in_vitro_profile=None, in_vivo_profile=None, prediction=None):
-    settings = _settings(form)
-    candidates = _candidate_requests(form, settings)
-    if settings['assess_target']:
-        _course(prediction, 'cal-target-file')
-        if len(prediction.time) > 200:
-            raise PlanningInputError('Use at most 200 target-prediction observations per comparison.', 'cal-target-file')
-        if settings['approach_id'] == 'approach1' and prediction.observation_uncertainty is not None:
-            raise PlanningInputError('Approach 1 does not propagate target response SD/SEM. Choose Approach 2 or explicitly omit target precision.', 'cal-target-file')
-    point_count = (len(settings.get('evaluation_times', settings.get('response_levels', ())))
-                   + (1 if settings['method'] == 'tau_ratio' else 0)
-                   + (len(prediction.time) if settings['assess_target'] else 0))
-    if (len(candidates) * settings['n_simulations'] * settings['interval_draws'] * point_count
-            > 10_000_000):
-        raise PlanningInputError('Reduce evaluation points, candidates, simulations, or interval draws to at most 10000000 point draws per request.', 'cal_interval_draws')
-    if settings['assess_target'] and prediction is not None and (
-            prediction is existing_in_vitro or prediction is existing_in_vivo):
-        raise PlanningInputError('Target observations must be independent of calibration measurements.', 'cal-target-file')
+def _build_calibration_candidates(form, settings, candidates, *, existing_in_vitro=None,
+                                  existing_in_vivo=None, in_vitro_source=None,
+                                  in_vivo_source=None, in_vitro_profile=None,
+                                  in_vivo_profile=None, generation_only=False):
+    """Prepare fixed source scales and plans once for preview and simulation."""
     existing = dict(in_vitro=existing_in_vitro, in_vivo=existing_in_vivo)
     supplied_sources = dict(in_vitro=in_vitro_source, in_vivo=in_vivo_source)
     profiles = dict(in_vitro=in_vitro_profile, in_vivo=in_vivo_profile)
@@ -253,6 +242,8 @@ def run_calibration_comparison(form: Mapping, *, existing_in_vitro=None, existin
     for side_index, side in enumerate(SIDES):
         prefix = 'cal_' + side + '_'
         varied = settings['varied_environment'] in (side, 'both')
+        if generation_only and not varied:
+            continue
         mode = form.get(prefix + 'mode', 'prospective') if varied else 'fixed'
         if mode not in ('fixed', 'prospective', 'additions') or (varied and mode == 'fixed'):
             raise PlanningInputError('Choose a prospective dataset or additions to existing observations.', prefix + 'mode')
@@ -352,6 +343,7 @@ def run_calibration_comparison(form: Mapping, *, existing_in_vitro=None, existin
                 continue
             field, old = request['field'], analyzed[side]
             observation = replace(models[side], replicates_per_time=request['replicates'])
+            criterion = None
             if request['kind'] == 'manual':
                 times = request['times']
             else:
@@ -376,6 +368,9 @@ def run_calibration_comparison(form: Mapping, *, existing_in_vitro=None, existin
                     optimized = optimize_local_i_optimal_designs(fitted_reference, observation, constraints,
                         existing_observations=historical, refine=True, max_exchange_iterations=10)
                     selected = optimized.design_for_n(len(fixed)+count, refined=True)
+                    criterion = selected.score.criterion
+                    if not np.isfinite(criterion):
+                        warnings.append(f'{row["name"]} ({side}): local information is insufficient under the generating model; consider more distinct times and inspect the source model. The generated times remain available for comparison.')
                     times = selected.times[~np.any(np.isclose(selected.times[:, None], fixed, rtol=0., atol=1e-12), axis=1)]
                 except (ValueError, RuntimeError, FloatingPointError) as error:
                     raise PlanningInputError(f'Curve-recovery schedule generation failed: {error}', field + 'number_of_times') from error
@@ -391,10 +386,68 @@ def run_calibration_comparison(form: Mapping, *, existing_in_vitro=None, existin
                     raise PlanningInputError('Future individual SD must be positive at every proposed time.', error_field)
                 kwargs[side + '_times'] = times
                 kwargs[side + '_observation_model'] = observation
-            outcomes.append(dict(candidate=row['name'], side=side, kind=request['kind'], status='available',
+            outcomes.append(dict(candidate=row['name'], candidate_index=row['index'],
+                side=side, kind=request['kind'], status='available',
+                fixed_times=np.array([]) if old is None else np.unique(old.time),
+                new_units=len(times) * request['replicates'], information_criterion=criterion,
+                reference_time_range=details[side].get('reference_time_range'),
                 times=times.copy(), replicates=request['replicates'],
                 message=('Generated for curve recovery, not optimized for IVIVC performance.' if request['kind']=='generated' else 'Explicitly specified added observations.')))
         designs[row['name']] = CalibrationDesign(**kwargs)
+    if settings['normalization'] != 'none' or settings['one_minus']:
+        warnings.append('Response normalization constants are fixed from each source dataset and applied once to that environment. Future SD uses this analyzed scale; simulated datasets are not normalized again.')
+    return CalibrationComparisonResult(settings, None, designs, references, fits, analyzed,
+                                       details, list(dict.fromkeys(warnings)), outcomes)
+
+
+def run_calibration_generation(form: Mapping, *, existing_in_vitro=None, existing_in_vivo=None,
+                               in_vitro_source=None, in_vivo_source=None,
+                               in_vitro_profile=None, in_vivo_profile=None):
+    """Generate reviewable candidates without IVIVC fitting or measurement simulation.
+
+    All active varied-environment candidates define the same source domains used
+    by a full comparison. Held-fixed data, target predictions, and Monte Carlo
+    settings are irrelevant to this request and are not required or validated.
+    """
+    settings = _settings(form, generation_only=True)
+    candidates = _candidate_requests(form, settings, generation_only=True)
+    if not any(request['kind'] == 'generated' for row in candidates
+               for request in row['sides'].values()):
+        raise PlanningInputError('Choose generation for at least one candidate environment.', 'calibration-candidates')
+    return _build_calibration_candidates(form, settings, candidates,
+        existing_in_vitro=existing_in_vitro, existing_in_vivo=existing_in_vivo,
+        in_vitro_source=in_vitro_source, in_vivo_source=in_vivo_source,
+        in_vitro_profile=in_vitro_profile, in_vivo_profile=in_vivo_profile,
+        generation_only=True)
+
+
+def run_calibration_comparison(form: Mapping, *, existing_in_vitro=None, existing_in_vivo=None,
+                               in_vitro_source=None, in_vivo_source=None,
+                               in_vitro_profile=None, in_vivo_profile=None, prediction=None):
+    settings = _settings(form)
+    candidates = _candidate_requests(form, settings)
+    if settings['assess_target']:
+        _course(prediction, 'cal-target-file')
+        if len(prediction.time) > 200:
+            raise PlanningInputError('Use at most 200 target-prediction observations per comparison.', 'cal-target-file')
+        if settings['approach_id'] == 'approach1' and prediction.observation_uncertainty is not None:
+            raise PlanningInputError('Approach 1 does not propagate target response SD/SEM. Choose Approach 2 or explicitly omit target precision.', 'cal-target-file')
+    point_count = (len(settings.get('evaluation_times', settings.get('response_levels', ())))
+                   + (1 if settings['method'] == 'tau_ratio' else 0)
+                   + (len(prediction.time) if settings['assess_target'] else 0))
+    if (len(candidates) * settings['n_simulations'] * settings['interval_draws'] * point_count
+            > 10_000_000):
+        raise PlanningInputError('Reduce evaluation points, candidates, simulations, or interval draws to at most 10000000 point draws per request.', 'cal_interval_draws')
+    if settings['assess_target'] and prediction is not None and (
+            prediction is existing_in_vitro or prediction is existing_in_vivo):
+        raise PlanningInputError('Target observations must be independent of calibration measurements.', 'cal-target-file')
+    prepared = _build_calibration_candidates(form, settings, candidates,
+        existing_in_vitro=existing_in_vitro, existing_in_vivo=existing_in_vivo,
+        in_vitro_source=in_vitro_source, in_vivo_source=in_vivo_source,
+        in_vitro_profile=in_vitro_profile, in_vivo_profile=in_vivo_profile)
+    designs, references, fits = prepared.designs, prepared.references, prepared.source_fits
+    analyzed, details = prepared.analyzed_existing, prepared.source_details
+    warnings, outcomes = prepared.warnings, prepared.generation_outcomes
     assessment = dict(approach_id=settings['approach_id'], model_name=settings['model_name'],
                       method=settings['method'], selected_normalizations=(), selected_scalings=(),
                       selected_interpolation=[settings['interpolation']], n_samples=settings['interval_draws'],
@@ -421,8 +474,6 @@ def run_calibration_comparison(form: Mapping, *, existing_in_vitro=None, existin
     except (ValueError, RuntimeError, TypeError, FloatingPointError) as error:
         raise PlanningInputError(f'Calibration comparison could not be completed: {error}', 'calibration-candidates') from error
     warnings.append('Generating references in the two environments are assumed independent. Existing calibration rows remain fixed; only proposed independent observations are simulated.')
-    if settings['normalization'] != 'none' or settings['one_minus']:
-        warnings.append('Response normalization constants are fixed from each source dataset and applied once to that environment. Future SD uses this analyzed scale; simulated datasets are not normalized again.')
     if settings['approach_id'] == 'approach1':
         warnings.append('Approach 1 repeats the ordinary shared interpolation and time-mapping fit. Experimental response uncertainty drives simulated measurements, not weighting or propagation within that fit; across-study variation is reported separately from mapping-fit intervals.')
     for key, requested in (('relationship', settings['relationship']), ('prediction', settings['assess_target'])):
