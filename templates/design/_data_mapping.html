@@ -1,0 +1,113 @@
+{% macro error_for(field_id) -%}
+<p id="{{ field_id }}-error" class="design-field-error" data-error-for="{{ field_id }}" hidden></p>
+{%- endmacro %}
+
+{% macro column_select(field_id, label, chosen='', empty_label='Select a column') -%}
+<div class="design-field">
+    <label for="{{ field_id }}">{{ label }}</label>
+    <select id="{{ field_id }}" name="{{ field_id }}">
+        <option value="">{{ empty_label }}</option>
+        {% for column in columns or [] %}<option value="{{ column }}"{% if column == chosen %} selected{% endif %}>{{ column }}</option>{% endfor %}
+    </select>
+    {{ error_for(field_id) }}
+</div>
+{%- endmacro %}
+
+{% set dataset_prefix = dataset.id ~ '__' %}
+{% if sheet_names %}
+<div class="design-field">
+    <label for="{{ dataset_prefix }}sheet">Worksheet</label>
+    <select id="{{ dataset_prefix }}sheet" name="{{ dataset_prefix }}sheet" data-import-sheet>
+        <option value="">Select a worksheet</option>
+        {% for name in sheet_names %}<option value="{{ name }}"{% if name == selected_sheet %} selected{% endif %}>{{ name }}</option>{% endfor %}
+    </select>
+    {{ error_for(dataset_prefix ~ 'sheet') }}
+</div>
+{% endif %}
+
+{% if columns is none %}
+<p class="design-help">Select a worksheet and choose Read columns again.</p>
+{% else %}
+<div data-column-fields>
+    <p class="design-help">Column choices below are starting suggestions. Check them before previewing the data.</p>
+    {% if dataset.kind in ('course', 'pair') %}
+    {% for series in dataset.series %}
+    {% set prefix = dataset_prefix ~ series.key ~ '__' %}
+    <fieldset class="design-course-options" data-course-options="{{ prefix }}">
+        <legend>{{ series.label }}</legend>
+        <div class="design-field-grid">
+            {{ column_select(prefix ~ 'time_column', 'Time column', columns[series.time_default] if series.time_default < columns|length else '') }}
+            {{ column_select(prefix ~ 'response_column', 'Response column', columns[series.response_default] if series.response_default < columns|length else '') }}
+        </div>
+        <div class="design-field">
+            <label for="{{ prefix }}uncertainty">Response and uncertainty interpretation</label>
+            <select id="{{ prefix }}uncertainty" name="{{ prefix }}uncertainty" data-uncertainty-kind>
+                <option value="none">Uncertainty not supplied</option>
+                <option value="individual_sd">Individual observations with SD</option>
+                <option value="mean_sd">Means with replicate SD and independent count</option>
+                <option value="mean_sem">Means with SEM</option>
+            </select>
+            {{ error_for(prefix ~ 'uncertainty') }}
+        </div>
+        <div data-error-fields hidden>
+            <div class="design-field">
+                <label for="{{ prefix }}error_source">SD or SEM source</label>
+                <select id="{{ prefix }}error_source" name="{{ prefix }}error_source">
+                    <option value="constant">Constant value</option>
+                    <option value="column">A column in this file</option>
+                </select>
+                {{ error_for(prefix ~ 'error_source') }}
+            </div>
+            <div class="design-field" data-error-source="constant">
+                <label for="{{ prefix }}error_value">Constant absolute SD or SEM</label>
+                <input id="{{ prefix }}error_value" name="{{ prefix }}error_value" type="number" min="0" step="any" placeholder="Enter the supplied positive SD or SEM">
+                {{ error_for(prefix ~ 'error_value') }}
+            </div>
+            <div data-error-source="column" hidden>
+                {{ column_select(prefix ~ 'error_column', 'SD or SEM column') }}
+            </div>
+        </div>
+        <div data-count-fields hidden>
+            <div class="design-field">
+                <label for="{{ prefix }}count_source">Independent replicate count</label>
+                <select id="{{ prefix }}count_source" name="{{ prefix }}count_source">
+                    <option value="none">Not supplied (optional with SEM)</option>
+                    <option value="constant">Constant count</option>
+                    <option value="column">A column in this file</option>
+                </select>
+                {{ error_for(prefix ~ 'count_source') }}
+            </div>
+            <div class="design-field" data-count-source="constant" hidden>
+                <label for="{{ prefix }}count_value">Constant independent replicate count</label>
+                <input id="{{ prefix }}count_value" name="{{ prefix }}count_value" type="number" min="1" step="1" placeholder="Actual independent replicate count">
+                {{ error_for(prefix ~ 'count_value') }}
+            </div>
+            <div data-count-source="column" hidden>
+                {{ column_select(prefix ~ 'count_column', 'Independent replicate-count column') }}
+            </div>
+        </div>
+        <div class="design-field">
+            <label for="{{ prefix }}response_units">Response units (optional)</label>
+            <input id="{{ prefix }}response_units" name="{{ prefix }}response_units" type="text" placeholder="For example: fraction remaining">
+            {{ error_for(prefix ~ 'response_units') }}
+        </div>
+        <p class="design-help">Individual SD is retained as observation uncertainty. Mean + SD + count is converted once to SEM = SD/√n. Supplied SEM is retained without further division. Original measurement errors are assumed independent; counts should represent independent experimental units.</p>
+    </fieldset>
+    {% endfor %}
+    {% elif dataset.kind == 'ratios' %}
+    {{ column_select(dataset_prefix ~ 'ratio_column', 'In vivo / in vitro time-scale ratio', 'ratio' if 'ratio' in columns else (columns[0] if columns else '')) }}
+    {{ column_select(dataset_prefix ~ 'weight_column', 'Weight column (optional)', 'weight' if 'weight' in columns else '', 'No weight column — equal weights') }}
+    {{ column_select(dataset_prefix ~ 'source_column', 'Source identifier column (optional)', 'source_id' if 'source_id' in columns else '', 'No source identifier column') }}
+    <p class="design-help">Ratios must be positive. Supplied weights must be nonnegative and have positive total weight; blank cells in a selected weight column are errors. Ratios refer to compatible in vivo/in vitro time-scale definitions and units.</p>
+    {% elif dataset.kind == 'sd_profile' %}
+    <div class="design-field-grid">
+        {{ column_select(dataset_prefix ~ 'time_column', 'Time column', 'time' if 'time' in columns else (columns[0] if columns else '')) }}
+        {{ column_select(dataset_prefix ~ 'sd_column', 'Individual-measurement SD column', 'sd' if 'sd' in columns else (columns[1] if columns|length > 1 else '')) }}
+    </div>
+    <p class="design-help">This profile specifies individual future-measurement SD, not SEM or reference-curve uncertainty. Times must increase without duplicates. Planning uses the nearest-time SD and extends endpoint values beyond the profile range.</p>
+    {% endif %}
+    <div class="design-action-row">
+        <button type="button" data-import-action="preview" data-dataset-id="{{ dataset.id }}">Preview interpreted data</button>
+    </div>
+</div>
+{% endif %}

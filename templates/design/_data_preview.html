@@ -1,0 +1,28 @@
+<section class="design-data-preview" aria-labelledby="{{ dataset.id }}-preview-heading">
+    <h4 id="{{ dataset.id }}-preview-heading">{{ dataset.label }} — interpreted preview</h4>
+    <p class="design-help">File: {{ filename }}{% if selected_sheet is not none %} · Worksheet: {{ selected_sheet }}{% endif %}.</p>
+    {% if dataset.kind in ('course', 'pair') %}<p class="design-help">Values are on the uploaded response scale; no response normalization has been applied.</p>{% endif %}
+    {% for imported in imports %}
+    {% set data = imported.data %}
+    <section class="design-preview-series" aria-label="{{ imported.label }}">
+        <h5>{{ imported.label }}</h5>
+        <p>{{ data.summary.interpretation }}</p>
+        {% if data.summary.get('mapping') %}<p class="design-help">Mapping: {% for label, column in data.summary.mapping.items() %}{{ label }} → {{ column }}{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
+        <p class="design-help">{{ data.summary.source_rows }} source rows · {{ data.summary.retained_rows }} retained · {{ data.summary.omitted_rows }} omitted.</p>
+        {% if data.summary.get('time_range') %}<p class="design-help">Time range: {{ data.summary.time_range[0] }}–{{ data.summary.time_range[1] }}{% if data.summary.get('response_range') %} · Response range: {{ data.summary.response_range[0] }}–{{ data.summary.response_range[1] }}{% endif %}.</p>{% endif %}
+        {% if data.summary.get('ratio_range') %}<p class="design-help">Ratio range: {{ data.summary.ratio_range[0] }}–{{ data.summary.ratio_range[1] }}{% if data.summary.get('weights') %} · Weights: {{ data.summary.weights }}{% endif %}.</p>{% endif %}
+        {% if data.summary.get('individual_sd_range') %}<p class="design-help">Individual SD range: {{ data.summary.individual_sd_range[0] }}–{{ data.summary.individual_sd_range[1] }}.</p>{% endif %}
+        {% if data.summary.get('response_units') %}<p class="design-help">Response units: {{ data.summary.response_units }}.</p>{% endif %}
+        {% if data.omitted_rows %}<p class="design-help">Omitted rows: {{ data.omitted_rows[:10]|join(', ') }}{% if data.omitted_rows|length > 10 %}, …{% endif %}. Rows missing both mapped time and response are reported rather than fitted.</p>{% endif %}
+        <div class="design-preview-table">
+            <table>
+                <caption>{{ imported.label }}: first {{ data.rows|length }} interpreted rows</caption>
+                <thead><tr>{% for column in data.columns %}<th scope="col">{{ column }}</th>{% endfor %}</tr></thead>
+                <tbody>{% for row in data.rows %}<tr>{% for column in data.columns %}<td>{{ row[column] if row[column] is not none else '—' }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+            </table>
+        </div>
+        {% if data.summary.retained_rows > data.rows|length %}<p class="design-help">Only the first {{ data.rows|length }} rows are displayed; all retained rows were checked.</p>{% endif %}
+    </section>
+    {% endfor %}
+    <p class="design-help">This preview describes the selected file and mapping at the time it was requested. No curve fitting, schedule optimization, or simulation has run.</p>
+</section>

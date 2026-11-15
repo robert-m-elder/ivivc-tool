@@ -1,0 +1,18 @@
+{% macro data_upload(dataset) -%}
+<fieldset class="design-dataset" data-design-dataset="{{ dataset.id }}" data-dataset-kind="{{ dataset.kind }}" data-inspect-url="{{ url_for('inspect_data') }}" data-preview-url="{{ url_for('preview_data') }}">
+    <legend>{{ dataset.label }}</legend>
+    <div class="design-field">
+        <label for="{{ dataset.id }}">CSV or Excel file</label>
+        <input id="{{ dataset.id }}" name="{{ dataset.file_field }}" type="file" accept=".csv,.xls,.xlsx" aria-describedby="{{ dataset.id }}-help">
+        <p id="{{ dataset.id }}-help" class="design-help">Select a file, read its columns, then review the mapping and interpreted values. The selected file stays in this page.</p>
+        <p id="{{ dataset.id }}-error" class="design-field-error" data-error-for="{{ dataset.id }}" hidden></p>
+    </div>
+    <div class="design-action-row">
+        <button type="button" data-import-action="inspect" data-dataset-id="{{ dataset.id }}" aria-controls="{{ dataset.id }}-config">Read columns</button>
+    </div>
+    <p class="design-help" data-import-status role="status" aria-live="polite"></p>
+    <div id="{{ dataset.id }}-config" data-import-config></div>
+    <p class="design-status" data-import-stale hidden></p>
+    <div id="{{ dataset.id }}-preview" data-import-preview></div>
+</fieldset>
+{%- endmacro %}

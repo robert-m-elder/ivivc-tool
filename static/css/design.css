@@ -142,6 +142,32 @@
 .design-page .design-settings-table th { width: 46%; }
 .design-page .design-review-result .design-action-row { margin-top: 1rem; }
 
+.design-page .design-dataset,
+.design-page .design-course-options {
+    min-width: 0;
+    margin: 1.1rem 0;
+    padding: 1rem;
+    border: 1px solid var(--design-border);
+    border-radius: .3rem;
+}
+
+.design-page .design-dataset > legend,
+.design-page .design-course-options > legend { font-weight: 600; padding-inline: .35rem; }
+.design-page .design-course-options { background: var(--design-background); }
+.design-page .design-data-preview { margin-top: 1rem; border-top: 1px solid var(--design-border); padding-top: 1rem; }
+.design-page .design-data-preview h4 { font-size: 1rem; margin: 0 0 .7rem; overflow-wrap: anywhere; }
+.design-page .design-preview-series + .design-preview-series { margin-top: 1.4rem; }
+.design-page .design-preview-series h5 { font-size: .95rem; margin: .5rem 0; }
+.design-page .design-preview-table { overflow-x: auto; }
+.design-page .design-preview-table table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+.design-page .design-preview-table caption { text-align: left; margin-bottom: .5rem; color: var(--design-muted); }
+.design-page .design-preview-table th,
+.design-page .design-preview-table td { text-align: left; vertical-align: top; padding: .55rem; border-bottom: 1px solid var(--design-border); }
+.design-page .design-preview-table td { font-variant-numeric: tabular-nums; }
+.design-page .design-preview-table th { overflow-wrap: anywhere; }
+.design-page .design-checkbox-label { display: flex; align-items: flex-start; gap: .5rem; }
+.design-page .design-checkbox-label input[type="checkbox"] { display: inline-block; width: auto; min-height: 0; margin-top: .35rem; flex-shrink: 0; }
+
 .design-page .design-skip-link {
     position: absolute;
     top: .5rem;

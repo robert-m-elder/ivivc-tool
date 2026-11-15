@@ -46,6 +46,13 @@ function fixture() {
         setAttribute(name, value) { this.attributes[name] = String(value); }
         getAttribute(name) { return this.attributes[name] ?? null; }
         addEventListener(type, listener) { (this.listeners[type] ||= []).push(listener); }
+        dispatchEvent(event) {
+            if (!event.target) event.target = this;
+            const ancestors = [];
+            for (let node = this; node; node = event.bubbles ? node.parentElement : null) ancestors.push(node);
+            for (const node of ancestors) for (const listener of node.listeners[event.type] || []) listener(event);
+            return true;
+        }
         focus() { document.activeElement = this; }
         matches(selector) {
             const attribute = /^\[([^=\]]+)(?:="([^"]*)")?\]$/.exec(selector);
@@ -128,6 +135,9 @@ function fixture() {
     vm.runInNewContext(source, {
         document,
         FormData: SubmittedFormData,
+        CustomEvent: class {
+            constructor(type, options = {}) { this.type = type; Object.assign(this, options); }
+        },
         fetch(url, options) {
             return new Promise((resolve, reject) => requests.push({url, options, resolve, reject}));
         },

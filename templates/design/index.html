@@ -1,3 +1,4 @@
+{% from 'design/_data_upload.html' import data_upload %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,18 +7,19 @@
     <title>Study Design for Absorbable Materials</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/design.css') }}">
     <script src="{{ url_for('static', filename='js/design.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/design-data.js') }}" defer></script>
 </head>
 <body class="design-page">
     <a class="design-skip-link" href="#design-workspace">Skip to workspace</a>
     <header class="design-site-header">
         <div class="design-page-width">
             <h1>Study Design for Absorbable Materials</h1>
-            <p class="design-muted">Development version · setup review</p>
+            <p class="design-muted">Development version · data import and setup review</p>
         </div>
     </header>
 
     <main id="design-workspace" class="design-page-width" tabindex="-1">
-        <p class="design-notice">This version reviews setup settings. Data import and numerical analysis are not yet available.</p>
+        <p class="design-notice">Import and interpret data, then review setup settings. Numerical analysis is not yet available.</p>
         <noscript><p class="design-notice">Enable JavaScript to review setup and retain selected files while moving between inputs and comparisons.</p></noscript>
 
         <form id="design-setup-form" action="{{ url_for('review_setup') }}" method="post" enctype="multipart/form-data" novalidate>
@@ -56,41 +58,34 @@
                             <p id="reference-source-error" class="design-field-error" data-error-for="reference_source" hidden></p>
                         </div>
                         <div data-reference-source="measured"{% if settings.reference_source != 'measured' %} hidden{% endif %}>
-                            <div class="design-field">
-                                <label for="reference-file">Prior in vivo reference data</label>
-                                <input id="reference-file" name="reference_file" type="file" accept=".csv,.xls,.xlsx" aria-describedby="file-reading-help">
-                            </div>
+                            {{ data_upload(datasets['reference-file']) }}
                         </div>
                         <div data-reference-source="ivivc"{% if settings.reference_source != 'ivivc' %} hidden{% endif %}>
-                            <div class="design-field">
-                                <label for="ivivc-calibration-file">Paired in vitro/in vivo calibration data</label>
-                                <input id="ivivc-calibration-file" name="ivivc_calibration_file" type="file" accept=".csv,.xls,.xlsx" aria-describedby="file-reading-help">
-                            </div>
-                            <div class="design-field">
-                                <label for="prediction-file">Target in vitro data</label>
-                                <input id="prediction-file" name="prediction_file" type="file" accept=".csv,.xls,.xlsx" aria-describedby="file-reading-help">
-                            </div>
+                            {{ data_upload(datasets['ivivc-calibration-file']) }}
+                            {{ data_upload(datasets['prediction-file']) }}
                         </div>
                         <div data-reference-source="scaling"{% if settings.reference_source != 'scaling' %} hidden{% endif %}>
-                            <div class="design-field">
-                                <label for="scaling-source-file">Target in vitro time-course data</label>
-                                <input id="scaling-source-file" name="scaling_source_file" type="file" accept=".csv,.xls,.xlsx" aria-describedby="file-reading-help">
-                            </div>
-                            <div class="design-field">
-                                <label for="time-scale-file">Empirical time-scale distribution</label>
-                                <input id="time-scale-file" name="time_scale_file" type="file" accept=".csv" aria-describedby="file-reading-help">
-                            </div>
+                            {{ data_upload(datasets['scaling-source-file']) }}
+                            {{ data_upload(datasets['time-scale-file']) }}
                         </div>
-                        <p id="file-reading-help" class="design-help">File selections stay in this page while you review setup. Files are not read by this version.</p>
+                        <div class="design-field">
+                            <label class="design-checkbox-label" for="has_completed"><input id="has_completed" name="has_completed" type="checkbox" value="on"> This target study already has completed observations</label>
+                            <p class="design-help">Completed target-study measurements have a different role from prior reference or calibration data.</p>
+                        </div>
+                        <div data-completed-dataset hidden>
+                            {{ data_upload(datasets['completed-target-file']) }}
+                        </div>
                     </section>
 
                     <section class="design-section" aria-labelledby="study-reference-heading">
                         <h3 id="study-reference-heading">2 · Reference and preprocessing</h3>
-                        <p>Reference fitting, preprocessing options, and the trajectory preview will appear here when data import is available.</p>
+                        <p>Reference fitting, preprocessing options, and the trajectory preview will appear here when numerical planning is connected. Data previews above retain the uploaded response scale.</p>
                     </section>
                     <section class="design-section" aria-labelledby="study-measurements-heading">
                         <h3 id="study-measurements-heading">3 · Future measurements</h3>
                         <p>Future measurement variability and independent replicate counts will be configured separately from reference uncertainty.</p>
+                        {{ data_upload(datasets['future-sd-profile-file']) }}
+                        <p class="design-help">The optional SD profile describes individual future measurements. It does not supply uncertainty for the reference data.</p>
                     </section>
                     <section class="design-section" aria-labelledby="study-sampling-heading">
                         <h3 id="study-sampling-heading">4 · Sampling choices</h3>
@@ -111,21 +106,15 @@
                             <p id="varied-environment-help" class="design-help">Existing measurements will stay fixed when evaluating proposed additions.</p>
                             <p id="varied-environment-error" class="design-field-error" data-error-for="varied_environment" hidden></p>
                         </div>
-                        <div class="design-field-grid">
-                            <div class="design-field">
-                                <label for="existing-in-vitro-file">Existing in vitro calibration data, if available</label>
-                                <input id="existing-in-vitro-file" name="existing_in_vitro_file" type="file" accept=".csv,.xls,.xlsx" aria-describedby="calibration-file-reading-help">
-                            </div>
-                            <div class="design-field">
-                                <label for="existing-in-vivo-file">Existing in vivo calibration data, if available</label>
-                                <input id="existing-in-vivo-file" name="existing_in_vivo_file" type="file" accept=".csv,.xls,.xlsx" aria-describedby="calibration-file-reading-help">
-                            </div>
-                        </div>
-                        <p id="calibration-file-reading-help" class="design-help">These file selections identify their intended roles. Files and uncertainty columns are not read by this version.</p>
+                        {{ data_upload(datasets['existing-in-vitro-file']) }}
+                        {{ data_upload(datasets['existing-in-vivo-file']) }}
                     </section>
                     <section class="design-section" aria-labelledby="calibration-reference-heading">
                         <h3 id="calibration-reference-heading">2 · Expected behavior and future measurements</h3>
                         <p>Reference trajectories and future measurement variability will be specified for each environment receiving simulated measurements.</p>
+                        {{ data_upload(datasets['calibration-in-vitro-sd-profile-file']) }}
+                        {{ data_upload(datasets['calibration-in-vivo-sd-profile-file']) }}
+                        <p class="design-help">These optional profiles describe future individual SD in each environment. Independent replicate counts will be applied when planning is connected.</p>
                     </section>
                     <section class="design-section" aria-labelledby="calibration-assessment-heading">
                         <h3 id="calibration-assessment-heading">3 · IVIVC assessment</h3>

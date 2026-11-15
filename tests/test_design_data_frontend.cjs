@@ -1,0 +1,330 @@
+"use strict";
+
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const test = require("node:test");
+const vm = require("node:vm");
+
+const source = fs.readFileSync(path.join(__dirname, "../static/js/design-data.js"), "utf8");
+
+// A small browser fixture for the import controller. Server-rendered mapping
+// responses install matching controls; no data-file parser is implemented here.
+function fixture() {
+    const document = {readyState: "complete"};
+    const dataAttribute = key => "data-" + key.replace(/[A-Z]/g, letter => "-" + letter.toLowerCase());
+    let installMapping;
+
+    class Element {
+        constructor(tag, attributes = {}) {
+            this.tagName = tag.toUpperCase();
+            this.attributes = {...attributes};
+            this.children = [];
+            this.parentElement = null;
+            this.listeners = {};
+            this.files = [];
+            this.value = attributes.value || "";
+            this._html = "";
+            this._text = "";
+            this.dataset = new Proxy({}, {
+                get: (_, key) => this.attributes[dataAttribute(key)],
+                set: (_, key, value) => { this.attributes[dataAttribute(key)] = String(value); return true; },
+            });
+        }
+        get id() { return this.attributes.id || ""; }
+        get name() { return this.attributes.name || ""; }
+        get type() { return this.attributes.type || ""; }
+        get disabled() { return this.attributes.disabled !== undefined; }
+        set disabled(value) { if (value) this.attributes.disabled = ""; else delete this.attributes.disabled; }
+        get hidden() { return this.attributes.hidden !== undefined; }
+        set hidden(value) { if (value) this.attributes.hidden = ""; else delete this.attributes.hidden; }
+        get checked() { return this.attributes.checked !== undefined; }
+        set checked(value) { if (value) this.attributes.checked = ""; else delete this.attributes.checked; }
+        get textContent() { return this._text + this.children.map(child => child.textContent).join(""); }
+        set textContent(value) { this._text = String(value); this._html = ""; this.children = []; }
+        get innerHTML() { return this._html; }
+        set innerHTML(value) {
+            this._html = String(value); this._text = ""; this.children = [];
+            if (this.attributes["data-import-config"] !== undefined) installMapping(this, value);
+            else if (value) this.append(new Element("section"));
+        }
+        get childElementCount() { return this.children.length; }
+        append(...children) { children.forEach(child => { child.parentElement = this; this.children.push(child); }); }
+        replaceChildren(...children) { this._html = ""; this._text = ""; this.children = []; this.append(...children); }
+        setAttribute(name, value) { this.attributes[name] = String(value); }
+        getAttribute(name) { return this.attributes[name] ?? null; }
+        hasAttribute(name) { return this.attributes[name] !== undefined; }
+        addEventListener(type, listener) { (this.listeners[type] ||= []).push(listener); }
+        matches(selector) {
+            if (selector.startsWith("#")) return this.id === selector.slice(1);
+            const match = /^([\w-]+)?((?:\[[^\]]+\])*)$/.exec(selector);
+            if (!match || (match[1] && this.tagName.toLowerCase() !== match[1])) return false;
+            return [...match[2].matchAll(/\[([^=\]]+)(?:=["']?([^\]"']*)["']?)?\]/g)].every(([, name, value]) =>
+                this.hasAttribute(name) && (value === undefined || this.attributes[name] === value));
+        }
+        querySelectorAll(selector) {
+            const selectors = selector.split(",").map(part => part.trim());
+            const found = [];
+            const visit = node => node.children.forEach(child => {
+                if (selectors.some(part => child.matches(part))) found.push(child);
+                visit(child);
+            });
+            visit(this); return found;
+        }
+        querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
+        closest(selector) {
+            for (let node = this; node; node = node.parentElement) if (node.matches(selector)) return node;
+            return null;
+        }
+        contains(other) {
+            for (let node = other; node; node = node.parentElement) if (node === this) return true;
+            return false;
+        }
+        dispatchEvent(event) {
+            if (!event.target) event.target = this;
+            const ancestors = [];
+            for (let node = this; node; node = node.parentElement) ancestors.push(node);
+            for (const node of ancestors) for (const listener of node.listeners[event.type] || []) listener(event);
+            return true;
+        }
+    }
+
+    const element = (tag, attributes = {}, parent = null) => {
+        const node = new Element(tag, attributes);
+        if (parent) parent.append(node);
+        return node;
+    };
+    const root = element("main", {id: "design-workspace"});
+    const form = element("form", {id: "design-setup-form"}, root);
+    const task = element("select", {id: "task", name: "task", value: "study"}, form);
+    const studyGroup = element("div", {"data-design-task": "study"}, form);
+    const hasCompleted = element("input", {id: "has_completed", name: "has_completed", type: "checkbox"}, studyGroup);
+    const completedGroup = element("div", {"data-completed-dataset": "", hidden: ""}, studyGroup);
+
+    function makeDataset(id, parent) {
+        const container = element("div", {"data-design-dataset": id, "data-dataset-kind": "course",
+            "data-inspect-url": "/data/inspect", "data-preview-url": "/data/preview"}, parent);
+        const file = element("input", {id, name: id.replaceAll("-", "_"), type: "file"}, container);
+        const inspect = element("button", {type: "button", "data-import-action": "inspect"}, container);
+        const config = element("div", {"data-import-config": ""}, container);
+        const preview = element("div", {"data-import-preview": ""}, container);
+        const status = element("p", {"data-import-status": ""}, container);
+        const stale = element("p", {"data-import-stale": "", hidden: ""}, container);
+        return {id, container, file, inspect, config, preview, status, stale};
+    }
+    const dataset = makeDataset("reference-file", studyGroup);
+    const completed = makeDataset("completed-target-file", completedGroup);
+    const prefix = dataset.id + "__profile__";
+
+    installMapping = (container, token) => {
+        if (!token) return;
+        const id = container.closest("[data-design-dataset]").dataset.designDataset;
+        const key = id + "__profile__";
+        if (token.includes("SHEETS") || token.includes("EXCEL_MAPPING")) {
+            element("select", {id: id + "__sheet", name: id + "__sheet", value: token.includes("MAPPING") ? "Data" : ""}, container);
+        }
+        if (!token.includes("MAPPING")) return;
+        const columns = element("div", {"data-column-fields": ""}, container);
+        const options = element("fieldset", {"data-course-options": key}, columns);
+        const field = (name, tag, value, parent = options) => element(tag, {id: key + name, name: key + name, value}, parent);
+        field("time_column", "select", "time");
+        field("response_column", "select", "response");
+        field("uncertainty", "select", "none");
+        const errorFields = element("div", {"data-error-fields": ""}, options);
+        field("error_source", "select", "constant", errorFields);
+        const errorConstant = element("div", {"data-error-source": "constant"}, errorFields);
+        field("error_value", "input", ".05", errorConstant);
+        const errorColumn = element("div", {"data-error-source": "column"}, errorFields);
+        field("error_column", "select", "sd", errorColumn);
+        const countFields = element("div", {"data-count-fields": ""}, options);
+        field("count_source", "select", "none", countFields);
+        const countConstant = element("div", {"data-count-source": "constant"}, countFields);
+        field("count_value", "input", "3", countConstant);
+        const countColumn = element("div", {"data-count-source": "column"}, countFields);
+        field("count_column", "select", "n", countColumn);
+        field("response_units", "input", "fraction remaining");
+        element("button", {type: "button", "data-import-action": "preview"}, columns);
+    };
+
+    document.getElementById = id => root.id === id ? root : root.querySelectorAll("[id]").find(node => node.id === id) || null;
+    document.createElement = tag => element(tag);
+    const requests = [], errors = [], updates = [];
+    root.addEventListener("design-input-errors", event => { if (event.detail.errors.length) errors.push(event.detail); });
+    root.addEventListener("design-inputs-updated", event => updates.push(event));
+    class FormDataFixture {
+        constructor() { this.values = []; }
+        append(name, value) { this.values.push([name, value]); }
+        set(name, value) { this.values = this.values.filter(([key]) => key !== name); this.append(name, value); }
+        entries() { return this.values[Symbol.iterator](); }
+        get(name) { return this.values.find(([key]) => key === name)?.[1] ?? null; }
+    }
+    class CustomEventFixture {
+        constructor(type, options = {}) { this.type = type; Object.assign(this, options); }
+    }
+    vm.runInNewContext(source, {
+        document, FormData: FormDataFixture, CustomEvent: CustomEventFixture,
+        fetch(url, options) { return new Promise((resolve, reject) => requests.push({url, options, resolve, reject})); },
+    }, {filename: "design-data.js"});
+
+    async function emit(node, type) {
+        const event = {type, target: node, preventDefault() { this.defaultPrevented = true; }};
+        const ancestors = []; for (let current = node; current; current = current.parentElement) ancestors.push(current);
+        const calls = []; for (const current of ancestors) for (const listener of current.listeners[type] || []) calls.push(listener(event));
+        await Promise.all(calls);
+    }
+    const flush = () => new Promise(resolve => setImmediate(resolve));
+    async function respond(html, extra = {}, index = requests.length - 1) {
+        requests[index].resolve({ok: true, json: async () => ({ok: true, html, dataset_id: dataset.id, filename: dataset.file.files[0]?.name, ...extra})});
+        await flush();
+    }
+    function file(name = "measurements.csv") { return {name, size: 42, lastModified: 123}; }
+    function control(name) { return document.getElementById(prefix + name); }
+    async function readColumns(token = "CSV_MAPPING") {
+        dataset.file.files = [file(token === "EXCEL_MAPPING" ? "measurements.xlsx" : "measurements.csv")];
+        void emit(dataset.inspect, "click");
+        await respond(token);
+    }
+    return {root, form, task, studyGroup, hasCompleted, completedGroup, dataset, completed, requests, errors, updates,
+        emit, flush, respond, file, control, readColumns, document};
+}
+
+test("a missing file reports its field without sending a request", async () => {
+    const page = fixture();
+    await page.emit(page.dataset.inspect, "click");
+    assert.equal(page.requests.length, 0);
+    assert.equal(page.errors.length, 1);
+    assert.equal(page.errors[0].errors[0].field_id, page.dataset.id);
+});
+
+test("column inspection preserves the file input and sends only its selected file", async () => {
+    const page = fixture(), input = page.dataset.file, selected = page.file();
+    input.files = [selected];
+    void page.emit(page.dataset.inspect, "click");
+    assert.equal(page.requests.length, 1);
+    assert.equal(page.requests[0].url, "/data/inspect");
+    assert.equal(page.requests[0].options.body.get("file"), selected);
+    assert.equal(page.requests[0].options.body.get("dataset_id"), page.dataset.id);
+    await page.respond("CSV_MAPPING");
+    assert.equal(page.document.getElementById(page.dataset.id), input);
+    assert.equal(input.files[0], selected);
+    assert(page.control("time_column"));
+    assert(page.updates.length > 0);
+});
+
+test("Excel worksheet selection replaces mappings only after another column inspection", async () => {
+    const page = fixture();
+    page.dataset.file.files = [page.file("measurements.xlsx")];
+    void page.emit(page.dataset.inspect, "click");
+    await page.respond("SHEETS", {requires_sheet: true, sheets: ["Data", "Other"]});
+    const sheet = page.document.getElementById(page.dataset.id + "__sheet");
+    assert(sheet);
+    assert.equal(page.control("time_column"), null);
+    sheet.value = "Data"; await page.emit(sheet, "change");
+    void page.emit(page.dataset.inspect, "click");
+    assert.equal(page.requests.at(-1).options.body.get("sheet"), "Data");
+    await page.respond("EXCEL_MAPPING", {requires_sheet: false, selected_sheet: "Data"});
+    const columns = page.dataset.config.querySelector("[data-column-fields]");
+    const original = page.control("time_column");
+    const changedSheet = page.document.getElementById(page.dataset.id + "__sheet");
+    changedSheet.value = "Other"; await page.emit(changedSheet, "change");
+    assert.equal(columns.hidden, true);
+    assert.equal(original.disabled, true);
+    assert.equal(page.requests.length, 2);
+});
+
+test("uncertainty controls distinguish means with SD from means with SEM", async () => {
+    const page = fixture(); await page.readColumns();
+    const mode = page.control("uncertainty");
+    assert.equal(page.control("error_value").disabled, true);
+    mode.value = "mean_sd"; await page.emit(mode, "change");
+    assert.equal(page.control("count_source").value, "constant");
+    assert.equal(page.control("count_value").disabled, false);
+    assert.equal(page.control("error_value").disabled, false);
+    mode.value = "mean_sem"; await page.emit(mode, "change");
+    const counts = page.control("count_source"); counts.value = "none"; await page.emit(counts, "change");
+    assert.equal(counts.value, "none");
+    assert.equal(page.control("count_value").disabled, true);
+    mode.value = "individual_sd"; await page.emit(mode, "change");
+    assert.equal(counts.disabled, true);
+    assert.equal(page.control("error_value").disabled, false);
+    assert.equal(page.requests.length, 1);
+});
+
+test("preview submits mapped controls and preserves the earlier preview on failure", async () => {
+    const page = fixture(); await page.readColumns();
+    void page.emit(page.dataset.config.querySelector('[data-import-action="preview"]'), "click");
+    assert.equal(page.requests.at(-1).url, "/data/preview");
+    assert.equal(page.requests.at(-1).options.body.get(page.dataset.id + "__profile__time_column"), "time");
+    await page.respond("<table>First interpreted data</table>");
+    const previous = page.dataset.preview.innerHTML;
+    page.control("response_column").value = "other"; await page.emit(page.control("response_column"), "change");
+    assert.equal(page.dataset.stale.hidden, false);
+    assert.equal(page.requests.length, 2);
+    void page.emit(page.dataset.config.querySelector('[data-import-action="preview"]'), "click");
+    page.requests.at(-1).resolve({ok: false, json: async () => ({ok: false, errors: [{field_id: page.dataset.id + "__profile__response_column", message: "Choose a response column."}]})});
+    await page.flush();
+    assert.equal(page.dataset.preview.innerHTML, previous);
+    assert.equal(page.errors.at(-1).errors[0].message, "Choose a response column.");
+});
+
+test("file replacement clears old mappings while retaining the labeled earlier preview", async () => {
+    const page = fixture(); await page.readColumns();
+    void page.emit(page.dataset.config.querySelector('[data-import-action="preview"]'), "click");
+    await page.respond("<table>Earlier file preview</table>");
+    page.dataset.file.files = [page.file("replacement.csv")];
+    await page.emit(page.dataset.file, "change");
+    assert.equal(page.dataset.config.children.length, 0);
+    assert.equal(page.dataset.preview.innerHTML, "<table>Earlier file preview</table>");
+    assert.equal(page.dataset.stale.hidden, false);
+    assert.equal(page.requests.length, 2);
+});
+
+test("network and malformed-response failures keep the last preview and release import buttons", async () => {
+    for (const failure of ["network", "invalid-json"]) {
+        const page = fixture(); await page.readColumns();
+        const button = page.dataset.config.querySelector('[data-import-action="preview"]');
+        void page.emit(button, "click"); await page.respond("<table>Retained interpreted data</table>");
+        void page.emit(button, "click");
+        if (failure === "network") page.requests.at(-1).reject(new Error("offline"));
+        else page.requests.at(-1).resolve({ok: false, json: async () => { throw new Error("not JSON"); }});
+        await page.flush();
+        assert.equal(page.dataset.preview.innerHTML, "<table>Retained interpreted data</table>");
+        assert.equal(page.dataset.inspect.disabled, false);
+        assert.equal(button.disabled, false);
+        assert.match(page.errors.at(-1).errors[0].message, /connection/);
+    }
+});
+
+test("a changed file or mapping discards in-flight responses and stale field errors", async () => {
+    const page = fixture(); await page.readColumns();
+    const button = page.dataset.config.querySelector('[data-import-action="preview"]');
+    void page.emit(button, "click");
+    void page.emit(button, "click");
+    assert.equal(page.requests.length, 2);
+    page.control("response_column").value = "changed"; await page.emit(page.control("response_column"), "change");
+    await page.respond("<table>Obsolete response</table>");
+    assert.equal(page.dataset.preview.innerHTML, "");
+    void page.emit(button, "click");
+    page.dataset.file.files = [page.file("new.csv")]; await page.emit(page.dataset.file, "change");
+    page.requests.at(-1).resolve({ok: false, json: async () => ({ok: false, errors: [{field_id: page.dataset.id, message: "Old file invalid."}]})});
+    await page.flush();
+    assert.equal(page.errors.length, 0);
+    assert.equal(page.dataset.preview.innerHTML, "");
+});
+
+test("visibility changes cannot enable inactive dataset or completed-observation controls", async () => {
+    const page = fixture(); await page.readColumns();
+    assert.equal(page.completed.file.disabled, true);
+    page.hasCompleted.checked = true; await page.emit(page.hasCompleted, "change");
+    assert.equal(page.completedGroup.hidden, false);
+    assert.equal(page.completed.file.disabled, false);
+    page.studyGroup.hidden = true;
+    page.root.dispatchEvent({type: "design-visibility-updated"});
+    assert.equal(page.dataset.file.disabled, true);
+    assert.equal(page.control("time_column").disabled, true);
+    page.studyGroup.hidden = false;
+    page.root.dispatchEvent({type: "design-visibility-updated"});
+    assert.equal(page.dataset.file.disabled, false);
+    assert.equal(page.control("time_column").disabled, false);
+    assert.equal(page.control("error_value").disabled, true);
+});

@@ -1,13 +1,15 @@
 """Separate, request-scoped Flask frontend for study-design assessment.
 
-F1 provides setup review and request handling. Numerical workflows are connected
-in subsequent patches; importing this module does not import the IVIVC web app.
+Data imports are interpreted within individual requests. Numerical planning is
+connected in subsequent patches; this module does not import the IVIVC web app.
 """
 
 import json
 
 from flask import Flask, jsonify, render_template, request
 from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
+
+from utilities.design_uploads import COURSE_FIELDS, DATASETS, options_for
 
 
 TASK_LABELS = {
@@ -92,7 +94,96 @@ def create_app(config=None):
 
     @app.get('/')
     def index():
-        return render_template('design/index.html', settings=_default_settings())
+        return render_template('design/index.html', settings=_default_settings(), datasets=DATASETS)
+
+    def import_error(message, field_id=None):
+        return jsonify(ok=False, errors=[{'field_id': field_id, 'message': message}]), 400
+
+    def dataset_request():
+        identifier = request.form.get('dataset_id', '')
+        return DATASETS.get(identifier), request.files.get('file'), request.form.get('sheet') or None
+
+    @app.post('/data/inspect')
+    def inspect_data():
+        # Lazy imports retain the independent, lightweight application entry point.
+        from utilities.design_data import DataImportError, read_upload
+
+        dataset, upload, sheet = dataset_request()
+        if dataset is None:
+            return import_error('Select a supported dataset role.')
+        try:
+            loaded = read_upload(upload, sheet=sheet)
+        except DataImportError as error:
+            field = dataset['id'] + '__sheet' if error.field == 'sheet' and sheet else dataset['id']
+            return import_error(str(error), field)
+        columns = None if loaded.frame is None else loaded.frame.columns.tolist()
+        html = render_template(
+            'design/_data_mapping.html', dataset=dataset,
+            sheet_names=loaded.sheets, selected_sheet=loaded.sheet, columns=columns,
+        )
+        return jsonify(
+            ok=True, html=html, dataset_id=dataset['id'], filename=loaded.filename,
+            sheets=loaded.sheets, selected_sheet=loaded.sheet,
+            requires_sheet=loaded.frame is None, columns=columns or [],
+        )
+
+    @app.post('/data/preview')
+    def preview_data():
+        from utilities.design_data import (
+            DataImportError, interpret_sd_profile, interpret_time_course,
+            interpret_time_scales, read_upload,
+        )
+
+        dataset, upload, sheet = dataset_request()
+        if dataset is None:
+            return import_error('Select a supported dataset role.')
+        try:
+            loaded = read_upload(upload, sheet=sheet)
+        except DataImportError as error:
+            field = dataset['id'] + '__sheet' if error.field == 'sheet' and sheet else dataset['id']
+            return import_error(str(error), field)
+        if loaded.frame is None:
+            return import_error('Select a worksheet and read its columns first.', dataset['id'] + '__sheet')
+
+        imports, errors = [], []
+        if dataset['kind'] in ('course', 'pair'):
+            for series in dataset['series']:
+                prefix = dataset['id'] + '__' + series['key'] + '__'
+                try:
+                    options = options_for(request.form, prefix, COURSE_FIELDS)
+                    for field, index in (('time_column', series['time_default']),
+                                         ('response_column', series['response_default'])):
+                        if field not in options:
+                            options[field] = (loaded.frame.columns[index]
+                                              if index < len(loaded.frame.columns) else '')
+                    interpreted = interpret_time_course(
+                        loaded.frame, options,
+                        label=series['label'],
+                    )
+                except DataImportError as error:
+                    field = dataset['id'] if error.field == 'file' else prefix + error.field
+                    errors.append({'field_id': field, 'message': series['label'] + ': ' + str(error)})
+                else:
+                    imports.append({'label': series['label'], 'data': interpreted})
+        else:
+            prefix = dataset['id'] + '__'
+            fields = (('ratio_column', 'weight_column', 'source_column')
+                      if dataset['kind'] == 'ratios' else ('time_column', 'sd_column'))
+            interpreter = interpret_time_scales if dataset['kind'] == 'ratios' else interpret_sd_profile
+            try:
+                interpreted = interpreter(loaded.frame, options_for(request.form, prefix, fields))
+            except DataImportError as error:
+                field = dataset['id'] if error.field == 'file' else prefix + error.field
+                errors.append({'field_id': field, 'message': str(error)})
+            else:
+                imports.append({'label': dataset['label'], 'data': interpreted})
+        if errors:
+            return jsonify(ok=False, errors=errors), 400
+        html = render_template(
+            'design/_data_preview.html', dataset=dataset, filename=loaded.filename,
+            selected_sheet=loaded.sheet, imports=imports,
+        )
+        return jsonify(ok=True, html=html, dataset_id=dataset['id'], filename=loaded.filename)
 
     @app.post('/review')
     def review_setup():

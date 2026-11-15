@@ -33,6 +33,7 @@
             root.querySelectorAll('[data-reference-source]').forEach(group => {
                 setActive(group, task.value === 'study' && group.dataset.referenceSource === source.value);
             });
+            root.dispatchEvent(new CustomEvent('design-visibility-updated'));
         }
 
         function signature(data = new FormData(form)) {
@@ -73,10 +74,10 @@
             });
         }
 
-        function showErrors(errors) {
+        function showErrors(errors, context = {}) {
             clearErrors();
             const heading = document.createElement('h2');
-            heading.textContent = 'The setup review could not be completed';
+            heading.textContent = context.heading || 'The setup review could not be completed';
             const list = document.createElement('ul');
             const fieldMessages = new Map();
             errors.forEach(error => {
@@ -115,8 +116,16 @@
             summary.hidden = false;
             showView('inputs');
             summary.focus();
-            requestStatus.textContent = 'Setup review failed. Earlier displayed results remain available.';
+            requestStatus.textContent = context.status || 'Setup review failed. Earlier displayed results remain available.';
         }
+
+        root.addEventListener('design-input-errors', event => {
+            const context = event.detail || {};
+            if (!Array.isArray(context.errors)) return;
+            if (context.errors.length) showErrors(context.errors, context);
+            else clearErrors();
+        });
+        root.addEventListener('design-inputs-updated', updateDraftStatus);
 
         root.querySelectorAll('[data-design-view]').forEach(button => {
             button.addEventListener('click', () => showView(button.dataset.designView));
