@@ -180,7 +180,7 @@ class MeasuredPlanningTests(unittest.TestCase):
     def test_invalid_inputs_have_actionable_field_ids_before_any_fit(self):
         cases = [
             ({'task': 'calibration'}, 'task'), ({'reference_source': 'ivivc'}, 'reference_source'),
-            ({'has_completed': 'on'}, 'has_completed'), ({'model_name': 'unregistered'}, 'model_name'),
+            ({'has_completed': 'on'}, 'completed-target-file'), ({'model_name': 'unregistered'}, 'model_name'),
             ({'normalization': 'log_y'}, 'normalization'), ({'observation_kind': 'unknown'}, 'observation_kind'),
             ({'observation_value': '0'}, 'observation_value'), ({'first_time': '-1'}, 'first_time'),
             ({'last_time': '0'}, 'last_time'), ({'time_step': '0'}, 'time_step'),

@@ -206,9 +206,14 @@ def create_app(config=None):
             return jsonify(ok=False, errors=errors), 400
         if settings['task'] != 'study':
             return import_error('Calibration comparisons are not connected to this frontend yet.', 'task')
-        if request.form.get('has_completed'):
-            return import_error('Planning with completed target-study observations will be connected in a later patch.',
-                                'has_completed')
+        has_completed = str(request.form.get('has_completed', '')).strip().lower() in (
+            '1', 'on', 'true', 'yes',
+        )
+        measured_mode = request.form.get('measured_adaptive_mode', 'refit_completed')
+        if (has_completed and settings['reference_source'] == 'measured'
+                and measured_mode not in ('refit_completed', 'reweight_prior')):
+            return import_error('Select how completed data update the measured reference.',
+                                'measured_adaptive_mode')
 
         def planning_input(identifier):
             """Rebuild a typed input from this request, without relying on a preview."""
@@ -266,8 +271,16 @@ def create_app(config=None):
         try:
             source_kind = settings['reference_source']
             arguments, source_summaries = {}, []
+            completed, completed_summaries = None, []
+            if has_completed:
+                completed, completed_summaries = planning_input('completed-target-file')
             if source_kind == 'measured':
-                source, source_summaries = planning_input('reference-file')
+                if has_completed and measured_mode == 'refit_completed':
+                    # These current-study rows are fitted once by the backend;
+                    # an unrelated prior upload must not enter that fit.
+                    source = None
+                else:
+                    source, source_summaries = planning_input('reference-file')
             elif source_kind == 'ivivc':
                 calibration, source_summaries = planning_input('ivivc-calibration-file')
                 prediction, prediction_summaries = planning_input('prediction-file')
@@ -279,13 +292,16 @@ def create_app(config=None):
                 distribution, distribution_summaries = planning_input('time-scale-file')
                 source_summaries.extend(distribution_summaries)
                 arguments = dict(scaling_source=scaling_source, distribution=distribution)
+            source_summaries.extend(completed_summaries)
             profile, profile_summary = None, None
             if request.form.get('observation_kind') == 'time_profile_sd':
                 profile, profile_summaries = planning_input('future-sd-profile-file')
                 profile_summary = profile_summaries[0]['summary']
-            result = (run_measured_planning(source, request.form, profile=profile)
+            result = (run_measured_planning(source, request.form, profile=profile,
+                                           completed=completed)
                       if source_kind == 'measured' else
-                      run_reference_planning(request.form, profile=profile, **arguments))
+                      run_reference_planning(request.form, profile=profile,
+                                             completed=completed, **arguments))
         except PlanningInputError as error:
             return import_error(str(error), error.field_id)
         source_summary = source_summaries[0]['summary']

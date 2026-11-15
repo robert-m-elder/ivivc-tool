@@ -31,12 +31,13 @@ page can link to the two applications without combining their entry points.
   it does not fit curves, generate schedules, or run simulations. A setup review
   is not an analysis result.
 - `POST /calculate` imports and validates the current files and settings, then
-  completes prospective study planning synchronously. It returns server-rendered
+  completes prospective or adaptive study planning synchronously. It returns server-rendered
   comparison HTML or field-linked errors.
-- **Calculate comparison** supports new in vivo studies using measured reference
-  data, an IVIVC prediction, or empirical time scaling. Completed-study updates
-  and calibration comparisons retain import/setup review but are not yet
-  connected to numerical calculation in this frontend. Report generation remains
+- **Calculate comparison** supports new studies and additions to completed
+  observations, using measured reference data, an IVIVC prediction, or empirical
+  time scaling. Timing windows and deadlines can constrain proposed future times.
+  Calibration comparisons retain import/setup review but their numerical
+  calculations are not yet connected to this frontend. Report generation remains
   unavailable.
 
 JavaScript is required for the workspace. It leaves the input form mounted,
@@ -269,6 +270,103 @@ random streams derived from the entered seed. Schedules still share the same
 simulation plan. This separation can change seeded Monte Carlo values relative
 to F3, while preserving reproducibility within this version.
 
+## Adaptive planning with completed observations
+
+Select **This target study already has completed observations**, then import the
+current cumulative target-study data. Repeated rows are retained. Each row's
+supplied SD or SEM is used directly; reported counts do not divide SEM again.
+Completed responses are held fixed in every simulated study and are never
+generated again using the proposed future replicate count.
+
+With a measured reference, choose one of two roles:
+
+- **Refit completed data** uses the current study's completed observations alone
+  to fit the reference. Shared preprocessing is applied once to their values and
+  precision. These observations are not also used in a likelihood update.
+- **Update a separate prior** fits the separately supplied prior reference data,
+  then updates its complete trajectory weights using the completed target data.
+  The two studies are not pooled into a common measured curve.
+
+IVIVC and empirical-scaling references also update trajectory weights using the
+completed target data. Each request reconstructs the original prior and applies
+the cumulative observations once. It does not update an already updated prior.
+Empirical scaling retains its ratio provenance and reports the changed weights.
+
+For any prior-weight update, completed values and SD/SEM must **already use the
+analyzed response scale of the reference**. This is the raw scale when no
+response transformation is selected. A partial completed dataset is not
+normalized independently by its own initial value or extrema. By contrast,
+refitting the completed data as the source applies the selected preprocessing
+to that source and uses those same transformed rows in study refits.
+
+If completed precision is unspecified, explicitly choose to reuse the future
+measurement model or supply SD/SEM. Reusing the future model treats those
+historical rows as individual observations: their SD is evaluated at the
+completed times and observed responses once, then held fixed for fitting,
+weighting, and likelihood calculations. This is an additional historical-error
+assumption; for constant CV it uses the observed response as a plug-in value.
+Supplied completed SD/SEM always takes precedence over this fallback.
+
+Completed times are automatically retained in every schedule. The study-size
+inputs still count **total distinct times**, including completed and fixed
+proposed times. The adaptive results additionally show new time counts, new
+times, and new experimental-unit counts. Proposed replicate counts apply only
+to new observations; unknown historical unit counts are not inferred from them.
+
+Choose **Future times only** to exclude times at or before the latest completed
+measurement. Alternatively, allow earlier unmeasured elapsed times for gap
+filling when that is experimentally possible. Selecting **Latest completed
+measurement** as the first opportunity anchors the candidate grid there; the
+future-only rule still requires new times to be strictly later. Completed times
+and the milestone baseline remain in the reference/evaluation domain rather
+than being cut off by this candidate restriction.
+
+An optional list of unavailable proposed times removes those opportunities
+from the candidate grid. It cannot conflict with a fixed proposed measurement.
+Completed observations remain in the analysis even if their time appears in
+that exclusion list.
+
+Weight concentration and agreement summaries help assess whether an updated
+reference is still informative. Their effective draw counts are numerical
+diagnostics, not numbers of independent animals or universal adequacy cutoffs.
+An update cannot introduce behavior absent from the original reference curves.
+
+## Timing windows and deadlines
+
+Add up to eight timing requirements. For each bound, use a specified in vivo
+time or a degradation milestone and reference quantile. For example, a degraded
+fraction of `0.5` and quantile `0.25` uses the 25th percentile of reference T50.
+The **milestone baseline time** defines the response from which degradation is
+measured; specifying that time does not automatically add an experimental unit.
+
+- **Informative point(s) in a window** requests a minimum number of distinct
+  times in `(lower bound, upper bound]`, selected for information alongside the
+  other schedule choices. Count either new observations only or all qualifying
+  times, including completed nonbaseline observations.
+- **Latest feasible point before a deadline** reserves a point as late as
+  feasible before that deadline, jointly with the other latest-point requests.
+  The remaining times are selected for information.
+
+Fixed or completed observations at the designated baseline time do not count
+toward window coverage. An already elapsed deadline
+or a milestone not sufficiently reached within the reference horizon can make a
+requirement unavailable. Increase the horizon or revise the requirement when
+scientifically appropriate; the app does not discard nonreaching reference
+weight or change the requested quantile to produce a deadline.
+
+The result lists resolved bounds, generated schedules, and outcomes at every
+requested study size. **Infeasible**, **unresolved**, and **search limit reached**
+have different meanings. Reaching a search limit is not evidence that no
+schedule exists. If no suggested schedule can be produced, the reference and
+requirement diagnostics remain available without invented recovery metrics.
+Evenly spaced and manual comparisons are assessed separately and labeled with
+their requirement coverage; a comparison need not satisfy the requirements.
+
+This frontend currently combines timing requirements with future-only adaptive
+planning. Gap filling can be assessed without timing requirements; their
+combination is rejected explicitly because the shared timing scheduler defines
+new points as occurring after the latest completed time.
+
 ## Checks
 
 ```bash
@@ -276,6 +374,7 @@ python -m pytest tests/test_design_app.py
 python -m pytest tests/test_design_data.py tests/test_design_data_routes.py
 python -m pytest tests/test_design_planning.py tests/test_design_planning_results.py tests/test_design_planning_routes.py
 python -m pytest tests/test_design_reference_*.py
+python -m pytest tests/test_design_adaptive_*.py tests/test_design_timing.py
 node tests/test_design_frontend.cjs
 node tests/test_design_data_frontend.cjs
 ```

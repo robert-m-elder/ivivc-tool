@@ -20,6 +20,9 @@
         const submit = document.getElementById('review-setup');
         const calculate = document.getElementById('calculate-comparison');
         const completed = document.getElementById('has_completed');
+        const measuredMode = document.getElementById('measured_adaptive_mode');
+        const firstMode = document.getElementById('first_time_mode');
+        const timingRows = Array.from(root.querySelectorAll('[data-timing-row]'));
         const observationKind = document.getElementById('observation_kind');
         const ivivcApproach = document.getElementById('ivivc_approach');
         const ivivcModel = document.getElementById('ivivc_model');
@@ -33,8 +36,7 @@
         let calculatedSignature = null;
 
         function planningAvailable() {
-            return task.value === 'study' && ['measured', 'ivivc', 'scaling'].includes(source.value) &&
-                !(completed && completed.checked);
+            return task.value === 'study' && ['measured', 'ivivc', 'scaling'].includes(source.value);
         }
 
         function syncButtons() {
@@ -78,6 +80,54 @@
             previousApproach = approach;
         }
 
+        function syncAdaptive(available) {
+            const adaptive = available && Boolean(completed && completed.checked);
+            const refit = adaptive && source.value === 'measured' &&
+                (!measuredMode || measuredMode.value === 'refit_completed');
+            root.querySelectorAll('[data-adaptive-controls]').forEach(group => {
+                setActive(group, adaptive);
+            });
+            root.querySelectorAll('[data-measured-adaptive-options]').forEach(group => {
+                setActive(group, adaptive && source.value === 'measured');
+            });
+            root.querySelectorAll('[data-measured-prior]').forEach(group => {
+                setActive(group, available && source.value === 'measured' && !refit);
+            });
+            root.querySelectorAll('[data-completed-dataset]').forEach(group => {
+                setActive(group, adaptive);
+            });
+            root.querySelectorAll('[data-first-specified]').forEach(group => {
+                setActive(group, available && !(adaptive && firstMode && firstMode.value === 'latest_completed'));
+            });
+            root.querySelectorAll('[data-completed-scale-help]').forEach(note => {
+                note.textContent = refit ?
+                    'Enter completed responses and SD/SEM on their original scale. The selected preprocessing is applied once, and the same analyzed observations remain fixed during simulated-study refitting.' :
+                    'Enter completed responses and SD/SEM already on the analyzed reference response scale. Do not normalize a partial completed dataset using its own initial value or extrema. These observations update the separate prior once.';
+            });
+        }
+
+        function syncTiming(available) {
+            timingRows.forEach(row => {
+                const enabled = available && row.dataset.timingActive === 'true';
+                setActive(row, enabled);
+                const prefix = 'timing_' + row.dataset.timingRow + '_';
+                row.querySelectorAll('[data-timing-mode]').forEach(group => {
+                    const mode = document.getElementById(prefix + group.dataset.timingBound + '_mode');
+                    setActive(group, enabled && mode && mode.value === group.dataset.timingMode);
+                });
+                const kind = document.getElementById(prefix + 'kind');
+                row.querySelectorAll('[data-timing-window-fields]').forEach(group => {
+                    setActive(group, enabled && kind && kind.value === 'window');
+                });
+                row.querySelectorAll('[data-remove-timing]').forEach(button => {
+                    button.disabled = !enabled;
+                });
+            });
+            root.querySelectorAll('[data-add-timing]').forEach(button => {
+                button.disabled = !available || !timingRows.some(row => row.dataset.timingActive !== 'true');
+            });
+        }
+
         function syncInputs() {
             root.querySelectorAll('[data-design-task]').forEach(group => {
                 setActive(group, group.dataset.designTask === task.value);
@@ -95,15 +145,19 @@
                 setActive(group, available && group.dataset.referenceOptions === source.value);
             });
             syncIVIVC(available);
+            syncAdaptive(available);
             root.querySelectorAll('[data-observation-kind]').forEach(group => {
                 const kinds = group.dataset.observationKind.split(/\s+/);
                 setActive(group, available && observationKind && kinds.includes(observationKind.value));
             });
             root.querySelectorAll('[data-planning-availability]').forEach(note => {
                 note.textContent = available ?
-                    'Ready to calculate a prospective study using the selected reference source.' :
-                    'Calculation supports prospective in vivo studies. Completed-study updates and calibration comparisons can be imported and reviewed; their calculations are not connected yet.';
+                    (completed && completed.checked ?
+                        'Ready to assess additional sampling using completed observations and the selected reference source.' :
+                        'Ready to calculate a prospective study using the selected reference source.') :
+                    'Calculation supports in vivo study planning and refinement. Calibration comparisons can be imported and reviewed; their calculations are not connected yet.';
             });
+            syncTiming(available);
             syncButtons();
             root.dispatchEvent(new CustomEvent('design-visibility-updated'));
         }
@@ -216,6 +270,19 @@
         root.querySelectorAll('[data-design-view]').forEach(button => {
             button.addEventListener('click', () => showView(button.dataset.designView));
         });
+        root.addEventListener('click', event => {
+            const add = event.target.closest('[data-add-timing]');
+            const remove = event.target.closest('[data-remove-timing]');
+            if ((!add && !remove) || !planningAvailable()) return;
+            event.preventDefault();
+            const row = add ? timingRows.find(item => item.dataset.timingActive !== 'true') :
+                timingRows.find(item => item.dataset.timingRow === remove.dataset.removeTiming);
+            if (!row) return;
+            row.dataset.timingActive = add ? 'true' : 'false';
+            syncInputs();
+            updateDraftStatus();
+            if (add) document.getElementById('timing_' + row.dataset.timingRow + '_kind').focus();
+        });
         task.addEventListener('change', () => {
             syncInputs();
             clearErrors();
@@ -235,7 +302,7 @@
                 status: 'Calculation failed. Earlier displayed results remain available.',
             } : {};
             if (calculating && !planningAvailable()) {
-                showErrors([{message: 'Choose an in vivo study with a supported reference source and without completed target-study observations to calculate this workflow.'}], context);
+                showErrors([{message: 'Choose an in vivo study with a supported reference source to calculate this workflow.'}], context);
                 return;
             }
             const data = new FormData(form);

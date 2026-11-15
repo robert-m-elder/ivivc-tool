@@ -37,20 +37,40 @@
         </aside>{% endif %}
     </section>
 
+    {% if adaptive %}
+    <section class="design-section" aria-labelledby="planning-adaptive-heading">
+        <h3 id="planning-adaptive-heading">Completed observations and reference update</h3>
+        <p>{{ adaptive.method }}</p>
+        <p>{{ adaptive.interpretation }}</p>
+        <div class="design-preview-table"><table class="design-settings-table">
+            <caption>Completed target-study data used in this calculation</caption>
+            <tbody>{% for label, value in adaptive.rows %}<tr><th scope="row">{{ label }}</th><td>{{ value }}</td></tr>{% endfor %}</tbody>
+        </table></div>
+        <div class="design-preview-table"><table>
+            <caption>First {{ adaptive.preview|length }} completed rows on the analyzed response scale</caption>
+            <thead><tr><th scope="col">Time</th><th scope="col">Response</th><th scope="col">Observation {{ 'SEM' if adaptive.response_kind == 'mean' else 'SD' }}</th><th scope="col">Reported independent count</th></tr></thead>
+            <tbody>{% for row in adaptive.preview %}<tr><td>{{ row.time }}</td><td>{{ row.response }}</td><td>{{ row.uncertainty }}</td><td>{{ row.count }}</td></tr>{% endfor %}</tbody>
+        </table></div>
+        <p class="design-help">All {{ adaptive.row_count }} completed rows remain fixed during every simulated study. Their replicate counts are not replaced by the planned count, and the completed measurements are not simulated again. Repeated times remain separate observations or reported means.</p>
+        {% if adaptive.has_update %}<p class="design-help">The effective number of trajectories and largest weight describe how concentrated the reference weights have become; they are not counts of independent animals or tests of planning adequacy. Concentrated weights or poor agreement suggest reviewing the reference assumptions, measurement precision, and model choices in the IVIVC app.</p>{% endif %}
+        <p class="design-help">{% if adaptive.future_policy == 'future_only' %}Only new opportunities after the latest completed elapsed time are eligible.{% else %}Gap filling permits new observations at earlier elapsed times that have not already been completed. Judge whether those opportunities are experimentally feasible.{% endif %}</p>
+    </section>
+    {% endif %}
+
     <section class="design-section" aria-labelledby="planning-reference-result-heading">
         <h3 id="planning-reference-result-heading">Expected in vivo reference and uncertainty</h3>
         {{ chart(reference_plot, 'Central reference and pointwise 2.5th–97.5th percentiles' if reference_range_available else 'Central reference; no sampled uncertainty range', 'In vivo time', 'Analyzed response', 'planning-reference-plot') }}
-        {% if source_kind == 'measured' %}<p class="design-help">Dark points are the supplied reference observations after preprocessing.</p>{% endif %}
+        {% if adaptive %}<p class="design-help">Dark points are the completed target-study observations on the analyzed response scale. {% if adaptive.has_update %}The dashed line retains the original prior central curve; the shaded band uses the updated weights.{% endif %}</p>{% elif source_kind == 'measured' %}<p class="design-help">Dark points are the supplied reference observations after preprocessing.</p>{% endif %}
         {% if reference_range_available %}<p class="design-help">The shaded band summarizes pointwise weighted percentiles of usable complete reference trajectories. {% if source_kind == 'scaling' %}These preserve the supplied empirical time-scale weights and source-fit parameter uncertainty.{% elif source_kind == 'ivivc' %}These retain the uncertainty supported by the selected IVIVC approach and prediction method.{% else %}These are sampled from fitted parameter uncertainty.{% endif %} The band excludes future measurement variability and is not a simultaneous band or a range for individual future measurements.</p>
         {% else %}<p class="design-help">One complete reference trajectory is available. No sampled reference-uncertainty band is displayed. Future measurement variability still enters the study simulations; a single reference curve does not establish that the underlying behavior is known.</p>{% endif %}
         <div class="design-preview-table">
             <table class="design-settings-table">
-                <caption>Milestones relative to the response at the first planning time</caption>
+                <caption>Milestones relative to the response at baseline time {{ milestone_baseline_time }}</caption>
                 <thead><tr><th scope="col">Milestone</th><th scope="col">Reference median time</th><th scope="col">Reference weight reaching by the end</th></tr></thead>
                 <tbody>{% for endpoint in endpoints %}<tr><th scope="row">{{ endpoint.name }}</th><td>{{ endpoint.median }}</td><td>{{ endpoint.reached }}</td></tr>{% endfor %}</tbody>
             </table>
         </div>
-        <p class="design-help">T50 and T90 mean 50% and 90% decrease from that baseline. Reference weight describes uncertainty in the assumed curve, not a fraction of animals. Trajectories that do not reach a milestone remain beyond the horizon when determining its median. A dash indicates unavailable information. These milestones do not determine the suggested schedules.</p>
+        <p class="design-help">T50 and T90 mean 50% and 90% decrease from that baseline. The milestone baseline and first planning time can differ. Reference weight describes uncertainty in the assumed curve, not a fraction of animals. Trajectories that do not reach a milestone remain beyond the horizon when determining its median. A dash indicates unavailable information. Milestones affect schedule selection only when explicitly included in a timing requirement.</p>
     </section>
 
     {% if source_details_rows or source_plots or source_fit_rows %}
@@ -62,8 +82,8 @@
         </table></div>{% endif %}
         {% if scale_records %}<div class="design-preview-table"><table>
             <caption>Empirical ratio records and normalized weights</caption>
-            <thead><tr><th scope="col">Record</th><th scope="col">In vivo / in vitro ratio</th><th scope="col">Weight</th><th scope="col">Source identifier</th></tr></thead>
-            <tbody>{% for record in scale_records %}<tr><th scope="row">{{ record.row }}</th><td>{{ record.ratio }}</td><td>{{ record.weight }}</td><td>{{ record.source }}</td></tr>{% endfor %}</tbody>
+            <thead><tr><th scope="col">Record</th><th scope="col">In vivo / in vitro ratio</th><th scope="col">{{ 'Original weight' if has_updated_scale_weights else 'Weight' }}</th>{% if has_updated_scale_weights %}<th scope="col">Updated weight</th>{% endif %}<th scope="col">Source identifier</th></tr></thead>
+            <tbody>{% for record in scale_records %}<tr><th scope="row">{{ record.row }}</th><td>{{ record.ratio }}</td><td>{{ record.weight }}</td>{% if has_updated_scale_weights %}<td>{{ record.updated_weight }}</td>{% endif %}<td>{{ record.source }}</td></tr>{% endfor %}</tbody>
         </table></div>
         <p class="design-help">Showing {{ scale_records|length }} of {{ scale_record_count }} supplied records. All positive-weight records enter the reference; zero-weight records and duplicate ratios remain in the source data.</p>{% endif %}
         {% for source_plot in source_plots %}
@@ -79,22 +99,54 @@
     </section>
     {% endif %}
 
+    {% if timing.requirements %}
+    <section class="design-section" aria-labelledby="planning-timing-heading">
+        <h3 id="planning-timing-heading">Timing requirements and schedule availability</h3>
+        <div class="design-preview-table"><table>
+            <caption>Requested windows and deadlines resolved using this reference</caption>
+            <thead><tr><th scope="col">Requirement</th><th scope="col">Rule</th><th scope="col">Lower bound</th><th scope="col">Upper bound or deadline</th><th scope="col">Count</th><th scope="col">Resolution</th></tr></thead>
+            <tbody>{% for requirement in timing.requirements %}<tr>
+                <th scope="row">{{ requirement.label }}</th><td>{{ 'Latest feasible time before deadline' if requirement.kind == 'latest_before' else 'Informative times in window' }}</td>
+                <td>{{ requirement.lower_description }}<br>Resolved: {{ requirement.lower }}</td><td>{{ requirement.upper_description }}<br>Resolved: {{ requirement.upper }}</td>
+                <td>{{ requirement.minimum_count }}; {{ 'completed and new nonbaseline times' if requirement.count_scope == 'all' else 'new nonbaseline times' }}</td><td>{{ requirement.status }}: {{ requirement.message }}</td>
+            </tr>{% endfor %}</tbody>
+        </table></div>
+        <p class="design-help">Windows include their upper bound and exclude their lower bound. Baseline times do not count toward window coverage. Milestone bounds use the selected degraded fraction, reference quantile, and baseline; a milestone beyond the horizon remains unresolved rather than being moved to the study end.</p>
+        <div class="design-preview-table"><table>
+            <caption>Suggested schedule generation by total distinct study times</caption>
+            <thead><tr><th scope="col">Total times</th><th scope="col">Availability</th><th scope="col">Times</th><th scope="col">Search outcome</th></tr></thead>
+            <tbody>{% for outcome in timing.outcomes %}<tr><th scope="row">{{ outcome.number_of_times }}</th><td>{{ outcome.status }}: {{ outcome.message }}</td><td>{{ outcome.times }}</td><td>{{ outcome.optimization_status }}</td></tr>{% endfor %}</tbody>
+        </table></div>
+        {% for outcome in timing.outcomes %}{% if outcome.anchors %}
+        <div class="design-preview-table"><table>
+            <caption>Latest-before selections for {{ outcome.number_of_times }} total times</caption>
+            <thead><tr><th scope="col">Requirement</th><th scope="col">Selected time</th><th scope="col">Deadline</th><th scope="col">Time before deadline</th><th scope="col">Status</th></tr></thead>
+            <tbody>{% for anchor in outcome.anchors %}<tr><th scope="row">{{ anchor.label }}</th><td>{{ anchor.selected_time }}</td><td>{{ anchor.deadline }}</td><td>{{ anchor.deadline_slack }}</td><td>{{ anchor.status }}: {{ anchor.message }}</td></tr>{% endfor %}</tbody>
+        </table></div>{% endif %}{% endfor %}
+        <p class="design-help">Feasible schedules satisfy the requested timing rules. A schedule-availability status of search limit means availability was not established within the search budget; it is not evidence of infeasibility. A feasible schedule with an optimization search limit remains feasible, but its improvement search was interrupted. Information optimization is heuristic and does not establish a globally optimal schedule.</p>
+    </section>
+    {% endif %}
+
     <section class="design-section" aria-labelledby="planning-performance-heading">
         <h3 id="planning-performance-heading">Curve recovery versus study size</h3>
-        {{ chart(performance_plot, 'Simulated recovery error versus number of sampling times', 'Distinct planned times, including fixed times', 'IRMSE', 'planning-performance-plot') }}
+        {% if has_comparison %}
+        {{ chart(performance_plot, 'Simulated recovery error versus number of sampling times', performance_x_label, 'IRMSE', 'planning-performance-plot') }}
         <p class="design-help">IRMSE is the root mean square difference between a recovered curve and its simulated true curve across the planning range, in analyzed response units. Lower error means closer curve recovery under these assumptions. Solid traces show mean error; dashed traces show the 90th percentile. Manual schedules are separate points.</p>
         <div class="design-preview-table">
             <table>
                 <caption>Schedule performance; recovery errors use successful simulated fits</caption>
-                <thead><tr><th scope="col">Schedule</th><th scope="col">Times</th><th scope="col">Sampling times</th><th scope="col">Independent units</th><th scope="col">Successful fits</th><th scope="col">Failure rate</th><th scope="col">Mean IRMSE</th><th scope="col">90th percentile IRMSE</th><th scope="col">Mean fitted curve interval width</th></tr></thead>
+                <thead><tr><th scope="col">Schedule</th><th scope="col">Total times</th><th scope="col">Sampling times</th>{% if adaptive %}<th scope="col">New times</th><th scope="col">New sampling times</th>{% endif %}<th scope="col">{{ 'New independent units' if adaptive else 'Independent units' }}</th>{% if timing.requirements %}<th scope="col">Timing inspection</th>{% endif %}<th scope="col">Successful fits</th><th scope="col">Failure rate</th><th scope="col">Mean IRMSE</th><th scope="col">90th percentile IRMSE</th><th scope="col">Mean fitted curve interval width</th></tr></thead>
                 <tbody>{% for row in rows %}<tr>
-                    <th scope="row">{{ row.name }}</th><td>{{ row.number_of_times }}</td><td>{{ row.times }}</td><td>{{ row.experimental_units }}</td>
+                    <th scope="row">{{ row.name }}</th><td>{{ row.number_of_times }}</td><td>{{ row.times }}</td>{% if adaptive %}<td>{{ row.number_of_new_times }}</td><td>{{ row.new_times }}</td>{% endif %}<td>{{ row.experimental_units }}</td>
+                    {% if timing.requirements %}<td>{% if row.timing %}{{ row.timing.status }}: {{ row.timing.message }}{% for requirement in row.timing.requirements %}<br>{{ requirement.label }}: {{ requirement.status }}{% endfor %}{% else %}No inspection available{% endif %}</td>{% endif %}
                     <td>{{ row.n_successful }} / {{ row.n_simulations }}</td><td>{{ row.failure_rate }}</td><td>{{ row.mean_irmse }}</td><td>{{ row.p90_irmse }}</td><td>{{ row.mean_curve_interval_width }} ({{ row.interval_count }} fits)</td>
                 </tr>{% endfor %}</tbody>
             </table>
         </div>
-        <p class="design-help">Units equal distinct times × independent replicates per time. Fixed times are proposed measurements, not completed observations. The last column averages approximate 95% fitted mean-curve interval widths across time and usable successful fits; it excludes individual measurement scatter. Unavailable errors or widths appear as a dash. Compare error with failure rates rather than interpreting error alone.</p>
+        <p class="design-help">{% if adaptive %}New units equal new distinct times × planned independent replicates per time. Completed measurements and their reported counts are retained separately; the planned count applies only to new observations.{% else %}Units equal distinct times × independent replicates per time. Fixed times are proposed measurements, not completed observations.{% endif %} The last column averages approximate 95% fitted mean-curve interval widths across time and usable successful fits; it excludes individual measurement scatter. Unavailable errors or widths appear as a dash. Compare error with failure rates rather than interpreting error alone.</p>
+        {% if timing.requirements %}<p class="design-help">Manual and evenly spaced schedules can be assessed even when they miss timing requirements. Their timing inspection is reported alongside recovery performance. Meeting a latest-before deadline alone does not certify that a comparison used the latest feasible opportunity; suggested latest-before selections are reported separately above.</p>{% endif %}
         <p class="design-help">All schedules share simulated reference trajectories and measurement-error draws at common times. Small differences may reflect Monte Carlo variation. No automatic overall ranking is assigned.</p>
+        {% else %}<p>No schedule was available for simulation under these settings. Review the requirement-resolution and schedule-availability outcomes above. No recovery error or zero-width interval has been substituted for an unavailable calculation.</p>{% endif %}
     </section>
 
     <section class="design-section" aria-labelledby="planning-settings-heading">

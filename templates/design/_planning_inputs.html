@@ -1,4 +1,5 @@
 {% from 'design/_data_upload.html' import data_upload %}
+{% from 'design/_timing_inputs.html' import timing_inputs %}
 
 {% macro field_error(id) -%}
 <p id="{{ id }}-error" class="design-field-error" data-error-for="{{ id }}" hidden></p>
@@ -133,23 +134,52 @@
 {% macro sampling_inputs() -%}
 <div data-planning-controls>
     <h4>Feasible sampling opportunities</h4>
+    <div class="design-field-grid" data-adaptive-controls hidden>
+        <div class="design-field">
+            <label for="first_time_mode">First opportunity</label>
+            <select id="first_time_mode" name="first_time_mode">
+                <option value="specified" selected>Specify a time</option>
+                <option value="latest_completed">Start from the latest completed measurement</option>
+            </select>
+            {{ field_error('first_time_mode') }}
+        </div>
+        <div class="design-field">
+            <label for="future_policy">Where new measurements may be proposed</label>
+            <select id="future_policy" name="future_policy" aria-describedby="future-policy-help">
+                <option value="future_only" selected>After the latest completed time only</option>
+                <option value="gap_fill">Allow earlier elapsed times to fill gaps</option>
+            </select>
+            <p id="future-policy-help" class="design-help">Gap filling may require a new experimental cohort. Completed observations are retained in both modes. Timing requirements currently apply to future-only sampling.</p>
+            {{ field_error('future_policy') }}
+        </div>
+    </div>
     <div class="design-field-grid design-three-fields">
+        <div data-first-specified>
         {{ number_field('first_time', 'First time', 0, 0, 'any') }}
+        </div>
         {{ number_field('last_time', 'Last time', 52, 0, 'any') }}
         {{ number_field('time_step', 'Step between opportunities', 2, 0, 'any') }}
     </div>
-    <p class="design-help">Use the source data's in vivo time units. This range also defines where curve recovery is assessed. IVIVC references require the full range to be supported by usable joint draws. Empirical scaling requires in vitro source support for every positive-weight ratio unless extrapolation is explicitly allowed above.</p>
+    <p class="design-help">Use in vivo time units. Starting from the latest completed measurement anchors this grid there; future-only sampling excludes that completed time itself. The reference and recovery range still includes the baseline and completed observations. IVIVC references require support over that range; empirical scaling requires source support for every positive-weight ratio unless extrapolation is enabled.</p>
+    <div class="design-field">
+        <label for="excluded_times">Unavailable proposed times</label>
+        <input id="excluded_times" name="excluded_times" type="text" value="" aria-describedby="excluded-times-help">
+        <p id="excluded-times-help" class="design-help">Optional comma-separated times to exclude from new sampling opportunities. Completed observations are never removed by these exclusions; proposed fixed times must remain available.</p>
+        {{ field_error('excluded_times') }}
+    </div>
     <div class="design-field-grid">
-        {{ number_field('min_times', 'Fewest distinct study times', 3, 1, '1', 'Total distinct times, including fixed times.') }}
+        {{ number_field('min_times', 'Fewest distinct study times', 3, 1, '1', 'Total distinct times, including completed and fixed times.') }}
         {{ number_field('max_times', 'Most distinct study times', 6, 1, '1', 'Compare every study size from the fewest through the most.') }}
     </div>
     <div class="design-field">
         <label for="fixed_times">Fixed study times</label>
         <input id="fixed_times" name="fixed_times" type="text" value="0" aria-describedby="fixed-times-help">
-        <p id="fixed-times-help" class="design-help">Optional comma-separated times that every schedule must include, such as a baseline. These are proposed measurements, not completed observations.</p>
+        <p id="fixed-times-help" class="design-help">Optional comma-separated proposed times that every schedule must include, such as a baseline. All completed times are added automatically and retain their actual observations.</p>
         {{ field_error('fixed_times') }}
     </div>
-    <p class="design-help">Suggested times are selected for expected curve recovery using a local I-optimal heuristic. They are candidates for assessment rather than a guarantee of a globally optimal schedule. Detailed windows and milestone deadlines will be connected in a later workflow.</p>
+    <p class="design-help">Suggested times are selected for expected curve recovery using a local I-optimal heuristic. They are candidates for assessment rather than a guarantee of a globally optimal schedule.</p>
+    {{ number_field('baseline_time', 'Milestone baseline time', 0, 0, 'any', 'T50 and T90 are relative to the reference response at this time. Existing or fixed observations at this baseline are excluded from window coverage counts. This setting does not add a measurement; include a proposed baseline in fixed times if needed.') }}
+    {{ timing_inputs() }}
     <fieldset class="design-comparison-options">
         <legend>Alternative comparison schedules</legend>
         <div class="design-field">
@@ -159,7 +189,7 @@
         <div class="design-field">
             <label for="manual_schedules">Add manually specified schedules</label>
             <textarea id="manual_schedules" name="manual_schedules" rows="4" placeholder="Early emphasis: 0, 4, 10, 24&#10;Longer follow-up: 0, 12, 24, 52" aria-describedby="manual-schedules-help"></textarea>
-            <p id="manual-schedules-help" class="design-help">Optional: one named schedule per line, in the form Name: time, time, time. Each schedule must include every fixed time, use feasible opportunities in the selected range, and have a total number of times within the study-size range.</p>
+            <p id="manual-schedules-help" class="design-help">Optional: one named schedule per line, in the form Name: time, time, time. Enter the complete schedule, including every completed and fixed time. New times must use feasible opportunities, and the total number of times must lie within the study-size range.</p>
             {{ field_error('manual_schedules') }}
         </div>
     </fieldset>

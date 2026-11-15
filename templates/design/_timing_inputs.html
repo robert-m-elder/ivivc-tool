@@ -1,0 +1,77 @@
+{% macro error(id) -%}
+<p id="{{ id }}-error" class="design-field-error" data-error-for="{{ id }}" hidden></p>
+{%- endmacro %}
+
+{% macro number(id, label, value, step='any', maximum=none) -%}
+<div class="design-field">
+    <label for="{{ id }}">{{ label }}</label>
+    <input id="{{ id }}" name="{{ id }}" type="number" min="0"{% if maximum is not none %} max="{{ maximum }}"{% endif %} step="{{ step }}" value="{{ value }}" disabled>
+    {{ error(id) }}
+</div>
+{%- endmacro %}
+
+{% macro bound(prefix, side, label, time, fraction) -%}
+<div class="design-field">
+    <label for="{{ prefix }}{{ side }}_mode">{{ label }}</label>
+    <select id="{{ prefix }}{{ side }}_mode" name="{{ prefix }}{{ side }}_mode" disabled>
+        <option value="numeric" selected>Specified time</option>
+        <option value="milestone">Reference milestone quantile</option>
+    </select>
+    {{ error(prefix ~ side ~ '_mode') }}
+</div>
+<div data-timing-bound="{{ side }}" data-timing-mode="numeric">
+    {{ number(prefix ~ side ~ '_time', label ~ ' time', time) }}
+</div>
+<div class="design-field-grid" data-timing-bound="{{ side }}" data-timing-mode="milestone" hidden>
+    {{ number(prefix ~ side ~ '_fraction', label ~ ' degraded fraction', fraction, maximum=1) }}
+    {{ number(prefix ~ side ~ '_quantile', label ~ ' reference quantile', '.25', maximum=1) }}
+</div>
+{%- endmacro %}
+
+{% macro timing_inputs() -%}
+<fieldset id="timing-requirements" class="design-comparison-options" tabindex="-1" data-timing-editor>
+    <legend>Timing requirements</legend>
+    <p class="design-help">Optionally require sampling within a window, or choose the latest feasible time before a deadline. Add multiple requirements when needed. Windows include their upper bound and exclude their lower bound and baseline measurements.</p>
+    <p class="design-help">Milestones use the reference response at the milestone baseline above. A degraded fraction of 0.5 means T50; 0.9 means T90. A reference quantile of 0.25 means the 25th percentile. Fractions and quantiles must be strictly between 0 and 1. These requirements currently apply to future-only sampling, rather than gap filling.</p>
+    {{ error('timing-requirements') }}
+    {% for index in range(8) %}{% set prefix = 'timing_' ~ index ~ '_' %}
+    <fieldset class="design-comparison-options" data-timing-row="{{ index }}" data-timing-active="false" hidden>
+        <legend>Timing requirement {{ index + 1 }}</legend>
+        <div class="design-field-grid">
+            <div class="design-field">
+                <label for="{{ prefix }}label">Label</label>
+                <input id="{{ prefix }}label" name="{{ prefix }}label" type="text" value="Requirement {{ index + 1 }}" disabled>
+                {{ error(prefix ~ 'label') }}
+            </div>
+            <div class="design-field">
+                <label for="{{ prefix }}kind">Selection rule</label>
+                <select id="{{ prefix }}kind" name="{{ prefix }}kind" disabled>
+                    <option value="window" selected>Choose informative times within a window</option>
+                    <option value="latest_before">Choose the latest feasible time before a deadline</option>
+                </select>
+                {{ error(prefix ~ 'kind') }}
+            </div>
+        </div>
+        <div class="design-field-grid">
+            <div>{{ bound(prefix, 'lower', 'After', 0, '.5') }}</div>
+            <div>{{ bound(prefix, 'upper', 'By / at deadline', 12, '.9') }}</div>
+        </div>
+        <div class="design-field-grid" data-timing-window-fields>
+            {{ number(prefix ~ 'minimum_count', 'Minimum distinct times in this window', 1, '1') }}
+            <div class="design-field">
+                <label for="{{ prefix }}count_scope">Observations that may satisfy this window</label>
+                <select id="{{ prefix }}count_scope" name="{{ prefix }}count_scope" disabled>
+                    <option value="new" selected>Proposed new sampling times</option>
+                    <option value="all">Completed and proposed sampling times</option>
+                </select>
+                {{ error(prefix ~ 'count_scope') }}
+            </div>
+        </div>
+        <p class="design-help">The latest-before rule reserves a feasible point as late as possible jointly with the other requirements; it does not simply select the most informative point before the deadline.</p>
+        <button type="button" data-remove-timing="{{ index }}">Remove this requirement</button>
+    </fieldset>
+    {% endfor %}
+    <button type="button" data-add-timing>Add a timing requirement</button>
+    <p class="design-help">Up to eight requirements per comparison. Results distinguish unavailable milestones, infeasible requested study sizes, and search limits.</p>
+</fieldset>
+{%- endmacro %}

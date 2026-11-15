@@ -202,6 +202,12 @@ def build_ivivc_reference(in_vitro, in_vivo, prediction, form, settings, time_gr
     tolerance = 1e-12 * max(1., abs(lower), abs(upper))
     if grid[0] < lower - tolerance or grid[-1] > upper + tolerance:
         field = 'first_time' if grid[0] < lower - tolerance else 'last_time'
+        if grid[0] < lower - tolerance:
+            completed_times = settings.get('completed_times', ())
+            if len(completed_times) and min(completed_times) < lower - tolerance:
+                field = 'completed-target-file'
+            elif 'baseline_time' in settings and settings['baseline_time'] < lower - tolerance:
+                field = 'baseline_time'
         raise PlanningInputError(
             f'The selected IVIVC reference supports in vivo times {lower:.6g} to {upper:.6g}. '
             'Set the planning range inside this domain or revise the prediction data/method. '

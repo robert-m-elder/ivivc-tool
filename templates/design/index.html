@@ -15,12 +15,12 @@
     <header class="design-site-header">
         <div class="design-page-width">
             <h1>Study Design for Absorbable Materials</h1>
-            <p class="design-muted">Development version · prospective study planning</p>
+            <p class="design-muted">Development version · study planning and refinement</p>
         </div>
     </header>
 
     <main id="design-workspace" class="design-page-width" tabindex="-1">
-        <p class="design-notice">Plan a new in vivo study using measured reference data, an IVIVC prediction, or empirical time scaling. Compare sampling schedules and simulated curve recovery under the selected assumptions.</p>
+        <p class="design-notice">Plan a new in vivo study or assess additional sampling after completed observations. Use measured data, an IVIVC prediction, or empirical time scaling to compare schedules and simulated curve recovery under the selected assumptions.</p>
         <noscript><p class="design-notice">Enable JavaScript to review setup and retain selected files while moving between inputs and comparisons.</p></noscript>
 
         <form id="design-setup-form" action="{{ url_for('review_setup') }}" method="post" enctype="multipart/form-data" novalidate>
@@ -59,7 +59,9 @@
                             <p id="reference-source-error" class="design-field-error" data-error-for="reference_source" hidden></p>
                         </div>
                         <div data-reference-source="measured"{% if settings.reference_source != 'measured' %} hidden{% endif %}>
+                            <div data-measured-prior>
                             {{ data_upload(datasets['reference-file']) }}
+                            </div>
                         </div>
                         <div data-reference-source="ivivc"{% if settings.reference_source != 'ivivc' %} hidden{% endif %}>
                             {{ data_upload(datasets['ivivc-calibration-file']) }}
@@ -71,10 +73,31 @@
                         </div>
                         <div class="design-field">
                             <label class="design-checkbox-label" for="has_completed"><input id="has_completed" name="has_completed" type="checkbox" value="on"> This target study already has completed observations</label>
-                            <p class="design-help">Completed target-study measurements have a different role from prior reference or calibration data. Import is available; numerical planning with completed observations will be connected later.</p>
+                            <p class="design-help">Upload the cumulative completed data for this target study. These measurements stay fixed during assessment; only proposed new measurements are simulated.</p>
+                        </div>
+                        <div class="design-field" data-measured-adaptive-options hidden>
+                            <label for="measured_adaptive_mode">How measured data inform this ongoing study</label>
+                            <select id="measured_adaptive_mode" name="measured_adaptive_mode" aria-describedby="measured-adaptive-help">
+                                <option value="refit_completed" selected>Fit this study's completed observations</option>
+                                <option value="reweight_prior">Update a separate prior in vivo reference</option>
+                            </select>
+                            <p id="measured-adaptive-help" class="design-help">Fit completed data directly when they are the source of expected behavior. Use a separate prior only when its source observations are distinct from this study's completed observations; datasets are not pooled.</p>
+                            <p id="measured_adaptive_mode-error" class="design-field-error" data-error-for="measured_adaptive_mode" hidden></p>
                         </div>
                         <div data-completed-dataset hidden>
                             {{ data_upload(datasets['completed-target-file']) }}
+                        </div>
+                        <div data-adaptive-controls hidden>
+                            <p class="design-help" data-completed-scale-help>Completed values and SD/SEM must use the analyzed reference response scale.</p>
+                            <div class="design-field">
+                                <label for="completed_error_mode">Precision for completed observations</label>
+                                <select id="completed_error_mode" name="completed_error_mode" aria-describedby="completed-error-help">
+                                    <option value="supplied" selected>Use supplied SD/SEM</option>
+                                    <option value="future_model">If precision is missing, use the future variability model</option>
+                                </select>
+                                <p id="completed-error-help" class="design-help">Supplied SD/SEM always takes precedence. The explicit fallback treats each unqualified row as one independent observation. Historical SD is evaluated at its observed response and time, then held fixed; replicate counts for new sampling do not divide it.</p>
+                                <p id="completed_error_mode-error" class="design-field-error" data-error-for="completed_error_mode" hidden></p>
+                            </div>
                         </div>
                     </section>
 
@@ -148,7 +171,7 @@
                     <div class="design-action-row">
                         <button id="review-setup" type="submit" disabled>Review setup</button>
                         <button id="calculate-comparison" class="design-primary" type="submit" name="action" value="calculate" formaction="{{ url_for('calculate_comparison') }}" aria-describedby="design-calculation-help" disabled>Calculate comparison</button>
-                        <p id="design-calculation-help" class="design-help" data-planning-availability>Calculation is available for a new study using any of the three reference sources. It runs within this request; keep the page open.</p>
+                        <p id="design-calculation-help" class="design-help" data-planning-availability>Calculation supports new and ongoing studies using any of the three reference sources. It runs within this request; keep the page open.</p>
                     </div>
                 </section>
             </section>

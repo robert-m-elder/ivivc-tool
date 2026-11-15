@@ -96,7 +96,8 @@ function fixture({planning = false} = {}) {
     const fileInputs = {};
     for (const mode of ["measured", "ivivc", "scaling"]) {
         sourceGroups[mode] = element("div", {"data-reference-source": mode}, studyGroup);
-        fileInputs[mode] = element("input", {id: mode + "-file", name: mode + "_file", type: "file"}, sourceGroups[mode]);
+        const uploadGroup = planning && mode === "measured" ? element("div", {"data-measured-prior": ""}, sourceGroups[mode]) : sourceGroups[mode];
+        fileInputs[mode] = element("input", {id: mode + "-file", name: mode + "_file", type: "file"}, uploadGroup);
     }
     const calibrationGroup = element("div", {"data-design-task": "calibration"}, inputs);
     const environment = element("select", {id: "varied_environment", name: "varied_environment", value: "in_vivo"}, calibrationGroup);
@@ -108,10 +109,47 @@ function fixture({planning = false} = {}) {
     let calculate, completed, planningGroup, observationKind, observationValue, minimumSd, profileFile;
     let availability, ivivcGroup, scalingGroup, ivivcApproach, ivivcModel, ivivcMethod;
     let interpolation, scalingModel, extrapolation, ivivcTarget, ratioFile;
+    let measuredMode, completedError, completedFile, completedScaleHelp, firstMode, firstTime, futurePolicy, addTiming;
+    const timingRows = [];
     if (planning) {
         completed = element("input", {id: "has_completed", name: "has_completed", type: "checkbox", value: "on"}, studyGroup);
         completed.checked = false;
+        const completedGroup = element("div", {"data-completed-dataset": "", hidden: ""}, studyGroup);
+        completedFile = element("input", {id: "completed-target-file", name: "completed_target_file", type: "file"}, completedGroup);
+        const measuredModeGroup = element("div", {"data-measured-adaptive-options": "", hidden: ""}, studyGroup);
+        measuredMode = element("select", {id: "measured_adaptive_mode", name: "measured_adaptive_mode", value: "refit_completed"}, measuredModeGroup);
+        const adaptiveGroup = element("div", {"data-adaptive-controls": "", hidden: ""}, studyGroup);
+        completedError = element("select", {id: "completed_error_mode", name: "completed_error_mode", value: "supplied"}, adaptiveGroup);
+        completedScaleHelp = element("p", {"data-completed-scale-help": ""}, adaptiveGroup);
         planningGroup = element("div", {"data-planning-controls": ""}, studyGroup);
+        const samplingAdaptive = element("div", {"data-adaptive-controls": "", hidden: ""}, planningGroup);
+        firstMode = element("select", {id: "first_time_mode", name: "first_time_mode", value: "specified"}, samplingAdaptive);
+        futurePolicy = element("select", {id: "future_policy", name: "future_policy", value: "future_only"}, samplingAdaptive);
+        const specified = element("div", {"data-first-specified": ""}, planningGroup);
+        firstTime = element("input", {id: "first_time", name: "first_time", value: "0"}, specified);
+        addTiming = element("button", {type: "button", "data-add-timing": ""}, planningGroup);
+        for (let index = 0; index < 8; index++) {
+            const prefix = "timing_" + index + "_";
+            const row = element("fieldset", {"data-timing-row": String(index), "data-timing-active": "false", hidden: ""}, planningGroup);
+            const kind = element("select", {id: prefix + "kind", name: prefix + "kind", value: "window"}, row);
+            const label = element("input", {id: prefix + "label", name: prefix + "label", value: "Requirement " + (index + 1)}, row);
+            const bounds = {};
+            for (const side of ["lower", "upper"]) {
+                const mode = element("select", {id: prefix + side + "_mode", name: prefix + side + "_mode", value: "numeric"}, row);
+                const numeric = element("div", {"data-timing-bound": side, "data-timing-mode": "numeric"}, row);
+                const time = element("input", {id: prefix + side + "_time", name: prefix + side + "_time", value: side === "lower" ? "0" : "12"}, numeric);
+                const milestone = element("div", {"data-timing-bound": side, "data-timing-mode": "milestone"}, row);
+                const fraction = element("input", {id: prefix + side + "_fraction", name: prefix + side + "_fraction", value: side === "lower" ? ".5" : ".9"}, milestone);
+                const quantile = element("input", {id: prefix + side + "_quantile", name: prefix + side + "_quantile", value: ".25"}, milestone);
+                element("p", {id: quantile.id + "-error", "data-error-for": quantile.id, hidden: ""}, milestone);
+                bounds[side] = {mode, time, fraction, quantile};
+            }
+            const windowFields = element("div", {"data-timing-window-fields": ""}, row);
+            const count = element("input", {id: prefix + "minimum_count", name: prefix + "minimum_count", value: "1"}, windowFields);
+            const scope = element("select", {id: prefix + "count_scope", name: prefix + "count_scope", value: "new"}, windowFields);
+            const remove = element("button", {type: "button", "data-remove-timing": String(index)}, row);
+            timingRows.push({row, kind, label, bounds, count, scope, remove});
+        }
         ivivcGroup = element("div", {"data-reference-options": "ivivc"}, planningGroup);
         ivivcApproach = element("select", {id: "ivivc_approach", name: "ivivc_approach", value: "approach2"}, ivivcGroup);
         const modelGroup = element("div", {"data-ivivc-model-fields": ""}, ivivcGroup);
@@ -210,7 +248,8 @@ function fixture({planning = false} = {}) {
         calculate, completed, planningGroup, observationKind, observationValue, minimumSd, profileFile,
         availability, reviewContent, resultStatus, successfulCalculation,
         ivivcGroup, scalingGroup, ivivcApproach, ivivcModel, ivivcMethod,
-        interpolation, scalingModel, extrapolation, ivivcTarget, ratioFile};
+        interpolation, scalingModel, extrapolation, ivivcTarget, ratioFile,
+        measuredMode, completedError, completedFile, completedScaleHelp, firstMode, firstTime, futurePolicy, addTiming, timingRows};
 }
 
 test("task and reference changes enable only active inputs without fetching", async () => {
@@ -437,17 +476,20 @@ test("calculation availability follows source and completed-study choices withou
     assert.equal(page.calculate.disabled, false);
     page.completed.checked = true;
     await page.emit(page.completed, "change");
-    assert.equal(page.calculate.disabled, true);
-    assert.equal(page.observationValue.disabled, true);
-    await page.emit(page.form, "submit", {submitter: page.calculate});
+    assert.equal(page.calculate.disabled, false);
+    assert.equal(page.observationValue.disabled, false);
+    assert.equal(page.completedFile.disabled, false);
+    assert.equal(page.fileInputs.measured.disabled, true);
     assert.equal(page.requests.length, 0);
-    assert.match(page.summary.textContent, /without completed/);
+    assert.match(page.availability.textContent, /additional sampling/);
     page.completed.checked = false;
     await page.emit(page.completed, "change");
     assert.equal(page.calculate.disabled, false);
     page.task.value = "calibration";
     await page.emit(page.task, "change");
     assert.equal(page.calculate.disabled, true);
+    await page.emit(page.form, "submit", {submitter: page.calculate});
+    assert.equal(page.requests.length, 0);
 });
 
 test("only the selected future-error controls are submitted after repeated visibility updates", async () => {
@@ -640,4 +682,153 @@ test("changing reference source during calculation keeps its successful output l
     assert.match(page.resultStatus.textContent, /original inputs/);
     assert.equal(page.calculate.disabled, false);
     assert.equal(page.requests.length, 1);
+});
+
+test("adaptive measured modes retain files and submit the correct reference role", async () => {
+    const page = fixture({planning: true});
+    const prior = {name: "prior.csv", size: 123, lastModified: 1};
+    const completed = {name: "completed.csv", size: 90, lastModified: 2};
+    page.fileInputs.measured.files = [prior];
+    page.completedFile.files = [completed];
+    page.completed.checked = true;
+    await page.emit(page.completed, "change");
+    assert.equal(page.measuredMode.disabled, false);
+    assert.equal(page.completedError.disabled, false);
+    assert.match(page.completedScaleHelp.textContent, /original scale/);
+    let pending = page.emit(page.form, "submit", {submitter: page.calculate});
+    let values = new Map(page.requests.at(-1).options.body.entries());
+    assert.equal(values.get("measured_adaptive_mode"), "refit_completed");
+    assert.equal(values.get("completed_target_file"), completed);
+    assert(!values.has("measured_file"));
+    assert.equal(values.get("completed_error_mode"), "supplied");
+    page.requests.at(-1).resolve({ok: true, json: async () => ({ok: true, html: "<p>Refit completed observations</p>"})});
+    await pending;
+    page.measuredMode.value = "reweight_prior";
+    page.completedError.value = "future_model";
+    await page.emit(page.measuredMode, "change");
+    assert.match(page.completedScaleHelp.textContent, /already on the analyzed/);
+    assert.equal(page.fileInputs.measured.files[0], prior);
+    assert.equal(page.completedFile.files[0], completed);
+    pending = page.emit(page.form, "submit", {submitter: page.calculate});
+    values = new Map(page.requests.at(-1).options.body.entries());
+    assert.equal(values.get("measured_file"), prior);
+    assert.equal(values.get("completed_target_file"), completed);
+    assert.equal(values.get("completed_error_mode"), "future_model");
+    page.requests.at(-1).resolve({ok: true, json: async () => ({ok: true, html: "<p>Updated prior</p>"})});
+    await pending;
+    page.completed.checked = false;
+    await page.emit(page.completed, "change");
+    assert.equal(page.fileInputs.measured.disabled, false);
+    assert.equal(page.completedFile.disabled, true);
+    assert.equal(page.measuredMode.disabled, true);
+    assert.equal(page.completedError.disabled, true);
+});
+
+test("latest-completed grid starts and gap-filling policy are explicit without changing stored times", async () => {
+    const page = fixture({planning: true});
+    page.completed.checked = true;
+    page.firstTime.value = "3";
+    page.firstMode.value = "latest_completed";
+    page.futurePolicy.value = "gap_fill";
+    await page.emit(page.completed, "change");
+    assert.equal(page.firstTime.disabled, true);
+    const pending = page.emit(page.form, "submit", {submitter: page.calculate});
+    const values = new Map(page.requests.at(-1).options.body.entries());
+    assert.equal(values.get("first_time_mode"), "latest_completed");
+    assert.equal(values.get("future_policy"), "gap_fill");
+    assert(!values.has("first_time"));
+    page.requests.at(-1).resolve({ok: false, json: async () => ({ok: false, errors: [{message: "Check sampling choices."}]})});
+    await pending;
+    page.firstMode.value = "specified";
+    await page.emit(page.firstMode, "change");
+    assert.equal(page.firstTime.disabled, false);
+    assert.equal(page.firstTime.value, "3");
+    page.sourceField.value = "ivivc";
+    await page.emit(page.sourceField, "change");
+    assert.equal(page.measuredMode.disabled, true);
+    assert.equal(page.completedError.disabled, false);
+    assert.match(page.completedScaleHelp.textContent, /update the separate prior once/);
+});
+
+test("timing editor submits active numeric or milestone controls and removes rows without losing their settings", async () => {
+    const page = fixture({planning: true});
+    assert(page.timingRows.every(item => item.row.hidden && item.kind.disabled));
+    await page.emit(page.addTiming, "click");
+    const first = page.timingRows[0], second = page.timingRows[1];
+    assert.equal(first.row.hidden, false);
+    assert.equal(page.document.activeElement, first.kind);
+    first.bounds.upper.mode.value = "milestone";
+    first.bounds.upper.fraction.value = ".5";
+    first.bounds.upper.quantile.value = ".25";
+    await page.emit(first.bounds.upper.mode, "change");
+    await page.emit(page.addTiming, "click");
+    second.kind.value = "latest_before";
+    second.bounds.upper.time.value = "20";
+    await page.emit(second.kind, "change");
+    const pending = page.emit(page.form, "submit", {submitter: page.calculate});
+    const values = new Map(page.requests.at(-1).options.body.entries());
+    assert.equal(values.get("timing_0_kind"), "window");
+    assert.equal(values.get("timing_0_upper_fraction"), ".5");
+    assert.equal(values.get("timing_0_upper_quantile"), ".25");
+    assert(!values.has("timing_0_upper_time"));
+    assert.equal(values.get("timing_1_kind"), "latest_before");
+    assert.equal(values.get("timing_1_upper_time"), "20");
+    assert(!values.has("timing_1_minimum_count"));
+    assert(!values.has("timing_1_count_scope"));
+    assert(!values.has("timing_2_kind"));
+    page.requests.at(-1).resolve({ok: true, json: async () => ({ok: true, html: "<p>Timing comparison</p>"})});
+    await pending;
+    await page.emit(first.remove, "click");
+    assert.equal(first.kind.disabled, true);
+    assert.equal(second.kind.disabled, false);
+    assert.match(page.resultStatus.textContent, /Inputs changed/);
+    await page.emit(page.addTiming, "click");
+    assert.equal(first.bounds.upper.mode.value, "milestone");
+    assert.equal(first.bounds.upper.quantile.value, ".25");
+    assert.equal(first.bounds.upper.time.disabled, true);
+});
+
+test("timing slots remain bounded and inactive requirements stay disabled across task changes", async () => {
+    const page = fixture({planning: true});
+    for (let index = 0; index < 8; index++) await page.emit(page.addTiming, "click");
+    assert.equal(page.addTiming.disabled, true);
+    assert.equal(page.timingRows.filter(item => !item.row.hidden).length, 8);
+    await page.emit(page.timingRows[3].remove, "click");
+    assert.equal(page.addTiming.disabled, false);
+    page.task.value = "calibration";
+    await page.emit(page.task, "change");
+    assert(page.timingRows.every(item => item.kind.disabled));
+    assert.equal(page.addTiming.disabled, true);
+    page.task.value = "study";
+    await page.emit(page.task, "change");
+    assert.equal(page.timingRows[0].kind.disabled, false);
+    assert.equal(page.timingRows[3].kind.disabled, true);
+    assert.equal(page.requests.length, 0);
+});
+
+test("timing validation targets current controls and ignores obsolete errors after removal", async () => {
+    const page = fixture({planning: true});
+    await page.successfulCalculation();
+    const previous = page.content.innerHTML;
+    await page.emit(page.addTiming, "click");
+    const row = page.timingRows[0];
+    row.bounds.upper.mode.value = "milestone";
+    row.bounds.upper.quantile.value = "2";
+    await page.emit(row.bounds.upper.mode, "change");
+    let pending = page.emit(page.form, "submit", {submitter: page.calculate});
+    page.requests.at(-1).resolve({ok: false, json: async () => ({ok: false, errors: [
+        {field_id: "timing_0_upper_quantile", message: "Use a quantile between zero and one."},
+    ]})});
+    await pending;
+    assert.equal(row.bounds.upper.quantile.getAttribute("aria-invalid"), "true");
+    assert.equal(page.content.innerHTML, previous);
+    pending = page.emit(page.form, "submit", {submitter: page.calculate});
+    await page.emit(row.remove, "click");
+    page.requests.at(-1).resolve({ok: false, json: async () => ({ok: false, errors: [
+        {field_id: "timing_0_upper_quantile", message: "Obsolete error."},
+    ]})});
+    await pending;
+    assert.notEqual(row.bounds.upper.quantile.getAttribute("aria-invalid"), "true");
+    assert(!page.summary.textContent.includes("Obsolete error."));
+    assert.equal(page.content.innerHTML, previous);
 });

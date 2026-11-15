@@ -139,7 +139,6 @@ class DesignPlanningRoutes(unittest.TestCase):
     def test_numerically_unsupported_workflows_are_rejected_explicitly(self):
         for options, field in (
             ({'task': 'calibration'}, 'task'),
-            ({'has_completed': 'on'}, 'has_completed'),
         ):
             with self.subTest(options=options):
                 self.error(self.calculate(content=None, **options), field)
