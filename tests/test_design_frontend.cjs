@@ -11,7 +11,7 @@ const source = fs.readFileSync(path.join(__dirname, "../static/js/design.js"), "
 // Minimal DOM for the behavior used by this frontend. No browser or extra
 // JavaScript dependency is needed to exercise its request/state handling.
 function fixture({planning = false, calibration = false, plots, inspection, recovery,
-                  measurements = null, observeResize = false} = {}) {
+                  measurements = null, observeResize = false, mountPrefix = ""} = {}) {
     const document = {readyState: "complete", activeElement: null, scrolls: []};
     const dataAttribute = key => "data-" + key.replace(/[A-Z]/g, letter => "-" + letter.toLowerCase());
 
@@ -105,8 +105,8 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
         constructor(callback) { this.callback = callback; this.observed = []; resizeObservers.push(this); }
         observe(node) { this.observed.push(node); }
     }
-    const form = element("form", {id: "design-setup-form"}, root);
-    form.action = "/review";
+    const form = element("form", {id: "design-setup-form", action: mountPrefix + "/review"}, root);
+    form.action = form.getAttribute("action");
     const task = element("select", {id: "task", name: "task", value: "study", "aria-describedby": "task-help"}, form);
     const inputs = element("section", {id: "design-inputs"}, form);
     const summary = element("section", {id: "design-errors", hidden: ""}, inputs);
@@ -221,7 +221,11 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
         minimumSd = element("input", {id: "minimum_sd", name: "minimum_sd", value: ".001"}, cv);
         const profile = element("div", {"data-observation-kind": "time_profile_sd"}, planningGroup);
         profileFile = element("input", {id: "profile-file", name: "profile_file", type: "file"}, profile);
-        calculate = element("button", {id: "calculate-comparison", form: "design-setup-form", type: "submit", formaction: "/calculate", disabled: ""}, bar);
+        calculate = element("button", {id: "calculate-comparison", form: "design-setup-form", type: "submit",
+            name: "action", value: "calculate", formaction: mountPrefix + "/calculate", disabled: ""}, bar);
+        // HTMLFormElement named lookup also includes externally associated
+        // controls, which can shadow built-in properties such as action.
+        form.action = calculate;
         availability = element("p", {"data-planning-availability": ""}, inputs);
     }
     let calibrationControls = null;
@@ -395,6 +399,39 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
         fixedTimes, baselineTime, excludedTimes, alternativeSummary, timingSummary, advancedSummary,
         calibration: calibrationControls};
 }
+
+test('review reads its declared URL when a named Calculate button shadows form.action', async () => {
+    for (const mountPrefix of ['', '/tools/design']) {
+        const page = fixture({planning: true, mountPrefix});
+        const file = {name: 'reference.csv', size: 42, lastModified: 123};
+        page.fileInputs.measured.files = [file];
+        assert.equal(page.form.action, page.calculate, 'Model native named-control lookup before submitting.');
+
+        const firstReview = page.emit(page.form, 'submit', {submitter: page.submit});
+        assert.equal(page.requests.at(-1).url, mountPrefix + '/review');
+        assert.equal(typeof page.requests.at(-1).url, 'string');
+        page.requests.at(-1).resolve({ok: true, json: async () => ({ok: true, html: '<p>Reviewed setup</p>'})});
+        await firstReview;
+        assert.equal(page.comparisonStatus.dataset.state, 'none');
+        assert.equal(page.fileInputs.measured.files[0], file);
+
+        await page.successfulCalculation('<p>Calculated comparison</p>');
+        assert.equal(page.requests.at(-1).url, mountPrefix + '/calculate');
+        const comparison = page.content.innerHTML;
+        const freshness = page.resultStatus.textContent;
+        await page.emit(page.inputsButton, 'click');
+        // Enter-key/default submission uses the same review URL without an
+        // explicit submitter and must not replace the numerical comparison.
+        await page.successfulReview('<p>Reviewed again</p>');
+        assert.equal(page.requests.at(-1).url, mountPrefix + '/review');
+        assert.equal(typeof page.requests.at(-1).url, 'string');
+        assert.equal(page.content.innerHTML, comparison);
+        assert.equal(page.resultStatus.textContent, freshness);
+        assert.equal(page.comparisonStatus.dataset.state, 'current');
+        assert.equal(page.fileInputs.measured.files[0], file);
+        assert.equal(page.reviewContent.innerHTML, '<p>Reviewed again</p>');
+    }
+});
 
 test("task and reference changes enable only active inputs without fetching", async () => {
     const page = fixture();

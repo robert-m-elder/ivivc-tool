@@ -727,7 +727,9 @@
             setOperation(calculating ? 'calculation' : 'review', true, calculating ?
                 'Calculating the ' + comparisonName + ' comparison. Keep this page open.' : 'Reviewing setup.');
             try {
-                const response = await fetch(calculating ? calculate.getAttribute('formaction') : form.action, {
+                // The form-associated button named "action" shadows form.action
+                // in browsers, so read the declared review URL directly.
+                const response = await fetch(calculating ? calculate.getAttribute('formaction') : form.getAttribute('action'), {
                     method: 'POST', body: data, headers: {'Accept': 'application/json'},
                 });
                 const payload = await response.json();

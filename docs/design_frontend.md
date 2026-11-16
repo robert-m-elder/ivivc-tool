@@ -68,6 +68,11 @@ and settings are submitted each time.
 - **Review setup** checks these choices. File previews are requested separately;
   it does not fit curves, generate schedules, or run simulations. A setup review
   is not an analysis result.
+  The controller reads the form's explicit `action` attribute for its URL:
+  the form-associated Calculate button is named `action`, which shadows the
+  `form.action` property in a browser. Calculation uses the button's separate
+  `formaction` URL. Both attributes come from `url_for` and retain hosting
+  prefixes.
 - `POST /calculate` imports and validates the current files and settings, then
   completes prospective or adaptive study planning synchronously. It returns server-rendered
   comparison HTML or field-linked errors.
@@ -798,6 +803,9 @@ node --test tests/test_design_frontend.cjs tests/test_design_data_frontend.cjs t
 The frontend checks use Node's built-in test runner and a small DOM fixture;
 they require no additional JavaScript packages. Existing numerical and IVIVC
 tests should continue to run in the usual application environment.
+Routing checks model the named Calculate button shadowing `form.action` and
+exercise Review setup, Enter submission, and calculation at standalone and
+prefixed URLs while retaining uploaded files and comparison freshness.
 
 `test_design_navigation_markup.py` renders the actual shell for both tasks and
 URL prefixes. It checks the persistent button's form ownership, focusable
@@ -834,6 +842,10 @@ controllers working together.
    Check narrow windows, browser zoom, and reduced-motion settings. Change tasks
    and workspace views; only the relevant section buttons should be shown.
    If using a prefix, complete the remaining checks at that prefixed URL.
+   Choose Review setup, then return to Inputs and submit a setup review using
+   Enter in a single-line field. Both should reach the setup review without a
+   numerical calculation or a missing-URL error. Repeat Review setup after a
+   calculation and confirm that its comparison and freshness remain intact.
    After calculating a comparison, check hover values, zoom/reset, legend
    toggles, and figure download on the reference plot. Switch between Inputs
    and Comparisons and resize the browser; the plot should fit the visible

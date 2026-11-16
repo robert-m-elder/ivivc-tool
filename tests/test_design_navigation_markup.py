@@ -69,6 +69,8 @@ class DesignNavigationMarkup(unittest.TestCase):
             with self.subTest(prefix=prefix, task=task):
                 forms = [attrs for tag, attrs, _ in page.elements if tag == 'form']
                 self.assertEqual(len(forms), 1)
+                self.assertEqual(forms[0]['action'], prefix + '/review')
+                self.assertEqual(forms[0]['method'], 'post')
                 buttons = [(attrs, ancestors) for tag, attrs, ancestors in page.elements
                            if attrs.get('id') == 'calculate-comparison']
                 self.assertEqual(len(buttons), 1)
