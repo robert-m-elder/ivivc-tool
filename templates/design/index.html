@@ -7,7 +7,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Study Design for Absorbable Materials</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app-theme.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/design.css') }}">
+    <link rel="shortcut icon" href="{{ url_for('static', filename='images/favicon-32.ico') }}">
     <script src="https://cdn.plot.ly/plotly-3.0.1.min.js" charset="utf-8" defer></script>
     <script src="{{ url_for('static', filename='js/design-plots.js') }}" defer></script>
     <script src="{{ url_for('static', filename='js/design-timeline-figure.js') }}" defer></script>
@@ -20,9 +22,12 @@
 <body class="design-page">
     <a class="design-skip-link" href="#design-workspace">Skip to workspace</a>
     <header class="design-site-header">
-        <div class="design-page-width">
-            <h1>Study Design for Absorbable Materials</h1>
-            <p class="design-muted">Development version · study planning and IVIVC calibration assessment</p>
+        <div class="design-page-width design-header-inner">
+            <img class="design-header-logo" src="{{ url_for('static', filename='images/Logo_FDA_Primary_Blue.png') }}" alt="FDA Logo" width="2173" height="627">
+            <div class="design-header-copy">
+                <h1 class="design-app-title">Study Design for Absorbable Materials</h1>
+                <p class="design-muted">Development version · study planning and IVIVC calibration assessment</p>
+            </div>
         </div>
     </header>
 

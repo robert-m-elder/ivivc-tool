@@ -4,6 +4,20 @@ The study-design interface has a separate Flask entry point and shares the
 repository's Python environment with the IVIVC app. The IVIVC entry point,
 templates, and numerical backend are unchanged.
 
+## Appearance
+
+The design page loads `static/css/app-theme.css` before its own `design.css`.
+Edit the shared theme to change the palette, font family, common corner radii,
+or focus colors for both apps. The design stylesheet maps its `--design-*`
+variables to those shared settings and keeps its layout and responsive rules
+local. It does not load the IVIVC app's `styles.css`.
+
+The header reuses the existing blue FDA logo and favicon. The logo and title
+stack on narrow screens. Controls use the shared primary, hover, active, focus,
+and error colors; disabled controls keep their disabled appearance. Plot series
+and timeline-key colors remain tied to the displayed data and figure builders.
+See [Shared app theme](app_theme.md) for the theme definitions and branch rollout.
+
 ## Run locally
 
 From the repository root, using the project's Python 3.12 environment with
@@ -755,7 +769,11 @@ installation. DOM-fixture tests do not replace this check of both browser
 controllers working together.
 
 1. Open the workspace and check that styles, the application scripts, and the
-   Plotly CDN script load.
+   Plotly CDN script load. Confirm that the FDA logo, blue title, and shared
+   control colors appear. Narrow the window to check that the header stacks
+   without horizontal overflow. Check button hover/pressed states and keyboard
+   focus, including the skip link. These assets should also load when the app
+   is hosted under a URL prefix.
    If using a prefix, complete the remaining checks at that prefixed URL.
    After calculating a comparison, check hover values, zoom/reset, legend
    toggles, and figure download on the reference plot. Switch between Inputs
