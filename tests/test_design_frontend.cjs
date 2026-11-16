@@ -135,6 +135,8 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
     let availability, ivivcGroup, scalingGroup, ivivcApproach, ivivcModel, ivivcMethod;
     let interpolation, scalingModel, extrapolation, ivivcTarget, ratioFile;
     let measuredMode, completedError, completedFile, completedScaleHelp, firstMode, firstTime, futurePolicy, addTiming;
+    let alternativesDetails, timingDetails, advancedTimeDetails, includeEven, manualSchedules;
+    let fixedTimes, baselineTime, excludedTimes, alternativeSummary, timingSummary, advancedSummary;
     const timingRows = [];
     if (planning) {
         completed = element("input", {id: "has_completed", name: "has_completed", type: "checkbox", value: "on"}, studyGroup);
@@ -149,13 +151,22 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
         planningGroup = element("div", {"data-planning-controls": ""}, studyGroup);
         const samplingAdaptive = element("div", {"data-adaptive-controls": "", hidden: ""}, planningGroup);
         firstMode = element("select", {id: "first_time_mode", name: "first_time_mode", value: "specified"}, samplingAdaptive);
-        futurePolicy = element("select", {id: "future_policy", name: "future_policy", value: "future_only"}, samplingAdaptive);
         const specified = element("div", {"data-first-specified": ""}, planningGroup);
         firstTime = element("input", {id: "first_time", name: "first_time", value: "0"}, specified);
-        addTiming = element("button", {type: "button", "data-add-timing": ""}, planningGroup);
+        alternativesDetails = element("details", {id: "sampling-alternatives"}, planningGroup);
+        const alternativesTitle = element("summary", {}, alternativesDetails);
+        alternativeSummary = element("span", {"data-sampling-summary": "alternatives"}, alternativesTitle);
+        includeEven = element("input", {id: "include_even", name: "include_even", type: "checkbox", value: "on"}, alternativesDetails);
+        includeEven.checked = true;
+        manualSchedules = element("textarea", {id: "manual_schedules", name: "manual_schedules"}, alternativesDetails);
+        timingDetails = element("details", {id: "timing-requirements", tabindex: "-1", "data-timing-editor": ""}, planningGroup);
+        const timingTitle = element("summary", {}, timingDetails);
+        timingSummary = element("span", {"data-sampling-summary": "timing"}, timingTitle);
+        element("p", {id: "timing-requirements-error", "data-error-for": "timing-requirements", hidden: ""}, timingDetails);
+        addTiming = element("button", {type: "button", "data-add-timing": ""}, timingDetails);
         for (let index = 0; index < 8; index++) {
             const prefix = "timing_" + index + "_";
-            const row = element("fieldset", {"data-timing-row": String(index), "data-timing-active": "false", hidden: ""}, planningGroup);
+            const row = element("fieldset", {"data-timing-row": String(index), "data-timing-active": "false", hidden: ""}, timingDetails);
             const kind = element("select", {id: prefix + "kind", name: prefix + "kind", value: "window"}, row);
             const label = element("input", {id: prefix + "label", name: prefix + "label", value: "Requirement " + (index + 1)}, row);
             const bounds = {};
@@ -175,6 +186,15 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
             const remove = element("button", {type: "button", "data-remove-timing": String(index)}, row);
             timingRows.push({row, kind, label, bounds, count, scope, remove});
         }
+        advancedTimeDetails = element("details", {id: "sampling-time-options"}, planningGroup);
+        const advancedTitle = element("summary", {}, advancedTimeDetails);
+        advancedSummary = element("span", {"data-sampling-summary": "advanced"}, advancedTitle);
+        fixedTimes = element("input", {id: "fixed_times", name: "fixed_times", value: "0"}, advancedTimeDetails);
+        baselineTime = element("input", {id: "baseline_time", name: "baseline_time", value: "0"}, advancedTimeDetails);
+        excludedTimes = element("input", {id: "excluded_times", name: "excluded_times", value: ""}, advancedTimeDetails);
+        element("p", {id: "fixed_times-error", "data-error-for": "fixed_times", hidden: ""}, advancedTimeDetails);
+        const policyAdaptive = element("div", {"data-adaptive-controls": "", hidden: ""}, advancedTimeDetails);
+        futurePolicy = element("select", {id: "future_policy", name: "future_policy", value: "future_only"}, policyAdaptive);
         ivivcGroup = element("div", {"data-reference-options": "ivivc"}, planningGroup);
         ivivcApproach = element("select", {id: "ivivc_approach", name: "ivivc_approach", value: "approach2"}, ivivcGroup);
         const modelGroup = element("div", {"data-ivivc-model-fields": ""}, ivivcGroup);
@@ -371,6 +391,8 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
         ivivcGroup, scalingGroup, ivivcApproach, ivivcModel, ivivcMethod,
         interpolation, scalingModel, extrapolation, ivivcTarget, ratioFile,
         measuredMode, completedError, completedFile, completedScaleHelp, firstMode, firstTime, futurePolicy, addTiming, timingRows,
+        alternativesDetails, timingDetails, advancedTimeDetails, includeEven, manualSchedules,
+        fixedTimes, baselineTime, excludedTimes, alternativeSummary, timingSummary, advancedSummary,
         calibration: calibrationControls};
 }
 
@@ -1712,4 +1734,159 @@ test('an old validation link cannot focus a setting made inactive by a reference
     assert.equal(page.document.activeElement, page.summary);
     assert.equal(page.document.scrolls.at(-1).node, page.summary);
     assert.match(page.requestStatus.textContent, /no longer active/i);
+});
+
+test('closed sampling options keep their existing defaults enabled and included in a calculation', async () => {
+    const page = fixture({planning: true});
+    for (const section of [page.alternativesDetails, page.timingDetails, page.advancedTimeDetails]) {
+        assert.equal(section.open, false);
+    }
+    for (const field of [page.fixedTimes, page.baselineTime, page.excludedTimes, page.includeEven, page.manualSchedules]) {
+        assert.equal(field.disabled, false, field.id);
+    }
+    assert.equal(page.firstMode.value, 'specified');
+    assert.equal(page.firstMode.disabled, true, 'An ongoing-study choice is inactive for a new study.');
+    const pending = page.emit(page.form, 'submit', {submitter: page.calculate});
+    const values = new Map(page.requests.at(-1).options.body.entries());
+    assert.equal(values.get('fixed_times'), '0');
+    assert.equal(values.get('baseline_time'), '0');
+    assert.equal(values.get('excluded_times'), '');
+    assert.equal(values.get('include_even'), 'on');
+    assert.equal(values.get('manual_schedules'), '');
+    assert.equal(values.get('first_time'), '0');
+    assert(!values.has('first_time_mode'));
+    assert(!values.has('future_policy'));
+    page.requests.at(-1).resolve({ok: true, json: async () => ({ok: true, html: '<p>Default comparison</p>'})});
+    await pending;
+});
+
+test('custom sampling choices survive closed panels and task or reference switches', async () => {
+    const page = fixture({planning: true, calibration: true});
+    page.advancedTimeDetails.open = true;
+    for (const [field, value] of [[page.fixedTimes, '0, 8'], [page.baselineTime, '2'], [page.excludedTimes, '6, 10']]) {
+        field.value = value;
+        await page.emit(field, 'input');
+    }
+    page.completed.checked = true;
+    await page.emit(page.completed, 'change');
+    page.firstMode.value = 'latest_completed';
+    await page.emit(page.firstMode, 'change');
+    page.futurePolicy.value = 'gap_fill';
+    await page.emit(page.futurePolicy, 'change');
+    page.alternativesDetails.open = true;
+    page.includeEven.checked = false;
+    await page.emit(page.includeEven, 'change');
+    page.manualSchedules.value = 'Selected: 0, 4, 8';
+    await page.emit(page.manualSchedules, 'input');
+    page.alternativesDetails.open = page.advancedTimeDetails.open = false;
+    page.task.value = 'calibration';
+    await page.emit(page.task, 'change');
+    assert.equal(page.fixedTimes.disabled, true);
+    page.task.value = 'study';
+    await page.emit(page.task, 'change');
+    page.sourceField.value = 'ivivc';
+    await page.emit(page.sourceField, 'change');
+    page.sourceField.value = 'measured';
+    await page.emit(page.sourceField, 'change');
+    assert.equal(page.alternativesDetails.open, false);
+    assert.equal(page.advancedTimeDetails.open, false);
+    assert.equal(page.fixedTimes.disabled, false);
+    const pending = page.emit(page.form, 'submit', {submitter: page.calculate});
+    const values = new Map(page.requests.at(-1).options.body.entries());
+    assert.equal(values.get('fixed_times'), '0, 8');
+    assert.equal(values.get('baseline_time'), '2');
+    assert.equal(values.get('excluded_times'), '6, 10');
+    assert.equal(values.get('manual_schedules'), 'Selected: 0, 4, 8');
+    assert(!values.has('include_even'));
+    assert.equal(values.get('first_time_mode'), 'latest_completed');
+    assert.equal(values.get('future_policy'), 'gap_fill');
+    assert(!values.has('first_time'));
+    page.requests.at(-1).resolve({ok: true, json: async () => ({ok: true, html: '<p>Custom comparison</p>'})});
+    await pending;
+});
+
+test('sampling summaries follow edited settings and timing rows without changing the entered values', async () => {
+    const page = fixture({planning: true});
+    assert.match(page.advancedSummary.textContent, /Fixed times: 0.*Milestone baseline: 0.*Excluded times: none/);
+    assert.match(page.alternativeSummary.textContent, /Evenly spaced: on.*Manual schedules: 0/);
+    assert.equal(page.timingSummary.textContent, '0 requirements');
+    for (const [field, value] of [[page.fixedTimes, '0, 8'], [page.baselineTime, '2'], [page.excludedTimes, '6, 10']]) {
+        field.value = value;
+        await page.emit(field, 'input');
+    }
+    page.includeEven.checked = false;
+    await page.emit(page.includeEven, 'change');
+    page.manualSchedules.value = 'Early: 0, 4, 8\n\nLate: 0, 12, 20';
+    await page.emit(page.manualSchedules, 'input');
+    await page.emit(page.addTiming, 'click');
+    assert.equal(page.timingSummary.textContent, '1 requirement');
+    await page.emit(page.addTiming, 'click');
+    assert.equal(page.timingSummary.textContent, '2 requirements');
+    await page.emit(page.timingRows[0].remove, 'click');
+    assert.equal(page.timingSummary.textContent, '1 requirement');
+    assert.match(page.advancedSummary.textContent, /Fixed times: 0, 8.*Milestone baseline: 2.*Excluded times: 6, 10/);
+    assert.match(page.alternativeSummary.textContent, /Evenly spaced: off.*Manual schedules: 2/);
+    assert.equal(page.fixedTimes.value, '0, 8');
+    assert.equal(page.baselineTime.value, '2');
+    assert.equal(page.excludedTimes.value, '6, 10');
+    assert.equal(page.manualSchedules.value, 'Early: 0, 4, 8\n\nLate: 0, 12, 20');
+    page.completed.checked = true;
+    await page.emit(page.completed, 'change');
+    page.futurePolicy.value = 'gap_fill';
+    await page.emit(page.futurePolicy, 'change');
+    assert.match(page.advancedSummary.textContent, /New times: gap filling allowed/);
+    assert.equal(page.requests.length, 0);
+});
+
+test('opening or closing sampling panels preserves a current comparison and active timing values', async () => {
+    const page = fixture({planning: true});
+    await page.emit(page.addTiming, 'click');
+    const timing = page.timingRows[0];
+    timing.bounds.upper.time.value = '18';
+    await page.emit(timing.bounds.upper.time, 'input');
+    page.timingDetails.open = false;
+    const pending = page.emit(page.form, 'submit', {submitter: page.calculate});
+    const values = new Map(page.requests.at(-1).options.body.entries());
+    assert.equal(values.get('timing_0_upper_time'), '18');
+    assert.equal(timing.bounds.upper.time.disabled, false);
+    page.requests.at(-1).resolve({ok: true, json: async () => ({ok: true, html: '<p>Timing comparison</p>'})});
+    await pending;
+    await page.emit(page.inputsButton, 'click');
+    const status = page.comparisonStatus.textContent;
+    for (const panel of [page.alternativesDetails, page.timingDetails, page.advancedTimeDetails]) {
+        panel.open = true;
+        await page.emit(panel, 'toggle');
+        panel.open = false;
+        await page.emit(panel, 'toggle');
+    }
+    assert.equal(page.comparisonStatus.dataset.state, 'current');
+    assert.equal(page.comparisonStatus.textContent, status);
+    assert.equal(page.calculate.textContent, 'Recalculate comparison');
+    assert.equal(timing.bounds.upper.time.value, '18');
+    assert.equal(timing.bounds.upper.time.disabled, false);
+    assert.equal(page.requests.length, 1);
+});
+
+test('validation links reveal advanced controls, the timing panel itself, and nested timing fields', async () => {
+    for (const target of ['fixed_times', 'timing-requirements', 'timing_0_upper_quantile']) {
+        const page = fixture({planning: true});
+        if (target.startsWith('timing_')) {
+            await page.emit(page.addTiming, 'click');
+            page.timingRows[0].bounds.upper.mode.value = 'milestone';
+            await page.emit(page.timingRows[0].bounds.upper.mode, 'change');
+            page.timingDetails.open = false;
+        }
+        const pending = page.emit(page.form, 'submit', {submitter: page.calculate});
+        page.requests.at(-1).resolve({ok: false, json: async () => ({ok: false, errors: [
+            {field_id: target, message: 'Check this sampling choice.'},
+        ]})});
+        await pending;
+        assert.equal(page.document.activeElement, page.summary);
+        const panel = target === 'fixed_times' ? page.advancedTimeDetails : page.timingDetails;
+        assert.equal(panel.open, false);
+        await page.emit(page.summary.querySelectorAll('a')[0], 'click');
+        assert.equal(panel.open, true, target);
+        assert.equal(page.document.activeElement.id, target);
+        assert.equal(page.document.scrolls.at(-1).node.id, target);
+    }
 });

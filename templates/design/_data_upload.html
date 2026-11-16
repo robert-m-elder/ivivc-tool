@@ -13,6 +13,7 @@
     <p class="design-help" data-import-status role="status" aria-live="polite"></p>
     <div id="{{ dataset.id }}-config" data-import-config></div>
     <p class="design-status" data-import-stale hidden></p>
-    <div id="{{ dataset.id }}-preview" data-import-preview></div>
+    <button type="button" data-import-preview-toggle aria-controls="{{ dataset.id }}-preview" aria-expanded="false" hidden>Show preview</button>
+    <div id="{{ dataset.id }}-preview" data-import-preview hidden></div>
 </fieldset>
 {%- endmacro %}

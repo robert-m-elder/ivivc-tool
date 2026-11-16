@@ -107,7 +107,7 @@
     <p class="design-help">This profile specifies individual future-measurement SD, not SEM or reference-curve uncertainty. Times must increase without duplicates. Planning uses the nearest-time SD and extends endpoint values beyond the profile range.</p>
     {% endif %}
     <div class="design-action-row">
-        <button type="button" data-import-action="preview" data-dataset-id="{{ dataset.id }}">Preview interpreted data</button>
+        <button type="button" data-import-action="preview" data-dataset-id="{{ dataset.id }}" aria-controls="{{ dataset.id }}-preview">Preview interpreted data</button>
     </div>
 </div>
 {% endif %}

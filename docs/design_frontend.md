@@ -136,6 +136,9 @@ For each active file role:
    Enter actual historical precision/counts; no numerical values are assumed.
 5. Choose **Preview interpreted data**. The preview records the file,
    worksheet, mappings, row counts, ranges, and uncertainty interpretation.
+   **Hide preview** collapses it; **Show preview** restores the same content
+   without rereading the file or changing the mappings. Use **Preview interpreted
+   data** again to refresh it after changing the interpretation.
 
 Data roles remain separate: prior reference data, IVIVC calibration/prediction
 inputs, completed target-study observations, future individual-SD profiles,
@@ -193,11 +196,37 @@ worksheets, or interpretation marks earlier previews as out of date while
 retaining their original captions. Failed or superseded requests do not replace
 successful previews or apply errors to newer inputs.
 
+Preview visibility is independent for each dataset and survives view/task
+switches. A successful refresh opens its new preview; a failed or superseded
+request preserves the earlier preview and its visibility. An out-of-date notice
+stays visible outside a collapsed preview. Showing or hiding a preview does not
+change calculation inputs or comparison freshness.
+
 The numerical import helpers live in `utilities/design_data.py`. They return
 typed `TimeCourse`, `ObservationModel`, or `EmpiricalTimeScaleDistribution`
 values for subsequent request handlers. Later calculations must reconstruct
 and validate these values from the current uploaded file and form settings,
 rather than trusting browser preview output.
+
+## Sampling choices and optional settings
+
+Sampling choices initially shows the opportunity range/step and study-size
+range. Three optional sections start collapsed, in this order: **Alternative
+comparison schedules**, **Timing requirements**, and **Advanced time
+inclusion/exclusion options**. Their summaries show the current choices.
+
+Closing a section retains its values and includes its active controls in the
+calculation. The existing defaults are unchanged: evenly spaced comparisons
+included, no timing requirements, fixed time `0`, milestone baseline `0`, and
+no excluded times. Fixed times, the milestone baseline, exclusions, and the
+ongoing-study gap-filling policy are in the advanced time section. Validation
+links open the relevant section before focusing its control.
+
+For an ongoing study, **Start proposed sampling opportunities** includes
+**Latest completed time** as an alternative to specifying the first time.
+The default remains **Specify a time**: changing the starting point can shift
+the candidate grid and affect proposed schedules. The latest completed time
+itself is excluded from new sampling under the future-only policy.
 
 ## Measured-reference planning
 
@@ -814,9 +843,18 @@ controllers working together.
 2. Import a small CSV and a workbook with multiple sheets. Read the columns,
    select the sheet and mappings, and preview mean/SD/count and mean/SEM data.
    Confirm the selected files remain available when changing workspace views.
+   Hide and show each interpreted preview. Its caption and contents should
+   stay intact without another request. Change a mapping while collapsed and
+   check that the out-of-date notice stays visible. A successful new preview
+   should open; a failed refresh should retain the earlier preview and its
+   visibility.
    Confirm that import requests show the spinner and clear it after success or
    failure, without changing the current comparison's input provenance.
-3. Calculate a small measured-reference study comparison. Check the endpoint
+3. In Sampling choices, expand and collapse the three optional sections.
+   Verify the summaries reflect edited values, closing sections retains their
+   inputs, and validation links reveal the relevant controls. For an ongoing
+   study, try Latest completed time, then return to a specified first time.
+   Calculate a small measured-reference study comparison. Check the endpoint
    median and central 95% range, including a milestone that some or all
    reference trajectories do not reach by the horizon. Such bounds should
    state **Beyond the assessment horizon**. Select three schedules and verify

@@ -69,6 +69,13 @@
                     button.disabled = !enabled || state.pending ||
                         (button.dataset.importAction === 'preview' && !state.columnsCurrent);
                 });
+                state.preview.hidden = !state.hasPreview || !state.previewVisible;
+                if (state.toggle) {
+                    state.toggle.hidden = !state.hasPreview;
+                    state.toggle.disabled = !enabled;
+                    state.toggle.textContent = state.previewVisible ? 'Hide preview' : 'Show preview';
+                    state.toggle.setAttribute('aria-expanded', String(state.previewVisible));
+                }
             });
         }
 
@@ -146,6 +153,7 @@
                 } else {
                     state.preview.innerHTML = payload.html;
                     state.hasPreview = true;
+                    state.previewVisible = true;
                     state.stale.hidden = true;
                     state.stale.textContent = '';
                     state.status.textContent = 'Data preview ready. No fitting or simulation has run.';
@@ -171,9 +179,11 @@
                 id, container, file: document.getElementById(id),
                 config: container.querySelector('[data-import-config]'),
                 preview: container.querySelector('[data-import-preview]'),
+                toggle: container.querySelector('[data-import-preview-toggle]'),
                 status: container.querySelector('[data-import-status]'),
                 stale: container.querySelector('[data-import-stale]'),
                 revision: 0, pending: false, columnsCurrent: false, hasPreview: false,
+                previewVisible: false,
             };
             states.set(container, state);
             function edited(event) {
@@ -199,6 +209,15 @@
             container.addEventListener('input', event => { if (event.target !== state.file) edited(event); });
         });
         root.addEventListener('click', event => {
+            const toggle = event.target.closest('[data-import-preview-toggle]');
+            if (toggle) {
+                event.preventDefault();
+                const state = states.get(toggle.closest('[data-design-dataset]'));
+                if (!state || !state.hasPreview || toggle.disabled || !active(state.container)) return;
+                state.previewVisible = !state.previewVisible;
+                sync();
+                return;
+            }
             const button = event.target.closest('[data-import-action]');
             if (!button) return;
             const state = states.get(button.closest('[data-design-dataset]'));

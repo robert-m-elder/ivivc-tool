@@ -101,6 +101,7 @@
         function focusTarget(target) {
             if (!target) return;
             measureChrome();
+            if (target.tagName === 'DETAILS') target.open = true;
             for (let ancestor = target.parentElement; ancestor && ancestor !== root; ancestor = ancestor.parentElement) {
                 if (ancestor.tagName === 'DETAILS') ancestor.open = true;
             }
@@ -426,6 +427,7 @@
         }
 
         function updateDraftStatus() {
+            updateSamplingSummaries();
             updateGenerationStatus();
             if (calculatedSignature !== null) {
                 const current = signature() === calculatedSignature;
@@ -454,6 +456,29 @@
                     'The displayed setup review matches these settings.' :
                     'Inputs changed. The displayed setup review retains its original settings; review again to check these choices.';
             measureChrome();
+        }
+
+        function updateSamplingSummaries() {
+            const value = id => {
+                const field = document.getElementById(id);
+                return field ? String(field.value).trim() : '';
+            };
+            const short = text => text.length > 45 ? text.slice(0, 42) + '…' : text;
+            const even = document.getElementById('include_even');
+            const manual = value('manual_schedules').split(/\r?\n/).filter(line => line.trim()).length;
+            const count = timingRows.filter(row => row.dataset.timingActive === 'true').length;
+            const summaries = {
+                alternatives: 'Evenly spaced: ' + (even && even.checked ? 'on' : 'off') + ' · Manual schedules: ' + manual,
+                timing: count + ' requirement' + (count === 1 ? '' : 's'),
+                advanced: 'Fixed times: ' + short(value('fixed_times') || 'none') +
+                    ' · Milestone baseline: ' + short(value('baseline_time') || 'not specified') +
+                    ' · Excluded times: ' + short(value('excluded_times') || 'none') +
+                    (completed && completed.checked ? ' · New times: ' +
+                        (value('future_policy') === 'gap_fill' ? 'gap filling allowed' : 'future only') : ''),
+            };
+            root.querySelectorAll('[data-sampling-summary]').forEach(summary => {
+                summary.textContent = summaries[summary.dataset.samplingSummary] || '';
+            });
         }
 
         function clearErrors() {

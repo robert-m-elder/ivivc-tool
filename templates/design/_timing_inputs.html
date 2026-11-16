@@ -29,10 +29,11 @@
 {%- endmacro %}
 
 {% macro timing_inputs() -%}
-<fieldset id="timing-requirements" class="design-comparison-options" tabindex="-1" data-timing-editor>
-    <legend>Timing requirements</legend>
+<details id="timing-requirements" class="design-advanced design-sampling-options" tabindex="-1" data-timing-editor>
+    <summary>Timing requirements <span class="design-option-summary" data-sampling-summary="timing">0 requirements</span></summary>
+    <div class="design-sampling-content">
     <p class="design-help">Optionally require sampling within a window, or choose the latest feasible time before a deadline. Add multiple requirements when needed. Windows include their upper bound and exclude their lower bound and baseline measurements.</p>
-    <p class="design-help">Milestones use the reference response at the milestone baseline above. A degraded fraction of 0.5 means T50; 0.9 means T90. A reference quantile of 0.25 means the 25th percentile. Fractions and quantiles must be strictly between 0 and 1. These requirements currently apply to future-only sampling, rather than gap filling.</p>
+    <p class="design-help">Milestones use the reference response at the milestone baseline, set under Advanced time inclusion/exclusion options (default 0). A degraded fraction of 0.5 means T50; 0.9 means T90. A reference quantile of 0.25 means the 25th percentile. Fractions and quantiles must be strictly between 0 and 1. These requirements currently apply to future-only sampling, rather than gap filling.</p>
     {{ error('timing-requirements') }}
     {% for index in range(8) %}{% set prefix = 'timing_' ~ index ~ '_' %}
     <fieldset class="design-comparison-options" data-timing-row="{{ index }}" data-timing-active="false" hidden>
@@ -73,5 +74,6 @@
     {% endfor %}
     <button type="button" data-add-timing>Add a timing requirement</button>
     <p class="design-help">Up to eight requirements per comparison. Results distinguish unavailable milestones, infeasible requested study sizes, and search limits.</p>
-</fieldset>
+    </div>
+</details>
 {%- endmacro %}

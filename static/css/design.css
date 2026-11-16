@@ -312,6 +312,23 @@
 .design-page .design-error-summary ul { margin: 0; padding-left: 1.25rem; }
 .design-page .design-advanced { margin-bottom: 1rem; }
 .design-page .design-advanced summary { cursor: pointer; margin-bottom: .8rem; }
+.design-page .design-sampling-options {
+    margin: 1rem 0;
+    padding: .85rem 1rem;
+    border: 1px solid var(--design-border);
+    border-radius: var(--app-radius-panel);
+}
+.design-page .design-sampling-options > summary { margin: 0; font-weight: 600; }
+.design-page .design-option-summary {
+    display: block;
+    margin: .25rem 0 0 1.05rem;
+    color: var(--design-muted);
+    font-size: .8125rem;
+    font-weight: 400;
+    overflow-wrap: anywhere;
+}
+.design-page .design-sampling-content { margin-top: 1rem; }
+.design-page .design-opportunity-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); }
 
 .design-page .design-settings-table { width: 100%; border-collapse: collapse; }
 .design-page .design-settings-table caption { text-align: left; margin-bottom: .5rem; color: var(--design-muted); }

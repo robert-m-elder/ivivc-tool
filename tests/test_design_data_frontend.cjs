@@ -107,10 +107,12 @@ function fixture() {
         const file = element("input", {id, name: id.replaceAll("-", "_"), type: "file"}, container);
         const inspect = element("button", {type: "button", "data-import-action": "inspect"}, container);
         const config = element("div", {"data-import-config": ""}, container);
-        const preview = element("div", {"data-import-preview": ""}, container);
+        const toggle = element("button", {type: "button", "data-import-preview-toggle": "",
+            "aria-controls": id + "-preview", "aria-expanded": "false", hidden: ""}, container);
+        const preview = element("div", {id: id + "-preview", "data-import-preview": "", hidden: ""}, container);
         const status = element("p", {"data-import-status": ""}, container);
         const stale = element("p", {"data-import-stale": "", hidden: ""}, container);
-        return {id, container, file, inspect, config, preview, status, stale};
+        return {id, container, file, inspect, config, preview, toggle, status, stale};
     }
     const dataset = makeDataset("reference-file", studyGroup);
     const completed = makeDataset("completed-target-file", completedGroup);
@@ -397,4 +399,158 @@ test('concurrent file roles use independent activity keys and each ends only its
     assert.equal(page.activity[3].key, 'import:' + page.completed.id);
     assert.equal(page.activity[3].active, false);
     assert.equal(page.completed.inspect.disabled, false);
+});
+
+test('preview visibility toggles without requests, input updates, or loss of selected files and mappings', async () => {
+    const page = fixture();
+    assert.equal(page.dataset.toggle.hidden, true);
+    assert.equal(page.dataset.preview.hidden, true);
+    await page.readColumns();
+    assert.equal(page.dataset.toggle.hidden, true);
+    const previewButton = page.dataset.config.querySelector('[data-import-action="preview"]');
+    void page.emit(previewButton, 'click');
+    await page.respond('<figure>Original file, mapped rows and caption</figure>');
+    assert.equal(page.dataset.preview.hidden, false);
+    assert.equal(page.dataset.toggle.hidden, false);
+    assert.equal(page.dataset.toggle.textContent, 'Hide preview');
+    assert.equal(page.dataset.toggle.getAttribute('aria-expanded'), 'true');
+    assert.equal(page.dataset.toggle.getAttribute('aria-controls'), page.dataset.preview.id);
+    const file = page.dataset.file.files[0];
+    const mapping = page.control('response_column');
+    const requests = page.requests.length, updates = page.updates.length, activity = page.activity.length;
+    await page.emit(page.dataset.toggle, 'click');
+    assert.equal(page.dataset.preview.hidden, true);
+    assert.equal(page.dataset.toggle.textContent, 'Show preview');
+    assert.equal(page.dataset.toggle.getAttribute('aria-expanded'), 'false');
+    await page.emit(page.dataset.toggle, 'click');
+    assert.equal(page.dataset.preview.hidden, false);
+    assert.equal(page.dataset.preview.innerHTML, '<figure>Original file, mapped rows and caption</figure>');
+    assert.equal(page.dataset.file.files[0], file);
+    assert.equal(page.control('response_column'), mapping);
+    assert.equal(mapping.value, 'response');
+    assert.equal(mapping.disabled, false);
+    assert.equal(page.requests.length, requests);
+    assert.equal(page.updates.length, updates, 'Presentation toggles must not mark a comparison as edited.');
+    assert.equal(page.activity.length, activity);
+});
+
+test('collapsed stale previews retain their original content and can be shown after mapping or file changes', async () => {
+    const page = fixture();
+    await page.readColumns('EXCEL_MAPPING');
+    void page.emit(page.dataset.config.querySelector('[data-import-action="preview"]'), 'click');
+    await page.respond('<figure>Original worksheet Data and original column mapping</figure>');
+    await page.emit(page.dataset.toggle, 'click');
+    page.control('response_column').value = 'changed-response';
+    await page.emit(page.control('response_column'), 'change');
+    assert.equal(page.dataset.preview.hidden, true);
+    assert.equal(page.dataset.stale.hidden, false, 'The stale notice must remain visible outside the collapsed preview.');
+    const sheet = page.document.getElementById(page.dataset.id + '__sheet');
+    sheet.value = 'Other';
+    await page.emit(sheet, 'change');
+    const before = page.requests.length;
+    await page.emit(page.dataset.toggle, 'click');
+    assert.equal(page.requests.length, before);
+    assert.equal(page.dataset.preview.hidden, false);
+    assert.match(page.dataset.preview.innerHTML, /Original worksheet Data/);
+    await page.emit(page.dataset.toggle, 'click');
+    page.dataset.file.files = [page.file('replacement.csv')];
+    await page.emit(page.dataset.file, 'change');
+    assert.equal(page.dataset.preview.hidden, true);
+    assert.equal(page.dataset.toggle.hidden, false);
+    assert.equal(page.dataset.stale.hidden, false);
+    void page.emit(page.dataset.inspect, 'click');
+    await page.respond('CSV_MAPPING');
+    assert.equal(page.dataset.preview.hidden, true, 'Rereading columns must not reopen old data.');
+    assert.match(page.dataset.preview.innerHTML, /Original worksheet Data/);
+    await page.emit(page.dataset.toggle, 'click');
+    assert.equal(page.dataset.preview.hidden, false);
+    assert.equal(page.dataset.stale.hidden, false);
+});
+
+test('failed and superseded preview refreshes preserve collapsed earlier data while the toggle remains usable', async () => {
+    for (const outcome of ['network', 'malformed', 'validation', 'mapping', 'file', 'inactive']) {
+        const page = fixture();
+        await page.readColumns();
+        const previewButton = page.dataset.config.querySelector('[data-import-action="preview"]');
+        void page.emit(previewButton, 'click');
+        await page.respond('<figure>Retained original preview</figure>');
+        await page.emit(page.dataset.toggle, 'click');
+        void page.emit(previewButton, 'click');
+        assert.equal(page.dataset.toggle.disabled, false, outcome);
+        const before = page.requests.length;
+        await page.emit(page.dataset.toggle, 'click');
+        assert.equal(page.dataset.preview.hidden, false);
+        await page.emit(page.dataset.toggle, 'click');
+        assert.equal(page.requests.length, before, 'Toggling during a refresh must not start another request.');
+        const request = page.requests.at(-1);
+        if (outcome === 'network') request.reject(new Error('offline'));
+        if (outcome === 'malformed') request.resolve({ok: true, json: async () => { throw new Error('not JSON'); }});
+        if (outcome === 'validation') request.resolve({ok: false, json: async () => ({ok: false, errors: [{message: 'Check the mapping.'}]})});
+        if (outcome === 'mapping') {
+            page.control('response_column').value = 'other';
+            await page.emit(page.control('response_column'), 'change');
+        }
+        if (outcome === 'file') {
+            page.dataset.file.files = [page.file('replacement.csv')];
+            await page.emit(page.dataset.file, 'change');
+        }
+        if (outcome === 'inactive') {
+            page.studyGroup.hidden = true;
+            page.root.dispatchEvent({type: 'design-visibility-updated'});
+            assert.equal(page.dataset.toggle.disabled, true);
+        }
+        if (['mapping', 'file', 'inactive'].includes(outcome)) request.resolve({ok: true, json: async () => ({ok: true, html: '<p>Obsolete replacement</p>'})});
+        await page.flush();
+        assert.equal(page.dataset.preview.innerHTML, '<figure>Retained original preview</figure>', outcome);
+        assert.equal(page.dataset.preview.hidden, true, outcome);
+        assert.equal(page.dataset.toggle.textContent, 'Show preview', outcome);
+        assert.equal(page.dataset.toggle.getAttribute('aria-expanded'), 'false', outcome);
+    }
+});
+
+test('a successful explicit preview refresh opens the newly interpreted data', async () => {
+    const page = fixture();
+    await page.readColumns();
+    const previewButton = page.dataset.config.querySelector('[data-import-action="preview"]');
+    void page.emit(previewButton, 'click');
+    await page.respond('<p>Earlier interpreted data</p>');
+    await page.emit(page.dataset.toggle, 'click');
+    page.control('response_column').value = 'other';
+    await page.emit(page.control('response_column'), 'change');
+    void page.emit(previewButton, 'click');
+    await page.respond('<p>Updated interpreted data and caption</p>');
+    assert.equal(page.dataset.preview.innerHTML, '<p>Updated interpreted data and caption</p>');
+    assert.equal(page.dataset.preview.hidden, false);
+    assert.equal(page.dataset.toggle.textContent, 'Hide preview');
+    assert.equal(page.dataset.toggle.getAttribute('aria-expanded'), 'true');
+    assert.equal(page.dataset.stale.hidden, true);
+});
+
+test('preview visibility belongs to each dataset and inactive roles cannot change it', async () => {
+    const page = fixture();
+    await page.readColumns();
+    void page.emit(page.dataset.config.querySelector('[data-import-action="preview"]'), 'click');
+    await page.respond('<p>Reference preview</p>');
+    page.hasCompleted.checked = true;
+    await page.emit(page.hasCompleted, 'change');
+    page.completed.file.files = [page.file('completed.csv')];
+    void page.emit(page.completed.inspect, 'click');
+    await page.respond('CSV_MAPPING', {dataset_id: page.completed.id});
+    void page.emit(page.completed.config.querySelector('[data-import-action="preview"]'), 'click');
+    await page.respond('<p>Completed observations preview</p>', {dataset_id: page.completed.id});
+    await page.emit(page.dataset.toggle, 'click');
+    assert.equal(page.dataset.preview.hidden, true);
+    assert.equal(page.completed.preview.hidden, false);
+    page.hasCompleted.checked = false;
+    await page.emit(page.hasCompleted, 'change');
+    assert.equal(page.completed.toggle.disabled, true);
+    const before = page.requests.length;
+    await page.emit(page.completed.toggle, 'click');
+    assert.equal(page.completed.preview.hidden, false, 'An inactive role must retain, rather than toggle, its preview state.');
+    page.hasCompleted.checked = true;
+    await page.emit(page.hasCompleted, 'change');
+    assert.equal(page.completed.toggle.disabled, false);
+    assert.equal(page.completed.preview.hidden, false);
+    assert.equal(page.completed.toggle.textContent, 'Hide preview');
+    assert.equal(page.requests.length, before);
 });

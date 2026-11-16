@@ -118,5 +118,56 @@ class DesignNavigationMarkup(unittest.TestCase):
                     self.assertIn('design-calculation-bar', [item.get('id') for _, item in ancestors])
 
 
+    def test_sampling_options_are_collapsed_in_order_without_disabling_their_values(self):
+        expected = ['sampling-alternatives', 'timing-requirements', 'sampling-time-options']
+        for prefix, task, page in self.pages:
+            with self.subTest(prefix=prefix, task=task):
+                sections = [(tag, attrs) for tag, attrs, _ in page.elements
+                            if attrs.get('id') in expected]
+                self.assertEqual([attrs['id'] for _, attrs in sections], expected)
+                self.assertTrue(all(tag == 'details' and 'open' not in attrs and 'hidden' not in attrs
+                                    for tag, attrs in sections))
+                for identifier, value in [('fixed_times', '0'), ('baseline_time', '0'), ('excluded_times', '')]:
+                    _, attrs, ancestors = next(row for row in page.elements if row[1].get('id') == identifier)
+                    self.assertEqual(attrs['value'], value)
+                    self.assertNotIn('disabled', attrs)
+                    self.assertIn('sampling-time-options', [item.get('id') for _, item in ancestors])
+                _, even, ancestors = next(row for row in page.elements if row[1].get('id') == 'include_even')
+                self.assertIn('checked', even)
+                self.assertNotIn('disabled', even)
+                self.assertIn('sampling-alternatives', [item.get('id') for _, item in ancestors])
+                _, policy, ancestors = next(row for row in page.elements if row[1].get('id') == 'future_policy')
+                self.assertIn('sampling-time-options', [item.get('id') for _, item in ancestors])
+
+    def test_latest_completed_is_available_without_changing_the_default_grid_mode(self):
+        for prefix, task, page in self.pages:
+            with self.subTest(prefix=prefix, task=task):
+                options = [attrs for tag, attrs, ancestors in page.elements if tag == 'option'
+                           and any(item.get('id') == 'first_time_mode' for _, item in ancestors)]
+                self.assertEqual({attrs['value'] for attrs in options}, {'specified', 'latest_completed'})
+                self.assertEqual([attrs['value'] for attrs in options if 'selected' in attrs], ['specified'])
+
+    def test_each_preview_toggle_controls_its_own_initially_hidden_preview(self):
+        for prefix, task, page in self.pages:
+            with self.subTest(prefix=prefix, task=task):
+                by_id = {attrs['id']: (tag, attrs, ancestors) for tag, attrs, ancestors in page.elements if 'id' in attrs}
+                toggles = [row for row in page.elements if 'data-import-preview-toggle' in row[1]]
+                self.assertTrue(toggles)
+                for tag, attrs, ancestors in toggles:
+                    self.assertEqual(tag, 'button')
+                    self.assertEqual(attrs['type'], 'button')
+                    self.assertEqual(attrs['aria-expanded'], 'false')
+                    self.assertIn('hidden', attrs)
+                    _, target, target_ancestors = by_id[attrs['aria-controls']]
+                    self.assertIn('data-import-preview', target)
+                    self.assertIn('hidden', target)
+                    dataset = next(item['data-design-dataset'] for _, item in ancestors if 'data-design-dataset' in item)
+                    target_dataset = next(item['data-design-dataset'] for _, item in target_ancestors if 'data-design-dataset' in item)
+                    self.assertEqual(dataset, target_dataset)
+                for _, attrs, ancestors in page.elements:
+                    if 'data-import-stale' in attrs:
+                        self.assertFalse(any('data-import-preview' in item for _, item in ancestors))
+
+
 if __name__ == '__main__':
     unittest.main()

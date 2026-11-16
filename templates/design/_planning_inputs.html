@@ -136,24 +136,16 @@
     <h4>Feasible sampling opportunities</h4>
     <div class="design-field-grid" data-adaptive-controls hidden>
         <div class="design-field">
-            <label for="first_time_mode">First opportunity</label>
-            <select id="first_time_mode" name="first_time_mode">
+            <label for="first_time_mode">Start proposed sampling opportunities</label>
+            <select id="first_time_mode" name="first_time_mode" aria-describedby="first-time-mode-help">
                 <option value="specified" selected>Specify a time</option>
-                <option value="latest_completed">Start from the latest completed measurement</option>
+                <option value="latest_completed">Latest completed time</option>
             </select>
+            <p id="first-time-mode-help" class="design-help">Latest completed time anchors the opportunity grid at the most recent completed observation. Specify a time to use a different starting point.</p>
             {{ field_error('first_time_mode') }}
         </div>
-        <div class="design-field">
-            <label for="future_policy">Where new measurements may be proposed</label>
-            <select id="future_policy" name="future_policy" aria-describedby="future-policy-help">
-                <option value="future_only" selected>After the latest completed time only</option>
-                <option value="gap_fill">Allow earlier elapsed times to fill gaps</option>
-            </select>
-            <p id="future-policy-help" class="design-help">Gap filling may require a new experimental cohort. Completed observations are retained in both modes. Timing requirements currently apply to future-only sampling.</p>
-            {{ field_error('future_policy') }}
-        </div>
     </div>
-    <div class="design-field-grid design-three-fields">
+    <div class="design-field-grid design-opportunity-grid">
         <div data-first-specified>
         {{ number_field('first_time', 'First time', 0, 0, 'any') }}
         </div>
@@ -161,27 +153,14 @@
         {{ number_field('time_step', 'Step between opportunities', 2, 0, 'any') }}
     </div>
     <p class="design-help">Use in vivo time units. Starting from the latest completed measurement anchors this grid there; future-only sampling excludes that completed time itself. The reference and recovery range still includes the baseline and completed observations. IVIVC references require support over that range; empirical scaling requires source support for every positive-weight ratio unless extrapolation is enabled.</p>
-    <div class="design-field">
-        <label for="excluded_times">Unavailable proposed times</label>
-        <input id="excluded_times" name="excluded_times" type="text" value="" aria-describedby="excluded-times-help">
-        <p id="excluded-times-help" class="design-help">Optional comma-separated times to exclude from new sampling opportunities. Completed observations are never removed by these exclusions; proposed fixed times must remain available.</p>
-        {{ field_error('excluded_times') }}
-    </div>
     <div class="design-field-grid">
         {{ number_field('min_times', 'Fewest distinct study times', 3, 1, '1', 'Total distinct times, including completed and fixed times.') }}
         {{ number_field('max_times', 'Most distinct study times', 6, 1, '1', 'Compare every study size from the fewest through the most.') }}
     </div>
-    <div class="design-field">
-        <label for="fixed_times">Fixed study times</label>
-        <input id="fixed_times" name="fixed_times" type="text" value="0" aria-describedby="fixed-times-help">
-        <p id="fixed-times-help" class="design-help">Optional comma-separated proposed times that every schedule must include, such as a baseline. All completed times are added automatically and retain their actual observations.</p>
-        {{ field_error('fixed_times') }}
-    </div>
     <p class="design-help">Suggested times are selected for expected curve recovery using a local I-optimal heuristic. They are candidates for assessment rather than a guarantee of a globally optimal schedule.</p>
-    {{ number_field('baseline_time', 'Milestone baseline time', 0, 0, 'any', 'T50 and T90 are relative to the reference response at this time. Existing or fixed observations at this baseline are excluded from window coverage counts. This setting does not add a measurement; include a proposed baseline in fixed times if needed.') }}
-    {{ timing_inputs() }}
-    <fieldset class="design-comparison-options">
-        <legend>Alternative comparison schedules</legend>
+    <details id="sampling-alternatives" class="design-advanced design-sampling-options">
+        <summary>Alternative comparison schedules <span class="design-option-summary" data-sampling-summary="alternatives">Evenly spaced: on · Manual schedules: 0</span></summary>
+        <div class="design-sampling-content">
         <div class="design-field">
             <label class="design-checkbox-label" for="include_even"><input id="include_even" name="include_even" type="checkbox" value="on" checked> Include an evenly spaced comparison at each study size</label>
             {{ field_error('include_even') }}
@@ -192,7 +171,38 @@
             <p id="manual-schedules-help" class="design-help">Optional: one named schedule per line, in the form Name: time, time, time. Enter the complete schedule, including every completed and fixed time. New times must use feasible opportunities, and the total number of times must lie within the study-size range.</p>
             {{ field_error('manual_schedules') }}
         </div>
-    </fieldset>
+        </div>
+    </details>
+    {{ timing_inputs() }}
+    <details id="sampling-time-options" class="design-advanced design-sampling-options">
+        <summary>Advanced time inclusion/exclusion options <span class="design-option-summary" data-sampling-summary="advanced">Fixed times: 0 · Milestone baseline: 0 · Excluded times: none</span></summary>
+        <div class="design-sampling-content">
+            <div class="design-field">
+                <label for="fixed_times">Fixed study times</label>
+                <input id="fixed_times" name="fixed_times" type="text" value="0" aria-describedby="fixed-times-help">
+                <p id="fixed-times-help" class="design-help">Optional comma-separated proposed times that every schedule must include, such as a baseline. All completed times are added automatically and retain their actual observations.</p>
+                {{ field_error('fixed_times') }}
+            </div>
+            {{ number_field('baseline_time', 'Milestone baseline time', 0, 0, 'any', 'T50 and T90 are relative to the reference response at this time. Existing or fixed observations at this baseline are excluded from window coverage counts. This setting does not add a measurement; include a proposed baseline in fixed times if needed.') }}
+            <div class="design-field">
+                <label for="excluded_times">Unavailable proposed times</label>
+                <input id="excluded_times" name="excluded_times" type="text" value="" aria-describedby="excluded-times-help">
+                <p id="excluded-times-help" class="design-help">Optional comma-separated times to exclude from new sampling opportunities. Completed observations are never removed by these exclusions; proposed fixed times must remain available.</p>
+                {{ field_error('excluded_times') }}
+            </div>
+            <div data-adaptive-controls hidden>
+                <div class="design-field">
+                    <label for="future_policy">Where new measurements may be proposed</label>
+                    <select id="future_policy" name="future_policy" aria-describedby="future-policy-help">
+                        <option value="future_only" selected>After the latest completed time only</option>
+                        <option value="gap_fill">Allow earlier elapsed times to fill gaps</option>
+                    </select>
+                    <p id="future-policy-help" class="design-help">Gap filling may require a new experimental cohort. Completed observations are retained in both modes. Timing requirements currently apply to future-only sampling.</p>
+                    {{ field_error('future_policy') }}
+                </div>
+            </div>
+        </div>
+    </details>
 </div>
 {%- endmacro %}
 
