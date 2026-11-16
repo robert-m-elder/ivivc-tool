@@ -59,6 +59,36 @@
         };
     }
 
+    function legendName(value) {
+        let remaining = String(value ?? '');
+        const lines = [];
+        while (remaining.length > 24) {
+            let boundary = remaining.lastIndexOf(' ', 24);
+            if (boundary < 8) boundary = 24;
+            lines.push(remaining.slice(0, boundary));
+            remaining = remaining.slice(boundary).trimStart();
+        }
+        lines.push(remaining);
+        return lines.map(escape).join('<br>');
+    }
+
+    function summaryLegend(figureLayout, data) {
+        const lineCount = data.filter(trace => trace.showlegend).reduce((total, trace) =>
+            total + trace.name.split('<br>').length, 0);
+        // Reserve enough room even when all entries wrap to separate rows on
+        // a narrow screen. Keep the original 255px plotting area above it.
+        const bottom = 65 + 18 * lineCount;
+        figureLayout.margin.b = bottom;
+        figureLayout.height = 315 + bottom;
+        figureLayout.showlegend = true;
+        figureLayout.legend = {orientation: 'h', x: 0, y: -45 / 255, yanchor: 'top',
+            font: {size: 11}, groupclick: 'togglegroup',
+            // Plotly remembers visibility per trace, not per group. Reset it
+            // when a different view/selection changes the range segments, so
+            // a hidden curve cannot leave a newly added segment visible.
+            uirevision: figureLayout.uirevision + ':' + data.map(trace => trace.uid).join('|')};
+    }
+
     function ranges(times, summary, row, color) {
         const segments = [];
         let segment = [];
@@ -79,7 +109,7 @@
             const common = {
                 type: 'scatter', mode: 'lines', x: points.map(point => point.time),
                 name: escape(row.name) + ' — across-study central 95% range',
-                legendgroup: 'schedule-' + row.id, line: {width: 0},
+                legendgroup: 'recovery-' + row.id, line: {width: 0},
                 connectgaps: false, showlegend: false,
             };
             data.push({...common, y: points.map(point => point.lower),
@@ -108,17 +138,24 @@
             const values = row[view === 'error' ? 'recovery_error' : 'recovered_response'];
             if (!values) return;
             const color = colorFor(selection, row, index);
-            if (!options.bands || options.bands[row.id] !== false) data.push(...ranges(row.evaluation_times, values, row, color));
+            data.push(...ranges(row.evaluation_times, values, row, color));
             const trace = line(row.evaluation_times, values.median, {
-                name: row.name + ' — median (' + count(row.n_successful) + '/' + count(row.n_simulations) + ' successful fits)',
+                name: row.name,
                 color, uid: row.id + '-median',
                 usable: index => count(array(values.available_counts)[index]) > 0,
                 customdata: array(row.evaluation_times).map((_, index) => [count(array(values.available_counts)[index])]),
                 hover: 'In vivo time: %{x:.8g}<br>Median ' + (view === 'error' ? 'recovery error' : 'recovered response') +
-                    ': %{y:.8g}<br>Usable successful studies: %{customdata[0]}<extra>%{fullData.name}</extra>',
+                    ': %{y:.8g}<br>Usable successful studies: %{customdata[0]}' +
+                    '<br>Successful fits: ' + count(row.n_successful) + '/' + count(row.n_simulations) +
+                    '<extra>' + escape(row.name) + '</extra>',
                 meta: {kind: 'median', schedule_id: row.id, view},
             });
-            if (trace) medians.push(trace);
+            if (trace) {
+                trace.name = legendName(row.name);
+                trace.showlegend = true;
+                trace.legendgroup = 'recovery-' + row.id;
+                medians.push(trace);
+            }
         });
         const figureLayout = layout(view === 'error' ? 'Recovery error across simulated studies' : 'Recovered response across simulated studies',
             view === 'error' ? 'Recovery error (analyzed response)' : 'Analyzed response',
@@ -131,12 +168,17 @@
                 name: 'Central assumed reference', dash: 'dash', uid: 'central-reference',
                 meta: {kind: 'reference'},
             });
-            if (central) data.push(central);
+            if (central) {
+                central.name = legendName('Central assumed reference');
+                central.showlegend = true;
+                data.push(central);
+            }
         } else {
             figureLayout.shapes = [{type: 'line', xref: 'paper', x0: 0, x1: 1,
                 yref: 'y', y0: 0, y1: 0, layer: 'below', line: {color: neutral, width: 1.5, dash: 'dash'}}];
         }
         data.push(...medians);
+        summaryLegend(figureLayout, data);
         return data.length ? {data, layout: figureLayout} : null;
     }
 

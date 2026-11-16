@@ -41,11 +41,12 @@ test('summary overlays selected schedules in result order with shared selection 
     const medians = kind(value, 'median');
     assert.deepEqual(medians.map(trace => trace.meta.schedule_id), ['schedule-0', 'schedule-2']);
     assert.deepEqual(medians.map(trace => trace.line.color), ['#123456', '#abcdef']);
-    assert.equal(value.layout.showlegend, false);
+    assert.equal(value.layout.showlegend, true);
     assert.equal(value.layout.uirevision, 'planning-recovery-response');
     assert.equal(kind(value, 'reference').length, 1);
     assert.equal(kind(value, 'reference')[0].line.dash, 'dash');
-    assert.equal(medians[0].name.includes('3/4 successful fits'), true);
+    assert.equal(medians[0].name, 'Schedule 0');
+    assert.match(medians[0].hovertemplate, /Successful fits: 3\/4/);
     assert.deepEqual(medians[0].customdata, [[3], [3], [0], [3], [3], [3]]);
 });
 
@@ -60,11 +61,44 @@ test('response range segments never fill across unavailable time points', () => 
     assert.match(value.layout.meta.range_interpretation, /not fitted confidence intervals/);
 });
 
-test('each selected schedule has an independent across-study range toggle', () => {
-    const value = figure.summary(fixture(), selection, {view: 'response', bands: {'schedule-0': false, 'schedule-2': true}});
+test('available ranges are shown and share one legend group with their corresponding median', () => {
+    const value = figure.summary(fixture(), selection, {view: 'response'});
     assert.equal(kind(value, 'median').length, 2);
-    assert.equal(kind(value, 'range_upper').every(trace => trace.meta.schedule_id === 'schedule-2'), true);
-    assert.equal(kind(value, 'range_upper').length, 2);
+    assert.equal(kind(value, 'range_upper').length, 4);
+    for (const median of kind(value, 'median')) {
+        assert.equal(median.showlegend, true);
+        const ranges = value.data.filter(trace => trace.meta.schedule_id === median.meta.schedule_id &&
+            ['range_lower', 'range_upper'].includes(trace.meta.kind));
+        assert.equal(ranges.every(trace => trace.legendgroup === median.legendgroup && !trace.showlegend), true);
+    }
+    assert.equal(value.layout.legend.groupclick, 'togglegroup');
+    assert.equal(value.data.filter(trace => trace.showlegend).length, 3, 'Reference plus one entry per recovered curve.');
+});
+
+test('long legend names wrap safely without losing the full schedule name or obscuring counts', () => {
+    const data = fixture();
+    data.recovery.schedules[0].name = '<script>' + 'Long alternative schedule name '.repeat(3) + '</script>';
+    const value = figure.summary(data, selection);
+    const median = kind(value, 'median')[0];
+    assert.match(median.name, /<br>/);
+    assert.equal(median.name.includes('<script>'), false);
+    assert.equal(median.name.replaceAll('<br>', '').replaceAll(' ', ''),
+        data.recovery.schedules[0].name.replaceAll(' ', '').replaceAll('<', '&lt;').replaceAll('>', '&gt;'));
+    assert.match(median.hovertemplate, /Successful fits: 3\/4/);
+    assert.equal(value.layout.height - value.layout.margin.t - value.layout.margin.b, 255);
+    assert.ok(value.layout.margin.b > 100);
+});
+
+test('legend visibility resets when the view or range group membership changes', () => {
+    const data = fixture();
+    const response = figure.summary(data, selection);
+    assert.equal(figure.summary(data, selection).layout.legend.uirevision, response.layout.legend.uirevision);
+    assert.notEqual(figure.summary(data, selection, {view: 'error'}).layout.legend.uirevision,
+        response.layout.legend.uirevision);
+    assert.notEqual(figure.summary(data, {selectedIds: ['schedule-0']}).layout.legend.uirevision,
+        response.layout.legend.uirevision);
+    data.recovery.schedules[0].recovered_response.available_counts.fill(1);
+    assert.notEqual(figure.summary(data, selection).layout.legend.uirevision, response.layout.legend.uirevision);
 });
 
 test('recovery-error curves pass through the already paired summaries and use a separate view scale', () => {

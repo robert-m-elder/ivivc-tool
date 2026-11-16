@@ -278,6 +278,26 @@ def present_planning_result(result, *, source_filename=None, source_summary=None
             lines.append({'label': f'{kind}: {metric}', 'color': colors[kind],
                           'dash': '' if index == 1 else '6 4', 'join': kind != 'Manual',
                           'values': [(value[0], value[index]) for value in values]})
+    performance_x_label = ('New sampling times' if adaptive else
+                           'Distinct planned times, including fixed times')
+    performance_figure = make_figure(
+        lines, title='Simulated recovery error versus number of sampling times',
+        x_label=performance_x_label, y_label='IRMSE', identifier='planning-performance-plot',
+    )
+    if performance_figure is not None:
+        performance_layout = performance_figure['layout']
+        performance_layout['xaxis'].update(tickmode='linear', tick0=0, dtick=1)
+        # Six metric entries can wrap to several rows on a narrow screen.
+        performance_layout['height'] = 460
+        performance_layout['margin']['b'] = 160
+        plot_height = 460 - performance_layout['margin']['t'] - 160
+        performance_layout['legend'].update(y=-45 / plot_height, yanchor='top', font={'size': 11})
+        for trace in performance_figure['data']:
+            # Markers retain a visible result when only one study size is assessed.
+            if trace['mode'] == 'lines':
+                trace['mode'] = 'lines+markers'
+            trace['marker']['symbol'] = ('diamond' if '90th percentile' in trace['name']
+                                          else 'circle')
     available_draws = np.count_nonzero(reference.valid_draws & (reference.draw_weights > 0))
     reference_range_available = bool(available_draws > 1)
     if reference_range_available:
@@ -415,10 +435,11 @@ def present_planning_result(result, *, source_filename=None, source_summary=None
         'adaptive': adaptive, 'timing': timing, 'has_comparison': result.comparison is not None,
         'has_updated_scale_weights': scale_current is not None,
         'milestone_baseline_time': _number(settings.get('baseline_time', reference.supported_time_range[0])),
-        'performance_x_label': 'New sampling times' if adaptive else 'Distinct planned times, including fixed times',
+        'performance_x_label': performance_x_label,
         'profile_summary': profile_summary or {}, 'rows': rows,
         'reference_plot': reference_plot, 'reference_figure': reference_figure,
         'performance_plot': _plot(lines),
+        'performance_figure': performance_figure,
         'warnings': list(dict.fromkeys(warnings)), 'endpoints': endpoints, 'ranks': ranks,
         'inspection': {
             'schema_version': 1,

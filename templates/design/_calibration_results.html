@@ -27,7 +27,7 @@
             <tbody>{% for row in rows %}<tr><th scope="row">{{ row.name }}</th><td>{{ row.sides.in_vitro.observation }}</td><td>{{ row.sides.in_vivo.observation }}</td></tr>{% endfor %}</tbody></table></div>
             <p class="design-help">SDs use the analyzed response scale. CV is a fraction of absolute response. The replicate counts above apply separately to the generated measurements.</p>
         </details>
-        <div class="design-preview-table"><table class="design-settings-table">
+        <div class="design-preview-table"><table class="design-existing-calibration-table">
             <caption>Existing observations retained in every simulated calibration dataset</caption>
             <thead><tr><th scope="col">Environment</th><th scope="col">Rows</th><th scope="col">Times</th><th scope="col">Reported independent units</th><th scope="col">Precision</th></tr></thead>
             <tbody>{% for row in existing_rows %}<tr><th scope="row">{{ row.side }}</th><td>{{ row.rows }}</td><td>{{ row.times }}</td><td>{{ row.units }}</td><td>{{ row.precision }}</td></tr>{% endfor %}</tbody>

@@ -221,7 +221,7 @@ Calculation rebuilds typed inputs from the current upload and mapping on every
 request; a previously generated preview is not required or trusted as input.
 Neither reference construction nor simulation changes the original files.
 
-### Interactive reference plot
+### Interactive reference and study-size plots
 
 The main in vivo reference plot uses Plotly for hover values, zoom and pan,
 legend toggles, and SVG figure download. Its curves, observations, and weighted
@@ -230,13 +230,20 @@ plot. The plot remains on the analyzed response scale. Changing a plot view
 does not rerun the analysis or change the submitted inputs. Double-clicking the
 plot or using its reset control restores the axis range.
 
+**Curve recovery versus study size** uses the same interactive renderer and
+the same mean/90th-percentile IRMSE values as its static fallback and performance
+table. The horizontal axis counts all distinct proposed times for prospective
+planning and only new times for adaptive planning. Manual comparisons remain
+separate points. Circle/diamond markers and hover labels distinguish means
+from 90th percentiles, including when only one study size is assessed.
+
 The design page loads the versioned Plotly 3.0.1 script once from
 `https://cdn.plot.ly/plotly-3.0.1.min.js`, matching the version used by the IVIVC
 results page. The browser needs access to that CDN for interactive plotting.
-If the library cannot load or a plot cannot be rendered, the static reference
-plot remains available with a short status message. Local serving can be added
-later without changing the numerical result format. Other design plots retain
-their existing static presentation during this first migration step.
+If the library cannot load or a plot cannot be rendered, the reference and
+study-size plots retain their static fallbacks with a short status message.
+Local serving can be added later without changing the numerical result format.
+Source-fit and calibration plots retain their existing static presentation.
 
 The small shared renderer is in `static/js/design-plots.js`. Figure payloads
 contain ordinary numeric `data` and `layout` values from
@@ -617,13 +624,18 @@ study's own generating curve, with a zero-error guide. Errors are paired before
 summarizing; subtracting the central reference from a median recovered curve
 does not produce that error summary. Values use the analyzed response scale.
 
-Each selected schedule has a checkbox for its pointwise central 95% recovery
-range. These ranges reflect the sampled reference trajectories and future
+Each selected schedule shows its pointwise central 95% recovery range when
+available. The plot legend identifies the central reference and recovered
+curves. Clicking a schedule's legend entry hides or shows its median and range
+together; numerical tables and availability counts still follow the schedule
+selection in the performance table. Changing the view or selection restores
+the current curves and their available ranges together. These ranges reflect
+the sampled reference trajectories and future
 measurement assumptions across successful simulated studies; they describe a
 different quantity from individual-fit confidence intervals or a reference-only
 range. They are not simultaneous bands. A singleton supplies a median without
 a plotted range. Fit success/failure counts and pointwise usable counts remain
-visible even with a range switched off, and missing values stay unavailable.
+visible even with a curve hidden through the legend, and missing values stay unavailable.
 Curve portions outside a schedule's sampled time range rely on the model's
 extrapolation; the timeline shows that sampling coverage.
 
@@ -641,9 +653,9 @@ The existing fitted mean-curve interval-width metric remains separate.
 the retained grid values, ranges, counts, and observations. They are populated
 only when opened and include at most the selected schedules. If interactive
 plotting is unavailable, the corresponding numerical table opens automatically.
-Selection, response/error views, range checkboxes, and the collapsed example all
-operate on retained results without calculation requests. View/range preferences
-survive schedule selection changes and workspace navigation. A successful new
+Selection, response/error views, legend controls, and the collapsed example all
+operate on retained results without calculation requests. The selected view
+survives schedule selection changes and workspace navigation. A successful new
 comparison starts fresh; failed requests retain the prior display.
 
 The shared selection and color state is available through
@@ -753,7 +765,9 @@ controllers working together.
    actions leave the comparison/input status unchanged and make no new
    calculation request. With CDN access blocked, selection and exact-time
    tables should still work. Switch the recovery plot between response and
-   error, toggle each schedule's range, and inspect numerical values. Expand
+   error, use the legend to hide/show a schedule's curve and range together,
+   and inspect numerical values. Check hover/zoom/download on the study-size
+   plot as well. Expand
    the shared illustrative study, confirming that a failed example remains
    failed and that original completed observations appear once. With CDN
    access blocked, the recovery tables should open automatically and continue

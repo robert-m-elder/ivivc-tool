@@ -97,11 +97,9 @@ function fixture({data = inspectionData(), encoded, initialSelection = {selected
     const view = add('data-recovery-view', panel, 'select'); view.value = 'response'; view.disabled = true;
     const empty = add('data-recovery-empty', panel, 'p');
     const status = add('data-recovery-status', panel, 'p');
-    const rows = [], bands = [], swatches = [], availability = [], exampleRows = [], outcomes = [];
+    const rows = [], swatches = [], availability = [], exampleRows = [], outcomes = [];
     for (const schedule of data.recovery.schedules) {
         const row = add('data-recovery-schedule', panel, 'div', schedule.id); rows.push(row);
-        const band = add('data-recovery-band', row, 'input', schedule.id);
-        band.checked = true; band.disabled = true; bands.push(band);
         swatches.push(add('data-recovery-swatch', row, 'span', schedule.id));
         availability.push(add('data-recovery-availability', row, 'span', schedule.id));
     }
@@ -174,7 +172,7 @@ function fixture({data = inspectionData(), encoded, initialSelection = {selected
         detail: {selectedIds: ids, colors}, bubbles: true});
     const change = element => element.dispatchEvent({type: 'change', bubbles: true});
     const toggle = (element, open = true) => { element.open = open; element.dispatchEvent({type: 'toggle'}); };
-    return {api, root, holder, payload, panel, view, empty, status, rows, bands, swatches, availability,
+    return {api, root, holder, payload, panel, view, empty, status, rows, swatches, availability,
         plot, target, values, caption, valuesBody, example, exampleStatus, exampleRows, outcomes,
         examplePlot, exampleTarget, exampleValues, curvesBody, pointsBody, calls, selected, change, toggle, window, data,
         scheduleControls};
@@ -187,7 +185,7 @@ test('recovery uses V3 selection and colors without choosing another schedule', 
     const call = f.calls.summary.at(-1);
     assert.deepEqual(call.selection.selectedIds, ['schedule-0', 'schedule-1']);
     assert.equal(call.options.view, 'response');
-    assert.equal(call.options.bands['schedule-0'], true);
+    assert.deepEqual(call.options, {view: 'response'});
     assert.equal(f.rows[0].hidden, false); assert.equal(f.rows[2].hidden, true);
     assert.equal(f.swatches[0].style.values['--schedule-color'], '#123456');
     assert.match(f.availability[0].textContent, /3\s*(?:\/|of)\s*4/);
@@ -203,25 +201,23 @@ test('existing selection is adopted and duplicate or unknown IDs never exceed th
     assert.equal(ids.length, 3); assert.equal(new Set(ids).size, 3); assert.equal(ids.includes('unknown'), false);
 });
 
-test('response/error display and each band preference survive schedule changes', () => {
+test('response/error display survives schedule changes without range-control state', () => {
     const f = fixture(); f.api.initialize(f.root); f.selected(['schedule-0', 'schedule-1']);
-    f.bands[0].checked = false; f.change(f.bands[0]);
-    assert.equal(f.calls.summary.at(-1).options.bands['schedule-0'], false);
     f.view.value = 'error'; f.change(f.view);
     assert.equal(f.calls.summary.at(-1).options.view, 'error');
     f.selected(['schedule-1']); f.selected(['schedule-0', 'schedule-1']);
-    assert.equal(f.view.value, 'error'); assert.equal(f.bands[0].checked, false);
-    assert.equal(f.calls.summary.at(-1).options.bands['schedule-0'], false);
-    assert.equal(f.bands[1].checked, true);
+    assert.equal(f.view.value, 'error');
+    assert.deepEqual(f.calls.summary.at(-1).options, {view: 'error'});
+    assert.equal(f.root.querySelectorAll('[data-recovery-band]').length, 0);
 });
 
-test('a sparse pointwise range disables its toggle only for the affected view', () => {
+test('a sparse pointwise range is reported as unavailable only for the affected view', () => {
     const f = fixture(); f.api.initialize(f.root); f.selected(['schedule-2']);
-    assert.equal(f.bands[2].disabled, false);
+    assert.doesNotMatch(f.availability[2].textContent, /No central 95% range/);
     f.view.value = 'error'; f.change(f.view);
-    assert.equal(f.bands[2].disabled, true);
+    assert.match(f.availability[2].textContent, /No central 95% range/);
     f.view.value = 'response'; f.change(f.view);
-    assert.equal(f.bands[2].disabled, false); assert.equal(f.bands[2].checked, true);
+    assert.doesNotMatch(f.availability[2].textContent, /No central 95% range/);
 });
 
 test('zero successful fits suppress incidental retained summaries while preserving failure counts', () => {
@@ -230,7 +226,7 @@ test('zero successful fits suppress incidental retained summaries while preservi
     data.recovery.schedules[0].n_failed = 4;
     // Keep incidental finite summary coordinates/counts to verify the success guard.
     const f = fixture({data}); f.api.initialize(f.root); f.selected(['schedule-0']);
-    assert.equal(f.bands[0].disabled, true);
+    assert.match(f.availability[0].textContent, /No central 95% range/);
     assert.match(f.availability[0].textContent, /0\s*(?:\/|of)\s*4/);
     assert.match(f.availability[0].textContent, /4 failed/);
     f.toggle(f.values);
@@ -264,15 +260,13 @@ test('unavailable shared examples retain their reason without constructing a fig
     assert.equal(f.examplePlot.hidden, true);
 });
 
-test('numerical recovery values are lazy, view-specific, and independent of hidden bands', () => {
+test('numerical recovery values are lazy and retain pointwise ranges for the selected view', () => {
     const f = fixture(); f.api.initialize(f.root); f.selected(['schedule-0', 'schedule-2']);
     assert.equal(f.valuesBody.children.length, 0);
     f.toggle(f.values);
     assert.equal(f.valuesBody.children.length, 6);
     assert.match(f.valuesBody.textContent, /<img src=x> first schedule/);
     assert.match(f.valuesBody.textContent, /0\.8/);
-    f.bands[0].checked = false; f.change(f.bands[0]);
-    assert.match(f.valuesBody.textContent, /0\.8/, 'Band display does not delete numerical bounds.');
     f.view.value = 'error'; f.change(f.view);
     assert.match(f.valuesBody.textContent, /-0\.2/);
     assert.match(f.valuesBody.textContent, /—/);
@@ -302,15 +296,16 @@ test('missing or failed interactive rendering opens and fills the numerical fall
     assert.equal(failed.values.open, true); assert.equal(failed.valuesBody.children.length, 3);
 });
 
-test('clearing and restoring selection preserves view/bands while hiding empty plots and details', () => {
+test('clearing and restoring selection preserves the view while hiding empty plots and details', () => {
     const f = fixture(); f.api.initialize(f.root); f.selected(['schedule-0']);
-    f.view.value = 'error'; f.change(f.view); f.bands[0].checked = false; f.change(f.bands[0]);
+    f.view.value = 'error'; f.change(f.view);
     f.selected([]);
     assert.equal(f.plot.hidden, true); assert.equal(f.values.hidden, true); assert.equal(f.empty.hidden, false);
     assert.equal(f.example.hidden, true);
     f.selected(['schedule-0']);
     assert.equal(f.values.hidden, false); assert.equal(f.example.hidden, false);
-    assert.equal(f.view.value, 'error'); assert.equal(f.bands[0].checked, false);
+    assert.equal(f.view.value, 'error');
+    assert.deepEqual(f.calls.summary.at(-1).options, {view: 'error'});
 });
 
 test('disposal and later resolutions cannot reopen old fallbacks or respond to selection', async () => {
@@ -331,7 +326,7 @@ test('malformed data does not execute code and leaves controls unavailable', () 
         const f = fixture({encoded});
         assert.doesNotThrow(() => f.api.initialize(f.root));
         assert.match(f.status.textContent, /unavailable/i);
-        assert.equal(f.view.disabled, true); assert.equal(f.bands.every(band => band.disabled), true);
+        assert.equal(f.view.disabled, true);
         assert.equal(f.window.injected, undefined); assert.equal(f.calls.summary.length, 0);
     }
 });
@@ -357,9 +352,8 @@ test('actual V3 selection initializes recovery colors and remains unchanged by r
     assert.deepEqual(selected.selectedIds, ['schedule-0', 'schedule-1']);
     assert.deepEqual(f.calls.summary.at(-1).selection, selected);
     f.view.value = 'error'; f.change(f.view);
-    f.bands[0].checked = false; f.change(f.bands[0]);
     assert.deepEqual(plain(f.window.DesignScheduleInspection.getSelection(f.root)), selected);
     assert.deepEqual(f.calls.summary.at(-1).selection, selected);
     assert.equal(f.calls.summary.at(-1).options.view, 'error');
-    assert.equal(f.calls.summary.at(-1).options.bands['schedule-0'], false);
+    assert.deepEqual(f.calls.summary.at(-1).options, {view: 'error'});
 });

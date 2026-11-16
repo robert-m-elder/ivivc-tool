@@ -38,7 +38,7 @@
         {% if reference_range_available %}<p class="design-help">The shaded band summarizes pointwise weighted percentiles of usable complete reference trajectories. {% if source_kind == 'scaling' %}These preserve the supplied empirical time-scale weights and source-fit parameter uncertainty.{% elif source_kind == 'ivivc' %}These retain the uncertainty supported by the selected IVIVC approach and prediction method.{% else %}These are sampled from fitted parameter uncertainty.{% endif %} The band excludes future measurement variability and is not a simultaneous band or a range for individual future measurements.</p>
         {% else %}<p class="design-help">One complete reference trajectory is available. No sampled reference-uncertainty band is displayed. Future measurement variability still enters the study simulations; a single reference curve does not establish that the underlying behavior is known.</p>{% endif %}
         <div class="design-preview-table">
-            <table class="design-settings-table">
+            <table class="design-milestone-table">
                 <caption>Milestones relative to the response at baseline time {{ milestone_baseline_time }}</caption>
                 <thead><tr><th scope="col">Milestone</th><th scope="col">Reference median time</th><th scope="col">Reference central 95% range</th><th scope="col">Reference weight reaching by the end</th></tr></thead>
                 <tbody>{% for endpoint in endpoints %}<tr><th scope="row">{{ endpoint.name }}</th><td>{{ endpoint.median }}</td><td>{{ endpoint.range_95 }}</td><td>{{ endpoint.reached }}</td></tr>{% endfor %}</tbody>
@@ -104,7 +104,7 @@
     <section class="design-section" aria-labelledby="planning-performance-heading">
         <h3 id="planning-performance-heading">Curve recovery versus study size</h3>
         {% if has_comparison %}
-        {{ chart(performance_plot, 'Simulated recovery error versus number of sampling times', performance_x_label, 'IRMSE', 'planning-performance-plot') }}
+        {{ interactive_chart(performance_figure, performance_plot, 'Simulated recovery error versus number of sampling times', performance_x_label, 'IRMSE', 'planning-performance-plot') }}
         <p class="design-help">IRMSE is the root mean square difference between a recovered curve and its simulated true curve across the planning range, in analyzed response units. Lower error means closer curve recovery under these assumptions. Solid traces show mean error; dashed traces show the 90th percentile. Manual schedules are separate points.</p>
         <p class="design-help">Use Inspect to select up to three schedules, then <a href="#planning-schedule-inspection">view their timelines and exact sampling details</a>.</p>
         <div class="design-preview-table">

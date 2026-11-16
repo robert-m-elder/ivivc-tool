@@ -160,13 +160,6 @@
         state.view.disabled = !count;
         state.values.hidden = !count;
         if (state.controls) state.controls.hidden = !count;
-        state.bandControls.forEach(control => {
-            const schedule = state.byId.get(control.dataset.recoveryBand);
-            const available = schedule && state.selection.selectedIds.includes(schedule.id) &&
-                bandAvailable(schedule, summary(state, schedule));
-            control.disabled = !available;
-            control.checked = Boolean(available && state.bands.get(schedule.id));
-        });
         state.root.querySelectorAll('[data-recovery-schedule]').forEach(element => {
             element.hidden = !state.selection.selectedIds.includes(element.dataset.recoverySchedule);
         });
@@ -203,7 +196,7 @@
         let figure = null;
         try {
             figure = window.DesignRecoveryFigure?.summary(state.inspection, state.selection,
-                {view: state.view.value, bands: Object.fromEntries(state.bands)});
+                {view: state.view.value});
         } catch (error) { /* The numeric tables remain available if figure construction fails. */ }
         draw(state, 'summary', figure, version);
     }
@@ -261,8 +254,6 @@
                 new Set(schedules.map(schedule => schedule.id)).size !== schedules.length) throw new Error('Unavailable recovery data.');
             const state = {
                 root, inspection, schedules, byId: new Map(schedules.map(schedule => [schedule.id, schedule])),
-                bands: new Map(schedules.map(schedule => [schedule.id, true])),
-                bandControls: Array.from(root.querySelectorAll('[data-recovery-band]')),
                 selection: {selectedIds: [], colors: {}}, version: 0, exampleVersion: 0, disposed: false,
                 status, controls: root.querySelector('[data-recovery-controls]'),
                 view: root.querySelector('[data-recovery-view]'), empty: root.querySelector('[data-recovery-empty]'),
@@ -282,10 +273,6 @@
             state.changed = event => {
                 if (event.target === state.view) {
                     if (!['response', 'error'].includes(state.view.value)) state.view.value = 'response';
-                    renderSummary(state);
-                } else if (state.bandControls.includes(event.target)) {
-                    const control = event.target;
-                    if (!control.disabled) state.bands.set(control.dataset.recoveryBand, Boolean(control.checked));
                     renderSummary(state);
                 }
             };

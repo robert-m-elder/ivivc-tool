@@ -10,16 +10,6 @@
                 <option value="error">Recovery error</option>
             </select>
         </div>
-        <fieldset class="design-recovery-bands">
-            <legend>Central 95% recovery ranges</legend>
-            <p class="design-help">These checkboxes control the shading. Median curves remain displayed for all selected schedules.</p>
-            {% for schedule in inspection.recovery.schedules %}
-            <div class="design-recovery-schedule" data-recovery-schedule="{{ schedule.id }}" hidden>
-                <label class="design-checkbox-label"><input type="checkbox" data-recovery-band="{{ schedule.id }}" checked disabled aria-describedby="{{ schedule.id }}-recovery-availability"><span><span class="design-schedule-swatch" data-recovery-swatch="{{ schedule.id }}" aria-hidden="true"></span>{{ schedule.name }}</span></label>
-                <p class="design-help" id="{{ schedule.id }}-recovery-availability" data-recovery-availability="{{ schedule.id }}">{{ schedule.n_successful }} / {{ schedule.n_simulations }} successful fits; {{ schedule.n_failed }} failed.</p>
-            </div>
-            {% endfor %}
-        </fieldset>
     </div>
     <p class="design-help" data-recovery-status role="status" aria-live="polite"></p>
     <div class="design-interactive-plot" data-recovery-plot data-design-plot hidden>
@@ -27,7 +17,12 @@
         <div data-design-plot-fallback><p class="design-help">Numerical recovery values and usable study counts are available below.</p></div>
         <p class="design-help" data-design-plot-status role="status" aria-live="polite"></p>
     </div>
-    <p id="planning-recovery-interpretation" class="design-help">Colored lines show median recovery across successful simulated studies. Optional shaded ranges run from the pointwise 2.5th to 97.5th percentiles. Their spread reflects the sampled reference trajectories and future measurement assumptions. This variation across successful studies differs from uncertainty within a single fit or in the reference alone. The pointwise ranges are not simultaneous bands. A range requires at least two usable values at that time; a median can use one. Fit failures and usable counts remain visible.</p>
+    <div role="group" aria-label="Calculation availability for selected schedules">
+        {% for schedule in inspection.recovery.schedules %}
+        <p class="design-help design-recovery-schedule" data-recovery-schedule="{{ schedule.id }}" hidden><span class="design-schedule-swatch" data-recovery-swatch="{{ schedule.id }}" aria-hidden="true"></span><strong>{{ schedule.name }}:</strong> <span data-recovery-availability="{{ schedule.id }}">{{ schedule.n_successful }} / {{ schedule.n_simulations }} successful fits; {{ schedule.n_failed }} failed.</span></p>
+        {% endfor %}
+    </div>
+    <p id="planning-recovery-interpretation" class="design-help">Colored lines show median recovery across successful simulated studies, with shaded pointwise 2.5th–97.5th percentile ranges where available. Click a legend item to hide or show a curve and its range. Their spread reflects the sampled reference trajectories and future measurement assumptions. This variation across successful studies differs from uncertainty within a single fit or in the reference alone. The pointwise ranges are not simultaneous bands. A range requires at least two usable values at that time; a median can use one. Fit failures and usable counts remain visible.</p>
     <p class="design-help">Recovered response is compared with the central reference, shown as a gray dashed line. Recovery error means recovered minus that simulated study's own true response, calculated before summarizing; its plot has a zero-error guide. All values use the analyzed response scale. Recovery outside a schedule's sampling range depends on model extrapolation; see its timeline for sampling coverage.</p>
     <details class="design-recovery-values" data-recovery-values hidden>
         <summary>Numerical recovery values</summary>
@@ -36,7 +31,7 @@
             <thead><tr><th scope="col">Schedule</th><th scope="col">In vivo time</th><th scope="col">Median</th><th scope="col">2.5th percentile</th><th scope="col">97.5th percentile</th><th scope="col">Usable studies</th></tr></thead>
             <tbody data-recovery-values-body></tbody>
         </table></div>
-        <p class="design-help">A dash means unavailable. Numerical percentiles remain available when their plotted range is switched off. Usable counts can differ across time or between response and error summaries.</p>
+        <p class="design-help">A dash means unavailable. Numerical values follow the schedule selection in the performance table, including curves hidden through the plot legend. Usable counts can differ across time or between response and error summaries.</p>
     </details>
     <details class="design-recovery-example" data-recovery-example hidden>
         <summary>Illustrative simulated study — recovered response</summary>

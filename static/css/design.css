@@ -165,6 +165,20 @@
 .design-page .design-preview-table td { text-align: left; vertical-align: top; padding: .55rem; border-bottom: 1px solid var(--design-border); }
 .design-page .design-preview-table td { font-variant-numeric: tabular-nums; }
 .design-page .design-preview-table th { overflow-wrap: anywhere; }
+/* Multi-column result tables do not use the two-column settings widths. */
+.design-page .design-milestone-table,
+.design-page .design-existing-calibration-table { table-layout: fixed; }
+.design-page .design-milestone-table { min-width: 38rem; }
+.design-page .design-milestone-table thead th:nth-child(1) { width: 20%; }
+.design-page .design-milestone-table thead th:nth-child(2) { width: 24%; }
+.design-page .design-milestone-table thead th:nth-child(3) { width: 32%; }
+.design-page .design-milestone-table thead th:nth-child(4) { width: 24%; }
+.design-page .design-existing-calibration-table { min-width: 44rem; }
+.design-page .design-existing-calibration-table thead th:nth-child(1) { width: 16%; }
+.design-page .design-existing-calibration-table thead th:nth-child(2) { width: 8%; }
+.design-page .design-existing-calibration-table thead th:nth-child(3) { width: 22%; }
+.design-page .design-existing-calibration-table thead th:nth-child(4) { width: 22%; }
+.design-page .design-existing-calibration-table thead th:nth-child(5) { width: 32%; }
 .design-page .design-checkbox-label { display: flex; align-items: flex-start; gap: .5rem; }
 .design-page .design-checkbox-label input[type="checkbox"] { display: inline-block; width: auto; min-height: 0; margin-top: .35rem; flex-shrink: 0; }
 
@@ -217,6 +231,8 @@
 .design-page #design-review-content:not(:empty) { margin-top: 1.5rem; }
 .design-page [data-design-plot-target] { width: 100%; min-width: 0; height: 380px; }
 .design-page [data-design-plot-target][hidden] { display: none; }
+.design-page #planning-performance-plot-interactive { height: auto; min-height: 460px; }
+.design-page [data-recovery-plot] [data-design-plot-target] { height: auto; min-height: 380px; }
 .design-page .design-schedule-checkbox {
     display: flex;
     align-items: center;
@@ -280,14 +296,6 @@
 .design-page .design-guide-window { height: .7rem; border: 1px solid #bccbd6; background: rgba(74,111,139,.12); }
 .design-page .design-guide-deadline { border-top: 2px dotted #8a6e4a; }
 .design-page .design-recovery-view-field { max-width: 28rem; }
-.design-page .design-recovery-bands {
-    min-width: 0;
-    margin: .75rem 0;
-    padding: .75rem 1rem;
-    border: 1px solid var(--design-border);
-    border-radius: .3rem;
-}
-.design-page .design-recovery-bands > legend { padding-inline: .35rem; font-weight: 600; }
 .design-page .design-recovery-schedule + .design-recovery-schedule { margin-top: .75rem; }
 .design-page .design-recovery-schedule label { margin-bottom: .15rem; }
 .design-page .design-recovery-schedule p { margin: .1rem 0 0 1.4rem; }

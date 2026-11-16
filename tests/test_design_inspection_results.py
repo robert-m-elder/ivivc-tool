@@ -247,8 +247,8 @@ class InspectionPayload(unittest.TestCase):
 
         parser = RecoveryElements()
         parser.feed(html)
-        self.assertEqual([attrs['data-recovery-band'] for attrs in parser.bands],
-                         [row['id'] for row in context['rows']])
+        self.assertEqual(parser.bands, [])
+        self.assertNotIn('design-recovery-bands', html)
         self.assertEqual(len(parser.view), 1)
         self.assertEqual(len(parser.example), 1)
         self.assertEqual(parser.example[0][0], 'details')

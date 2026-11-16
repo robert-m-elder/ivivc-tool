@@ -1,5 +1,5 @@
 """Interactive reference specifications preserve numerical data and uncertainty."""
-from copy import copy
+from copy import copy, deepcopy
 import json
 import unittest
 
@@ -130,6 +130,85 @@ class ReferenceSpecifications(unittest.TestCase):
         self.assertFalse(any(trace.get('fill') for trace in one['data']))
         self.assertEqual(one, two)
         self.assertEqual(len(one['data']), 2)
+
+
+class PerformanceSpecifications(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        source = TimeCourse(np.arange(5.), [1., .87, .67, .56, .39])
+        settings = dict(model_name='linear', first_time='0', last_time='4', time_step='1',
+                        min_times='3', max_times='4', fixed_times='0', include_even='on',
+                        reference_draws='8', n_simulations='4', random_seed='2',
+                        replicates_per_time='2', manual_schedules='Comparison: 0,2,4')
+        cls.result = run_measured_planning(source, settings)
+        completed = TimeCourse([0., 1., 2.], [1., .84, .64],
+            observation_uncertainty=ResolvedObservationUncertainty(
+                [.03] * 3, response_kind='mean', replicate_counts=[4, 9, 16]))
+        cls.adaptive = run_measured_planning(source,
+            dict(settings, has_completed='on', measured_adaptive_mode='reweight_prior',
+                 future_policy='future_only', min_times='4', max_times='4',
+                 manual_schedules=''), completed=completed)
+
+    def test_interactive_series_preserve_the_existing_static_plot_values(self):
+        context = present_planning_result(self.result)
+        value = context['performance_figure']
+        expected = context['performance_plot']['series']
+        self.assertEqual(len(value['data']), len(expected))
+        for trace, series in zip(value['data'], expected):
+            self.assertEqual(trace['name'], series['label'])
+            self.assertEqual(trace['line']['color'], series['color'])
+            np.testing.assert_array_equal(trace['x'], [point[0] for point in series['values']])
+            np.testing.assert_array_equal(trace['y'], [point[1] for point in series['values']])
+            self.assertIn('%{fullData.name}', trace['hovertemplate'])
+        self.assertEqual(value['layout']['xaxis']['dtick'], 1)
+        self.assertEqual(value['layout']['xaxis']['title']['text'], context['performance_x_label'])
+        self.assertEqual(value['layout']['uirevision'], 'planning-performance-plot')
+        self.assertEqual(value['layout']['height'], 460)
+        self.assertEqual(value['layout']['margin']['b'], 160)
+        self.assertEqual(value['layout']['legend']['yanchor'], 'top')
+        json.dumps(value, allow_nan=False)
+
+    def test_mean_and_percentile_markers_identify_manual_comparisons_without_joining_them(self):
+        value = present_planning_result(self.result)['performance_figure']
+        manual = [trace for trace in value['data'] if trace['name'].startswith('Manual:')]
+        self.assertEqual([trace['name'] for trace in manual], ['Manual: Mean', 'Manual: 90th percentile'])
+        self.assertTrue(all(trace['mode'] == 'markers' for trace in manual))
+        self.assertEqual([trace['marker']['symbol'] for trace in manual], ['circle', 'diamond'])
+        suggested = [trace for trace in value['data'] if trace['name'].startswith('Suggested:')]
+        self.assertEqual([trace['line']['dash'] for trace in suggested], ['solid', 'dash'])
+        self.assertTrue(all(trace['mode'] == 'lines+markers' for trace in suggested))
+
+    def test_singleton_adaptive_study_size_remains_visible_and_counts_only_new_times(self):
+        context = present_planning_result(self.adaptive)
+        value = context['performance_figure']
+        self.assertEqual(value['layout']['xaxis']['title']['text'], 'New sampling times')
+        for trace in value['data']:
+            self.assertEqual(trace['x'], [1.])
+            self.assertEqual(trace['mode'], 'lines+markers')
+        self.assertEqual(context['rows'][0]['number_of_times'], 4)
+        self.assertEqual(context['rows'][0]['number_of_new_times'], 1)
+
+    def test_nonfinite_metrics_stay_json_gaps_and_do_not_join_adjacent_results(self):
+        result = deepcopy(self.result)
+        summary = next(iter(result.comparison.summaries.values()))
+        summary.mean_irmse, summary.p90_irmse = np.nan, np.inf
+        value = present_planning_result(result)['performance_figure']
+        for trace in value['data'][:2]:
+            self.assertIsNone(trace['x'][0])
+            self.assertIsNone(trace['y'][0])
+            self.assertIsNotNone(trace['y'][1])
+            self.assertIs(trace['connectgaps'], False)
+        json.dumps(value, allow_nan=False)
+
+    def test_unavailable_performance_or_comparison_does_not_get_a_synthetic_figure(self):
+        result = deepcopy(self.result)
+        for summary in result.comparison.summaries.values():
+            summary.mean_irmse, summary.p90_irmse = np.nan, np.nan
+        self.assertIsNone(present_planning_result(result)['performance_figure'])
+        result.comparison, result.optimization, result.schedules = None, None, {}
+        context = present_planning_result(result)
+        self.assertIsNone(context['performance_figure'])
+        self.assertIsNone(context['performance_plot'])
 
 
 if __name__ == '__main__':
