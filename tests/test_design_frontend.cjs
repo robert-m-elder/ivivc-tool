@@ -10,7 +10,7 @@ const source = fs.readFileSync(path.join(__dirname, "../static/js/design.js"), "
 
 // Minimal DOM for the behavior used by this frontend. No browser or extra
 // JavaScript dependency is needed to exercise its request/state handling.
-function fixture({planning = false, calibration = false, plots, inspection} = {}) {
+function fixture({planning = false, calibration = false, plots, inspection, recovery} = {}) {
     const document = {readyState: "complete", activeElement: null};
     const dataAttribute = key => "data-" + key.replace(/[A-Z]/g, letter => "-" + letter.toLowerCase());
 
@@ -300,7 +300,7 @@ function fixture({planning = false, calibration = false, plots, inspection} = {}
 
     vm.runInNewContext(source, {
         document,
-        window: {DesignPlots: plots, DesignScheduleInspection: inspection},
+        window: {DesignPlots: plots, DesignScheduleInspection: inspection, DesignRecoveryInspection: recovery},
         FormData: SubmittedFormData,
         CustomEvent: class {
             constructor(type, options = {}) { this.type = type; Object.assign(this, options); }
@@ -620,6 +620,38 @@ test("an inspection initialization failure preserves the successful calculated r
     }});
     await page.successfulCalculation('<section>Retained numerical results</section>');
     assert.equal(page.content.innerHTML, '<section>Retained numerical results</section>');
+    assert.equal(page.summary.hidden, true);
+    assert.match(page.requestStatus.textContent, /comparison calculated/);
+});
+
+test("recovery subscribes before the shared schedule selection and both survive failed requests", async () => {
+    const calls = [];
+    const controller = prefix => Object.fromEntries(['dispose', 'initialize'].map(action =>
+        [action, () => calls.push(prefix + '-' + action)]));
+    const plots = Object.fromEntries(['purge', 'initialize', 'resize'].map(action =>
+        [action, () => calls.push('plots-' + action)]));
+    const page = fixture({planning: true, plots, inspection: controller('schedules'), recovery: controller('recovery')});
+    await page.successfulCalculation('<section>Shared timeline and recovery display</section>');
+    assert.deepEqual(calls, ['recovery-dispose', 'schedules-dispose', 'plots-purge',
+        'recovery-initialize', 'schedules-initialize', 'plots-initialize', 'plots-resize']);
+    calls.length = 0;
+    const pending = page.emit(page.form, 'submit', {submitter: page.calculate});
+    page.requests.at(-1).resolve({ok: false, json: async () => ({ok: false,
+        errors: [{field_id: 'random_seed', message: 'Check the seed.'}]})});
+    await pending;
+    assert.deepEqual(calls, []);
+    assert.equal(page.content.innerHTML, '<section>Shared timeline and recovery display</section>');
+});
+
+test("a failed recovery controller cannot prevent schedule inspection or successful results", async () => {
+    const calls = [];
+    const page = fixture({planning: true,
+        recovery: {dispose() { throw new Error('Recovery cleanup unavailable.'); },
+            initialize() { throw new Error('Recovery unavailable.'); }},
+        inspection: {dispose() { calls.push('dispose'); }, initialize() { calls.push('initialize'); }},
+    });
+    await page.successfulCalculation('<section>Numerical recovery summaries</section>');
+    assert.deepEqual(calls, ['dispose', 'initialize']);
     assert.equal(page.summary.hidden, true);
     assert.match(page.requestStatus.textContent, /comparison calculated/);
 });

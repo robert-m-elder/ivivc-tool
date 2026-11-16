@@ -54,7 +54,8 @@ class DesignDeployment(unittest.TestCase):
             '/review', '/calculate', '/generate-candidates', '/data/inspect',
             '/data/preview', '/static/css/design.css', '/static/js/design.js',
             '/static/js/design-data.js', '/static/js/design-plots.js',
-            '/static/js/design-timeline-figure.js', '/static/js/design-schedule-inspection.js')}
+            '/static/js/design-timeline-figure.js', '/static/js/design-schedule-inspection.js',
+            '/static/js/design-recovery-figure.js', '/static/js/design-recovery-inspection.js')}
         expected.add('https://cdn.plot.ly/plotly-3.0.1.min.js')
         self.assertEqual(set(page.urls), expected)
         self.assertEqual(page.urls.count('https://cdn.plot.ly/plotly-3.0.1.min.js'), 1)

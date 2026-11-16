@@ -219,7 +219,48 @@ class InspectionPayload(unittest.TestCase):
         html = environment.get_template('design/_planning_results.html').render(**context)
         self.assertNotIn('data-schedule-select=', html)
         self.assertNotIn('data-schedule-timeline ', html)
+        self.assertNotIn('data-recovery-panel ', html)
         self.assertIn('No schedule was available for simulation', html)
+
+    @unittest.skipIf(Environment is None, 'Jinja is supplied by the Flask environment.')
+    def test_recovery_controls_are_display_only_and_the_shared_example_starts_collapsed(self):
+        context = present_planning_result(self.result)
+        environment = Environment(loader=FileSystemLoader(Path(__file__).parents[1] / 'templates'),
+                                  autoescape=True, undefined=StrictUndefined)
+        html = environment.get_template('design/_planning_results.html').render(**context)
+
+        class RecoveryElements(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.bands, self.example, self.view, self.ids = [], [], [], []
+
+            def handle_starttag(self, tag, attrs):
+                attrs = dict(attrs)
+                if 'id' in attrs:
+                    self.ids.append(attrs['id'])
+                if 'data-recovery-band' in attrs:
+                    self.bands.append(attrs)
+                if 'data-recovery-view' in attrs:
+                    self.view.append(attrs)
+                if 'data-recovery-example' in attrs:
+                    self.example.append((tag, attrs))
+
+        parser = RecoveryElements()
+        parser.feed(html)
+        self.assertEqual([attrs['data-recovery-band'] for attrs in parser.bands],
+                         [row['id'] for row in context['rows']])
+        self.assertEqual(len(parser.view), 1)
+        self.assertEqual(len(parser.example), 1)
+        self.assertEqual(parser.example[0][0], 'details')
+        self.assertNotIn('open', parser.example[0][1])
+        self.assertEqual(len(parser.ids), len(set(parser.ids)))
+        for attrs in parser.bands + parser.view:
+            self.assertIn('disabled', attrs)
+            self.assertNotIn('name', attrs)
+        self.assertIn("simulated study's own true response", html)
+        self.assertIn('the simulation output does not retain them', html)
+        self.assertIn('data-recovery-example-curves-body></tbody>', html)
+        self.assertIn('data-recovery-values-body></tbody>', html)
 
 
 @unittest.skipIf(importlib.util.find_spec('flask') is None, 'Flask is supplied by the app environment.')

@@ -1,0 +1,68 @@
+<section class="design-section" data-recovery-panel aria-labelledby="planning-recovery-heading">
+    <h3 id="planning-recovery-heading">Compare recovered in vivo curves</h3>
+    <p class="design-help">This view uses the schedules selected in the performance table, with the same colors as their timelines. Display changes use this calculated comparison without new simulations.</p>
+    <p data-recovery-empty>Choose a schedule in the performance table to compare its recovered curve.</p>
+    <div data-recovery-controls hidden>
+        <div class="design-field design-recovery-view-field">
+            <label for="planning-recovery-view">Across simulated studies, show</label>
+            <select id="planning-recovery-view" data-recovery-view aria-describedby="planning-recovery-interpretation" disabled>
+                <option value="response" selected>Recovered response</option>
+                <option value="error">Recovery error</option>
+            </select>
+        </div>
+        <fieldset class="design-recovery-bands">
+            <legend>Central 95% recovery ranges</legend>
+            <p class="design-help">These checkboxes control the shading. Median curves remain displayed for all selected schedules.</p>
+            {% for schedule in inspection.recovery.schedules %}
+            <div class="design-recovery-schedule" data-recovery-schedule="{{ schedule.id }}" hidden>
+                <label class="design-checkbox-label"><input type="checkbox" data-recovery-band="{{ schedule.id }}" checked disabled aria-describedby="{{ schedule.id }}-recovery-availability"><span><span class="design-schedule-swatch" data-recovery-swatch="{{ schedule.id }}" aria-hidden="true"></span>{{ schedule.name }}</span></label>
+                <p class="design-help" id="{{ schedule.id }}-recovery-availability" data-recovery-availability="{{ schedule.id }}">{{ schedule.n_successful }} / {{ schedule.n_simulations }} successful fits; {{ schedule.n_failed }} failed.</p>
+            </div>
+            {% endfor %}
+        </fieldset>
+    </div>
+    <p class="design-help" data-recovery-status role="status" aria-live="polite"></p>
+    <div class="design-interactive-plot" data-recovery-plot data-design-plot hidden>
+        <div id="planning-recovery-interactive" data-design-plot-target hidden role="img" aria-label="Overlaid recovery summaries for selected schedules. Numerical values and usable study counts are available below."></div>
+        <div data-design-plot-fallback><p class="design-help">Numerical recovery values and usable study counts are available below.</p></div>
+        <p class="design-help" data-design-plot-status role="status" aria-live="polite"></p>
+    </div>
+    <p id="planning-recovery-interpretation" class="design-help">Colored lines show median recovery across successful simulated studies. Optional shaded ranges run from the pointwise 2.5th to 97.5th percentiles. Their spread reflects the sampled reference trajectories and future measurement assumptions. This variation across successful studies differs from uncertainty within a single fit or in the reference alone. The pointwise ranges are not simultaneous bands. A range requires at least two usable values at that time; a median can use one. Fit failures and usable counts remain visible.</p>
+    <p class="design-help">Recovered response is compared with the central reference, shown as a gray dashed line. Recovery error means recovered minus that simulated study's own true response, calculated before summarizing; its plot has a zero-error guide. All values use the analyzed response scale. Recovery outside a schedule's sampling range depends on model extrapolation; see its timeline for sampling coverage.</p>
+    <details class="design-recovery-values" data-recovery-values hidden>
+        <summary>Numerical recovery values</summary>
+        <div class="design-preview-table"><table>
+            <caption data-recovery-values-caption>Recovery values for the selected schedules</caption>
+            <thead><tr><th scope="col">Schedule</th><th scope="col">In vivo time</th><th scope="col">Median</th><th scope="col">2.5th percentile</th><th scope="col">97.5th percentile</th><th scope="col">Usable studies</th></tr></thead>
+            <tbody data-recovery-values-body></tbody>
+        </table></div>
+        <p class="design-help">A dash means unavailable. Numerical percentiles remain available when their plotted range is switched off. Usable counts can differ across time or between response and error summaries.</p>
+    </details>
+    <details class="design-recovery-example" data-recovery-example hidden>
+        <summary>Illustrative simulated study — recovered response</summary>
+        <p class="design-help">The same predetermined first simulated study is used for every selected schedule. It illustrates one possible outcome; the across-study summaries above describe variation. A failed fit stays failed and is not replaced by a different study. This illustration always shows response, regardless of the summary view above.</p>
+        <p class="design-help" data-recovery-example-status role="status" aria-live="polite"></p>
+        {% for schedule in inspection.recovery.schedules %}
+        <p class="design-help" data-recovery-example-schedule="{{ schedule.id }}" hidden><span class="design-schedule-swatch" data-recovery-swatch="{{ schedule.id }}" aria-hidden="true"></span><strong>{{ schedule.name }}:</strong> <span data-recovery-example-outcome="{{ schedule.id }}"></span></p>
+        {% endfor %}
+        <div class="design-interactive-plot" data-recovery-example-plot data-design-plot hidden>
+            <div id="planning-recovery-example-interactive" data-design-plot-target hidden role="img" aria-label="Overlaid recovered responses, generating truth, and observations from the same first simulated study for selected schedules. Exact numerical values are available below."></div>
+            <div data-design-plot-fallback><p class="design-help">Numerical illustrative-study values are available below.</p></div>
+            <p class="design-help" data-design-plot-status role="status" aria-live="polite"></p>
+        </div>
+        <p class="design-help">The gray dashed line is the simulated true curve. Colored lines are successful recovered fits; colored markers show means of newly simulated replicates at each time, rather than all individual replicate observations. Dark open circles show original completed rows once, held fixed during fitting. Completed rows retain the precision and reported counts used in this calculation, as described in the completed-data section. No pointwise fitted confidence bounds are shown because the simulation output does not retain them.</p>
+        <details class="design-recovery-values" data-recovery-example-values hidden>
+            <summary>Numerical illustrative-study values</summary>
+            <div class="design-preview-table"><table>
+                <caption>True and recovered curves for the shared illustrative study</caption>
+                <thead><tr><th scope="col">Schedule</th><th scope="col">In vivo time</th><th scope="col">True response</th><th scope="col">Recovered response</th></tr></thead>
+                <tbody data-recovery-example-curves-body></tbody>
+            </table></div>
+            <div class="design-preview-table"><table>
+                <caption>New time means and original completed observations for the illustrative study</caption>
+                <thead><tr><th scope="col">Schedule</th><th scope="col">In vivo time</th><th scope="col">Observed response</th><th scope="col">Observation type</th><th scope="col">Precision and count</th></tr></thead>
+                <tbody data-recovery-example-points-body></tbody>
+            </table></div>
+        </details>
+    </details>
+</section>

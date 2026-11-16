@@ -610,7 +610,42 @@ performance results remain available. On narrow screens, the timeline scrolls
 horizontally; its explanatory key wraps below the chart rather than clipping
 inside it.
 
-Overlaid recovery plots and the illustrative-study display remain for V4.
+The same selection controls the overlaid recovery plots. **Recovered response**
+shows the median recovered curve for each schedule alongside the central
+reference. **Recovery error** shows summaries of recovered minus each simulated
+study's own generating curve, with a zero-error guide. Errors are paired before
+summarizing; subtracting the central reference from a median recovered curve
+does not produce that error summary. Values use the analyzed response scale.
+
+Each selected schedule has a checkbox for its pointwise central 95% recovery
+range. These ranges reflect the sampled reference trajectories and future
+measurement assumptions across successful simulated studies; they describe a
+different quantity from individual-fit confidence intervals or a reference-only
+range. They are not simultaneous bands. A singleton supplies a median without
+a plotted range. Fit success/failure counts and pointwise usable counts remain
+visible even with a range switched off, and missing values stay unavailable.
+Curve portions outside a schedule's sampled time range rely on the model's
+extrapolation; the timeline shows that sampling coverage.
+
+Expand **Illustrative simulated study** to see the same predetermined first
+simulation for the selected schedules. It always shows response, independently
+of the summary view. Its generating true curve appears once, alongside
+successful recovered curves and the means of newly simulated replicates.
+Original completed rows appear once with their unchanged precision and reported
+counts. A failed fit retains its explanation and observations; another study is
+not substituted. This example has no study-number selector or fitted confidence
+band because pointwise fitted bounds are not retained by the simulation output.
+The existing fitted mean-curve interval-width metric remains separate.
+
+**Numerical recovery values** and **Numerical illustrative-study values** expose
+the retained grid values, ranges, counts, and observations. They are populated
+only when opened and include at most the selected schedules. If interactive
+plotting is unavailable, the corresponding numerical table opens automatically.
+Selection, response/error views, range checkboxes, and the collapsed example all
+operate on retained results without calculation requests. View/range preferences
+survive schedule selection changes and workspace navigation. A successful new
+comparison starts fresh; failed requests retain the prior display.
+
 The shared selection and color state is available through
 `DesignScheduleInspection.getSelection(resultElement)` and the display-only
 `design-schedule-selection-changed` event. The shared renderer's
@@ -672,7 +707,7 @@ Install the test dependencies in the same environment used to run the app:
 python -m pip install -r requirements-test.txt
 python -m pytest tests/test_design_*.py
 python -m pytest tests/test_study_design*.py
-node --test tests/test_design_frontend.cjs tests/test_design_data_frontend.cjs tests/test_design_plots.cjs tests/test_design_timeline_figure.cjs tests/test_design_schedule_frontend.cjs
+node --test tests/test_design_frontend.cjs tests/test_design_data_frontend.cjs tests/test_design_plots.cjs tests/test_design_timeline_figure.cjs tests/test_design_schedule_frontend.cjs tests/test_design_recovery_figure.cjs tests/test_design_recovery_frontend.cjs
 ```
 
 The frontend checks use Node's built-in test runner and a small DOM fixture;
@@ -717,7 +752,12 @@ controllers working together.
    consistent. Clear all selections, then choose one again. Check that these
    actions leave the comparison/input status unchanged and make no new
    calculation request. With CDN access blocked, selection and exact-time
-   tables should still work. Exercise an IVIVC
+   tables should still work. Switch the recovery plot between response and
+   error, toggle each schedule's range, and inspect numerical values. Expand
+   the shared illustrative study, confirming that a failed example remains
+   failed and that original completed observations appear once. With CDN
+   access blocked, the recovery tables should open automatically and continue
+   to follow the same selection. Exercise an IVIVC
    reference and an empirical time-scale reference with their own input files.
    Add completed observations and one timing requirement, then recalculate.
 4. In calibration comparison, generate a candidate, copy it to editable times,

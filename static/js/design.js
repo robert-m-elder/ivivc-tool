@@ -336,10 +336,14 @@
         }
 
         function inspectionAction(action, container) {
-            try {
-                const api = typeof window !== 'undefined' && window.DesignScheduleInspection;
-                if (api && typeof api[action] === 'function') api[action](container);
-            } catch (error) { /* Display controls cannot invalidate a successful calculation. */ }
+            if (typeof window === 'undefined') return;
+            // Recovery subscribes before the schedule controller emits its
+            // initial selection. Both displays retain the same result colors.
+            for (const api of [window.DesignRecoveryInspection, window.DesignScheduleInspection]) {
+                try {
+                    if (api && typeof api[action] === 'function') api[action](container);
+                } catch (error) { /* Display controls cannot invalidate a successful calculation. */ }
+            }
         }
 
         function updateDraftStatus() {

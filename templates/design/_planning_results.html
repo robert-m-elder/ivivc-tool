@@ -125,7 +125,10 @@
         {% else %}<p>No schedule was available for simulation under these settings. Review the requirement-resolution and schedule-availability outcomes above. No recovery error or zero-width interval has been substituted for an unavailable calculation.</p>{% endif %}
     </section>
 
-    {% if has_comparison %}{% include 'design/_schedule_inspection.html' %}{% endif %}
+    {% if has_comparison %}
+    {% include 'design/_schedule_inspection.html' %}
+    {% include 'design/_recovery_inspection.html' %}
+    {% endif %}
 
     <section class="design-section" aria-labelledby="planning-settings-heading">
         <h3 id="planning-settings-heading">Inputs used for this calculation</h3>
