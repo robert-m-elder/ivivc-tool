@@ -2,6 +2,7 @@
 
 Plot geometry contains finite numbers only. The reference also has an interactive
 figure specification; its original numerical values are separate from SVG geometry.
+Compact inspection values retain original coordinates for later browser views.
 """
 from __future__ import annotations
 
@@ -10,6 +11,8 @@ import numpy as np
 from study_design_core import reference_crossing_time_summary
 
 from .design_plotly import make_figure
+from .design_recovery_inspection import build_recovery_inspection
+from .design_schedule_inspection import build_schedule_inspection
 
 
 def _number(value):
@@ -22,6 +25,53 @@ def _number(value):
 
 def _percent(value):
     return f'{100 * float(value):.1f}%' if np.isfinite(value) else '—'
+
+
+def _endpoint_presentation(reference, baseline_time, *, range_available):
+    """Use shared weighted crossing quantiles, retaining noncrossing weight."""
+    range_available = bool(range_available)
+    rows, numerical, warnings = [], [], []
+    for label, fraction in (('T50', .5), ('T90', .9)):
+        summaries = [reference_crossing_time_summary(
+            reference, degraded_fraction=fraction, quantile=quantile,
+            baseline_time=baseline_time,
+        ) for quantile in (.025, .5, .975)]
+        lower, median, upper = summaries
+
+        def display(summary):
+            if summary.status == 'beyond_horizon':
+                return 'Beyond the assessment horizon'
+            return _number(summary.deadline)
+
+        if median.status == 'invalid_reference':
+            warnings.append(f'{label} is unavailable: a positive, finite response at the '
+                            'milestone baseline and finite relative responses are needed '
+                            'in every positive-weight reference trajectory.')
+        interval = (f'{display(lower)} to {display(upper)}' if range_available else
+                    'Not available (one reference trajectory)')
+        if median.status == 'invalid_reference':
+            interval = '—'
+        rows.append({
+            'name': label, 'reached': (_percent(median.reached_weight)
+                                      if median.status != 'invalid_reference' else '—'),
+            'median': display(median), 'status': median.message,
+            'lower_95': display(lower), 'upper_95': display(upper), 'range_95': interval,
+            'median_status': median.status, 'lower_status': lower.status,
+            'upper_status': upper.status, 'range_available': range_available and
+            median.status != 'invalid_reference',
+        })
+        numerical.append({
+            'name': label, 'degraded_fraction': fraction,
+            'baseline_time': float(baseline_time),
+            'supported_time_range': list(reference.supported_time_range),
+            'reached_weight': (float(median.reached_weight)
+                               if median.status != 'invalid_reference' else None),
+            'sampled_range_available': range_available and median.status != 'invalid_reference',
+            'quantiles': [{'probability': row.quantile, 'value': row.deadline,
+                           'status': row.status, 'message': row.message}
+                          for row in summaries],
+        })
+    return rows, numerical, warnings
 
 
 def _plot(series, *, band=None, observations=None):
@@ -196,7 +246,7 @@ def present_planning_result(result, *, source_filename=None, source_summary=None
     replicates = int(settings['replicates_per_time'])
     rows, performance = [], {}
     colors = {'Suggested': '#24535c', 'Evenly spaced': '#a75328', 'Manual': '#6f4a92'}
-    for label, summary in summaries.items():
+    for index, (label, summary) in enumerate(summaries.items()):
         simulated = result.comparison.results[label]
         interval_count = int(np.count_nonzero(
             simulated.fit_success & np.isfinite(simulated.mean_curve_interval_width)))
@@ -206,7 +256,7 @@ def present_planning_result(result, *, source_filename=None, source_summary=None
         new_times = np.asarray([time for time in summary.design_times
                                if not np.any(np.isclose(completed_times, time, rtol=0., atol=1e-12))])
         row = {
-            'name': label, 'kind': kind, 'number_of_times': count,
+            'id': f'schedule-{index}', 'name': label, 'kind': kind, 'number_of_times': count,
             'times': ', '.join(_number(value) for value in summary.design_times),
             'number_of_new_times': len(new_times),
             'new_times': ', '.join(_number(value) for value in new_times) or 'None',
@@ -229,7 +279,7 @@ def present_planning_result(result, *, source_filename=None, source_summary=None
                           'dash': '' if index == 1 else '6 4', 'join': kind != 'Manual',
                           'values': [(value[0], value[index]) for value in values]})
     available_draws = np.count_nonzero(reference.valid_draws & (reference.draw_weights > 0))
-    reference_range_available = available_draws > 1
+    reference_range_available = bool(available_draws > 1)
     if reference_range_available:
         lower, upper = _reference_band(reference)
         reference_band = list(zip(reference.time_grid, lower, upper))
@@ -276,19 +326,11 @@ def present_planning_result(result, *, source_filename=None, source_summary=None
             'identifier': f'planning-source-{index}',
             'plot': _plot(series, observations=list(zip(curve['time'], curve['value']))),
         })
-    endpoints = []
-    for label, degraded_fraction in (('T50', .5), ('T90', .9)):
-        milestone = reference_crossing_time_summary(
-            reference, degraded_fraction=degraded_fraction, quantile=.5,
-            baseline_time=settings.get('baseline_time', reference.supported_time_range[0]),
-        )
-        if milestone.status == 'invalid_reference':
-            warnings.append(f'{label} is unavailable: a positive, finite response at the '
-                            'first planning time is needed to define relative degradation.')
-        endpoints.append({'name': label,
-                          'reached': _percent(milestone.reached_weight)
-                          if milestone.status != 'invalid_reference' else '—',
-                          'median': _number(milestone.deadline), 'status': milestone.message})
+    endpoints, endpoint_data, endpoint_warnings = _endpoint_presentation(
+        reference, settings.get('baseline_time', reference.supported_time_range[0]),
+        range_available=reference_range_available,
+    )
+    warnings.extend(endpoint_warnings)
     source_range = ((float(np.min(source.time)), float(np.max(source.time)))
                     if source_kind == 'measured' and source is not None else None)
     if source_range is not None and (reference.time_grid[0] < source_range[0] or reference.time_grid[-1] > source_range[1]):
@@ -378,5 +420,21 @@ def present_planning_result(result, *, source_filename=None, source_summary=None
         'reference_plot': reference_plot, 'reference_figure': reference_figure,
         'performance_plot': _plot(lines),
         'warnings': list(dict.fromkeys(warnings)), 'endpoints': endpoints, 'ranks': ranks,
+        'inspection': {
+            'schema_version': 1,
+            'reference': {
+                'time': reference.time_grid.tolist(),
+                'central_response': reference.central_curve.tolist(),
+                'lower': lower.tolist() if reference_range_available else None,
+                'upper': upper.tolist() if reference_range_available else None,
+                'range_available': reference_range_available,
+                'range_interpretation': 'Pointwise weighted central 95% reference range; '
+                                       'excludes future measurement variability.',
+                'time_label': 'In vivo time', 'response_label': 'Analyzed response',
+            },
+            'schedule_data': build_schedule_inspection(result),
+            'recovery': build_recovery_inspection(result),
+            'endpoints': endpoint_data,
+        },
         'settings_rows': settings_rows,
     }

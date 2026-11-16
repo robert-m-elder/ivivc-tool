@@ -565,6 +565,71 @@ the tradeoffs and check scientific plausibility. Small differences can reflect
 Monte Carlo variation; advanced controls set source parameter draws, propagated
 interval draws, simulated experiments, and the seed.
 
+## Schedule inspection data and endpoint ranges
+
+The ordinary planning milestone table includes the reference median time,
+central 95% range, and reference weight reaching T50 or T90 by the assessment
+horizon. The bounds are the weighted 2.5th and 97.5th percentiles of crossing
+times, using the same baseline and shared crossing-time API as timing
+requirements. Non-reaching trajectories retain their weight beyond the
+horizon. An unresolved percentile reads **Beyond the assessment horizon**;
+it is neither discarded nor replaced by the last sample or assessment time.
+An invalid baseline leaves the milestone unavailable. One usable reference
+trajectory supplies a median when resolvable, but no sampled uncertainty range.
+
+V2 also prepares compact numerical inspection data with each calculated
+planning result. Selection controls and stacked timelines are for V3; overlaid
+recovery plots and the illustrative-study display are for V4. These later
+display choices will use the current result without further requests or
+simulations. The comparison's existing settings and out-of-date behavior apply
+to the inspection data as well.
+
+The result contains an inert `application/json` element marked
+`data-planning-inspection`, serialized with Jinja's HTML-safe `tojson` filter.
+Its versioned payload has these sections:
+
+- `reference` retains the central curve and existing pointwise weighted
+  reference range, on their original time/response coordinates and analyzed
+  response scale, separately from simulated recovery spread.
+- `schedule_data` retains numeric times, point roles, baseline guides,
+  resolved windows/deadlines, and unavailable schedule-generation outcomes.
+  A point may be completed, user-fixed, or a retained latest-before anchor,
+  and may contribute to multiple windows. Window contributions do not imply
+  that an individual time was mandated. A manual or evenly spaced comparison
+  does not inherit certified latest-before attribution from a suggested
+  schedule with the same times. Completed measurements and planned new
+  replicates remain separate. The milestone baseline guide and explicitly
+  fixed timing-baseline points have separate flags: only the latter are
+  excluded by the timing backend from window counts. Latest completed time,
+  first sampling opportunity, evaluation range, and timing-context start are
+  retained separately, so gap filling does not hide earlier new opportunities.
+- `recovery` contains pointwise 2.5th, 50th, and 97.5th percentiles for recovered
+  responses and recovery errors, with total, successful, failed, and usable
+  counts. Errors are recovered minus that simulation's own true response,
+  calculated before summarization. Simulations already sample the reference
+  weights; these summaries use equal simulation weights and NumPy's linear
+  empirical quantile method. They describe variation across successful
+  simulated studies, separately from fitted-model confidence intervals and
+  reference uncertainty. Fewer than two usable values leave the range
+  unavailable; a singleton median remains available. Missing coordinates are
+  JSON `null`, preserving gaps rather than substituting zero.
+- `recovery.shared_example` identifies the predetermined first simulated
+  study, using the same shared trajectory selection for every schedule. A
+  failed fit stays failed; another successful study is not substituted. Each
+  schedule retains that study's true/recovered curves and observed time means.
+  Those means summarize the simulated replicates, rather than displaying all
+  individual replicate observations. Original completed rows, their SD/SEM,
+  and reported counts remain available separately. Pointwise fitted confidence
+  bounds are explicitly unavailable because the simulation result does not
+  retain them; the existing mean fitted interval width remains separate.
+- `endpoints` retains numeric crossing quantiles with explicit availability
+  statuses, so unresolved horizon bounds do not require nonfinite JSON values.
+
+Performance rows and both schedule inspection sections share stable
+`schedule-N` identifiers within the calculated result. Only summary curves
+and one example per schedule are included; the browser does not receive all
+simulated studies. Presentation does not refit curves or rerun simulations.
+
 ## Checks
 
 Install the test dependencies in the same environment used to run the app:
@@ -609,7 +674,10 @@ controllers working together.
 2. Import a small CSV and a workbook with multiple sheets. Read the columns,
    select the sheet and mappings, and preview mean/SD/count and mean/SEM data.
    Confirm the selected files remain available when changing workspace views.
-3. Calculate a small measured-reference study comparison. Exercise an IVIVC
+3. Calculate a small measured-reference study comparison. Check the endpoint
+   median and central 95% range, including a milestone that some or all
+   reference trajectories do not reach by the horizon. Such bounds should
+   state **Beyond the assessment horizon**. Exercise an IVIVC
    reference and an empirical time-scale reference with their own input files.
    Add completed observations and one timing requirement, then recalculate.
 4. In calibration comparison, generate a candidate, copy it to editable times,

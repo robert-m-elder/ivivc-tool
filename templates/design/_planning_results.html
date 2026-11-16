@@ -1,5 +1,6 @@
 {% from 'design/_charts.html' import chart, interactive_chart %}
 <div data-planning-result>
+    <script type="application/json" data-planning-inspection>{{ inspection | tojson }}</script>
     <section class="design-section" aria-labelledby="planning-result-heading">
         <h3 id="planning-result-heading">Study-planning comparison</h3>
         <p>{{ source_label }}{% if source_filename %}: <strong>{{ source_filename }}</strong>{% endif %}. These results retain the inputs submitted for this calculation.</p>
@@ -39,11 +40,11 @@
         <div class="design-preview-table">
             <table class="design-settings-table">
                 <caption>Milestones relative to the response at baseline time {{ milestone_baseline_time }}</caption>
-                <thead><tr><th scope="col">Milestone</th><th scope="col">Reference median time</th><th scope="col">Reference weight reaching by the end</th></tr></thead>
-                <tbody>{% for endpoint in endpoints %}<tr><th scope="row">{{ endpoint.name }}</th><td>{{ endpoint.median }}</td><td>{{ endpoint.reached }}</td></tr>{% endfor %}</tbody>
+                <thead><tr><th scope="col">Milestone</th><th scope="col">Reference median time</th><th scope="col">Reference central 95% range</th><th scope="col">Reference weight reaching by the end</th></tr></thead>
+                <tbody>{% for endpoint in endpoints %}<tr><th scope="row">{{ endpoint.name }}</th><td>{{ endpoint.median }}</td><td>{{ endpoint.range_95 }}</td><td>{{ endpoint.reached }}</td></tr>{% endfor %}</tbody>
             </table>
         </div>
-        <p class="design-help">T50 and T90 mean 50% and 90% decrease from that baseline. The milestone baseline and first planning time can differ. Reference weight describes uncertainty in the assumed curve, not a fraction of animals. Trajectories that do not reach a milestone remain beyond the horizon when determining its median. A dash indicates unavailable information. Milestones affect schedule selection only when explicitly included in a timing requirement.</p>
+        <p class="design-help">T50 and T90 mean 50% and 90% decrease from that baseline. The milestone baseline and first planning time can differ. The central 95% range runs from the weighted 2.5th to 97.5th percentile of reference milestone times. Reference weight describes uncertainty in the assumed curve, not a fraction of animals. Trajectories that do not reach a milestone keep their weight beyond the assessment horizon when determining the median and both bounds. An unresolved percentile is labeled “Beyond the assessment horizon”; it is not replaced by the study end. One reference trajectory supplies no sampled uncertainty range. A dash indicates unavailable information. Milestones affect schedule selection only when explicitly included in a timing requirement.</p>
     </section>
 
     {% if source_details_rows or source_plots or source_fit_rows %}
@@ -84,7 +85,7 @@
                 <td>{{ requirement.minimum_count }}; {{ 'completed and new nonbaseline times' if requirement.count_scope == 'all' else 'new nonbaseline times' }}</td><td>{{ requirement.status }}: {{ requirement.message }}</td>
             </tr>{% endfor %}</tbody>
         </table></div>
-        <p class="design-help">Windows include their upper bound and exclude their lower bound. Baseline times do not count toward window coverage. Milestone bounds use the selected degraded fraction, reference quantile, and baseline; a milestone beyond the horizon remains unresolved rather than being moved to the study end.</p>
+        <p class="design-help">Windows include their upper bound and exclude their lower bound. Fixed baseline times do not count toward window coverage. The milestone baseline defines the response decrease; placing that guide at another sampled time does not itself exclude that time from window counts. Milestone bounds use the selected degraded fraction, reference quantile, and baseline; a milestone beyond the horizon remains unresolved rather than being moved to the study end.</p>
         <div class="design-preview-table"><table>
             <caption>Suggested schedule generation by total distinct study times</caption>
             <thead><tr><th scope="col">Total times</th><th scope="col">Availability</th><th scope="col">Times</th><th scope="col">Search outcome</th></tr></thead>
