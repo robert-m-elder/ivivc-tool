@@ -10,8 +10,9 @@ const source = fs.readFileSync(path.join(__dirname, "../static/js/design.js"), "
 
 // Minimal DOM for the behavior used by this frontend. No browser or extra
 // JavaScript dependency is needed to exercise its request/state handling.
-function fixture({planning = false, calibration = false, plots, inspection, recovery} = {}) {
-    const document = {readyState: "complete", activeElement: null};
+function fixture({planning = false, calibration = false, plots, inspection, recovery,
+                  measurements = null, observeResize = false} = {}) {
+    const document = {readyState: "complete", activeElement: null, scrolls: []};
     const dataAttribute = key => "data-" + key.replace(/[A-Z]/g, letter => "-" + letter.toLowerCase());
 
     class Element {
@@ -45,6 +46,7 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
         replaceChildren(...children) { this._text = ""; this._html = ""; this.children = []; this.append(...children); }
         setAttribute(name, value) { this.attributes[name] = String(value); }
         getAttribute(name) { return this.attributes[name] ?? null; }
+        removeAttribute(name) { delete this.attributes[name]; }
         addEventListener(type, listener) { (this.listeners[type] ||= []).push(listener); }
         dispatchEvent(event) {
             if (!event.target) event.target = this;
@@ -53,7 +55,8 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
             for (const node of ancestors) for (const listener of node.listeners[event.type] || []) listener(event);
             return true;
         }
-        focus() { document.activeElement = this; }
+        focus(options) { document.activeElement = this; this.focusOptions = options; }
+        scrollIntoView(options) { document.scrolls.push({node: this, options}); }
         matches(selector) {
             const attribute = /^\[([^=\]]+)(?:="([^"]*)")?\]$/.exec(selector);
             if (attribute) return this.attributes[attribute[1]] !== undefined &&
@@ -82,15 +85,34 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
         return node;
     };
     const root = element("main", {id: "design-workspace"});
+    const navigation = element("nav", {id: "design-section-navigation"}, root);
+    const inputsButton = element("button", {"data-design-view": "inputs"}, navigation);
+    const resultsButton = element("button", {"data-design-view": "results"}, navigation);
+    const studySection = element("button", {"data-design-section": "study-sampling-heading", "data-section-task": "study"}, navigation);
+    const calibrationSection = element("button", {"data-design-section": "calibration-candidates-heading", "data-section-task": "calibration"}, navigation);
+    const commonSection = element("button", {"data-design-section": "design-review-heading", "data-section-task": "all"}, navigation);
+    const bar = element("aside", {id: "design-calculation-bar"});
+    const comparisonStatus = element("p", {id: "design-comparison-status", "data-state": "none"}, bar);
+    const operationFeedback = element("p", {id: "design-operation-feedback", hidden: ""}, bar);
+    const operationText = element("span", {id: "design-operation-text"}, operationFeedback);
+    const cssValues = new Map(), resizeObservers = [];
+    if (measurements) {
+        root.style = {setProperty(name, value) { cssValues.set(name, value); }};
+        navigation.getBoundingClientRect = () => ({height: measurements.navigation});
+        bar.getBoundingClientRect = () => ({height: measurements.bar});
+    }
+    class ResizeObserverFixture {
+        constructor(callback) { this.callback = callback; this.observed = []; resizeObservers.push(this); }
+        observe(node) { this.observed.push(node); }
+    }
     const form = element("form", {id: "design-setup-form"}, root);
     form.action = "/review";
     const task = element("select", {id: "task", name: "task", value: "study", "aria-describedby": "task-help"}, form);
-    const inputsButton = element("button", {"data-design-view": "inputs"}, form);
-    const resultsButton = element("button", {"data-design-view": "results"}, form);
     const inputs = element("section", {id: "design-inputs"}, form);
     const summary = element("section", {id: "design-errors", hidden: ""}, inputs);
     const draftStatus = element("p", {id: "design-draft-status"}, inputs);
     const studyGroup = element("div", {"data-design-task": "study"}, inputs);
+    const studyHeading = element("h3", {id: "study-sampling-heading", tabindex: "-1"}, studyGroup);
     const sourceField = element("select", {id: "reference_source", name: "reference_source", value: "measured"}, studyGroup);
     const sourceGroups = {};
     const fileInputs = {};
@@ -100,9 +122,12 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
         fileInputs[mode] = element("input", {id: mode + "-file", name: mode + "_file", type: "file"}, uploadGroup);
     }
     const calibrationGroup = element("div", {"data-design-task": "calibration"}, inputs);
+    const calibrationHeading = element("h3", {id: "calibration-candidates-heading", tabindex: "-1"}, calibrationGroup);
     const environment = element("select", {id: "varied_environment", name: "varied_environment", value: "in_vivo"}, calibrationGroup);
     const calibrationFile = element("input", {id: "calibration-file", name: "calibration_file", type: "file"}, calibrationGroup);
-    const details = element("details", {}, inputs);
+    const calculationHeading = element("h3", {id: "design-review-heading", tabindex: "-1"}, inputs);
+    const outerDetails = element("details", {}, inputs);
+    const details = element("details", {}, outerDetails);
     const simulations = element("input", {id: "n_simulations", name: "n_simulations", type: "number", value: "100", "aria-describedby": "n-simulations-help"}, details);
     const seed = element("input", {id: "random_seed", name: "random_seed", type: "number", value: "12345", "aria-describedby": "random-seed-help"}, details);
     const submit = element("button", {id: "review-setup", disabled: ""}, inputs);
@@ -176,7 +201,7 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
         minimumSd = element("input", {id: "minimum_sd", name: "minimum_sd", value: ".001"}, cv);
         const profile = element("div", {"data-observation-kind": "time_profile_sd"}, planningGroup);
         profileFile = element("input", {id: "profile-file", name: "profile_file", type: "file"}, profile);
-        calculate = element("button", {id: "calculate-comparison", formaction: "/calculate", disabled: ""}, inputs);
+        calculate = element("button", {id: "calculate-comparison", form: "design-setup-form", type: "submit", formaction: "/calculate", disabled: ""}, bar);
         availability = element("p", {"data-planning-availability": ""}, inputs);
     }
     let calibrationControls = null;
@@ -272,12 +297,14 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
     for (const field of [task, sourceField, environment, simulations, seed]) {
         errors[field.id] = element("p", {id: field.id + "-error", "data-error-for": field.id, hidden: ""}, inputs);
     }
-    const requestStatus = element("p", {id: "design-request-status"}, root);
+    const requestStatus = element("p", {id: "design-request-status"}, bar);
     const results = element("section", {id: "design-results", hidden: ""}, root);
+    const resultsHeading = element("h2", {id: "design-results-heading", tabindex: "-1"}, results);
     const content = element("div", {id: "design-results-content"}, results);
     content.innerHTML = "<p>No review yet.</p>";
     const reviewContent = planning ? element("div", {id: "design-review-content"}, results) : content;
     const resultStatus = planning ? element("p", {id: "design-results-status"}, results) : null;
+    root.append(bar);
 
     document.getElementById = id => root.id === id ? root :
         root.querySelectorAll("[id]").find(node => node.id === id) || null;
@@ -300,7 +327,8 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
 
     vm.runInNewContext(source, {
         document,
-        window: {DesignPlots: plots, DesignScheduleInspection: inspection, DesignRecoveryInspection: recovery},
+        window: {DesignPlots: plots, DesignScheduleInspection: inspection, DesignRecoveryInspection: recovery,
+                 ResizeObserver: observeResize ? ResizeObserverFixture : undefined},
         FormData: SubmittedFormData,
         CustomEvent: class {
             constructor(type, options = {}) { this.type = type; Object.assign(this, options); }
@@ -335,6 +363,9 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
     return {root, form, task, sourceField, sourceGroups, fileInputs, calibrationGroup, environment,
         calibrationFile, details, simulations, seed, inputs, results, content, summary, draftStatus,
         requestStatus, submit, errors, requests, document, inputsButton, resultsButton, emit, successfulReview,
+        navigation, studySection, calibrationSection, commonSection, studyHeading, calibrationHeading,
+        calculationHeading, outerDetails, bar, comparisonStatus, operationFeedback, operationText, resultsHeading,
+        cssValues, resizeObservers,
         calculate, completed, planningGroup, observationKind, observationValue, minimumSd, profileFile,
         availability, reviewContent, resultStatus, successfulCalculation,
         ivivcGroup, scalingGroup, ivivcApproach, ivivcModel, ivivcMethod,
@@ -535,7 +566,7 @@ test("calculation posts the mounted form to its own endpoint and preserves selec
     assert.equal(page.content.innerHTML, "<section>Curve recovery</section>");
     assert.equal(page.fileInputs.measured.files[0], file);
     assert.equal(page.results.hidden, false);
-    assert.equal(page.document.activeElement, page.content);
+    assert.equal(page.document.activeElement, page.resultsHeading);
     assert.match(page.resultStatus.textContent, /current inputs/);
     assert.equal(page.calculate.disabled, false);
 });
@@ -802,7 +833,7 @@ test("failed calculations retain both earlier numerical results and setup review
         assert.equal(page.form.getAttribute("aria-busy"), "false");
         assert.equal(page.calculate.disabled, false);
         assert.equal(page.submit.disabled, false);
-        assert.match(page.summary.textContent, /planning comparison/);
+        assert.match(page.summary.textContent, /study comparison/);
     }
 });
 
@@ -1451,4 +1482,234 @@ test('changing task during generation cannot apply or copy an obsolete calibrati
     assert.equal(cal.generate.disabled, true);
     assert.equal(page.inputs.hidden, false);
     assert.equal(page.calculate.disabled, false);
+});
+
+test('persistent comparison status follows calculated inputs and keeps recalculation available in either view', async () => {
+    const page = fixture({planning: true});
+    assert.equal(page.calculate.parentElement, page.bar);
+    assert.equal(page.calculate.getAttribute('form'), page.form.id);
+    assert.equal(page.comparisonStatus.dataset.state, 'none');
+    assert.match(page.calculate.textContent, /^Calculate comparison$/);
+    await page.successfulCalculation();
+    assert.equal(page.comparisonStatus.dataset.state, 'current');
+    assert.match(page.calculate.textContent, /^Recalculate comparison$/);
+    assert.equal(page.calculate.disabled, false);
+    assert.equal(page.results.hidden, false);
+    await page.emit(page.inputsButton, 'click');
+    page.seed.value = '999';
+    await page.emit(page.seed, 'input');
+    assert.equal(page.comparisonStatus.dataset.state, 'stale');
+    await page.successfulReview();
+    assert.equal(page.comparisonStatus.dataset.state, 'stale', 'Reviewing setup must not certify an earlier numerical comparison.');
+    page.seed.value = '12345';
+    await page.emit(page.seed, 'input');
+    assert.equal(page.comparisonStatus.dataset.state, 'current');
+    assert.equal(page.calculate.disabled, false);
+});
+
+test('section navigation follows the active task and focuses headings without calculating', async () => {
+    const page = fixture({planning: true, calibration: true});
+    assert.equal(page.studySection.hidden, false);
+    assert.equal(page.calibrationSection.hidden, true);
+    assert.equal(page.commonSection.hidden, false);
+    await page.emit(page.studySection, 'click');
+    assert.equal(page.inputs.hidden, false);
+    assert.equal(page.document.activeElement, page.studyHeading);
+    assert.equal(page.document.scrolls.at(-1).node, page.studyHeading);
+    await page.emit(page.resultsButton, 'click');
+    assert.equal(page.results.hidden, false);
+    assert.equal(page.studySection.hidden, true);
+    assert.equal(page.commonSection.hidden, true);
+    assert.equal(page.document.activeElement, page.resultsHeading);
+    await page.emit(page.inputsButton, 'click');
+    page.task.value = 'calibration';
+    await page.emit(page.task, 'change');
+    assert.equal(page.studySection.hidden, true);
+    assert.equal(page.calibrationSection.hidden, false);
+    await page.emit(page.calibrationSection, 'click');
+    assert.equal(page.document.activeElement, page.calibrationHeading);
+    assert.equal(page.document.scrolls.at(-1).node, page.calibrationHeading);
+    assert.equal(page.requests.length, 0);
+});
+
+test('calculation feedback remains visible while the request runs and clears on every outcome', async () => {
+    for (const outcome of ['success', 'validation', 'network', 'malformed']) {
+        const page = fixture({planning: true});
+        const pending = page.emit(page.form, 'submit', {submitter: page.calculate});
+        assert.equal(page.operationFeedback.hidden, false);
+        assert.match(page.operationText.textContent, /calculat/i);
+        assert.equal(page.submit.disabled, true);
+        assert.equal(page.calculate.disabled, true);
+        const request = page.requests.at(-1);
+        if (outcome === 'success') request.resolve({ok: true, json: async () => ({ok: true, html: '<p>Calculated</p>'})});
+        if (outcome === 'validation') request.resolve({ok: false, json: async () => ({ok: false, errors: [{field_id: 'random_seed', message: 'Check the seed.'}]})});
+        if (outcome === 'network') request.reject(new Error('offline'));
+        if (outcome === 'malformed') request.resolve({ok: true, json: async () => ({ok: true})});
+        await pending;
+        assert.equal(page.operationFeedback.hidden, true, outcome);
+        assert.equal(page.form.getAttribute('aria-busy'), 'false', outcome);
+        assert.equal(page.submit.disabled, false, outcome);
+        assert.equal(page.calculate.disabled, false, outcome);
+        if (outcome === 'success') {
+            assert.equal(page.document.activeElement, page.resultsHeading);
+            assert.equal(page.document.scrolls.at(-1).node, page.resultsHeading);
+        } else {
+            assert.equal(page.document.activeElement, page.summary);
+            assert.equal(page.document.scrolls.at(-1).node, page.summary);
+        }
+    }
+});
+
+test('setup review and generation share persistent request feedback without relabeling comparisons as current', async () => {
+    const page = await generationPage();
+    const review = page.emit(page.form, 'submit');
+    assert.equal(page.operationFeedback.hidden, false);
+    assert.match(page.operationText.textContent, /review/i);
+    page.requests.at(-1).resolve({ok: true, json: async () => ({ok: true, html: '<p>Setup only</p>'})});
+    await review;
+    assert.equal(page.operationFeedback.hidden, true);
+    assert.equal(page.comparisonStatus.dataset.state, 'none');
+    await page.emit(page.inputsButton, 'click');
+    const generation = page.emit(page.calibration.generate, 'click');
+    assert.equal(page.operationFeedback.hidden, false);
+    assert.match(page.operationText.textContent, /generat/i);
+    page.requests.at(-1).reject(new Error('offline'));
+    await generation;
+    assert.equal(page.operationFeedback.hidden, true);
+    assert.equal(page.calculate.disabled, false);
+    assert.equal(page.comparisonStatus.dataset.state, 'none');
+});
+
+test('concurrent import activity and calculations keep the spinner until every request settles', async () => {
+    for (const calculationFirst of [false, true]) {
+        const page = fixture({planning: true});
+        const activity = (key, active, message) => page.root.dispatchEvent({
+            type: 'design-request-activity', detail: {key, active, message},
+        });
+        activity('import:first', true, 'Reading file columns.');
+        activity('import:second', true, 'Preparing data preview.');
+        assert.equal(page.operationFeedback.hidden, false);
+        activity('import:first', false);
+        assert.equal(page.operationFeedback.hidden, false);
+        assert.match(page.operationText.textContent, /preview/i);
+        const calculation = page.emit(page.form, 'submit', {submitter: page.calculate});
+        if (!calculationFirst) activity('import:second', false);
+        assert.equal(page.operationFeedback.hidden, false);
+        assert.match(page.operationText.textContent, /calculat/i);
+        page.requests.at(-1).resolve({ok: true, json: async () => ({ok: true, html: '<p>Calculated</p>'})});
+        await calculation;
+        if (calculationFirst) {
+            assert.equal(page.operationFeedback.hidden, false);
+            assert.match(page.operationText.textContent, /preview/i);
+            activity('import:second', false);
+        }
+        assert.equal(page.operationFeedback.hidden, true);
+    }
+});
+
+test('a completed calculation preserves an editor and scroll position when inputs were changed or changed back', async () => {
+    for (const undo of [false, true]) {
+        const page = fixture({planning: true});
+        page.seed.focus();
+        const pending = page.emit(page.form, 'submit', {submitter: page.calculate});
+        page.seed.value = '999';
+        await page.emit(page.seed, 'input');
+        if (undo) {
+            page.seed.value = '12345';
+            await page.emit(page.seed, 'input');
+        }
+        const before = page.document.scrolls.length;
+        page.requests.at(-1).resolve({ok: true, json: async () => ({ok: true, html: '<p>Submitted settings</p>'})});
+        await pending;
+        assert.equal(page.inputs.hidden, false);
+        assert.equal(page.document.activeElement, page.seed);
+        assert.equal(page.document.scrolls.length, before);
+        assert.equal(page.comparisonStatus.dataset.state, undo ? 'current' : 'stale');
+    }
+});
+
+test('manual navigation during calculation is retained after unchanged inputs finish', async () => {
+    const page = fixture({planning: true});
+    const pending = page.emit(page.form, 'submit', {submitter: page.calculate});
+    await page.emit(page.commonSection, 'click');
+    const before = page.document.scrolls.length;
+    assert.equal(page.document.activeElement, page.calculationHeading);
+    page.requests.at(-1).resolve({ok: true, json: async () => ({ok: true, html: '<p>Calculated</p>'})});
+    await pending;
+    assert.equal(page.inputs.hidden, false);
+    assert.equal(page.document.activeElement, page.calculationHeading);
+    assert.equal(page.document.scrolls.length, before);
+    assert.equal(page.comparisonStatus.dataset.state, 'current');
+});
+
+test('validation from comparisons returns to the summary and error links reveal every enclosing details panel', async () => {
+    const page = fixture({planning: true});
+    await page.successfulCalculation();
+    assert.equal(page.inputs.hidden, true);
+    await page.emit(page.inputsButton, 'click');
+    page.seed.value = 'invalid';
+    await page.emit(page.seed, 'input');
+    await page.emit(page.resultsButton, 'click');
+    const pending = page.emit(page.form, 'submit', {submitter: page.calculate});
+    page.requests.at(-1).resolve({ok: false, json: async () => ({ok: false, errors: [
+        {field_id: 'random_seed', message: 'Enter a whole-number seed.'},
+    ]})});
+    await pending;
+    assert.equal(page.inputs.hidden, false);
+    assert.equal(page.document.activeElement, page.summary);
+    assert.equal(page.document.scrolls.at(-1).node, page.summary);
+    await page.emit(page.summary.querySelectorAll('a')[0], 'click');
+    assert.equal(page.outerDetails.open, true);
+    assert.equal(page.details.open, true);
+    assert.equal(page.document.activeElement, page.seed);
+    assert.equal(page.document.scrolls.at(-1).node, page.seed);
+    assert.equal(page.comparisonStatus.dataset.state, 'stale');
+});
+
+test('measured navigation and action-bar offsets refresh after resize and without an observer', () => {
+    // Mock rectangles verify the measurement-to-CSS plumbing. They do not
+    // validate actual browser layout, stacking, zoom, or focus visibility.
+    for (const observeResize of [true, false]) {
+        const measurements = {navigation: 89.1, bar: 143.01};
+        const page = fixture({planning: true, measurements, observeResize});
+        assert.equal(page.cssValues.get('--design-navigation-height'), '90px');
+        assert.equal(page.cssValues.get('--design-action-bar-height'), '144px');
+        measurements.navigation = 124.2;
+        measurements.bar = 211.7;
+        if (observeResize) {
+            assert.equal(page.resizeObservers.length, 1);
+            assert.deepEqual(page.resizeObservers[0].observed, [page.navigation, page.bar]);
+            page.resizeObservers[0].callback();
+        } else {
+            assert.equal(page.resizeObservers.length, 0);
+            page.root.dispatchEvent({type: 'design-request-activity', detail: {
+                key: 'import:reference-file', active: true, message: 'Preparing data preview.',
+            }});
+        }
+        assert.equal(page.cssValues.get('--design-navigation-height'), '125px');
+        assert.equal(page.cssValues.get('--design-action-bar-height'), '212px');
+    }
+});
+
+test('an old validation link cannot focus a setting made inactive by a reference-source change', async () => {
+    const page = fixture({planning: true});
+    page.sourceField.value = 'ivivc';
+    await page.emit(page.sourceField, 'change');
+    assert.equal(page.ivivcModel.disabled, false);
+    const pending = page.emit(page.form, 'submit', {submitter: page.calculate});
+    page.requests.at(-1).resolve({ok: false, json: async () => ({ok: false, errors: [
+        {field_id: 'ivivc_model', message: 'Check the IVIVC model.'},
+    ]})});
+    await pending;
+    const link = page.summary.querySelectorAll('a')[0];
+    assert(link);
+    page.sourceField.value = 'measured';
+    page.sourceField.focus();
+    await page.emit(page.sourceField, 'change');
+    assert.equal(page.ivivcModel.disabled, true);
+    await page.emit(link, 'click');
+    assert.equal(page.inputs.hidden, false);
+    assert.equal(page.document.activeElement, page.summary);
+    assert.equal(page.document.scrolls.at(-1).node, page.summary);
+    assert.match(page.requestStatus.textContent, /no longer active/i);
 });

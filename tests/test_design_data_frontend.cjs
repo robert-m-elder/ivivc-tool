@@ -148,9 +148,10 @@ function fixture() {
 
     document.getElementById = id => root.id === id ? root : root.querySelectorAll("[id]").find(node => node.id === id) || null;
     document.createElement = tag => element(tag);
-    const requests = [], errors = [], updates = [];
+    const requests = [], errors = [], updates = [], activity = [];
     root.addEventListener("design-input-errors", event => { if (event.detail.errors.length) errors.push(event.detail); });
     root.addEventListener("design-inputs-updated", event => updates.push(event));
+    root.addEventListener("design-request-activity", event => activity.push(event.detail));
     class FormDataFixture {
         constructor() { this.values = []; }
         append(name, value) { this.values.push([name, value]); }
@@ -184,7 +185,7 @@ function fixture() {
         void emit(dataset.inspect, "click");
         await respond(token);
     }
-    return {root, form, task, studyGroup, hasCompleted, completedGroup, dataset, completed, requests, errors, updates,
+    return {root, form, task, studyGroup, hasCompleted, completedGroup, dataset, completed, requests, errors, updates, activity,
         emit, flush, respond, file, control, readColumns, document};
 }
 
@@ -192,6 +193,7 @@ test("a missing file reports its field without sending a request", async () => {
     const page = fixture();
     await page.emit(page.dataset.inspect, "click");
     assert.equal(page.requests.length, 0);
+    assert.equal(page.activity.length, 0);
     assert.equal(page.errors.length, 1);
     assert.equal(page.errors[0].errors[0].field_id, page.dataset.id);
 });
@@ -327,4 +329,72 @@ test("visibility changes cannot enable inactive dataset or completed-observation
     assert.equal(page.dataset.file.disabled, false);
     assert.equal(page.control("time_column").disabled, false);
     assert.equal(page.control("error_value").disabled, true);
+});
+
+test('file inspection and preview announce request activity only while their requests are pending', async () => {
+    const page = fixture();
+    page.dataset.file.files = [page.file()];
+    void page.emit(page.dataset.inspect, 'click');
+    assert.equal(page.activity.length, 1);
+    assert.equal(page.activity[0].key, 'import:' + page.dataset.id);
+    assert.equal(page.activity[0].active, true);
+    assert.match(page.activity[0].message, /reading/i);
+    await page.respond('CSV_MAPPING');
+    assert.deepEqual(page.activity.map(item => item.active), [true, false]);
+    assert.equal(page.activity[1].key, page.activity[0].key);
+    page.activity.length = 0;
+    void page.emit(page.dataset.config.querySelector('[data-import-action="preview"]'), 'click');
+    assert.equal(page.activity.length, 1);
+    assert.match(page.activity[0].message, /preview/i);
+    await page.respond('<table>Interpreted data</table>');
+    assert.deepEqual(page.activity.map(item => item.active), [true, false]);
+    assert.equal(page.activity[1].key, 'import:' + page.dataset.id);
+});
+
+test('failed and superseded data requests always release their persistent activity indicator', async () => {
+    for (const outcome of ['network', 'malformed', 'validation', 'superseded']) {
+        const page = fixture();
+        await page.readColumns();
+        page.activity.length = 0;
+        void page.emit(page.dataset.config.querySelector('[data-import-action="preview"]'), 'click');
+        assert.equal(page.activity[0].active, true);
+        const request = page.requests.at(-1);
+        if (outcome === 'network') request.reject(new Error('offline'));
+        if (outcome === 'malformed') request.resolve({ok: true, json: async () => { throw new Error('not JSON'); }});
+        if (outcome === 'validation') request.resolve({ok: false, json: async () => ({ok: false, errors: [{message: 'Check the mapping.'}]})});
+        if (outcome === 'superseded') {
+            page.dataset.file.files = [page.file('replacement.csv')];
+            await page.emit(page.dataset.file, 'change');
+            request.resolve({ok: true, json: async () => ({ok: true, html: '<p>Obsolete preview</p>'})});
+        }
+        await page.flush();
+        assert.deepEqual(page.activity.map(item => item.active), [true, false], outcome);
+        assert.equal(page.activity[1].key, page.activity[0].key, outcome);
+        assert.equal(page.dataset.preview.innerHTML, '', outcome);
+    }
+});
+
+test('concurrent file roles use independent activity keys and each ends only its own request', async () => {
+    const page = fixture();
+    page.hasCompleted.checked = true;
+    await page.emit(page.hasCompleted, 'change');
+    page.dataset.file.files = [page.file('reference.csv')];
+    page.completed.file.files = [page.file('completed.csv')];
+    void page.emit(page.dataset.inspect, 'click');
+    void page.emit(page.completed.inspect, 'click');
+    assert.equal(page.requests.length, 2);
+    assert.deepEqual(page.activity.map(item => item.key), [
+        'import:' + page.dataset.id, 'import:' + page.completed.id,
+    ]);
+    assert(page.activity.every(item => item.active));
+    await page.respond('CSV_MAPPING', {}, 0);
+    assert.equal(page.activity.length, 3);
+    assert.equal(page.activity[2].key, 'import:' + page.dataset.id);
+    assert.equal(page.activity[2].active, false);
+    assert.equal(page.completed.inspect.disabled, true);
+    await page.respond('CSV_MAPPING', {dataset_id: page.completed.id}, 1);
+    assert.equal(page.activity.length, 4);
+    assert.equal(page.activity[3].key, 'import:' + page.completed.id);
+    assert.equal(page.activity[3].active, false);
+    assert.equal(page.completed.inspect.disabled, false);
 });

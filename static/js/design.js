@@ -17,6 +17,12 @@
         const summary = document.getElementById('design-errors');
         const draftStatus = document.getElementById('design-draft-status');
         const requestStatus = document.getElementById('design-request-status');
+        const comparisonStatus = document.getElementById('design-comparison-status');
+        const operationFeedback = document.getElementById('design-operation-feedback');
+        const operationText = document.getElementById('design-operation-text');
+        const navigation = document.getElementById('design-section-navigation');
+        const actionBar = document.getElementById('design-calculation-bar');
+        const sectionButtons = Array.from(root.querySelectorAll('[data-design-section]'));
         const submit = document.getElementById('review-setup');
         const calculate = document.getElementById('calculate-comparison');
         const completed = document.getElementById('has_completed');
@@ -50,6 +56,72 @@
         let generatedSignature = null;
         let generatedSchedules = [];
         let generationNotice = '';
+        let activeView = 'inputs';
+        let activeSection = null;
+        // Explicit edits and navigation should keep their focus even if the
+        // user later returns the form values to the submitted signature.
+        let draftRevision = 0;
+        let navigationRevision = 0;
+        const operations = new Map();
+
+        function setOperation(key, active, message) {
+            if (active) operations.set(key, message);
+            else operations.delete(key);
+            if (operationFeedback) operationFeedback.hidden = operations.size === 0;
+            if (operationText) {
+                const primary = operations.get('calculation') || operations.get('review') ||
+                    operations.get('generation') || operations.values().next().value;
+                operationText.textContent = primary ? primary + (operations.size > 1 ?
+                    ' (' + (operations.size - 1) + ' other request' + (operations.size > 2 ? 's' : '') + ' running.)' : '') : '';
+            }
+            measureChrome();
+        }
+
+        root.addEventListener('design-request-activity', event => {
+            const activity = event.detail || {};
+            if (typeof activity.key !== 'string' || !activity.key.startsWith('import:')) return;
+            if (activity.active === true) {
+                requestStatus.textContent = '';
+                requestStatus.dataset.state = 'busy';
+            }
+            setOperation(activity.key, activity.active === true,
+                typeof activity.message === 'string' ? activity.message : 'Preparing data.');
+        });
+
+        function measureChrome() {
+            if (!root.style || typeof root.style.setProperty !== 'function') return;
+            for (const [element, property] of [[navigation, '--design-navigation-height'],
+                [actionBar, '--design-action-bar-height']]) {
+                if (!element || typeof element.getBoundingClientRect !== 'function') continue;
+                const height = element.getBoundingClientRect().height;
+                if (height > 0) root.style.setProperty(property, Math.ceil(height) + 'px');
+            }
+        }
+
+        function focusTarget(target) {
+            if (!target) return;
+            measureChrome();
+            for (let ancestor = target.parentElement; ancestor && ancestor !== root; ancestor = ancestor.parentElement) {
+                if (ancestor.tagName === 'DETAILS') ancestor.open = true;
+            }
+            target.focus({preventScroll: true});
+            if (typeof target.scrollIntoView === 'function') target.scrollIntoView({block: 'start', behavior: 'auto'});
+        }
+
+        function syncNavigation() {
+            sectionButtons.forEach(button => {
+                button.hidden = activeView !== 'inputs' ||
+                    !['all', task.value].includes(button.dataset.sectionTask || 'all');
+                button.setAttribute('aria-current', !button.hidden && button.dataset.designSection === activeSection ? 'location' : 'false');
+            });
+            root.querySelectorAll('[data-design-section-links]').forEach(row => { row.hidden = activeView !== 'inputs'; });
+            measureChrome();
+        }
+
+        function noteInputChange() {
+            draftRevision++;
+            updateDraftStatus();
+        }
 
         function planningAvailable() {
             return task.value === 'study' && ['measured', 'ivivc', 'scaling'].includes(source.value);
@@ -66,7 +138,10 @@
 
         function syncButtons() {
             submit.disabled = pending || generating;
-            if (calculate) calculate.disabled = pending || generating || !calculationAvailable();
+            if (calculate) {
+                calculate.disabled = pending || generating || !calculationAvailable();
+                calculate.textContent = calculatedSignature === null ? 'Calculate comparison' : 'Recalculate comparison';
+            }
             if (generateCandidates) {
                 const requested = calibrationCandidates.some(row =>
                     row.dataset.calibrationActive === 'true' && ['in_vitro', 'in_vivo'].some(side => {
@@ -299,6 +374,7 @@
             });
             syncTiming(available);
             syncButtons();
+            syncNavigation();
             root.dispatchEvent(new CustomEvent('design-visibility-updated'));
         }
 
@@ -313,12 +389,15 @@
         }
 
         function showView(view) {
+            activeView = view;
+            if (view !== 'inputs') activeSection = null;
             inputs.hidden = view !== 'inputs';
             results.hidden = view !== 'results';
             root.querySelectorAll('[data-design-view]').forEach(button => {
                 button.setAttribute('aria-pressed', String(button.dataset.designView === view));
             });
             if (view === 'results') plotAction('resize', results);
+            syncNavigation();
         }
 
         function plotAction(action, container) {
@@ -350,13 +429,23 @@
             updateGenerationStatus();
             if (calculatedSignature !== null) {
                 const current = signature() === calculatedSignature;
+                if (comparisonStatus) {
+                    comparisonStatus.dataset.state = current ? 'current' : 'stale';
+                    comparisonStatus.textContent = current ? 'Comparison is current.' :
+                        'Comparison is out of date. Recalculate for these inputs.';
+                }
                 draftStatus.textContent = current ?
                     'The displayed comparison matches these settings.' :
                     'Inputs changed. The displayed comparison retains its original settings; calculate again to assess these choices.';
                 if (resultStatus) resultStatus.textContent = current ?
                     'Comparison for the current inputs.' :
                     'Inputs changed. This comparison still uses its original inputs and settings.';
+                measureChrome();
                 return;
+            }
+            if (comparisonStatus) {
+                comparisonStatus.dataset.state = 'none';
+                comparisonStatus.textContent = 'No comparison yet.';
             }
             if (resultStatus) resultStatus.textContent = 'No numerical comparison has been calculated.';
             draftStatus.textContent = reviewedSignature === null ?
@@ -364,6 +453,7 @@
                 signature() === reviewedSignature ?
                     'The displayed setup review matches these settings.' :
                     'Inputs changed. The displayed setup review retains its original settings; review again to check these choices.';
+            measureChrome();
         }
 
         function clearErrors() {
@@ -390,15 +480,24 @@
             errors.forEach(error => {
                 const item = document.createElement('li');
                 const field = error.field_id && document.getElementById(error.field_id);
-                if (field) {
+                if (field && !field.disabled) {
                     const link = document.createElement('a');
                     link.href = '#' + field.id;
                     link.textContent = error.message;
                     link.addEventListener('click', event => {
                         event.preventDefault();
-                        const details = field.closest('details');
-                        if (details) details.open = true;
-                        field.focus();
+                        showView('inputs');
+                        let inactive = field.disabled || field.hidden || document.getElementById(field.id) !== field;
+                        for (let ancestor = field.parentElement; ancestor && ancestor !== root; ancestor = ancestor.parentElement) {
+                            if (ancestor.hidden) inactive = true;
+                        }
+                        if (inactive) {
+                            requestStatus.textContent = 'That setting is no longer active. Check the current inputs again.';
+                            requestStatus.dataset.state = 'notice';
+                            focusTarget(summary);
+                            return;
+                        }
+                        focusTarget(field);
                     });
                     item.append(link);
                     field.setAttribute('aria-invalid', 'true');
@@ -422,8 +521,9 @@
             summary.append(heading, list);
             summary.hidden = false;
             showView('inputs');
-            summary.focus();
+            focusTarget(summary);
             requestStatus.textContent = context.status || 'Setup review failed. Earlier displayed results remain available.';
+            requestStatus.dataset.state = 'error';
         }
 
         root.addEventListener('design-input-errors', event => {
@@ -432,11 +532,28 @@
             if (context.errors.length) showErrors(context.errors, context);
             else clearErrors();
         });
-        root.addEventListener('design-inputs-updated', updateDraftStatus);
+        root.addEventListener('design-inputs-updated', noteInputChange);
 
         root.querySelectorAll('[data-design-view]').forEach(button => {
-            button.addEventListener('click', () => showView(button.dataset.designView));
+            button.addEventListener('click', () => {
+                navigationRevision++;
+                activeSection = null;
+                showView(button.dataset.designView);
+                focusTarget(document.getElementById(button.dataset.designView === 'inputs' ?
+                    'design-inputs-heading' : 'design-results-heading') ||
+                    (button.dataset.designView === 'inputs' ? inputs : results));
+            });
         });
+        sectionButtons.forEach(button => button.addEventListener('click', () => {
+            if (button.hidden || button.disabled) return;
+            const target = document.getElementById(button.dataset.designSection);
+            if (!target) return;
+            navigationRevision++;
+            showView('inputs');
+            activeSection = button.dataset.designSection;
+            syncNavigation();
+            focusTarget(target);
+        }));
         root.addEventListener('click', event => {
             const add = event.target.closest('[data-add-timing]');
             const remove = event.target.closest('[data-remove-timing]');
@@ -447,8 +564,8 @@
             if (!row) return;
             row.dataset.timingActive = add ? 'true' : 'false';
             syncInputs();
-            updateDraftStatus();
-            if (add) document.getElementById('timing_' + row.dataset.timingRow + '_kind').focus();
+            noteInputChange();
+            if (add) focusTarget(document.getElementById('timing_' + row.dataset.timingRow + '_kind'));
         });
         root.addEventListener('click', event => {
             const add = event.target.closest('[data-add-calibration-candidate]');
@@ -460,8 +577,8 @@
             if (!row) return;
             row.dataset.calibrationActive = add ? 'true' : 'false';
             syncInputs();
-            updateDraftStatus();
-            if (add) document.getElementById('cal_candidate_' + row.dataset.calibrationCandidate + '_name').focus();
+            noteInputChange();
+            if (add) focusTarget(document.getElementById('cal_candidate_' + row.dataset.calibrationCandidate + '_name'));
         });
         root.addEventListener('click', event => {
             const button = event.target.closest('[data-copy-generated-candidate]');
@@ -478,18 +595,23 @@
             }
             syncInputs();
             generationNotice = 'Copied times are now explicitly specified and can be edited. Calculate to assess them.';
-            updateDraftStatus();
-            document.getElementById('cal_candidate_' + index + '_' + schedules[0].side + '_times').focus();
+            noteInputChange();
+            focusTarget(document.getElementById('cal_candidate_' + index + '_' + schedules[0].side + '_times'));
         });
         if (generateCandidates) generateCandidates.addEventListener('click', async event => {
             event.preventDefault();
             if (generateCandidates.disabled || pending || generating || !calibrationAvailable()) return;
             const data = new FormData(form);
             const submittedSignature = signature(data);
+            const submittedRevision = draftRevision;
+            const submittedNavigation = navigationRevision;
             generating = true;
             generationNotice = '';
             clearErrors();
             form.setAttribute('aria-busy', 'true');
+            requestStatus.textContent = '';
+            requestStatus.dataset.state = 'busy';
+            setOperation('generation', true, 'Generating calibration candidate schedules.');
             updateGenerationStatus();
             try {
                 const response = await fetch(generateCandidates.dataset.generationUrl, {
@@ -498,6 +620,8 @@
                 const payload = await response.json();
                 if (signature() !== submittedSignature) {
                     generationNotice = 'Inputs changed during generation; the submitted preview was not applied. Generate again for the current choices.';
+                    requestStatus.textContent = generationNotice;
+                    requestStatus.dataset.state = 'notice';
                     return;
                 }
                 if (!response.ok || payload.ok !== true) {
@@ -518,7 +642,12 @@
                 generationContent.innerHTML = payload.html;
                 generatedSchedules = payload.schedules;
                 generatedSignature = submittedSignature;
-                generationContent.focus();
+                requestStatus.textContent = 'Candidate schedules generated. Review the times before calculating a comparison.';
+                requestStatus.dataset.state = 'success';
+                if (draftRevision === submittedRevision && navigationRevision === submittedNavigation) {
+                    showView('inputs');
+                    focusTarget(generationContent);
+                }
             } catch (error) {
                 generationNotice = signature() !== submittedSignature ?
                     'Inputs changed during generation; generate again for the current choices.' :
@@ -526,8 +655,13 @@
                 if (signature() === submittedSignature) showErrors([{message: generationNotice}], {
                     heading: 'Candidate schedules could not be generated', status: generationNotice,
                 });
+                else {
+                    requestStatus.textContent = generationNotice;
+                    requestStatus.dataset.state = 'notice';
+                }
             } finally {
                 generating = false;
+                setOperation('generation', false);
                 form.setAttribute('aria-busy', 'false');
                 updateGenerationStatus();
             }
@@ -539,8 +673,8 @@
             updateDraftStatus();
         });
         source.addEventListener('change', syncInputs);
-        form.addEventListener('input', updateDraftStatus);
-        form.addEventListener('change', () => { syncInputs(); updateDraftStatus(); });
+        form.addEventListener('input', noteInputChange);
+        form.addEventListener('change', () => { syncInputs(); noteInputChange(); });
 
         form.addEventListener('submit', async event => {
             event.preventDefault();
@@ -548,7 +682,7 @@
             const calculating = Boolean(calculate && event.submitter === calculate);
             const comparisonName = task.value === 'calibration' ? 'calibration' : 'study';
             const context = calculating ? {
-                heading: 'The planning comparison could not be completed',
+                heading: 'The ' + comparisonName + ' comparison could not be completed',
                 status: 'Calculation failed. Earlier displayed results remain available.',
             } : {};
             if (calculating && !calculationAvailable()) {
@@ -557,11 +691,16 @@
             }
             const data = new FormData(form);
             const submittedSignature = signature(data);
+            const submittedRevision = draftRevision;
+            const submittedNavigation = navigationRevision;
             pending = true;
             syncButtons();
             form.setAttribute('aria-busy', 'true');
             clearErrors();
-            requestStatus.textContent = calculating ? 'Calculating the ' + comparisonName + ' comparison. This request runs to completion.' : 'Reviewing setup.';
+            requestStatus.textContent = '';
+            requestStatus.dataset.state = 'busy';
+            setOperation(calculating ? 'calculation' : 'review', true, calculating ?
+                'Calculating the ' + comparisonName + ' comparison. Keep this page open.' : 'Reviewing setup.');
             try {
                 const response = await fetch(calculating ? calculate.getAttribute('formaction') : form.action, {
                     method: 'POST', body: data, headers: {'Accept': 'application/json'},
@@ -595,14 +734,16 @@
                     'Submitted ' + comparisonName + ' comparison calculated. Inputs changed during the request; calculate again to assess the current choices.') : unchanged ?
                     'Setup reviewed. This request did not run a numerical calculation.' :
                     'Submitted settings reviewed. Inputs changed during the request; review again to check the current choices.';
-                if (unchanged) {
+                requestStatus.dataset.state = 'success';
+                if (unchanged && draftRevision === submittedRevision && navigationRevision === submittedNavigation) {
                     showView('results');
-                    destination.focus();
+                    focusTarget(calculating ? document.getElementById('design-results-heading') || destination : destination);
                 }
             } catch (error) {
                 showErrors([{message: 'The request could not be completed. Check the connection and try again.'}], context);
             } finally {
                 pending = false;
+                setOperation(calculating ? 'calculation' : 'review', false);
                 syncButtons();
                 form.setAttribute('aria-busy', 'false');
             }
@@ -612,6 +753,15 @@
         showView('inputs');
         updateDraftStatus();
         syncButtons();
+        measureChrome();
+        if (typeof window !== 'undefined') {
+            if (typeof window.ResizeObserver === 'function') {
+                const observer = new window.ResizeObserver(measureChrome);
+                if (navigation) observer.observe(navigation);
+                if (actionBar) observer.observe(actionBar);
+            }
+            if (typeof window.addEventListener === 'function') window.addEventListener('resize', measureChrome);
+        }
         root.dataset.ready = 'true';
     }
 

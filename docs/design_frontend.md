@@ -90,9 +90,28 @@ and server errors preserve earlier output. Edits during a request are
 distinguished from the settings submitted in that request; successful results
 retain their original input summary and are marked out of date when needed.
 
+The top navigation remains visible while scrolling. Its section buttons follow
+the selected analysis task and move focus to the corresponding input heading.
+Inputs and Comparisons switch views without replacing the form or its selected
+files. The bottom calculation bar stays available in either view. It shows
+whether a comparison exists and whether it still matches the current inputs;
+after a comparison exists, the action is labelled **Recalculate comparison**.
+An out-of-date comparison stays available with its original settings.
+
+Requests show a spinner and descriptive text in the bottom bar. This indicates
+that a request is in progress; it does not estimate completion time or show a
+numerical percentage. The animation respects reduced-motion preferences.
+After a successful calculation for unchanged inputs, the app opens Comparisons
+and focuses its heading. If the user edited inputs or navigated during the
+request, it preserves the current view and position. Results retain their
+submitted settings and are labelled out of date if needed. Validation
+errors lead to an error summary with links to the relevant input controls.
+Navigation and focus offsets account for the persistent bars so their targets
+remain visible. No calculation runs merely from moving between sections.
+
 Only the current browser page holds the working form and displayed review.
 Refreshing or closing it clears that state. There is no project/result store,
-session storage, job queue, polling, progress reporting, or background worker.
+session storage, job queue, polling, numerical progress reporting, or background worker.
 The upload limit defaults to 25 MiB per request. Hosted request timeouts will
 limit numerical calculations. The request helper also bounds candidate-grid
 size, study sizes, reference draws, and simulated fits to keep this first
@@ -751,6 +770,12 @@ The frontend checks use Node's built-in test runner and a small DOM fixture;
 they require no additional JavaScript packages. Existing numerical and IVIVC
 tests should continue to run in the usual application environment.
 
+`test_design_navigation_markup.py` renders the actual shell for both tasks and
+URL prefixes. It checks the persistent button's form ownership, focusable
+navigation targets, and live feedback outside the busy form and hidden views.
+The JS checks cover freshness, concurrent request cleanup, preserved editing,
+and measured-offset updates; mocked rectangles do not verify browser geometry.
+
 The integration tests run small real numerical workflows through Flask's test
 client: import and uncertainty preview, schedule generation, adoption of
 explicit times, calibration comparison, completed-only adaptive planning, and
@@ -774,6 +799,11 @@ controllers working together.
    without horizontal overflow. Check button hover/pressed states and keyboard
    focus, including the skip link. These assets should also load when the app
    is hosted under a URL prefix.
+   Scroll through each task's inputs and check that section navigation and the
+   bottom calculation bar remain available. Use keyboard navigation to jump to
+   sections and confirm the focused heading or control is not behind either bar.
+   Check narrow windows, browser zoom, and reduced-motion settings. Change tasks
+   and workspace views; only the relevant section buttons should be shown.
    If using a prefix, complete the remaining checks at that prefixed URL.
    After calculating a comparison, check hover values, zoom/reset, legend
    toggles, and figure download on the reference plot. Switch between Inputs
@@ -784,6 +814,8 @@ controllers working together.
 2. Import a small CSV and a workbook with multiple sheets. Read the columns,
    select the sheet and mappings, and preview mean/SD/count and mean/SEM data.
    Confirm the selected files remain available when changing workspace views.
+   Confirm that import requests show the spinner and clear it after success or
+   failure, without changing the current comparison's input provenance.
 3. Calculate a small measured-reference study comparison. Check the endpoint
    median and central 95% range, including a milestone that some or all
    reference trajectories do not reach by the horizon. Such bounds should
@@ -817,6 +849,12 @@ controllers working together.
    provenance and an out-of-date label. Stale generated times must not be
    copied into the current inputs. Check that validation links reach the
    relevant control and that requests work again after correcting the inputs.
+   Check that the bottom bar switches between current and out-of-date messages,
+   and that Recalculate comparison is available from both workspace views.
+   Start a calculation and edit an input while it runs; completion should retain
+   the editing position. An unchanged successful calculation should instead open
+   Comparisons at its heading. Check spinner cleanup after both success and an
+   unavailable connection.
 6. Open a second tab to confirm it starts with a separate draft. Refreshing the
    original tab should start a new workspace; uploads and results are not
    restored. If running the IVIVC app too, verify it remains available at its

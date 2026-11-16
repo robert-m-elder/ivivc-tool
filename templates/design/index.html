@@ -35,6 +35,24 @@
         <p class="design-notice">Plan or extend an in vivo study, or compare how calibration sampling affects an IVIVC. Results describe expected performance under the supplied trajectory and measurement assumptions.</p>
         <noscript><p class="design-notice">Enable JavaScript to review setup and retain selected files while moving between inputs and comparisons.</p></noscript>
 
+        <nav id="design-section-navigation" class="design-section-navigation" aria-label="Sections and workspace views">
+            <div class="design-view-navigation">
+                <button type="button" data-design-view="inputs" aria-pressed="true" aria-controls="design-inputs">Inputs</button>
+                <button type="button" data-design-view="results" aria-pressed="false" aria-controls="design-results">Comparisons</button>
+            </div>
+            <div class="design-section-links" data-design-section-links>
+                <button type="button" data-design-section="study-data-heading" data-section-task="study"{% if settings.task != 'study' %} hidden{% endif %}>1 · Data</button>
+                <button type="button" data-design-section="study-reference-heading" data-section-task="study"{% if settings.task != 'study' %} hidden{% endif %}>2 · Reference</button>
+                <button type="button" data-design-section="study-measurements-heading" data-section-task="study"{% if settings.task != 'study' %} hidden{% endif %}>3 · Measurements</button>
+                <button type="button" data-design-section="study-sampling-heading" data-section-task="study"{% if settings.task != 'study' %} hidden{% endif %}>4 · Sampling</button>
+                <button type="button" data-design-section="calibration-data-heading" data-section-task="calibration"{% if settings.task != 'calibration' %} hidden{% endif %}>1 · Data</button>
+                <button type="button" data-design-section="calibration-reference-heading" data-section-task="calibration"{% if settings.task != 'calibration' %} hidden{% endif %}>2 · Expected behavior</button>
+                <button type="button" data-design-section="calibration-assessment-heading" data-section-task="calibration"{% if settings.task != 'calibration' %} hidden{% endif %}>3 · IVIVC assessment</button>
+                <button type="button" data-design-section="calibration-candidates-heading" data-section-task="calibration"{% if settings.task != 'calibration' %} hidden{% endif %}>4 · Candidates</button>
+                <button type="button" data-design-section="design-review-heading" data-section-task="all">5 · Calculation</button>
+            </div>
+        </nav>
+
         <form id="design-setup-form" action="{{ url_for('review_setup') }}" method="post" enctype="multipart/form-data" novalidate>
             <div class="design-toolbar">
                 <div class="design-field design-task-field">
@@ -46,20 +64,16 @@
                     <p id="task-help" class="design-help">Choose the question to address with the study-design backend.</p>
                     <p id="task-error" class="design-field-error" data-error-for="task" hidden></p>
                 </div>
-                <nav class="design-view-navigation" aria-label="Workspace views">
-                    <button type="button" data-design-view="inputs" aria-pressed="true" aria-controls="design-inputs">Inputs</button>
-                    <button type="button" data-design-view="results" aria-pressed="false" aria-controls="design-results">Comparisons</button>
-                </nav>
             </div>
 
             <section id="design-inputs" aria-labelledby="design-inputs-heading">
-                <h2 id="design-inputs-heading">Analysis inputs</h2>
+                <h2 id="design-inputs-heading" tabindex="-1">Analysis inputs</h2>
                 <p id="design-draft-status" class="design-status" aria-live="polite">Review the draft setup. No calculations run when inputs change.</p>
                 <section id="design-errors" class="design-error-summary" role="alert" tabindex="-1" hidden></section>
 
                 <div data-design-task="study"{% if settings.task != 'study' %} hidden{% endif %}>
                     <section class="design-section" aria-labelledby="study-data-heading">
-                        <h3 id="study-data-heading">1 · Data</h3>
+                        <h3 id="study-data-heading" tabindex="-1">1 · Data</h3>
                         <div class="design-field">
                             <label for="reference_source">Source of expected in vivo behavior</label>
                             <select id="reference_source" name="reference_source" aria-describedby="reference-source-help">
@@ -114,22 +128,22 @@
                     </section>
 
                     <section class="design-section" aria-labelledby="study-reference-heading">
-                        <h3 id="study-reference-heading">2 · Reference and preprocessing</h3>
+                        <h3 id="study-reference-heading" tabindex="-1">2 · Reference and preprocessing</h3>
                         {{ reference_inputs(planning_models, reference_options) }}
                     </section>
                     <section class="design-section" aria-labelledby="study-measurements-heading">
-                        <h3 id="study-measurements-heading">3 · Future measurements</h3>
+                        <h3 id="study-measurements-heading" tabindex="-1">3 · Future measurements</h3>
                         {{ measurement_inputs(datasets) }}
                     </section>
                     <section class="design-section" aria-labelledby="study-sampling-heading">
-                        <h3 id="study-sampling-heading">4 · Sampling choices</h3>
+                        <h3 id="study-sampling-heading" tabindex="-1">4 · Sampling choices</h3>
                         {{ sampling_inputs() }}
                     </section>
                 </div>
 
                 <div data-design-task="calibration"{% if settings.task != 'calibration' %} hidden{% endif %}>
                     <section class="design-section" aria-labelledby="calibration-data-heading">
-                        <h3 id="calibration-data-heading">1 · Calibration data and what changes</h3>
+                        <h3 id="calibration-data-heading" tabindex="-1">1 · Calibration data and what changes</h3>
                         <div class="design-field">
                             <label for="varied_environment">Compare proposed sampling in</label>
                             <select id="varied_environment" name="varied_environment" aria-describedby="varied-environment-help">
@@ -143,21 +157,21 @@
                         {{ calibration_data(datasets) }}
                     </section>
                     <section class="design-section" aria-labelledby="calibration-reference-heading">
-                        <h3 id="calibration-reference-heading">2 · Expected behavior and future measurements</h3>
+                        <h3 id="calibration-reference-heading" tabindex="-1">2 · Expected behavior and future measurements</h3>
                         {{ calibration_references(planning_models, datasets) }}
                     </section>
                     <section class="design-section" aria-labelledby="calibration-assessment-heading">
-                        <h3 id="calibration-assessment-heading">3 · IVIVC assessment</h3>
+                        <h3 id="calibration-assessment-heading" tabindex="-1">3 · IVIVC assessment</h3>
                         {{ calibration_assessment(cal_options, datasets) }}
                     </section>
                     <section class="design-section" aria-labelledby="calibration-candidates-heading">
-                        <h3 id="calibration-candidates-heading">4 · Candidate calibration designs</h3>
+                        <h3 id="calibration-candidates-heading" tabindex="-1">4 · Candidate calibration designs</h3>
                         {{ calibration_candidates() }}
                     </section>
                 </div>
 
                 <section class="design-section" aria-labelledby="design-review-heading">
-                    <h3 id="design-review-heading">5 · Calculation and review</h3>
+                    <h3 id="design-review-heading" tabindex="-1">5 · Calculation and review</h3>
                     <details class="design-advanced">
                         <summary>Advanced calculation settings</summary>
                         <div class="design-field-grid">
@@ -179,14 +193,12 @@
                     </details>
                     <div class="design-action-row">
                         <button id="review-setup" type="submit" disabled>Review setup</button>
-                        <button id="calculate-comparison" class="design-primary" type="submit" name="action" value="calculate" formaction="{{ url_for('calculate_comparison') }}" aria-describedby="design-calculation-help" disabled>Calculate comparison</button>
                         <p id="design-calculation-help" class="design-help" data-planning-availability>Calculate the selected study-planning or calibration comparison. It runs within this request; keep the page open.</p>
                     </div>
                 </section>
             </section>
         </form>
 
-        <p id="design-request-status" class="design-request-status" role="status" aria-live="polite"></p>
         <section id="design-results" aria-labelledby="design-results-heading" hidden>
             <h2 id="design-results-heading" tabindex="-1">Comparisons</h2>
             <p id="design-results-status" class="design-status" role="status" aria-live="polite"></p>
@@ -196,6 +208,19 @@
             <div id="design-review-content" tabindex="-1"></div>
             <div class="design-action-row"><button type="button" disabled title="Report generation will be added after the analysis workflows are settled.">Generate report</button></div>
         </section>
+        <aside id="design-calculation-bar" class="design-calculation-bar" aria-label="Calculation and comparison status">
+            <div class="design-page-width design-calculation-inner">
+                <div class="design-calculation-state">
+                    <p id="design-comparison-status" class="design-comparison-status" data-state="none" role="status" aria-live="polite" aria-atomic="true">No comparison yet.</p>
+                    <div id="design-operation-feedback" class="design-operation-feedback" role="status" aria-live="polite" aria-atomic="true" hidden>
+                        <span class="design-spinner" aria-hidden="true"></span>
+                        <span id="design-operation-text"></span>
+                    </div>
+                    <p id="design-request-status" class="design-request-status" role="status" aria-live="polite"></p>
+                </div>
+                <button id="calculate-comparison" class="design-primary" type="submit" form="design-setup-form" name="action" value="calculate" formaction="{{ url_for('calculate_comparison') }}" aria-describedby="design-calculation-help design-comparison-status" disabled>Calculate comparison</button>
+            </div>
+        </aside>
     </main>
 </body>
 </html>

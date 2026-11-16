@@ -114,6 +114,9 @@
                 state.file.files && state.file.files[0] === file && active(state.container);
             state.pending = true;
             state.status.textContent = action === 'inspect' ? 'Reading file columns.' : 'Preparing data preview.';
+            emit('design-request-activity', {
+                key: 'import:' + state.id, active: true, message: state.status.textContent,
+            });
             emit('design-input-errors', {errors: []});
             sync();
             try {
@@ -158,6 +161,7 @@
             } finally {
                 state.pending = false;
                 sync();
+                emit('design-request-activity', {key: 'import:' + state.id, active: false});
             }
         }
 
