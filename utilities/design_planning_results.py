@@ -341,10 +341,28 @@ def present_planning_result(result, *, source_filename=None, source_summary=None
         environment = curve.get('environment', '')
         x_label = ('In vivo time' if environment == 'in_vivo' else
                    'In vitro time' if environment == 'in_vitro' else 'Source time')
+        title = curve.get('label', 'Source data')
+        y_label = 'Analyzed source response'
+        identifier = f'planning-source-{index}'
+        observations = list(zip(curve['time'], curve['value']))
+        figure = make_figure(
+            series, observations=observations, title=title,
+            x_label=x_label, y_label=y_label, identifier=identifier,
+            observation_label='Supplied observations',
+        )
+        if figure is not None:
+            # A calibration fit and its observations can require two legend
+            # rows on narrow screens. Keep both labels below the time axis.
+            figure['layout']['height'] = 420
+            figure['layout']['margin']['b'] = 110
+            plot_height = 420 - figure['layout']['margin']['t'] - 110
+            figure['layout']['legend'].update(
+                y=-45 / plot_height, yanchor='top', font={'size': 11},
+            )
         source_plots.append({
-            'title': curve.get('label', 'Source data'), 'x_label': x_label,
-            'identifier': f'planning-source-{index}',
-            'plot': _plot(series, observations=list(zip(curve['time'], curve['value']))),
+            'title': title, 'x_label': x_label, 'y_label': y_label,
+            'identifier': identifier, 'figure': figure,
+            'plot': _plot(series, observations=observations),
         })
     endpoints, endpoint_data, endpoint_warnings = _endpoint_presentation(
         reference, settings.get('baseline_time', reference.supported_time_range[0]),

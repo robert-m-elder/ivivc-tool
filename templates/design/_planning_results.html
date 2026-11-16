@@ -60,16 +60,20 @@
             <tbody>{% for record in scale_records %}<tr><th scope="row">{{ record.row }}</th><td>{{ record.ratio }}</td><td>{{ record.weight }}</td>{% if has_updated_scale_weights %}<td>{{ record.updated_weight }}</td>{% endif %}<td>{{ record.source }}</td></tr>{% endfor %}</tbody>
         </table></div>
         <p class="design-help">Showing {{ scale_records|length }} of {{ scale_record_count }} supplied records. All positive-weight records enter the reference; zero-weight records and duplicate ratios remain in the source data.</p>{% endif %}
-        {% for source_plot in source_plots %}
-        {{ chart(source_plot.plot, source_plot.title, source_plot.x_label, 'Analyzed source response', source_plot.identifier) }}
-        {% endfor %}
-        {% if source_plots %}<p class="design-help">Source points and fitted curves are shown on their own time axes after the selected preprocessing. In vitro source observations are not in vivo reference measurements.</p>{% endif %}
+        {% if source_plots %}
+        <p class="design-help">{% if source_kind == 'ivivc' %}Calibration and target data are shown on their own time axes after preprocessing. The target in vitro data are inputs to the predicted in vivo reference above.{% else %}The source observations and available fitted curve are shown on their own time axis after preprocessing.{% endif %} In vitro source observations are not in vivo reference measurements.</p>
+        <div class="design-source-plots">
+            {% for source_plot in source_plots %}
+            {{ interactive_chart(source_plot.figure, source_plot.plot, source_plot.title, source_plot.x_label, source_plot.y_label, source_plot.identifier) }}
+            {% endfor %}
+        </div>
+        {% endif %}
         {% if source_fit_rows %}<div class="design-preview-table"><table>
             <caption>Source fit parameters; standard errors describe fitted parameters</caption>
             <thead><tr><th scope="col">Fit</th><th scope="col">Parameter</th><th scope="col">Estimate</th><th scope="col">Standard error</th></tr></thead>
             <tbody>{% for row in source_fit_rows %}<tr><th scope="row">{{ row.label }}</th><td>{{ row.parameter }}</td><td>{{ row.value }}</td><td>{{ row.se }}</td></tr>{% endfor %}</tbody>
         </table></div>{% endif %}
-        {% if source_kind == 'ivivc' %}<p class="design-help">This is a basic preview of the selected IVIVC. Examine the calibration data, model choices, and detailed diagnostics in the IVIVC app when interpretation or fit quality is uncertain. The study analysis model below is a separate choice from the IVIVC model.</p>{% elif source_kind == 'scaling' %}<p class="design-help">Empirical scale weights express the supplied assumptions about transferable time scaling. The fitted in vitro source and empirical scale are assumed independent. Their complete reference curves are combined without resampling the empirical ratios or adding future measurement noise.</p>{% endif %}
+        {% if source_kind == 'ivivc' %}<p class="design-help">These plots show the inputs and available source fits. Use the IVIVC app for full calibration diagnostics. The model used for simulated-study analysis is a separate choice from the IVIVC model.</p>{% elif source_kind == 'scaling' %}<p class="design-help">Empirical scale weights express the supplied assumptions about transferable time scaling. The fitted in vitro source and empirical scale are assumed independent. Their complete reference curves are combined without resampling the empirical ratios or adding future measurement noise.</p>{% endif %}
     </section>
     {% endif %}
 

@@ -221,7 +221,7 @@ Calculation rebuilds typed inputs from the current upload and mapping on every
 request; a previously generated preview is not required or trusted as input.
 Neither reference construction nor simulation changes the original files.
 
-### Interactive reference and study-size plots
+### Interactive reference, source, and study-size plots
 
 The main in vivo reference plot uses Plotly for hover values, zoom and pan,
 legend toggles, and SVG figure download. Its curves, observations, and weighted
@@ -237,13 +237,23 @@ planning and only new times for adaptive planning. Manual comparisons remain
 separate points. Circle/diamond markers and hover labels distinguish means
 from 90th percentiles, including when only one study size is assessed.
 
+The plots in **How the reference was constructed** use the same renderer.
+For an IVIVC reference, the in vitro calibration, in vivo calibration, and
+target in vitro data remain on their own time axes after preprocessing. A
+source fit is drawn when available; the target plot shows the supplied
+observations. Empirical time scaling also
+uses an interactive in vitro source preview. Hover, legend controls, zoom/reset,
+and SVG download operate on the retained source values without refitting or
+changing the reference. Source-fit parameters remain in the accompanying table.
+
 The design page loads the versioned Plotly 3.0.1 script once from
 `https://cdn.plot.ly/plotly-3.0.1.min.js`, matching the version used by the IVIVC
 results page. The browser needs access to that CDN for interactive plotting.
 If the library cannot load or a plot cannot be rendered, the reference and
-study-size plots retain their static fallbacks with a short status message.
+study-size and source plots retain their static fallbacks with a short status
+message.
 Local serving can be added later without changing the numerical result format.
-Source-fit and calibration plots retain their existing static presentation.
+Calibration-comparison plots retain their existing static presentation.
 
 The small shared renderer is in `static/js/design-plots.js`. Figure payloads
 contain ordinary numeric `data` and `layout` values from
@@ -289,7 +299,8 @@ Changing the prediction dataset or method can change this domain. Existing
 method-specific extrapolation diagnostics remain relevant even within the
 converted reference's numerical domain.
 
-Results include basic source-data/fitting previews, the selected IVIVC settings,
+Results include interactive source-data/fitting previews with static fallbacks,
+the selected IVIVC settings,
 input provenance, and the reference used for planning. These are planning aids.
 Use the IVIVC app for detailed diagnostics and investigation of questionable
 data or model choices.
@@ -773,6 +784,11 @@ controllers working together.
    access blocked, the recovery tables should open automatically and continue
    to follow the same selection. Exercise an IVIVC
    reference and an empirical time-scale reference with their own input files.
+   In **How the reference was constructed**, check hover, zoom, legend controls,
+   and download for each source plot. For an IVIVC reference, verify both
+   calibration plots and the target in vitro observations on their own time
+   axes, with clean captions and source fits only where available. With CDN
+   access blocked, each plot should retain its static fallback.
    Add completed observations and one timing requirement, then recalculate.
 4. In calibration comparison, generate a candidate, copy it to editable times,
    and assess it alongside an explicit candidate. Check both Approach 1 and

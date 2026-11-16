@@ -1,5 +1,6 @@
 """Reference-specific presentation checks using complete planning calculations."""
 from copy import deepcopy
+import json
 from pathlib import Path
 import unittest
 import warnings
@@ -45,6 +46,11 @@ class OtherReferencePresentation(unittest.TestCase):
                 dict(form, ivivc_approach='approach3', ivivc_method='value_scaling'),
                 in_vitro=vitro, in_vivo=vivo, prediction=target,
             )
+            cls.mapped = run_reference_planning(
+                dict(form, ivivc_approach='approach1', ivivc_method='time_mapping', ivivc_model='linear',
+                     first_time='.1', fixed_times='.1'),
+                in_vitro=vitro, in_vivo=vivo, prediction=target,
+            )
 
     def test_ivivc_reference_does_not_label_source_points_as_in_vivo_reference_measurements(self):
         context = present_planning_result(self.ivivc)
@@ -65,6 +71,74 @@ class OtherReferencePresentation(unittest.TestCase):
         self.assertTrue(context['source_fit_rows'])
         self.assertTrue(all(row['parameter'] and row['value'] != '—'
                             for row in context['source_fit_rows']))
+
+    def test_interactive_ivivc_source_figures_preserve_each_dataset_and_fit_on_its_own_axis(self):
+        context = present_planning_result(self.ivivc)
+        expected_axes = ['In vitro time', 'In vivo time', 'In vitro time']
+        for index, (source, curve) in enumerate(zip(context['source_plots'],
+                                                  self.ivivc.source_details['source_curves'])):
+            figure = source['figure']
+            self.assertEqual(figure['layout']['title']['text'], source['title'])
+            self.assertEqual(figure['layout']['xaxis']['title']['text'], expected_axes[index])
+            self.assertEqual(figure['layout']['yaxis']['title']['text'], 'Analyzed source response')
+            self.assertEqual(figure['layout']['uirevision'], f'planning-source-{index}')
+            observations = next(trace for trace in figure['data'] if trace['mode'] == 'markers')
+            self.assertEqual(observations['name'], 'Supplied observations')
+            np.testing.assert_array_equal(observations['x'], curve['time'])
+            np.testing.assert_array_equal(observations['y'], curve['value'])
+            fitted = [trace for trace in figure['data'] if trace['mode'] == 'lines']
+            if index < 2:
+                self.assertEqual(len(fitted), 1)
+                np.testing.assert_array_equal(fitted[0]['x'], curve['fitted_time'])
+                np.testing.assert_array_equal(fitted[0]['y'], curve['fitted_value'])
+            else:
+                self.assertEqual(fitted, [])
+                self.assertEqual(source['title'], 'Target in vitro')
+            self.assertFalse(any(trace.get('fill') or trace.get('error_y') for trace in figure['data']))
+            self.assertEqual(figure['layout']['height'], 420)
+            self.assertEqual(figure['layout']['legend']['yanchor'], 'top')
+            self.assertIsNotNone(source['plot'])
+            json.dumps(figure, allow_nan=False)
+
+    def test_scaling_source_figure_uses_the_existing_source_fit_without_in_vivo_relabeling(self):
+        source, = present_planning_result(self.scaling)['source_plots']
+        curve, = self.scaling.source_details['source_curves']
+        figure = source['figure']
+        self.assertEqual(source['title'], 'In vitro source')
+        self.assertEqual(figure['layout']['xaxis']['title']['text'], 'In vitro time')
+        np.testing.assert_array_equal(figure['data'][0]['x'], curve['fitted_time'])
+        np.testing.assert_array_equal(figure['data'][0]['y'], curve['fitted_value'])
+        np.testing.assert_array_equal(figure['data'][1]['y'], curve['value'])
+        json.dumps(figure, allow_nan=False)
+
+    def test_source_figures_without_source_fits_do_not_invent_lines_or_uncertainty(self):
+        for name, result in (('Approach 1', self.mapped), ('Approach 3', self.deterministic)):
+            with self.subTest(approach=name):
+                context = present_planning_result(result)
+                self.assertEqual(len(context['source_plots']), 3)
+                for source in context['source_plots']:
+                    trace, = source['figure']['data']
+                    self.assertEqual(trace['mode'], 'markers')
+                    self.assertFalse(trace.get('fill'))
+                    self.assertFalse(source['plot']['series'])
+                    json.dumps(source['figure'], allow_nan=False)
+
+    def test_source_figure_labels_are_escaped_and_nonfinite_coordinates_remain_gaps(self):
+        result = deepcopy(self.ivivc)
+        curve = result.source_details['source_curves'][0]
+        curve['label'] = '<script>Source</script>'
+        curve['fitted_value'][1] = np.nan
+        curve['value'][0] = np.inf
+        context = present_planning_result(result)
+        source = context['source_plots'][0]
+        figure = source['figure']
+        self.assertEqual(figure['layout']['title']['text'], '&lt;script&gt;Source&lt;/script&gt;')
+        fitted, observations = figure['data']
+        self.assertIsNone(fitted['x'][1])
+        self.assertIsNone(fitted['y'][1])
+        self.assertFalse(fitted['connectgaps'])
+        np.testing.assert_array_equal(observations['x'], curve['time'][1:])
+        json.dumps(figure, allow_nan=False)
 
     def test_time_scaling_reports_parameter_draws_per_ratio_and_total_reference_curves(self):
         context = present_planning_result(self.scaling)
@@ -126,6 +200,11 @@ class OtherReferencePresentation(unittest.TestCase):
         self.assertNotIn('<script>', html)
         self.assertNotIn('Dark points are the supplied reference observations', html)
         self.assertIn('separate choice from the IVIVC model', html)
+        self.assertIn('The target in vitro data are inputs to the predicted in vivo reference above.', html)
+        for index in range(3):
+            self.assertIn(f'id="planning-source-{index}-interactive"', html)
+        self.assertRegex(html, r'<figcaption[^>]*>Target in vitro\.</figcaption>')
+        self.assertNotIn('Target in vitro. .', html)
         self.assertEqual(html.count('<svg '), 5)
 
     @unittest.skipIf(Environment is None, 'Jinja is supplied by the Flask application environment.')

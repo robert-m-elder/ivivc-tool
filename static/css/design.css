@@ -233,6 +233,9 @@
 .design-page [data-design-plot-target][hidden] { display: none; }
 .design-page #planning-performance-plot-interactive { height: auto; min-height: 460px; }
 .design-page [data-recovery-plot] [data-design-plot-target] { height: auto; min-height: 380px; }
+.design-page .design-source-plots { display: grid; gap: 1rem; margin: 1rem 0; }
+.design-page .design-source-plots figure { margin: 0; }
+.design-page .design-source-plots [data-design-plot-target] { height: auto; min-height: 420px; }
 .design-page .design-schedule-checkbox {
     display: flex;
     align-items: center;

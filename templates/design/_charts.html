@@ -22,15 +22,17 @@
         <text x="395" y="286" text-anchor="middle" font-size="14" fill="#20313d">{{ x_label }}</text>
         <text transform="translate(16 130) rotate(-90)" text-anchor="middle" font-size="13" fill="#20313d">{{ y_label }}</text>
     </svg>
-    <figcaption class="design-help">{{ title }}. {% for line in plot.series %}<span style="color: {{ line.color }}">{{ line.label }}{% if line.dash %} (dashed){% endif %}</span>{% if not loop.last %}; {% endif %}{% endfor %}.</figcaption>
+    {% set caption_title = title|string|trim %}
+    <figcaption class="design-help">{{ caption_title }}{% if caption_title and caption_title[-1] not in '.!?' %}.{% endif %}{% if plot.series %}{% if caption_title %} {% endif %}{% for line in plot.series %}<span style="color: {{ line.color }}">{{ line.label }}{% if line.dash %} (dashed){% endif %}</span>{% if not loop.last %}; {% endif %}{% endfor %}.{% endif %}</figcaption>
 </figure>
 {% endif %}
 {% endmacro %}
 
 {% macro interactive_chart(figure, fallback, title, x_label, y_label, identifier) %}
 {% if figure %}
+{% set plot_title = title|string|trim %}
 <div class="design-interactive-plot" data-design-plot>
-    <div id="{{ identifier }}-interactive" data-design-plot-target hidden role="img" aria-label="{{ title }}. {{ y_label }} versus {{ x_label }}."></div>
+    <div id="{{ identifier }}-interactive" data-design-plot-target hidden role="img" aria-label="{{ plot_title }}{% if plot_title and plot_title[-1] not in '.!?' %}.{% endif %}{% if plot_title %} {% endif %}{{ y_label }} versus {{ x_label }}."></div>
     <script type="application/json" data-design-plot-spec>{{ figure|tojson }}</script>
     <div data-design-plot-fallback>{{ chart(fallback, title, x_label, y_label, identifier) }}</div>
     <p class="design-help" data-design-plot-status role="status" aria-live="polite"></p>
