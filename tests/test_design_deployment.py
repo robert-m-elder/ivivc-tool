@@ -45,7 +45,7 @@ class DesignDeployment(unittest.TestCase):
     def upload(content=b'time,response\n0,1\n1,.9\n2,.81\n'):
         return io.BytesIO(content), 'measurements.csv'
 
-    def test_wsgi_mount_keeps_all_form_import_generation_and_asset_urls_under_prefix(self):
+    def test_wsgi_mount_keeps_app_urls_under_prefix_with_one_versioned_plotly_cdn(self):
         response = self.client.get(PREFIX + '/')
         self.assertEqual(response.status_code, 200)
         page = PageURLs()
@@ -53,8 +53,10 @@ class DesignDeployment(unittest.TestCase):
         expected = {PREFIX + path for path in (
             '/review', '/calculate', '/generate-candidates', '/data/inspect',
             '/data/preview', '/static/css/design.css', '/static/js/design.js',
-            '/static/js/design-data.js')}
+            '/static/js/design-data.js', '/static/js/design-plots.js')}
+        expected.add('https://cdn.plot.ly/plotly-3.0.1.min.js')
         self.assertEqual(set(page.urls), expected)
+        self.assertEqual(page.urls.count('https://cdn.plot.ly/plotly-3.0.1.min.js'), 1)
         for url in expected:
             if '/static/' in url:
                 with self.subTest(url=url):

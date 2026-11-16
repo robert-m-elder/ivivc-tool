@@ -1,13 +1,15 @@
 """Presentation values for request-scoped study-planning comparisons.
 
-Plot geometry contains finite numbers only. Templates escape all uploaded names
-and text, and render the small SVG plots without remote scripts or new packages.
+Plot geometry contains finite numbers only. The reference also has an interactive
+figure specification; its original numerical values are separate from SVG geometry.
 """
 from __future__ import annotations
 
 import numpy as np
 
 from study_design_core import reference_crossing_time_summary
+
+from .design_plotly import make_figure
 
 
 def _number(value):
@@ -244,12 +246,21 @@ def present_planning_result(result, *, source_filename=None, source_summary=None
         reference_lines.insert(0, {'label': 'Original prior reference', 'color': '#a75328',
                                   'dash': '6 4', 'join': True,
                                   'values': list(zip(prior.time_grid, prior.central_curve))})
+    reference_observations = (
+        list(zip(completed.time, completed.response)) if completed is not None else
+        list(zip(source.time, source.value)) if source_kind == 'measured' and source is not None else None
+    )
     reference_plot = _plot(
         reference_lines,
         band=reference_band,
-        observations=(list(zip(completed.time, completed.response)) if completed is not None else
-                      list(zip(source.time, source.value))
-                      if source_kind == 'measured' and source is not None else None),
+        observations=reference_observations,
+    )
+    reference_figure = make_figure(
+        reference_lines, band=reference_band, observations=reference_observations,
+        title=('Central reference and pointwise 2.5th–97.5th percentiles'
+               if reference_range_available else 'Central reference; no sampled uncertainty range'),
+        x_label='In vivo time', y_label='Analyzed response', identifier='planning-reference-plot',
+        observation_label='Completed observations' if completed is not None else 'Source observations',
     )
     source_plots = []
     for index, curve in enumerate(details.get('source_curves', ())):
@@ -364,7 +375,8 @@ def present_planning_result(result, *, source_filename=None, source_summary=None
         'milestone_baseline_time': _number(settings.get('baseline_time', reference.supported_time_range[0])),
         'performance_x_label': 'New sampling times' if adaptive else 'Distinct planned times, including fixed times',
         'profile_summary': profile_summary or {}, 'rows': rows,
-        'reference_plot': reference_plot, 'performance_plot': _plot(lines),
+        'reference_plot': reference_plot, 'reference_figure': reference_figure,
+        'performance_plot': _plot(lines),
         'warnings': list(dict.fromkeys(warnings)), 'endpoints': endpoints, 'ranks': ranks,
         'settings_rows': settings_rows,
     }

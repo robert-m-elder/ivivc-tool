@@ -10,7 +10,7 @@ const source = fs.readFileSync(path.join(__dirname, "../static/js/design.js"), "
 
 // Minimal DOM for the behavior used by this frontend. No browser or extra
 // JavaScript dependency is needed to exercise its request/state handling.
-function fixture({planning = false, calibration = false} = {}) {
+function fixture({planning = false, calibration = false, plots} = {}) {
     const document = {readyState: "complete", activeElement: null};
     const dataAttribute = key => "data-" + key.replace(/[A-Z]/g, letter => "-" + letter.toLowerCase());
 
@@ -300,6 +300,7 @@ function fixture({planning = false, calibration = false} = {}) {
 
     vm.runInNewContext(source, {
         document,
+        window: {DesignPlots: plots},
         FormData: SubmittedFormData,
         CustomEvent: class {
             constructor(type, options = {}) { this.type = type; Object.assign(this, options); }
@@ -549,6 +550,83 @@ test("setup review never replaces an existing numerical comparison or its freshn
     assert.equal(page.reviewContent.innerHTML, "<section>Reviewed seed 999</section>");
     assert.match(page.resultStatus.textContent, /original inputs/);
     assert.match(page.draftStatus.textContent, /Inputs changed/);
+});
+
+test("successful calculations dispose the previous plot and initialize the inserted result", async () => {
+    const calls = [];
+    const plots = {
+        purge(node) { calls.push(['purge', node, node.innerHTML]); },
+        initialize(node) { calls.push(['initialize', node, node.innerHTML]); },
+        resize(node) { calls.push(['resize', node, node.hidden]); },
+    };
+    const page = fixture({planning: true, plots});
+    const file = {name: 'reference.csv', size: 12, lastModified: 1};
+    page.fileInputs.measured.files = [file];
+    const previous = page.content.innerHTML;
+    await page.successfulCalculation('<section>Interactive reference</section>');
+    assert.deepEqual(calls.map(call => call[0]), ['purge', 'initialize', 'resize']);
+    assert.equal(calls[0][1], page.content);
+    assert.equal(calls[0][2], previous);
+    assert.equal(calls[1][2], '<section>Interactive reference</section>');
+    assert.equal(calls[2][1], page.results);
+    assert.equal(calls[2][2], false, 'Resize must happen after the result view becomes visible.');
+    assert.equal(page.fileInputs.measured.files[0], file);
+    assert.equal(page.requests.length, 1);
+});
+
+test("failed calculations retain the previous rendered plot without disposing it", async () => {
+    const calls = [];
+    const plots = Object.fromEntries(['purge', 'initialize', 'resize'].map(action =>
+        [action, () => calls.push(action)]));
+    const page = fixture({planning: true, plots});
+    await page.successfulCalculation('<section>Keep this figure</section>');
+    calls.length = 0;
+    const pending = page.emit(page.form, 'submit', {submitter: page.calculate});
+    page.requests.at(-1).resolve({ok: false, json: async () => ({ok: false,
+        errors: [{field_id: 'random_seed', message: 'Check the seed.'}]})});
+    await pending;
+    assert.deepEqual(calls, []);
+    assert.equal(page.content.innerHTML, '<section>Keep this figure</section>');
+});
+
+test("review and workspace navigation preserve plots and resize without a new calculation", async () => {
+    const calls = [];
+    const plots = Object.fromEntries(['purge', 'initialize', 'resize'].map(action =>
+        [action, () => calls.push(action)]));
+    const page = fixture({planning: true, plots});
+    await page.successfulCalculation('<section>Numerical plot</section>');
+    calls.length = 0;
+    await page.successfulReview('<section>Setup review</section>');
+    assert.deepEqual(calls, ['resize']);
+    assert.equal(page.content.innerHTML, '<section>Numerical plot</section>');
+    const status = page.resultStatus.textContent;
+    const requests = page.requests.length;
+    calls.length = 0;
+    await page.emit(page.inputsButton, 'click');
+    await page.emit(page.resultsButton, 'click');
+    assert.deepEqual(calls, ['resize']);
+    assert.equal(page.requests.length, requests);
+    assert.equal(page.resultStatus.textContent, status);
+});
+
+test("plot initialization errors cannot turn successful calculations into failed requests", async () => {
+    for (const asynchronous of [false, true]) {
+        const page = fixture({planning: true, plots: {
+            purge() { throw new Error('Old plot cleanup failed.'); },
+            initialize() {
+                if (asynchronous) return Promise.reject(new Error('Plot unavailable.'));
+                throw new Error('Plot unavailable.');
+            },
+            resize() { throw new Error('Plot unavailable.'); },
+        }});
+        await page.successfulCalculation('<section>Numerical result and static figure</section>');
+        assert.equal(page.content.innerHTML, '<section>Numerical result and static figure</section>');
+        assert.equal(page.results.hidden, false);
+        assert.equal(page.summary.hidden, true);
+        assert.equal(page.calculate.disabled, false);
+        assert.match(page.resultStatus.textContent, /current inputs/);
+        assert.match(page.requestStatus.textContent, /comparison calculated/);
+    }
 });
 
 test("calculation availability follows source and completed-study choices without running requests", async () => {

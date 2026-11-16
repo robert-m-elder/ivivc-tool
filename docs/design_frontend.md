@@ -221,6 +221,31 @@ Calculation rebuilds typed inputs from the current upload and mapping on every
 request; a previously generated preview is not required or trusted as input.
 Neither reference construction nor simulation changes the original files.
 
+### Interactive reference plot
+
+The main in vivo reference plot uses Plotly for hover values, zoom and pan,
+legend toggles, and SVG figure download. Its curves, observations, and weighted
+pointwise uncertainty range are the same numerical results used by the static
+plot. The plot remains on the analyzed response scale. Changing a plot view
+does not rerun the analysis or change the submitted inputs. Double-clicking the
+plot or using its reset control restores the axis range.
+
+The design page loads the versioned Plotly 3.0.1 script once from
+`https://cdn.plot.ly/plotly-3.0.1.min.js`, matching the version used by the IVIVC
+results page. The browser needs access to that CDN for interactive plotting.
+If the library cannot load or a plot cannot be rendered, the static reference
+plot remains available with a short status message. Local serving can be added
+later without changing the numerical result format. Other design plots retain
+their existing static presentation during this first migration step.
+
+The small shared renderer is in `static/js/design-plots.js`. Figure payloads
+contain ordinary numeric `data` and `layout` values from
+`utilities.design_plotly.make_figure`, serialized separately from the HTML.
+Nonfinite values are represented by gaps. The workspace initializes figures
+after a successful result insertion, resizes them when Comparisons becomes
+visible, and releases replaced figures. Switching workspace views retains the
+existing plot state; a new calculation starts with a new figure.
+
 ## IVIVC-derived references
 
 Select **IVIVC prediction**, supply the paired calibration file and target in vitro
@@ -548,7 +573,7 @@ Install the test dependencies in the same environment used to run the app:
 python -m pip install -r requirements-test.txt
 python -m pytest tests/test_design_*.py
 python -m pytest tests/test_study_design*.py
-node --test tests/test_design_frontend.cjs tests/test_design_data_frontend.cjs
+node --test tests/test_design_frontend.cjs tests/test_design_data_frontend.cjs tests/test_design_plots.cjs
 ```
 
 The frontend checks use Node's built-in test runner and a small DOM fixture;
@@ -572,8 +597,15 @@ Before using a deployment, run these checks in an actual browser against that
 installation. DOM-fixture tests do not replace this check of both browser
 controllers working together.
 
-1. Open the workspace and check that styles and both JavaScript files load.
+1. Open the workspace and check that styles, the application scripts, and the
+   Plotly CDN script load.
    If using a prefix, complete the remaining checks at that prefixed URL.
+   After calculating a comparison, check hover values, zoom/reset, legend
+   toggles, and figure download on the reference plot. Switch between Inputs
+   and Comparisons and resize the browser; the plot should fit the visible
+   panel. Recalculate to check that the replacement figure works. With CDN
+   access blocked, the static reference plot and other results should remain
+   available.
 2. Import a small CSV and a workbook with multiple sheets. Read the columns,
    select the sheet and mappings, and preview mean/SD/count and mean/SEM data.
    Confirm the selected files remain available when changing workspace views.

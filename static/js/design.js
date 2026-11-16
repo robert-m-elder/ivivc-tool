@@ -318,6 +318,21 @@
             root.querySelectorAll('[data-design-view]').forEach(button => {
                 button.setAttribute('aria-pressed', String(button.dataset.designView === view));
             });
+            if (view === 'results') plotAction('resize', results);
+        }
+
+        function plotAction(action, container) {
+            // Plot loading/rendering is independent of a successful calculation.
+            // The renderer retains the static figure if the CDN is unavailable.
+            try {
+                if (typeof window !== 'undefined' && window.DesignPlots &&
+                        typeof window.DesignPlots[action] === 'function') {
+                    const rendering = window.DesignPlots[action](container);
+                    if (rendering && typeof rendering.catch === 'function') rendering.catch(() => {});
+                }
+            } catch (error) {
+                // Keep numerical results and their static plots available.
+            }
         }
 
         function updateDraftStatus() {
@@ -551,7 +566,9 @@
                 if (typeof payload.html !== 'string') throw new Error('Missing response HTML.');
                 // Only this app's server-rendered, escaped template is inserted here.
                 const destination = calculating ? content : reviewContent;
+                if (calculating) plotAction('purge', destination);
                 destination.innerHTML = payload.html;
+                if (calculating) plotAction('initialize', destination);
                 if (calculating) calculatedSignature = submittedSignature;
                 else reviewedSignature = submittedSignature;
                 updateDraftStatus();

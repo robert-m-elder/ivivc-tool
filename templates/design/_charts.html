@@ -26,3 +26,16 @@
 </figure>
 {% endif %}
 {% endmacro %}
+
+{% macro interactive_chart(figure, fallback, title, x_label, y_label, identifier) %}
+{% if figure %}
+<div class="design-interactive-plot" data-design-plot>
+    <div id="{{ identifier }}-interactive" data-design-plot-target hidden role="img" aria-label="{{ title }}. {{ y_label }} versus {{ x_label }}."></div>
+    <script type="application/json" data-design-plot-spec>{{ figure|tojson }}</script>
+    <div data-design-plot-fallback>{{ chart(fallback, title, x_label, y_label, identifier) }}</div>
+    <p class="design-help" data-design-plot-status role="status" aria-live="polite"></p>
+</div>
+{% else %}
+{{ chart(fallback, title, x_label, y_label, identifier) }}
+{% endif %}
+{% endmacro %}

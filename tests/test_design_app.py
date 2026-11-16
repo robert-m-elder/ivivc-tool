@@ -62,11 +62,24 @@ class DesignAppRequests(unittest.TestCase):
         self.assertFalse(response.headers.getlist('Set-Cookie'))
 
     def test_static_assets_are_served_by_the_separate_app(self):
-        for path in ('/static/css/design.css', '/static/js/design.js'):
+        for path in ('/static/css/design.css', '/static/js/design.js',
+                     '/static/js/design-data.js', '/static/js/design-plots.js'):
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
                 self.assertGreater(len(response.data), 0)
+
+    def test_plotly_is_loaded_once_before_the_shared_renderer_and_workspace_controller(self):
+        page = PageElements()
+        page.feed(self.client.get('/').get_data(as_text=True))
+        scripts = [attrs for tag, attrs in page.elements if tag == 'script']
+        urls = [attrs.get('src') for attrs in scripts]
+        cdn = 'https://cdn.plot.ly/plotly-3.0.1.min.js'
+        self.assertEqual(urls.count(cdn), 1)
+        self.assertLess(urls.index(cdn), urls.index('/static/js/design-plots.js'))
+        self.assertLess(urls.index('/static/js/design-plots.js'), urls.index('/static/js/design.js'))
+        self.assertTrue(all('defer' in attrs for attrs in scripts if attrs.get('src') in (
+            cdn, '/static/js/design-plots.js', '/static/js/design.js')))
 
     def test_study_setup_defaults_are_returned_without_numerical_results(self):
         response = self.review()

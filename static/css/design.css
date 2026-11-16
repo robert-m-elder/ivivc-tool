@@ -215,6 +215,8 @@
 .design-page textarea[aria-invalid="true"] { border-color: var(--design-error); }
 .design-page [data-planning-controls] > h4 { margin-top: .25rem; }
 .design-page #design-review-content:not(:empty) { margin-top: 1.5rem; }
+.design-page [data-design-plot-target] { width: 100%; min-width: 0; height: 380px; }
+.design-page [data-design-plot-target][hidden] { display: none; }
 @media (max-width: 640px) {
     .design-page .design-three-fields { grid-template-columns: 1fr; }
 }

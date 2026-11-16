@@ -1,4 +1,4 @@
-{% from 'design/_charts.html' import chart %}
+{% from 'design/_charts.html' import chart, interactive_chart %}
 <div data-planning-result>
     <section class="design-section" aria-labelledby="planning-result-heading">
         <h3 id="planning-result-heading">Study-planning comparison</h3>
@@ -32,7 +32,7 @@
 
     <section class="design-section" aria-labelledby="planning-reference-result-heading">
         <h3 id="planning-reference-result-heading">Expected in vivo reference and uncertainty</h3>
-        {{ chart(reference_plot, 'Central reference and pointwise 2.5th–97.5th percentiles' if reference_range_available else 'Central reference; no sampled uncertainty range', 'In vivo time', 'Analyzed response', 'planning-reference-plot') }}
+        {{ interactive_chart(reference_figure, reference_plot, 'Central reference and pointwise 2.5th–97.5th percentiles' if reference_range_available else 'Central reference; no sampled uncertainty range', 'In vivo time', 'Analyzed response', 'planning-reference-plot') }}
         {% if adaptive %}<p class="design-help">Dark points are the completed target-study observations on the analyzed response scale. {% if adaptive.has_update %}The dashed line retains the original prior central curve; the shaded band uses the updated weights.{% endif %}</p>{% elif source_kind == 'measured' %}<p class="design-help">Dark points are the supplied reference observations after preprocessing.</p>{% endif %}
         {% if reference_range_available %}<p class="design-help">The shaded band summarizes pointwise weighted percentiles of usable complete reference trajectories. {% if source_kind == 'scaling' %}These preserve the supplied empirical time-scale weights and source-fit parameter uncertainty.{% elif source_kind == 'ivivc' %}These retain the uncertainty supported by the selected IVIVC approach and prediction method.{% else %}These are sampled from fitted parameter uncertainty.{% endif %} The band excludes future measurement variability and is not a simultaneous band or a range for individual future measurements.</p>
         {% else %}<p class="design-help">One complete reference trajectory is available. No sampled reference-uncertainty band is displayed. Future measurement variability still enters the study simulations; a single reference curve does not establish that the underlying behavior is known.</p>{% endif %}
