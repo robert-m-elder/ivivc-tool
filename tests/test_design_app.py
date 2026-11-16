@@ -63,7 +63,8 @@ class DesignAppRequests(unittest.TestCase):
 
     def test_static_assets_are_served_by_the_separate_app(self):
         for path in ('/static/css/design.css', '/static/js/design.js',
-                     '/static/js/design-data.js', '/static/js/design-plots.js'):
+                     '/static/js/design-data.js', '/static/js/design-plots.js',
+                     '/static/js/design-timeline-figure.js', '/static/js/design-schedule-inspection.js'):
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
@@ -78,8 +79,11 @@ class DesignAppRequests(unittest.TestCase):
         self.assertEqual(urls.count(cdn), 1)
         self.assertLess(urls.index(cdn), urls.index('/static/js/design-plots.js'))
         self.assertLess(urls.index('/static/js/design-plots.js'), urls.index('/static/js/design.js'))
+        self.assertLess(urls.index('/static/js/design-timeline-figure.js'), urls.index('/static/js/design-schedule-inspection.js'))
+        self.assertLess(urls.index('/static/js/design-schedule-inspection.js'), urls.index('/static/js/design.js'))
         self.assertTrue(all('defer' in attrs for attrs in scripts if attrs.get('src') in (
-            cdn, '/static/js/design-plots.js', '/static/js/design.js')))
+            cdn, '/static/js/design-plots.js', '/static/js/design-timeline-figure.js',
+            '/static/js/design-schedule-inspection.js', '/static/js/design.js')))
 
     def test_study_setup_defaults_are_returned_without_numerical_results(self):
         response = self.review()

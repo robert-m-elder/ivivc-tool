@@ -174,6 +174,53 @@ class InspectionPayload(unittest.TestCase):
         self.assertEqual(len(context['inspection']['endpoints']), 2)
         json.dumps(context['inspection'], allow_nan=False)
 
+    @unittest.skipIf(Environment is None, 'Jinja is supplied by the Flask environment.')
+    def test_schedule_controls_match_retained_schedules_and_cannot_enter_calculation_inputs(self):
+        context = present_planning_result(self.result)
+        environment = Environment(loader=FileSystemLoader(Path(__file__).parents[1] / 'templates'),
+                                  autoescape=True, undefined=StrictUndefined)
+        html = environment.get_template('design/_planning_results.html').render(**context)
+
+        class Controls(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.controls, self.details = [], []
+
+            def handle_starttag(self, tag, attrs):
+                attrs = dict(attrs)
+                if 'data-schedule-select' in attrs:
+                    self.controls.append((tag, attrs))
+                if 'data-schedule-detail' in attrs:
+                    self.details.append(attrs['data-schedule-detail'])
+
+        parser = Controls()
+        parser.feed(html)
+        self.assertEqual([attrs['data-schedule-select'] for _, attrs in parser.controls],
+                         [row['id'] for row in context['rows']])
+        self.assertEqual(parser.details, [row['id'] for row in context['rows']])
+        for (tag, attrs), row in zip(parser.controls, context['rows']):
+            self.assertEqual(tag, 'input')
+            self.assertEqual(attrs['type'], 'checkbox')
+            self.assertEqual(attrs['aria-label'], 'Inspect ' + row['name'])
+            self.assertIn('disabled', attrs)  # Enabled after the browser checks inspection data.
+            self.assertNotIn('name', attrs)  # Display selections never become calculation settings.
+        self.assertIn('Select up to three schedules', html)
+        self.assertIn('Exact times and explanations', html)
+        self.assertIn('Contributing to a window does not mean', html)
+        self.assertNotIn('</script><script>alert(1)</script>', html)
+
+    @unittest.skipIf(Environment is None, 'Jinja is supplied by the Flask environment.')
+    def test_unavailable_comparison_has_no_unusable_schedule_selector(self):
+        result = copy(self.result)
+        result.comparison, result.optimization, result.schedules = None, None, {}
+        context = present_planning_result(result)
+        environment = Environment(loader=FileSystemLoader(Path(__file__).parents[1] / 'templates'),
+                                  autoescape=True, undefined=StrictUndefined)
+        html = environment.get_template('design/_planning_results.html').render(**context)
+        self.assertNotIn('data-schedule-select=', html)
+        self.assertNotIn('data-schedule-timeline ', html)
+        self.assertIn('No schedule was available for simulation', html)
+
 
 @unittest.skipIf(importlib.util.find_spec('flask') is None, 'Flask is supplied by the app environment.')
 class InspectionRoute(unittest.TestCase):

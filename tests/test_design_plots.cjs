@@ -85,7 +85,7 @@ test('a failed CDN load preserves static output and does not reject the result r
     assert.equal(f.calls.react.length, 0);
     assert.equal(f.target.hidden, true);
     assert.equal(f.fallback.hidden, false);
-    assert.match(f.status.textContent, /static plot and numerical results remain available/);
+    assert.match(f.status.textContent, /accompanying numerical results remain available/);
 });
 
 test('malformed or incomplete figure data falls back without executing payload text', async () => {
@@ -183,4 +183,136 @@ test('missing optional containers and rejected resizes leave the successful char
     assert.match(f.status.textContent, /Interactive plot ready/);
     f.api.purge(null);
     f.api.resize(null);
+});
+
+function updatedSpec(label) {
+    return {data: [{x: [0, 1], y: [1, 2], name: label}],
+        layout: {title: {text: label}, uirevision: 'selection-view'}};
+}
+
+test('a supplied update can initialize a figure and later updates preserve shared configuration', async () => {
+    const f = fixture();
+    f.spec.textContent = 'This script is not the requested figure.';
+    await f.api.update(f.wrapper, updatedSpec('First selection'));
+    await f.api.update(f.wrapper, updatedSpec('Second selection'));
+    await f.api.initialize(f.root);
+    assert.equal(f.calls.react.length, 2);
+    assert.equal(f.calls.react[1][1][0].name, 'Second selection');
+    assert.equal(f.calls.react[1][2].uirevision, 'selection-view');
+    assert.equal(f.calls.react[1][3].toImageButtonOptions.format, 'svg');
+    assert.equal(f.fallback.hidden, true);
+});
+
+test('rapid selection changes before rendering coalesce into the latest supplied figure', async () => {
+    const f = fixture();
+    await Promise.all([
+        f.api.initialize(f.root),
+        f.api.update(f.wrapper, updatedSpec('Superseded')),
+        f.api.update(f.wrapper, updatedSpec('Current selection')),
+    ]);
+    assert.equal(f.calls.react.length, 1);
+    assert.equal(f.calls.react[0][1][0].name, 'Current selection');
+});
+
+test('selection updates wait for an in-flight render and skip obsolete queued figures', async () => {
+    const releases = [];
+    let active = 0;
+    let maximumActive = 0;
+    const f = fixture({react: () => {
+        active += 1;
+        maximumActive = Math.max(maximumActive, active);
+        return new Promise(resolve => releases.push(() => { active -= 1; resolve(); }));
+    }});
+    const initial = f.api.initialize(f.root);
+    await Promise.resolve();
+    const superseded = f.api.update(f.wrapper, updatedSpec('Superseded'));
+    let finished = false;
+    const current = f.api.update(f.wrapper, updatedSpec('Latest')).then(() => { finished = true; });
+    assert.equal(f.calls.react.length, 1);
+    releases[0]();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(f.calls.react.length, 2);
+    assert.equal(f.calls.react[1][1][0].name, 'Latest');
+    assert.equal(f.fallback.hidden, false, 'A superseded frame must not hide the numerical fallback.');
+    assert.equal(finished, false);
+    releases[1]();
+    await Promise.all([initial, superseded, current]);
+    assert.equal(maximumActive, 1);
+    assert.equal(finished, true);
+    assert.equal(f.fallback.hidden, true);
+});
+
+test('an invalid update uses the numerical fallback and a subsequent valid update can recover', async () => {
+    const f = fixture();
+    await f.api.initialize(f.root);
+    await f.api.update(f.wrapper, {data: [], layout: []});
+    assert.equal(f.calls.react.length, 1);
+    assert.equal(f.calls.purge.length, 1);
+    assert.equal(f.target.hidden, true);
+    assert.equal(f.fallback.hidden, false);
+    await f.api.update(f.wrapper, updatedSpec('Recovered'));
+    assert.equal(f.calls.react.length, 2);
+    assert.equal(f.target.hidden, false);
+    assert.equal(f.fallback.hidden, true);
+});
+
+test('a rejected update resolves without losing the fallback and a later update can recover', async () => {
+    let fail = false;
+    const f = fixture({react: () => fail ? Promise.reject(new Error('Selection render failed')) : Promise.resolve()});
+    await f.api.initialize(f.root);
+    fail = true;
+    await f.api.update(f.wrapper, updatedSpec('Failure'));
+    assert.equal(f.calls.purge.length, 1);
+    assert.equal(f.fallback.hidden, false);
+    assert.equal(f.target.hidden, true);
+    fail = false;
+    await f.api.update(f.wrapper, updatedSpec('Recovered'));
+    assert.equal(f.calls.react.length, 3);
+    assert.match(f.status.textContent, /Interactive plot ready/);
+    assert.equal(f.fallback.hidden, true);
+});
+
+test('purging an in-flight plot discards its queued updates without applying late status changes', async () => {
+    let release;
+    const f = fixture({react: () => new Promise(resolve => { release = resolve; })});
+    const initial = f.api.initialize(f.root);
+    await Promise.resolve();
+    const queued = f.api.update(f.wrapper, updatedSpec('Obsolete'));
+    f.api.purge(f.root);
+    const status = f.status.textContent;
+    release();
+    await Promise.all([initial, queued]);
+    assert.equal(f.calls.react.length, 1);
+    assert.equal(f.status.textContent, status);
+    assert.equal(f.calls.resize.length, 0);
+});
+
+test('intentional reuse after purge waits for the old target render to finish cleanup', async () => {
+    const releases = [];
+    const f = fixture({react: () => new Promise(resolve => releases.push(resolve))});
+    const initial = f.api.initialize(f.root);
+    await Promise.resolve();
+    f.api.purge(f.root);
+    const reused = f.api.update(f.wrapper, updatedSpec('New selection'));
+    await Promise.resolve();
+    assert.equal(f.calls.react.length, 1, 'The reused target must not receive overlapping react calls.');
+    releases[0]();
+    await initial;
+    await Promise.resolve();
+    assert.equal(f.calls.react.length, 2);
+    assert.equal(f.calls.react[1][1][0].name, 'New selection');
+    releases[1]();
+    await reused;
+    assert.equal(f.fallback.hidden, true);
+});
+
+test('missing update targets or an unavailable CDN resolve safely with numerical output retained', async () => {
+    const f = fixture({missing: true});
+    await f.api.update(null, updatedSpec('No target'));
+    await f.api.update({}, updatedSpec('No target'));
+    await f.api.update(f.wrapper, updatedSpec('No CDN'));
+    assert.equal(f.calls.react.length, 0);
+    assert.equal(f.fallback.hidden, false);
+    assert.equal(f.target.hidden, true);
+    assert.match(f.status.textContent, /accompanying numerical results remain available/);
 });

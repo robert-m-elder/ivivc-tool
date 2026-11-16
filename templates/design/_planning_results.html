@@ -106,11 +106,13 @@
         {% if has_comparison %}
         {{ chart(performance_plot, 'Simulated recovery error versus number of sampling times', performance_x_label, 'IRMSE', 'planning-performance-plot') }}
         <p class="design-help">IRMSE is the root mean square difference between a recovered curve and its simulated true curve across the planning range, in analyzed response units. Lower error means closer curve recovery under these assumptions. Solid traces show mean error; dashed traces show the 90th percentile. Manual schedules are separate points.</p>
+        <p class="design-help">Use Inspect to select up to three schedules, then <a href="#planning-schedule-inspection">view their timelines and exact sampling details</a>.</p>
         <div class="design-preview-table">
             <table>
                 <caption>Schedule performance; recovery errors use successful simulated fits</caption>
-                <thead><tr><th scope="col">Schedule</th><th scope="col">Total times</th><th scope="col">Sampling times</th>{% if adaptive %}<th scope="col">New times</th><th scope="col">New sampling times</th>{% endif %}<th scope="col">{{ 'New independent units' if adaptive else 'Independent units' }}</th>{% if timing.requirements %}<th scope="col">Timing inspection</th>{% endif %}<th scope="col">Successful fits</th><th scope="col">Failure rate</th><th scope="col">Mean IRMSE</th><th scope="col">90th percentile IRMSE</th><th scope="col">Mean fitted curve interval width</th></tr></thead>
-                <tbody>{% for row in rows %}<tr>
+                <thead><tr><th scope="col">Inspect</th><th scope="col">Schedule</th><th scope="col">Total times</th><th scope="col">Sampling times</th>{% if adaptive %}<th scope="col">New times</th><th scope="col">New sampling times</th>{% endif %}<th scope="col">{{ 'New independent units' if adaptive else 'Independent units' }}</th>{% if timing.requirements %}<th scope="col">Timing inspection</th>{% endif %}<th scope="col">Successful fits</th><th scope="col">Failure rate</th><th scope="col">Mean IRMSE</th><th scope="col">90th percentile IRMSE</th><th scope="col">Mean fitted curve interval width</th></tr></thead>
+                <tbody>{% for row in rows %}<tr data-schedule-row="{{ row.id }}">
+                    <td><label class="design-schedule-checkbox"><input type="checkbox" data-schedule-select="{{ row.id }}" aria-label="Inspect {{ row.name }}" aria-describedby="planning-selection-help planning-selection-status" aria-controls="planning-schedule-inspection" disabled><span class="design-schedule-swatch" data-schedule-swatch="{{ row.id }}" aria-hidden="true" hidden></span></label></td>
                     <th scope="row">{{ row.name }}</th><td>{{ row.number_of_times }}</td><td>{{ row.times }}</td>{% if adaptive %}<td>{{ row.number_of_new_times }}</td><td>{{ row.new_times }}</td>{% endif %}<td>{{ row.experimental_units }}</td>
                     {% if timing.requirements %}<td>{% if row.timing %}{{ row.timing.status }}: {{ row.timing.message }}{% for requirement in row.timing.requirements %}<br>{{ requirement.label }}: {{ requirement.status }}{% endfor %}{% else %}No inspection available{% endif %}</td>{% endif %}
                     <td>{{ row.n_successful }} / {{ row.n_simulations }}</td><td>{{ row.failure_rate }}</td><td>{{ row.mean_irmse }}</td><td>{{ row.p90_irmse }}</td><td>{{ row.mean_curve_interval_width }} ({{ row.interval_count }} fits)</td>
@@ -122,6 +124,8 @@
         <p class="design-help">All schedules share simulated reference trajectories and measurement-error draws at common times. Small differences may reflect Monte Carlo variation. No automatic overall ranking is assigned.</p>
         {% else %}<p>No schedule was available for simulation under these settings. Review the requirement-resolution and schedule-availability outcomes above. No recovery error or zero-width interval has been substituted for an unavailable calculation.</p>{% endif %}
     </section>
+
+    {% if has_comparison %}{% include 'design/_schedule_inspection.html' %}{% endif %}
 
     <section class="design-section" aria-labelledby="planning-settings-heading">
         <h3 id="planning-settings-heading">Inputs used for this calculation</h3>

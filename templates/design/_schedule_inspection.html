@@ -1,0 +1,44 @@
+<section id="planning-schedule-inspection" class="design-section" aria-labelledby="planning-schedule-inspection-heading" data-schedule-inspection>
+    <h3 id="planning-schedule-inspection-heading">Inspect selected schedules</h3>
+    <p id="planning-selection-help" class="design-help">Select up to three schedules in the performance table. Timelines are stacked vertically on a shared in vivo time axis. Selection only changes the display; it does not recalculate or change the analysis inputs.</p>
+    <p id="planning-selection-status" class="design-help" data-schedule-selection-status role="status" aria-live="polite">Schedule inspection is preparing. The performance table remains available.</p>
+    <p data-schedule-selection-empty hidden>Choose a schedule in the performance table to inspect its sampling times.</p>
+    <div class="design-interactive-plot design-schedule-timeline" data-schedule-timeline data-design-plot hidden>
+        <div id="planning-schedule-timeline-interactive" data-design-plot-target hidden role="img" aria-label="Selected sampling schedules stacked vertically on a common in vivo time axis. Exact times and explanations are provided below."></div>
+        <div data-design-plot-fallback><p class="design-help">The exact times and explanations below provide the timeline's numerical information.</p></div>
+        <p class="design-help" data-design-plot-status role="status" aria-live="polite"></p>
+    </div>
+    <div data-schedule-timeline-help hidden>
+        <p class="design-help">Timeline key, where applicable:</p>
+        <ul class="design-timeline-key">
+            <li><span class="design-point-symbol design-point-completed" aria-hidden="true"></span>Completed time</li>
+            <li><span class="design-point-symbol design-point-fixed" aria-hidden="true"></span>User-fixed proposed time</li>
+            <li><span class="design-point-symbol design-point-latest" aria-hidden="true"></span>Latest-before selection</li>
+            <li><span class="design-point-symbol" aria-hidden="true"></span>Other proposed time</li>
+            <li><span class="design-guide-symbol design-guide-baseline" aria-hidden="true"></span>Milestone baseline</li>
+            <li><span class="design-guide-symbol design-guide-completed" aria-hidden="true"></span>Latest completed</li>
+            <li><span class="design-guide-symbol design-guide-window" aria-hidden="true"></span>Required window</li>
+            <li><span class="design-guide-symbol design-guide-deadline" aria-hidden="true"></span>Timing deadline</li>
+        </ul>
+        <p class="design-help">Colors identify the selected schedules. Hover for all roles at a time. A latest-before selection uses a diamond even when also user-fixed. The milestone baseline is a guide even when it is not sampled; it shares a line with latest completion when those times coincide. Shaded windows and deadline guides use the resolved requirements; unresolved bounds are not moved to the study end.</p>
+    </div>
+    <details class="design-schedule-details" data-schedule-details hidden>
+        <summary>Exact times and explanations</summary>
+        {% for schedule in inspection.schedule_data.schedules %}
+        <section class="design-schedule-detail" data-schedule-detail="{{ schedule.id }}" hidden aria-labelledby="{{ schedule.id }}-detail-heading">
+            <h4 id="{{ schedule.id }}-detail-heading"><span class="design-schedule-swatch" data-schedule-swatch="{{ schedule.id }}" aria-hidden="true" hidden></span>{{ schedule.name }}</h4>
+            {% if schedule.timing_status %}<p class="design-help">Timing inspection: {{ schedule.timing_status }}. {{ schedule.timing_message }}</p>{% endif %}
+            <div class="design-preview-table"><table>
+                <caption>Sampling times and retained explanations for {{ schedule.name }}</caption>
+                <thead><tr><th scope="col">In vivo time</th><th scope="col">Measurements</th><th scope="col">Roles and timing contributions</th></tr></thead>
+                <tbody>{% for point in schedule.points %}<tr>
+                    <th scope="row">{{ point.time }}</th>
+                    <td>{% if point.completed %}Completed; {{ point.completed_rows }} original {{ 'row' if point.completed_rows == 1 else 'rows' }}{% else %}Proposed; {{ point.new_replicates }} independent {{ 'replicate' if point.new_replicates == 1 else 'replicates' }}{% endif %}</td>
+                    <td><ul>{% for explanation in point.explanations %}<li>{{ explanation }}</li>{% endfor %}</ul></td>
+                </tr>{% endfor %}</tbody>
+            </table></div>
+        </section>
+        {% endfor %}
+        <p class="design-help">A time can have several roles or contribute to several windows. Contributing to a window does not mean that the individual time was mandated. Eligibility before a deadline does not establish that a comparison used the latest feasible time. Completed rows retain their original observations and precision; planned replicates apply only to new measurements.</p>
+    </details>
+</section>

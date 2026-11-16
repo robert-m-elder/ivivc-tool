@@ -335,6 +335,13 @@
             }
         }
 
+        function inspectionAction(action, container) {
+            try {
+                const api = typeof window !== 'undefined' && window.DesignScheduleInspection;
+                if (api && typeof api[action] === 'function') api[action](container);
+            } catch (error) { /* Display controls cannot invalidate a successful calculation. */ }
+        }
+
         function updateDraftStatus() {
             updateGenerationStatus();
             if (calculatedSignature !== null) {
@@ -566,9 +573,15 @@
                 if (typeof payload.html !== 'string') throw new Error('Missing response HTML.');
                 // Only this app's server-rendered, escaped template is inserted here.
                 const destination = calculating ? content : reviewContent;
-                if (calculating) plotAction('purge', destination);
+                if (calculating) {
+                    inspectionAction('dispose', destination);
+                    plotAction('purge', destination);
+                }
                 destination.innerHTML = payload.html;
-                if (calculating) plotAction('initialize', destination);
+                if (calculating) {
+                    inspectionAction('initialize', destination);
+                    plotAction('initialize', destination);
+                }
                 if (calculating) calculatedSignature = submittedSignature;
                 else reviewedSignature = submittedSignature;
                 updateDraftStatus();

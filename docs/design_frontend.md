@@ -577,12 +577,46 @@ it is neither discarded nor replaced by the last sample or assessment time.
 An invalid baseline leaves the milestone unavailable. One usable reference
 trajectory supplies a median when resolvable, but no sampled uncertainty range.
 
-V2 also prepares compact numerical inspection data with each calculated
-planning result. Selection controls and stacked timelines are for V3; overlaid
-recovery plots and the illustrative-study display are for V4. These later
-display choices will use the current result without further requests or
-simulations. The comparison's existing settings and out-of-date behavior apply
-to the inspection data as well.
+Each calculated planning result also contains compact numerical inspection
+data. Select up to three schedules in the performance table to inspect their
+timelines. The first suggested schedule is selected initially; this is a display
+default rather than a ranking. All selected schedules share one time axis,
+with a separate vertically stacked row for each schedule. Remaining selected
+schedules keep their colors when another schedule is added or removed. Once
+three are selected, deselect one before choosing another. Clearing all
+selections hides the timelines until a schedule is chosen again.
+
+The timeline uses open circles for completed observations, squares for fixed
+proposed times, diamonds for explicitly selected latest-before anchors, and
+filled circles for other proposed times. An anchor takes diamond precedence
+when a point is also fixed; hover text and **Exact times and explanations**
+retain all roles and overlapping timing contributions. The baseline remains a
+vertical guide even when it is not sampled. Latest completion is a separate
+guide where applicable, including gap filling with earlier new opportunities.
+Shading shows resolved windows, with deadline lines for latest-before rules.
+Exact requested/resolved bounds and statuses remain in the timing-requirement
+table; unresolved bounds are not drawn at the study end. A time inside a
+window is not thereby individually mandated.
+
+Selection changes use the current result without further requests or
+simulations, and never mark the analysis inputs changed. The comparison's
+existing settings and out-of-date behavior apply to the inspection data as
+well. Switching workspace views preserves the current selection; a successful
+new calculation starts a fresh selection. A failed calculation or setup review
+preserves it. The timeline supports hover, zoom/reset, and SVG download through
+the shared Plotly renderer. If interactive rendering is unavailable, selection
+still updates the exact-time tables, which open automatically. The other
+performance results remain available. On narrow screens, the timeline scrolls
+horizontally; its explanatory key wraps below the chart rather than clipping
+inside it.
+
+Overlaid recovery plots and the illustrative-study display remain for V4.
+The shared selection and color state is available through
+`DesignScheduleInspection.getSelection(resultElement)` and the display-only
+`design-schedule-selection-changed` event. The shared renderer's
+`DesignPlots.update(wrapper, figure)` serializes plot updates and coalesces
+rapid changes to the latest selection. Result replacement disposes the
+inspection controls and plots before initializing the new comparison.
 
 The result contains an inert `application/json` element marked
 `data-planning-inspection`, serialized with Jinja's HTML-safe `tojson` filter.
@@ -638,7 +672,7 @@ Install the test dependencies in the same environment used to run the app:
 python -m pip install -r requirements-test.txt
 python -m pytest tests/test_design_*.py
 python -m pytest tests/test_study_design*.py
-node --test tests/test_design_frontend.cjs tests/test_design_data_frontend.cjs tests/test_design_plots.cjs
+node --test tests/test_design_frontend.cjs tests/test_design_data_frontend.cjs tests/test_design_plots.cjs tests/test_design_timeline_figure.cjs tests/test_design_schedule_frontend.cjs
 ```
 
 The frontend checks use Node's built-in test runner and a small DOM fixture;
@@ -677,7 +711,13 @@ controllers working together.
 3. Calculate a small measured-reference study comparison. Check the endpoint
    median and central 95% range, including a milestone that some or all
    reference trajectories do not reach by the horizon. Such bounds should
-   state **Beyond the assessment horizon**. Exercise an IVIVC
+   state **Beyond the assessment horizon**. Select three schedules and verify
+   stacked timeline rows, a shared time axis, point-role hover text, and exact
+   times. Deselect and reselect schedules; the remaining colors should stay
+   consistent. Clear all selections, then choose one again. Check that these
+   actions leave the comparison/input status unchanged and make no new
+   calculation request. With CDN access blocked, selection and exact-time
+   tables should still work. Exercise an IVIVC
    reference and an empirical time-scale reference with their own input files.
    Add completed observations and one timing requirement, then recalculate.
 4. In calibration comparison, generate a candidate, copy it to editable times,

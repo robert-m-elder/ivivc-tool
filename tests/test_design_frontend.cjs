@@ -10,7 +10,7 @@ const source = fs.readFileSync(path.join(__dirname, "../static/js/design.js"), "
 
 // Minimal DOM for the behavior used by this frontend. No browser or extra
 // JavaScript dependency is needed to exercise its request/state handling.
-function fixture({planning = false, calibration = false, plots} = {}) {
+function fixture({planning = false, calibration = false, plots, inspection} = {}) {
     const document = {readyState: "complete", activeElement: null};
     const dataAttribute = key => "data-" + key.replace(/[A-Z]/g, letter => "-" + letter.toLowerCase());
 
@@ -300,7 +300,7 @@ function fixture({planning = false, calibration = false, plots} = {}) {
 
     vm.runInNewContext(source, {
         document,
-        window: {DesignPlots: plots},
+        window: {DesignPlots: plots, DesignScheduleInspection: inspection},
         FormData: SubmittedFormData,
         CustomEvent: class {
             constructor(type, options = {}) { this.type = type; Object.assign(this, options); }
@@ -587,6 +587,41 @@ test("failed calculations retain the previous rendered plot without disposing it
     await pending;
     assert.deepEqual(calls, []);
     assert.equal(page.content.innerHTML, '<section>Keep this figure</section>');
+});
+
+test("schedule inspection is disposed before replacement and initialized before plots", async () => {
+    const calls = [];
+    const inspection = Object.fromEntries(['dispose', 'initialize'].map(action =>
+        [action, node => calls.push(['inspection-' + action, node.innerHTML])]));
+    const plots = Object.fromEntries(['purge', 'initialize', 'resize'].map(action =>
+        [action, node => calls.push(['plots-' + action, node.innerHTML])]));
+    const page = fixture({planning: true, plots, inspection});
+    const previous = page.content.innerHTML;
+    await page.successfulCalculation('<section>Schedules and timelines</section>');
+    assert.deepEqual(calls.map(call => call[0]), [
+        'inspection-dispose', 'plots-purge', 'inspection-initialize', 'plots-initialize', 'plots-resize',
+    ]);
+    assert.equal(calls[0][1], previous);
+    assert.equal(calls[2][1], '<section>Schedules and timelines</section>');
+    calls.length = 0;
+    await page.successfulReview('<section>Review only</section>');
+    assert.deepEqual(calls.map(call => call[0]), ['plots-resize']);
+    const pending = page.emit(page.form, 'submit', {submitter: page.calculate});
+    page.requests.at(-1).resolve({ok: false, json: async () => ({ok: false,
+        errors: [{field_id: 'random_seed', message: 'Check the seed.'}]})});
+    await pending;
+    assert.deepEqual(calls.map(call => call[0]), ['plots-resize']);
+});
+
+test("an inspection initialization failure preserves the successful calculated result", async () => {
+    const page = fixture({planning: true, inspection: {
+        dispose() { throw new Error('Old inspection cleanup failed.'); },
+        initialize() { throw new Error('Inspection display unavailable.'); },
+    }});
+    await page.successfulCalculation('<section>Retained numerical results</section>');
+    assert.equal(page.content.innerHTML, '<section>Retained numerical results</section>');
+    assert.equal(page.summary.hidden, true);
+    assert.match(page.requestStatus.textContent, /comparison calculated/);
 });
 
 test("review and workspace navigation preserve plots and resize without a new calculation", async () => {
