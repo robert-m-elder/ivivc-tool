@@ -1,0 +1,43 @@
+/* Shared visual settings for the IVIVC and study-design interfaces.
+ * Load before the interface's own stylesheet. Layout and component selectors
+ * belong in that stylesheet; keep this file limited to inherited variables.
+ * Defaults preserve the existing IVIVC appearance. See docs/app_theme.md.
+ */
+:root {
+    --app-font-family: Arial, sans-serif;
+
+    /* Brand and action colors. Foregrounds are separate from surfaces. */
+    --app-primary: #007cba;
+    --app-primary-hover: #222c67;
+    --app-primary-active: #1a2150;
+    --app-on-primary: #ffffff;
+
+    /* Page, panel, and heading colors retain the existing variations. */
+    --app-page-background: #f0f0f0;
+    --app-surface: #ffffff;
+    --app-surface-muted: #f2f2f2;
+    --app-surface-subtle: #f9f9f9;
+    --app-heading: #2c3e50;
+    --app-heading-accent: #222c67;
+    --app-subheading: #34495e;
+    --app-text-secondary: #444;
+    --app-text-muted: #666;
+    --app-border: #8a8a8a;
+    --app-border-strong: #767676;
+
+    /* Keep the existing distinct navigation and focus treatments. */
+    --app-navigation-outline: #005ea8;
+    --app-skip-link: #005a8b;
+    --app-focus: #1a56db;
+    --app-button-focus: #4a90e2;
+
+    /* Status colors stay independent of the brand palette. */
+    --app-error: #b42318;
+    --app-error-surface: #fff4f2;
+    --app-error-text: #5f1712;
+    --app-warning: #f0ad4e;
+    --app-warning-surface: #fff8e1;
+
+    --app-radius-small: 4px;
+    --app-radius-panel: 5px;
+}
