@@ -10,7 +10,7 @@ const source = fs.readFileSync(path.join(__dirname, "../static/js/design.js"), "
 
 // Minimal DOM for the behavior used by this frontend. No browser or extra
 // JavaScript dependency is needed to exercise its request/state handling.
-function fixture({planning = false, calibration = false, plots, inspection, recovery,
+function fixture({planning = false, calibration = false, plots, inspection, recovery, performance,
                   measurements = null, observeResize = false, mountPrefix = ""} = {}) {
     const document = {readyState: "complete", activeElement: null, scrolls: []};
     const dataAttribute = key => "data-" + key.replace(/[A-Z]/g, letter => "-" + letter.toLowerCase());
@@ -346,6 +346,7 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
     vm.runInNewContext(source, {
         document,
         window: {DesignPlots: plots, DesignScheduleInspection: inspection, DesignRecoveryInspection: recovery,
+                 DesignPerformanceInspection: performance,
                  ResizeObserver: observeResize ? ResizeObserverFixture : undefined},
         FormData: SubmittedFormData,
         CustomEvent: class {
@@ -699,16 +700,17 @@ test("an inspection initialization failure preserves the successful calculated r
     assert.match(page.requestStatus.textContent, /comparison calculated/);
 });
 
-test("recovery subscribes before the shared schedule selection and both survive failed requests", async () => {
+test("comparison displays subscribe before shared schedule selection and survive failed requests", async () => {
     const calls = [];
     const controller = prefix => Object.fromEntries(['dispose', 'initialize'].map(action =>
         [action, () => calls.push(prefix + '-' + action)]));
     const plots = Object.fromEntries(['purge', 'initialize', 'resize'].map(action =>
         [action, () => calls.push('plots-' + action)]));
-    const page = fixture({planning: true, plots, inspection: controller('schedules'), recovery: controller('recovery')});
+    const page = fixture({planning: true, plots, inspection: controller('schedules'),
+        recovery: controller('recovery'), performance: controller('performance')});
     await page.successfulCalculation('<section>Shared timeline and recovery display</section>');
-    assert.deepEqual(calls, ['recovery-dispose', 'schedules-dispose', 'plots-purge',
-        'recovery-initialize', 'schedules-initialize', 'plots-initialize', 'plots-resize']);
+    assert.deepEqual(calls, ['performance-dispose', 'recovery-dispose', 'schedules-dispose', 'plots-purge',
+        'performance-initialize', 'recovery-initialize', 'schedules-initialize', 'plots-initialize', 'plots-resize']);
     calls.length = 0;
     const pending = page.emit(page.form, 'submit', {submitter: page.calculate});
     page.requests.at(-1).resolve({ok: false, json: async () => ({ok: false,

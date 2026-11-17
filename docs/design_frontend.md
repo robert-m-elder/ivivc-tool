@@ -709,9 +709,26 @@ true endpoint. Median and 90th-percentile absolute errors use only pairs with
 two finite times and show their denominator. Expanded availability details
 report true-only crossings, recovered-only crossings, neither reaching,
 invalid curves, failed fits, and median signed error (recovered minus true).
-Two noncrossings never count as zero timing error. The existing interactive
-study-size plot and performance table continue to show IRMSE; endpoint plot
-and measure selectors are a separate follow-up.
+Two noncrossings never count as zero timing error.
+
+In **Curve recovery versus study size**, **Recovery measure** switches the plot
+and schedule-performance table together between whole-curve IRMSE and any
+selected endpoint. Endpoints offer **Absolute timing error** (median and 90th
+percentile, with finite-pair counts) or **Recovered endpoint time** (median and
+central 95% range, with valid/reached counts). The successful-fit and failure
+columns remain visible. Endpoint-time ranges describe variation across
+simulated studies, separately from the fitted curve interval widths shown
+with IRMSE. Unavailable/beyond-horizon percentiles stay explicit in the table;
+they are never mapped to the assessment horizon. An error bar is drawn only
+when both range bounds are finite and at least two valid outcomes exist.
+
+All schedules remain on the study-size plot. Neutral traces compare schedule
+types; colored markers highlight selected schedules using the same colors as
+their timelines and recovery curves. Manual schedules remain separate points.
+Switching measures preserves the selection and colors, performs no request,
+and does not change comparison freshness. Returning to IRMSE restores its
+original numerical measures. If Plotly is unavailable, the measure controls
+still update the numerical table; a stale plot is not left under a new label.
 
 Each calculated planning result also contains compact numerical inspection
 data. Select up to three schedules in the performance table to inspect their
@@ -834,6 +851,9 @@ Its versioned payload has these sections:
   and reported counts remain available separately. Pointwise fitted confidence
   bounds are explicitly unavailable because the simulation result does not
   retain them; the existing mean fitted interval width remains separate.
+- `performance` supplies finite plot/table coordinates for IRMSE and selected
+  endpoint measures, their labels, availability counts, and percentile statuses.
+  It reuses the completed simulation summaries without recalculating endpoints.
 - `endpoint_recovery` retains the selected endpoint definitions, equal-weight
   simulated endpoint quantiles, availability counts, and paired timing errors
   for each schedule. Nonfinite times are represented by null plus an explicit
@@ -935,7 +955,13 @@ controllers working together.
    tables should still work. Switch the recovery plot between response and
    error, use the legend to hide/show a schedule's curve and range together,
    and inspect numerical values. Check hover/zoom/download on the study-size
-   plot as well. Expand
+   plot as well. Switch its recovery measure between IRMSE, Tx, and an absolute
+   threshold, then switch endpoint error/time views. Confirm headers, values,
+   units, availability counts, and highlighted schedule colors follow the
+   controls without recalculation or a freshness change. Try beyond-horizon
+   bounds, failed fits, and a comparison with no selected endpoints. With the
+   Plotly CDN blocked, the numerical table should still switch measures and
+   should not retain an old plot under the new label. Expand
    the shared illustrative study, confirming that a failed example remains
    failed and that original completed observations appear once. With CDN
    access blocked, the recovery tables should open automatically and continue

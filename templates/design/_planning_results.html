@@ -108,24 +108,45 @@
     </section>
     {% endif %}
 
-    <section class="design-section" aria-labelledby="planning-performance-heading">
+    <section class="design-section" aria-labelledby="planning-performance-heading" data-performance-inspection>
         <h3 id="planning-performance-heading">Curve recovery versus study size</h3>
         {% if has_comparison %}
-        {{ interactive_chart(performance_figure, performance_plot, 'Simulated recovery error versus number of sampling times', performance_x_label, 'IRMSE', 'planning-performance-plot') }}
-        <p class="design-help">IRMSE is the root mean square difference between a recovered curve and its simulated true curve across the planning range, in analyzed response units. Lower error means closer curve recovery under these assumptions. Solid traces show mean error; dashed traces show the 90th percentile. Manual schedules are separate points.</p>
+        <div class="design-field-grid">
+            <div class="design-field">
+                <label for="planning-performance-measure">Recovery measure</label>
+                <select id="planning-performance-measure" data-performance-measure aria-describedby="planning-performance-help" disabled>
+                    {% for measure in inspection.performance.measures %}<option value="{{ measure.id }}"{% if measure.id == 'irmse' %} selected{% endif %}>{{ measure.label }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="design-field" data-performance-view-field hidden>
+                <label for="planning-performance-view">Endpoint summary</label>
+                <select id="planning-performance-view" data-performance-view aria-describedby="planning-performance-help" disabled>
+                    <option value="error" selected>Absolute timing error</option>
+                    <option value="time">Recovered endpoint time</option>
+                </select>
+            </div>
+        </div>
+        <div class="design-interactive-plot" data-design-plot data-performance-plot>
+            <div id="planning-performance-plot-interactive" data-design-plot-target hidden role="img" aria-label="Simulated recovery error versus number of sampling times. IRMSE versus {{ performance_x_label }}."></div>
+            <script type="application/json" data-design-plot-spec>{{ performance_figure|tojson }}</script>
+            <div data-design-plot-fallback>{{ chart(performance_plot, 'Simulated recovery error versus number of sampling times', performance_x_label, 'IRMSE', 'planning-performance-plot') }}</div>
+            <p class="design-help" data-design-plot-status role="status" aria-live="polite"></p>
+        </div>
+        <p id="planning-performance-help" class="design-help" data-performance-help aria-live="polite">{{ inspection.performance.measures[0].views.error.help }}</p>
+        <p class="design-help">The measure controls update this plot and table together using the completed comparison. All schedules remain visible; selected schedules have colored markers matching their timelines and recovery curves. Manual schedules are separate points. Endpoint details and crossing outcomes remain below.</p>
         <p class="design-help">Use Inspect to select up to three schedules, then <a href="#planning-schedule-inspection">view their timelines and exact sampling details</a>.</p>
         <div class="design-preview-table">
-            <table class="design-performance-table">
-                <caption>Schedule performance; recovery errors use successful simulated fits</caption>
-                <thead><tr><th scope="col">Inspect</th><th scope="col">Schedule</th><th scope="col">Total times</th>{% if adaptive %}<th scope="col">New times</th>{% endif %}<th scope="col">{{ 'New independent units' if adaptive else 'Independent units' }}</th><th scope="col">Successful fits</th><th scope="col">Failure rate</th><th scope="col">Mean IRMSE</th><th scope="col">90th percentile IRMSE</th><th scope="col">Mean fitted curve interval width</th></tr></thead>
+            <table class="design-performance-table" data-performance-table>
+                <caption data-performance-caption>Schedule performance; recovery errors use successful simulated fits</caption>
+                <thead><tr><th scope="col">Inspect</th><th scope="col">Schedule</th><th scope="col">Total times</th>{% if adaptive %}<th scope="col">New times</th>{% endif %}<th scope="col">{{ 'New independent units' if adaptive else 'Independent units' }}</th><th scope="col">Successful fits</th><th scope="col">Failure rate</th><th scope="col" data-performance-primary-heading>Mean IRMSE</th><th scope="col" data-performance-secondary-heading>90th percentile IRMSE</th><th scope="col" data-performance-availability-heading>Mean fitted curve interval width</th></tr></thead>
                 <tbody>{% for row in rows %}<tr data-schedule-row="{{ row.id }}">
                     <td><label class="design-schedule-checkbox"><input type="checkbox" data-schedule-select="{{ row.id }}" aria-label="Inspect {{ row.name }}" aria-describedby="planning-selection-help planning-selection-status" aria-controls="planning-schedule-inspection" disabled><span class="design-schedule-swatch" data-schedule-swatch="{{ row.id }}" aria-hidden="true" hidden></span></label></td>
                     <th scope="row">{{ row.name }}{% if row.timing_flag %}<span class="design-timing-flag" title="{{ row.timing_flag.title }}">{{ row.timing_flag.label }}</span>{% endif %}</th><td>{{ row.number_of_times }}</td>{% if adaptive %}<td>{{ row.number_of_new_times }}</td>{% endif %}<td>{{ row.experimental_units }}</td>
-                    <td>{{ row.n_successful }} / {{ row.n_simulations }}</td><td>{{ row.failure_rate }}</td><td>{{ row.mean_irmse }}</td><td>{{ row.p90_irmse }}</td><td>{{ row.mean_curve_interval_width }} ({{ row.interval_count }} fits)</td>
+                    <td>{{ row.n_successful }} / {{ row.n_simulations }}</td><td>{{ row.failure_rate }}</td><td data-performance-primary>{{ row.mean_irmse }}</td><td data-performance-secondary>{{ row.p90_irmse }}</td><td data-performance-availability>{{ row.mean_curve_interval_width }} ({{ row.interval_count }} fits)</td>
                 </tr>{% endfor %}</tbody>
             </table>
         </div>
-        <p class="design-help">{% if adaptive %}New units equal new distinct times × planned independent replicates per time. Completed measurements and their reported counts are retained separately; the planned count applies only to new observations.{% else %}Units equal distinct times × independent replicates per time. Fixed times are proposed measurements, not completed observations.{% endif %} The last column averages approximate 95% fitted mean-curve interval widths across time and usable successful fits; it excludes individual measurement scatter. Unavailable errors or widths appear as a dash. Compare error with failure rates rather than interpreting error alone.</p>
+        <p class="design-help">{% if adaptive %}New units equal new distinct times × planned independent replicates per time. Completed measurements and their reported counts are retained separately; the planned count applies only to new observations.{% else %}Units equal distinct times × independent replicates per time. Fixed times are proposed measurements, not completed observations.{% endif %} For IRMSE, the last column averages approximate 95% fitted mean-curve interval widths across time and usable successful fits; it excludes individual measurement scatter. For endpoint views, it reports endpoint availability instead. Unavailable values appear as a dash. Compare errors with availability and failure rates.</p>
         {% if timing.requirements %}<p class="design-help">Timing flags identify unmet rules or incomplete timing assessment. Details for selected schedules are in Exact times and explanations; shared requirements and search diagnostics are in Timing details.</p>{% endif %}
         <p class="design-help">All schedules share simulated reference trajectories and measurement-error draws at common times. Small differences may reflect Monte Carlo variation. No automatic overall ranking is assigned.</p>
         {% else %}<p>No schedule was available for simulation under these settings. See the timing summary above and expand Timing details for requirement-resolution and schedule-availability outcomes. No recovery error or zero-width interval has been substituted for an unavailable calculation.</p>{% endif %}

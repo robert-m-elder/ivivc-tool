@@ -12,6 +12,7 @@ from .design_endpoints import (
     build_endpoint_inspection, endpoint_definitions, reference_endpoint_summary,
 )
 from .design_plotly import make_figure
+from .design_performance_inspection import build_performance_inspection
 from .design_recovery_inspection import build_recovery_inspection
 from .design_schedule_inspection import build_schedule_inspection
 
@@ -506,6 +507,9 @@ def present_planning_result(result, *, source_filename=None, source_summary=None
         definitions=endpoint_definitions(settings),
     )
     endpoint_recovery = build_endpoint_inspection(result)
+    performance_inspection = build_performance_inspection(
+        result, rows, endpoint_recovery, x_label=performance_x_label,
+    )
     warnings.extend(endpoint_warnings)
     source_range = ((float(np.min(source.time)), float(np.max(source.time)))
                     if source_kind == 'measured' and source is not None else None)
@@ -621,6 +625,7 @@ def present_planning_result(result, *, source_filename=None, source_summary=None
             'recovery': build_recovery_inspection(result),
             'endpoints': endpoint_data,
             'endpoint_recovery': endpoint_recovery,
+            'performance': performance_inspection,
         },
         'settings_rows': settings_rows,
     }

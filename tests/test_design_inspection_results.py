@@ -141,6 +141,10 @@ class InspectionPayload(unittest.TestCase):
             context = present_planning_result(result)
         labels = ['T50', 'T25', 'Response ≤ 0.6']
         self.assertEqual([row['name'] for row in context['endpoints']], labels)
+        performance = context['inspection']['performance']
+        self.assertEqual([measure['label'] for measure in performance['measures'][1:]], labels)
+        self.assertEqual([schedule['id'] for schedule in performance['schedules']],
+                         [row['id'] for row in context['rows']])
         raw = context['inspection']['endpoint_recovery']['schedules']
         self.assertEqual([row['id'] for row in raw], [row['id'] for row in context['rows']])
         for schedule in raw:
@@ -154,8 +158,14 @@ class InspectionPayload(unittest.TestCase):
         self.assertIn('Finite true–recovered pairs', html)
         self.assertIn('invalid despite a successful fit', html)
         self.assertNotIn('T90', html)
+        self.assertIn('data-performance-measure', html)
+        self.assertIn('<option value="endpoint-2">Response ≤ 0.6</option>', html)
+        self.assertNotIn('name="planning-performance-measure"', html)
+        self.assertNotIn('name="planning-performance-view"', html)
         result.settings = {**result.settings, 'recovery_endpoints': []}
         context = present_planning_result(result)
+        self.assertEqual([measure['id'] for measure in context['inspection']['performance']['measures']],
+                         ['irmse'])
         self.assertEqual(context['inspection']['endpoint_recovery']['schedules'], [])
         self.assertNotIn('id="planning-endpoint-heading"', template.render(**context))
 
