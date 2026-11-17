@@ -7,6 +7,7 @@ import numpy as np
 
 from .design_planning_results import _number, _percent, _plot, _reference_band
 from .design_calibration_recovery import build_calibration_recovery
+from .design_calibration_outputs import build_calibration_outputs
 
 
 SIDES = ('in_vitro', 'in_vivo')
@@ -224,6 +225,7 @@ def present_calibration_result(result, *, source_summaries=None, profile_summari
     method, approach = settings['method'], settings['approach_id']
     rows, sections = [], {'relationship': [], 'prediction': []}
     inspection = build_calibration_recovery(result)
+    inspection['outputs'] = build_calibration_outputs(result)
     identifiers = {candidate['name']: candidate['id'] for candidate in inspection['candidates']}
     for label, summary in result.comparison.summaries.items():
         design, simulated = result.designs[label], result.comparison.results[label]
@@ -267,17 +269,11 @@ def present_calibration_result(result, *, source_summaries=None, profile_summari
     for output, candidates in sections.items():
         if not candidates:
             continue
-        plot_series = [{'label': row['name'], 'color': color, 'join': True, 'dash': '',
-                        'values': list(zip(result.comparison.summaries[row['name']][output]['coordinate'],
-                                           result.comparison.summaries[row['name']][output]['pointwise_mean_interval_width']))}
-                       for row, color in zip(candidates, ('#24535c', '#a75328', '#6f4a92', '#2c7b50', '#9c4966', '#556280'))]
         output_sections.append({'key': output,
                                 'title': 'IVIVC relationship' if output == 'relationship' else 'Specified target predictions',
                                 'quantity_label': candidates[0]['quantity_label'],
                                 'coordinate_label': candidates[0]['coordinate_label'],
-                                'candidates': candidates,
-                                'width_plot': (None if candidates[0]['quantity'] == 'time_constant_ratio'
-                                               else _plot(plot_series))})
+                                'candidates': candidates})
     generation = []
     for entry in result.generation_outcomes:
         generation.append({**entry, 'side_label': SIDE_LABELS.get(entry.get('side'), entry.get('side', '')),

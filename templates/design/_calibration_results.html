@@ -15,9 +15,9 @@
         <h3 id="calibration-design-results-heading">Candidate designs and calculation success</h3>
         <div class="design-preview-table"><table>
             <caption>Proposed calibration measurements and fitting outcomes</caption>
-            <thead><tr>{% if calibration_inspection.supported %}<th scope="col">Inspect</th>{% endif %}<th scope="col">Candidate</th><th scope="col">Additional in vitro times</th><th scope="col">Replicates at each</th><th scope="col">Additional in vivo times</th><th scope="col">Replicates at each</th><th scope="col">Total new independent units</th><th scope="col">Successful IVIVC fits</th><th scope="col">Fit failure rate</th></tr></thead>
+            <thead><tr><th scope="col">Inspect</th><th scope="col">Candidate</th><th scope="col">Additional in vitro times</th><th scope="col">Replicates at each</th><th scope="col">Additional in vivo times</th><th scope="col">Replicates at each</th><th scope="col">Total new independent units</th><th scope="col">Successful IVIVC fits</th><th scope="col">Fit failure rate</th></tr></thead>
             <tbody>{% for row in rows %}<tr>
-                {% if calibration_inspection.supported %}<td><input type="checkbox" data-calibration-select="{{ row.id }}" aria-label="Inspect {{ row.name }}" aria-describedby="calibration-selection-help calibration-selection-status" aria-controls="calibration-recovery-panel" disabled></td>{% endif %}
+                <td><input type="checkbox" data-calibration-select="{{ row.id }}" aria-label="Inspect {{ row.name }}" aria-describedby="calibration-selection-help calibration-selection-status" aria-controls="calibration-recovery-panel" disabled></td>
                 <th scope="row"><span class="design-schedule-swatch" data-calibration-swatch="{{ row.id }}" aria-hidden="true" hidden></span>{{ row.name }}</th><td>{{ row.sides.in_vitro.times }}</td><td>{{ row.sides.in_vitro.replicates }}</td>
                 <td>{{ row.sides.in_vivo.times }}</td><td>{{ row.sides.in_vivo.replicates }}</td><td>{{ row.new_units }}</td>
                 <td>{{ row.n_fit_successful }} / {{ row.n_simulations }}</td><td>{{ row.fit_failure_rate }}</td>
@@ -46,11 +46,13 @@
     {% include 'design/_calibration_recovery.html' %}
 
     {% for output in output_sections %}
-    <section class="design-section" aria-labelledby="calibration-{{ output.key }}-heading">
+    <section class="design-section" aria-labelledby="calibration-{{ output.key }}-heading" data-calibration-output="{{ output.key }}">
         <h3 id="calibration-{{ output.key }}-heading">{{ output.title }}</h3>
         <p>Output: <strong>{{ output.quantity_label }}</strong>. Evaluation coordinate: {{ output.coordinate_label }}.</p>
         {% if output.key == 'prediction' %}<p class="design-help">The same independent target in vitro dataset is used for every calibration candidate. Response-ratio prediction uses target times and responses to predict in vivo responses. Time mapping and time-constant scaling use target times to predict in vivo times; inverse mapping uses target responses to predict in vivo times.</p>{% endif %}
-        {% if output.width_plot %}{{ chart(output.width_plot, 'Mean fitted interval width among available calculations', output.coordinate_label, 'Interval width', 'calibration-' ~ output.key ~ '-width') }}{% endif %}
+        {% include 'design/_calibration_output_plot.html' %}
+        <details class="design-recovery-values">
+        <summary>Precision, error, and availability for all designs</summary>
         <div class="design-preview-table"><table>
             <caption>{{ output.title }}: precision, availability, and error under the generating assumptions</caption>
             <thead><tr><th scope="col">Candidate</th><th scope="col">All points available</th><th scope="col">All fitted intervals available</th><th scope="col">Mean interval width</th><th scope="col">RMSE</th><th scope="col">Pointwise coverage over all known truth</th><th scope="col">Coverage among available intervals</th></tr></thead>
@@ -75,14 +77,15 @@
             </table></div>
             {% if candidate.empirical %}<p class="design-help">Empirical ranges use the backend's configured pointwise quantiles across available simulations. Errors subtract each simulation's own generating truth; they do not subtract one common central curve. Fixed historical data are not regenerated.</p>{% endif %}
             {% if candidate.example %}<div class="design-preview-table"><table>
-                <caption>Example simulated study {{ candidate.example.experiment }}: first available {{ output.key }} evaluation</caption>
+                <caption>Diagnostic study {{ candidate.example.experiment }}: first available {{ output.key }} evaluation</caption>
                 <thead><tr><th scope="col">{{ candidate.coordinate_label }}</th><th scope="col">Estimate</th><th scope="col">Lower fitted bound</th><th scope="col">Upper fitted bound</th><th scope="col">Assumed generating truth</th><th scope="col">Estimate / interval available</th><th scope="col">Point / interval status</th></tr></thead>
                 <tbody>{% for point in candidate.example.points %}<tr><th scope="row">{{ point.coordinate }}</th><td>{{ point.estimate }}</td><td>{{ point.lower }}</td><td>{{ point.upper }}</td><td>{{ point.truth }}</td><td>{{ point.point_available }} / {{ point.interval_available }}</td><td>{{ point.status }} / {{ point.interval_status }}{% if point.conditional %}; conditional interval ({{ point.valid_samples }} valid draws){% endif %}</td></tr>{% endfor %}</tbody>
-            </table></div><p class="design-help">This is one available simulated evaluation, not an average or a representative-study selection. Use the availability and performance summaries above to compare candidates.</p>{% endif %}
+            </table></div><p class="design-help">This is one available simulated evaluation, not an average or a representative-study selection. It may differ from the shared study-1 illustration above. Use the availability and performance summaries above to compare candidates.</p>{% endif %}
             {% if candidate.diagnostics.statuses %}<p class="design-help">Point calculation statuses: {% for status in candidate.diagnostics.statuses %}{{ status.label }}: {{ status.count }}{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
             {% if candidate.diagnostics.conditional_count %}<p class="design-help">{{ candidate.diagnostics.conditional_count }} point calculations used conditional intervals from successful Monte Carlo draws. Reported valid-draw counts range from {{ candidate.diagnostics.valid_samples }}{% if candidate.diagnostics.min_valid_fraction %}; minimum valid fraction: {{ candidate.diagnostics.min_valid_fraction }}{% endif %}. Missing intervals remain unavailable under the backend's configured policy.</p>{% endif %}
         </details>
         {% endfor %}
+        </details>
     </section>
     {% endfor %}
 

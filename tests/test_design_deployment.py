@@ -60,6 +60,7 @@ class DesignDeployment(unittest.TestCase):
             '/static/js/design-recovery-figure.js', '/static/js/design-recovery-inspection.js')}
         expected.add(PREFIX + '/static/js/design-performance-inspection.js')
         expected.add(PREFIX + '/static/js/design-calibration-recovery.js')
+        expected.add(PREFIX + '/static/js/design-calibration-outputs.js')
         expected.add('https://cdn.plot.ly/plotly-3.0.1.min.js')
         self.assertEqual(set(page.urls), expected)
         self.assertEqual(page.urls.count('https://cdn.plot.ly/plotly-3.0.1.min.js'), 1)

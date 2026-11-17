@@ -10,7 +10,7 @@ const source = fs.readFileSync(path.join(__dirname, "../static/js/design.js"), "
 
 // Minimal DOM for the behavior used by this frontend. No browser or extra
 // JavaScript dependency is needed to exercise its request/state handling.
-function fixture({planning = false, calibration = false, plots, inspection, recovery, performance, calibrationRecovery,
+function fixture({planning = false, calibration = false, plots, inspection, recovery, performance, calibrationRecovery, calibrationOutputs,
                   measurements = null, observeResize = false, mountPrefix = ""} = {}) {
     const document = {readyState: "complete", activeElement: null, scrolls: []};
     const dataAttribute = key => "data-" + key.replace(/[A-Z]/g, letter => "-" + letter.toLowerCase());
@@ -348,6 +348,7 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
         window: {DesignPlots: plots, DesignScheduleInspection: inspection, DesignRecoveryInspection: recovery,
                  DesignPerformanceInspection: performance,
                  DesignCalibrationRecovery: calibrationRecovery,
+                 DesignCalibrationOutputs: calibrationOutputs,
                  ResizeObserver: observeResize ? ResizeObserverFixture : undefined},
         FormData: SubmittedFormData,
         CustomEvent: class {
@@ -709,10 +710,10 @@ test("comparison displays subscribe before shared schedule selection and survive
         [action, () => calls.push('plots-' + action)]));
     const page = fixture({planning: true, plots, inspection: controller('schedules'),
         recovery: controller('recovery'), performance: controller('performance'),
-        calibrationRecovery: controller('calibration')});
+        calibrationRecovery: controller('calibration'), calibrationOutputs: controller('outputs')});
     await page.successfulCalculation('<section>Shared timeline and recovery display</section>');
-    assert.deepEqual(calls, ['performance-dispose', 'recovery-dispose', 'schedules-dispose', 'calibration-dispose', 'plots-purge',
-        'performance-initialize', 'recovery-initialize', 'schedules-initialize', 'calibration-initialize', 'plots-initialize', 'plots-resize']);
+    assert.deepEqual(calls, ['performance-dispose', 'recovery-dispose', 'schedules-dispose', 'outputs-dispose', 'calibration-dispose', 'plots-purge',
+        'performance-initialize', 'recovery-initialize', 'schedules-initialize', 'outputs-initialize', 'calibration-initialize', 'plots-initialize', 'plots-resize']);
     calls.length = 0;
     const pending = page.emit(page.form, 'submit', {submitter: page.calculate});
     page.requests.at(-1).resolve({ok: false, json: async () => ({ok: false,

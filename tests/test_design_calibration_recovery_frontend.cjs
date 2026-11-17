@@ -179,6 +179,8 @@ test('unsupported Approach 1 stays explicit and controller disposal is idempoten
     const unsupported = fixture({data});
     assert.equal(unsupported.environment.disabled, true);
     assert.equal(unsupported.calls.updates.length, 0);
+    assert.equal(unsupported.controls[0].disabled, false);
+    assert.deepEqual(plain(unsupported.api.getSelection(unsupported.root).selectedIds), ['calibration-design-0']);
     const f = fixture(), count = f.calls.updates.length;
     f.api.initialize(f.holder); assert.equal(f.calls.updates.length, count);
     f.api.dispose(f.holder); f.api.dispose(f.holder);

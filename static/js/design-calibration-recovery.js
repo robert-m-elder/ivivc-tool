@@ -233,7 +233,7 @@
     }
 
     function render(state) {
-        const rows = chosen(state), env = environment(state), picked = selection(state);
+        const rows = chosen(state), picked = selection(state);
         state.controls.forEach(control => {
             const id = control.dataset.calibrationSelect;
             control.checked = state.selected.has(id);
@@ -244,6 +244,13 @@
             swatch.hidden = !state.selected.has(id);
             if (!swatch.hidden) swatch.style.setProperty('--schedule-color', state.colors.get(id));
         });
+        state.selectionStatus.textContent = rows.length + ' of 3 designs selected.' +
+            (rows.length === 3 ? ' Deselect a design to choose another.' : '');
+        if (!state.inspection.supported) {
+            state.root.dispatchEvent(new CustomEvent('design-calibration-selection-changed', {detail: picked, bubbles: true}));
+            return;
+        }
+        const env = environment(state);
         state.root.querySelectorAll('[data-calibration-availability]').forEach(element => {
             const candidate = state.byId.get(element.dataset.calibrationAvailability);
             if (!candidate) return;
@@ -254,8 +261,6 @@
                 ' successful IVIVC fits; ' + (candidate.n_simulations - candidate.n_fit_successful) + ' failed. ' +
                 env.label + ' usable studies at each time: ' + usable + '.';
         });
-        state.selectionStatus.textContent = rows.length + ' of 3 designs selected.' +
-            (rows.length === 3 ? ' Deselect a design to choose another.' : '');
         if (state.empty) state.empty.hidden = rows.length > 0;
         state.status.textContent = !rows.some(candidate => side(state, candidate).n_curves > 0) ?
             'No usable reconstructed curves are available for the selected designs in this environment. Any dashed assumed reference is a generating assumption, not a recovered fit.' :
@@ -274,7 +279,7 @@
         if (states.has(root) || !root.querySelector('[data-calibration-recovery]')) return;
         try {
             const inspection = JSON.parse(root.querySelector('[data-calibration-inspection]')?.textContent || 'null');
-            if (inspection?.schema_version !== 1 || !inspection.supported || !array(inspection.candidates).length) return;
+            if (inspection?.schema_version !== 1 || !array(inspection.candidates).length) return;
             const candidates = inspection.candidates;
             const state = {root, inspection, candidates, byId: new Map(candidates.map(row => [row.id, row])),
                 selected: new Set([candidates[0].id]), colors: new Map([[candidates[0].id, palette[0]]]),
@@ -285,10 +290,13 @@
                 valuesBody: root.querySelector('[data-calibration-values-body]'), caption: root.querySelector('[data-calibration-values-caption]'),
                 example: root.querySelector('[data-calibration-example]'), examplePlot: root.querySelector('[data-calibration-example-plot]'),
                 exampleStatus: root.querySelector('[data-calibration-example-status]'), exampleBody: root.querySelector('[data-calibration-example-values-body]')};
-            if ([state.environment, state.selectionStatus, state.status, state.plot, state.values, state.valuesBody,
-                state.example, state.examplePlot, state.exampleStatus, state.exampleBody].some(element => !element)) return;
-            state.environment.value = inspection.environments[inspection.default_environment] ? inspection.default_environment : 'in_vivo';
-            state.environment.disabled = false;
+            if (!state.selectionStatus || (inspection.supported && [state.environment, state.status, state.plot,
+                state.values, state.valuesBody, state.example, state.examplePlot, state.exampleStatus,
+                state.exampleBody].some(element => !element))) return;
+            if (inspection.supported) {
+                state.environment.value = inspection.environments[inspection.default_environment] ? inspection.default_environment : 'in_vivo';
+                state.environment.disabled = false;
+            }
             state.changed = event => {
                 if (event.target === state.environment) {
                     if (!inspection.environments[state.environment.value]) state.environment.value = inspection.default_environment;
@@ -308,8 +316,10 @@
             state.valuesToggled = () => summaryValues(state);
             states.set(root, state);
             root.addEventListener('change', state.changed);
-            state.example.addEventListener('toggle', state.toggled);
-            state.values.addEventListener('toggle', state.valuesToggled);
+            if (inspection.supported) {
+                state.example.addEventListener('toggle', state.toggled);
+                state.values.addEventListener('toggle', state.valuesToggled);
+            }
             render(state);
         } catch (error) { /* Existing numerical calibration results stay available. */ }
     }
@@ -321,8 +331,8 @@
                 const state = states.get(root); if (!state) return;
                 state.disposed = true; state.version++; state.exampleVersion++;
                 root.removeEventListener('change', state.changed);
-                state.example.removeEventListener('toggle', state.toggled);
-                state.values.removeEventListener('toggle', state.valuesToggled);
+                state.example?.removeEventListener('toggle', state.toggled);
+                state.values?.removeEventListener('toggle', state.valuesToggled);
                 for (const wrapper of [state.plot, state.examplePlot]) {
                     try { window.DesignPlots?.purge(wrapper); } catch (error) { /* Detached output is already disposed. */ }
                 }

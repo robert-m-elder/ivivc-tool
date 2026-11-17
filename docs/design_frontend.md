@@ -671,6 +671,41 @@ switching do not mark calculation inputs changed. Approach 1 retains its
 time-mapping results and an explicit explanation that separate parametric
 calibration response curves are not available for that approach.
 
+**IVIVC relationship** and **Specified target predictions** now overlay the
+selected designs using that same selection and palette, including Approach 1.
+One legend entry toggles a design's estimate and its uncertainty region together.
+The first candidate is initially selected for display, without assigning a rank.
+These displays reuse retained output evaluations; they do not fit or simulate
+again. Their leading curves show pointwise median estimates and empirical
+2.5th–97.5th percentile ranges across available simulated studies. A central
+estimate needs one value; a range needs two. Per-design usable counts retain
+the number of requested experiments as their denominator, and missing values
+remain gaps. Gray assumed-truth guides are shown only where retained truth
+exists, with availability counts, and describe generating assumptions rather
+than external validation.
+
+Relationships keep the selected method's native quantity and coordinate:
+response ratio versus in vitro time, in vivo versus in vitro time, time versus
+response, or a scalar time-constant ratio compared by design. Target predictions
+lead with **In vivo response versus in vivo time**, with the native evaluation
+view also available. For response-ratio prediction, times are fixed and the
+response range is vertical. Time-based methods show a horizontal range of
+predicted times at each supplied target response; this is not a response range
+on a common in vivo time grid. Coordinates retain the target observation order.
+Nonmonotone/repeated response levels use interval markers rather than a filled
+region that could suggest a single-valued response curve. If the supposedly
+fixed coordinate varies across studies, the native view remains available and
+the response summary states why it cannot be constructed.
+
+Each output also has a collapsed **Illustrative simulated study 1** view using
+the same predetermined experiment as the calibration-curve example. Its fitted
+bounds describe uncertainty within that IVIVC, separately from the across-study
+ranges. Failed first evaluations stay unavailable, and bounds are not altered
+to force them to contain the point estimate. Numerical plotted values follow
+selection and view changes and open when plotting is unavailable. The former
+interval-width-only plots are replaced by these direct output views. Width,
+RMSE, coverage, availability, and detailed statuses for all designs remain in
+the collapsed **Precision, error, and availability for all designs** section.
 Results retain explicit proposed times/counts, fixed-data and source provenance,
 normalization constants, generating-model assumptions, and whether schedules
 were specified or generated. The comparison reports fit success, point and
@@ -1033,6 +1068,14 @@ controllers working together.
    mark inputs changed. With the CDN unavailable, numerical tables should still
    work. Approach 1 should show its mapping explanation and retain its existing
    relationship and target results.
+   In both approaches, check the relationship overlays and target prediction
+   views with the same selected designs/colors. A legend entry should hide its
+   central curve and range together. Time-method target ranges should run
+   horizontally; nonmonotone response levels should use interval markers.
+   Check scalar time-constant comparisons, unavailable points, and a failed
+   first study. Expand the precision/error details to inspect all designs and
+   confirm that narrower fitted intervals are considered alongside coverage,
+   error, and availability. None of these display controls should recalculate.
 5. After a successful calculation, change an input, replace a file, and submit
    an invalid request. Earlier output should remain visible with its original
    provenance and an out-of-date label. Stale generated times must not be

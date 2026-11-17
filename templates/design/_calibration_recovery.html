@@ -1,10 +1,10 @@
 <section id="calibration-recovery-panel" class="design-section" aria-labelledby="calibration-recovery-heading" data-calibration-recovery>
     <h3 id="calibration-recovery-heading">Recovered calibration curves</h3>
+    <p id="calibration-selection-help" class="design-help">Select up to three designs in the table above to compare the results below. Selection and plot controls use this completed comparison without fitting or simulating again.</p>
+    <p id="calibration-selection-status" class="design-help" data-calibration-selection-status role="status" aria-live="polite">Preparing design selection.</p>
     {% if not calibration_inspection.supported %}
     <p class="design-help">{{ calibration_inspection.message }}</p>
     {% else %}
-    <p id="calibration-selection-help" class="design-help">Select up to three designs in the table above to compare their reconstructed calibration responses. Selection and plot controls use this completed comparison without fitting or simulating again.</p>
-    <p id="calibration-selection-status" class="design-help" data-calibration-selection-status role="status" aria-live="polite">Preparing design selection.</p>
     <div class="design-field design-recovery-view-field">
         <label for="calibration-recovery-environment">Calibration environment</label>
         <select id="calibration-recovery-environment" data-calibration-environment aria-describedby="calibration-recovery-interpretation" disabled>

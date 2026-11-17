@@ -1,0 +1,42 @@
+{% set visual = calibration_inspection.outputs.get(output.key) %}
+{% if visual %}
+<p class="design-help">These overlays use the designs selected above and the same colors as the calibration-curve comparison. A legend entry hides or shows its central curve and uncertainty range together.</p>
+<div class="design-field">
+    <label for="calibration-{{ output.key }}-view">Plot view</label>
+    <select id="calibration-{{ output.key }}-view" data-calibration-output-view aria-describedby="calibration-{{ output.key }}-help" disabled>
+        {% if 'response' in visual.views %}<option value="response" selected>In vivo response versus in vivo time</option>{% endif %}
+        <option value="native"{% if 'response' not in visual.views %} selected{% endif %}>{{ 'IVIVC relationship' if output.key == 'relationship' else 'Prediction on the evaluation coordinates' }}</option>
+    </select>
+</div>
+<p id="calibration-{{ output.key }}-help" class="design-help" data-calibration-output-help aria-live="polite"></p>
+<p class="design-help" data-calibration-output-status role="status" aria-live="polite">Preparing the selected designs' output comparison.</p>
+<div class="design-interactive-plot" data-calibration-output-plot data-design-plot hidden>
+    <div id="calibration-{{ output.key }}-interactive" data-design-plot-target hidden role="img" aria-label="{{ output.title }} for the selected calibration designs."></div>
+    <div data-design-plot-fallback><p class="design-help">Numerical output values remain available below.</p></div>
+    <p class="design-help" data-design-plot-status role="status" aria-live="polite"></p>
+</div>
+<details class="design-recovery-values" data-calibration-output-values>
+    <summary>Numerical plotted values for selected designs</summary>
+    <div class="design-preview-table"><table>
+        <caption data-calibration-output-values-caption>Median estimates and pointwise central 95% ranges across simulated studies</caption>
+        <thead><tr><th scope="col">Design</th><th scope="col" data-calibration-output-x-heading>Coordinate</th><th scope="col" data-calibration-output-y-heading>Estimate</th><th scope="col">2.5th percentile</th><th scope="col">97.5th percentile</th><th scope="col">Usable estimates</th></tr></thead>
+        <tbody data-calibration-output-values-body></tbody>
+    </table></div>
+</details>
+<details class="design-recovery-example" data-calibration-output-example>
+    <summary>Illustrative simulated study 1 — {{ output.title|lower }}</summary>
+    <p class="design-help">This is the same predetermined study 1 used in the calibration-curve illustration. Its bounds describe uncertainty within that fitted IVIVC, separately from the across-study ranges above. A failed or unavailable evaluation remains unavailable. No different study is substituted.</p>
+    {% if output.candidates|selectattr('diagnostics.conditional_count')|list %}<p class="design-help">Some fitted intervals are conditional on usable parameter draws. Their valid-draw counts and calculation statuses are reported in the detailed diagnostics below.</p>{% endif %}
+    <p class="design-help" data-calibration-output-example-status role="status" aria-live="polite"></p>
+    <div class="design-interactive-plot" data-calibration-output-example-plot data-design-plot hidden>
+        <div id="calibration-{{ output.key }}-example-interactive" data-design-plot-target hidden role="img" aria-label="{{ output.title }} from shared simulated study 1, including available fitted bounds and assumed truth."></div>
+        <div data-design-plot-fallback><p class="design-help">Numerical example values remain available below.</p></div>
+        <p class="design-help" data-design-plot-status role="status" aria-live="polite"></p>
+    </div>
+    <div class="design-preview-table"><table>
+        <caption>Shared study 1: fitted output, bounds, and matching assumed truth</caption>
+        <thead><tr><th scope="col">Design</th><th scope="col" data-calibration-output-example-x-heading>Coordinate</th><th scope="col" data-calibration-output-example-y-heading>Estimate</th><th scope="col">Lower fitted bound</th><th scope="col">Upper fitted bound</th><th scope="col">Assumed truth on the uncertain axis</th><th scope="col">Point / interval available</th></tr></thead>
+        <tbody data-calibration-output-example-values-body></tbody>
+    </table></div>
+</details>
+{% endif %}
