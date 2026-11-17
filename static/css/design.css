@@ -468,6 +468,26 @@
 .design-page .design-schedule-detail { margin-top: 1rem; }
 .design-page .design-schedule-detail h4 { margin: .5rem 0; overflow-wrap: anywhere; }
 .design-page .design-schedule-detail ul { margin: 0; padding-left: 1rem; }
+.design-page .design-timing-summary { margin-top: 1rem; padding-top: .6rem; border-top: 1px solid var(--design-border); }
+.design-page .design-timing-summary h4 { margin: 0; font-size: 1rem; }
+.design-page .design-timing-exceptions { margin: .5rem 0; padding-left: 1.2rem; }
+.design-page .design-timing-exceptions li + li { margin-top: .3rem; }
+.design-page .design-timing-flag {
+    display: block;
+    width: fit-content;
+    max-width: 100%;
+    margin-top: .3rem;
+    padding: .15rem .4rem;
+    border-left: 3px solid var(--app-warning);
+    background: var(--app-warning-surface);
+    font-size: .8125rem;
+    font-weight: 400;
+    overflow-wrap: anywhere;
+}
+.design-page .design-timing-details > summary { cursor: pointer; font-size: 1.1rem; font-weight: 600; }
+.design-page .design-timing-details td ul { margin: .25rem 0 0; padding-left: 1.1rem; }
+.design-page .design-performance-table th,
+.design-page .design-performance-table td { overflow-wrap: anywhere; }
 .design-page .design-schedule-timeline { overflow-x: auto; }
 .design-page .design-schedule-timeline [data-design-plot-target] { height: auto; min-height: 300px; min-width: 560px; }
 .design-page .design-timeline-key {

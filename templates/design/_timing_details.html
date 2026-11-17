@@ -1,0 +1,28 @@
+{% if timing.requirements %}
+<details id="planning-timing-details" class="design-section design-timing-details">
+    <summary>Timing details</summary>
+    <div class="design-preview-table"><table>
+        <caption>Shared timing requirements resolved using this reference</caption>
+        <thead><tr><th scope="col">Requirement</th><th scope="col">Rule</th><th scope="col">Bounds</th><th scope="col">Required coverage</th><th scope="col">Resolution</th></tr></thead>
+        <tbody>{% for requirement in timing.requirements %}<tr>
+            <th scope="row">{{ requirement.label }}</th>
+            <td>{{ 'Latest feasible time before deadline' if requirement.kind == 'latest_before' else 'Informative times in window' }}</td>
+            <td>{{ requirement.lower_description }} → {{ requirement.upper_description }}<br>Resolved: ({{ requirement.lower }}, {{ requirement.upper }}]</td>
+            <td>{{ requirement.minimum_count }}; {{ 'completed and new nonbaseline times' if requirement.count_scope == 'all' else 'new nonbaseline times' }}</td>
+            <td>{{ requirement.status|replace('_', ' ') }}: {{ requirement.message }}</td>
+        </tr>{% endfor %}</tbody>
+    </table></div>
+    <p class="design-help">Windows include their upper bound and exclude their lower bound and fixed timing-baseline observations. The milestone baseline defines the response decrease; an observation at that time is excluded from coverage counts only when it has the fixed timing-baseline role. Unresolved milestone bounds are not moved to the study end.</p>
+    {% if timing.outcome_groups %}<div class="design-preview-table"><table>
+        <caption>Suggested schedule availability, grouped by outcome</caption>
+        <thead><tr><th scope="col">Total distinct study times</th><th scope="col">Availability</th><th scope="col">Search details</th></tr></thead>
+        <tbody>{% for group in timing.outcome_groups %}<tr>
+            <th scope="row">{{ group.sizes }}</th>
+            <td>{{ group.status|replace('_', ' ') }}</td>
+            <td>{{ group.optimization_status|replace('_', ' ') }}{% if group.messages %}<ul>{% for message in group.messages %}<li>{{ message }}</li>{% endfor %}</ul>{% endif %}</td>
+        </tr>{% endfor %}</tbody>
+    </table></div>{% endif %}
+    <p class="design-help">A search limit leaves availability undetermined; it is not evidence of infeasibility. A feasible schedule remains feasible when its optimization stops at a search or exchange limit. Information optimization is heuristic and does not establish a globally optimal schedule.</p>
+    {% if has_comparison %}<p class="design-help">Selected schedules' coverage counts, deadline selections, and sampling-time roles appear in <a href="#planning-schedule-inspection">Exact times and explanations</a>. A comparison point before a deadline establishes eligibility, not that the latest feasible point was selected.</p>{% endif %}
+</details>
+{% endif %}

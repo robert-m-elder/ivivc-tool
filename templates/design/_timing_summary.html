@@ -1,0 +1,10 @@
+{% if timing.overview %}
+<div id="planning-timing-summary" class="design-timing-summary" aria-labelledby="planning-timing-summary-heading">
+    <h4 id="planning-timing-summary-heading">Timing summary</h4>
+    <p>{{ timing.overview.requirements_text }} {{ timing.overview.availability_text }}</p>
+    {% if timing.overview.exceptions %}<ul class="design-timing-exceptions">
+        {% for exception in timing.overview.exceptions %}<li><strong>{{ exception.label }}:</strong> {{ exception.message }}</li>{% endfor %}
+    </ul>{% endif %}
+    <p class="design-help"><a href="#planning-timing-details">Timing details</a> contains rule definitions and schedule-generation diagnostics.</p>
+</div>
+{% endif %}

@@ -210,6 +210,8 @@ test('unavailable or malformed inspection data disable controls without executin
         assert.doesNotThrow(() => f.api.initialize(f.root));
         assert.match(f.status.textContent, /Schedule inspection unavailable/);
         assert.equal(f.controls.every(control => control.disabled), true);
+        assert.equal(f.details.hidden, false);
+        assert.equal(f.detailRows.every(detail => !detail.hidden), true);
         assert.equal(f.window.injected, undefined);
         assert.equal(f.calls.update.length, 0);
     }

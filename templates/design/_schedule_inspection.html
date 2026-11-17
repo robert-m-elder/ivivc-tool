@@ -1,7 +1,8 @@
+{% macro timing_value(value) -%}{{ '%.8g'|format(value) if value is not none else '—' }}{%- endmacro %}
 <section id="planning-schedule-inspection" class="design-section" aria-labelledby="planning-schedule-inspection-heading" data-schedule-inspection>
     <h3 id="planning-schedule-inspection-heading">Inspect selected schedules</h3>
     <p id="planning-selection-help" class="design-help">Select up to three schedules in the performance table. Timelines are stacked vertically on a shared in vivo time axis. Selection only changes the display; it does not recalculate or change the analysis inputs.</p>
-    <p id="planning-selection-status" class="design-help" data-schedule-selection-status role="status" aria-live="polite">Schedule inspection is preparing. The performance table remains available.</p>
+    <p id="planning-selection-status" class="design-help" data-schedule-selection-status role="status" aria-live="polite">Schedule inspection is preparing. Exact times and explanations are available below.</p>
     <p data-schedule-selection-empty hidden>Choose a schedule in the performance table to inspect its sampling times.</p>
     <div class="design-interactive-plot design-schedule-timeline" data-schedule-timeline data-design-plot hidden>
         <div id="planning-schedule-timeline-interactive" data-design-plot-target hidden role="img" aria-label="Selected sampling schedules stacked vertically on a common in vivo time axis. Exact times and explanations are provided below."></div>
@@ -22,12 +23,31 @@
         </ul>
         <p class="design-help">Colors identify the selected schedules. Hover for all roles at a time. A latest-before selection uses a diamond even when also user-fixed. The milestone baseline is a guide even when it is not sampled; it shares a line with latest completion when those times coincide. Shaded windows and deadline guides use the resolved requirements; unresolved bounds are not moved to the study end.</p>
     </div>
-    <details class="design-schedule-details" data-schedule-details hidden>
+    <details class="design-schedule-details" data-schedule-details>
         <summary>Exact times and explanations</summary>
+        {% if inspection.schedule_data.requirements %}<p class="design-help">Timing checks use the <a href="#planning-timing-details">shared requirement definitions and resolved bounds</a>. For comparison schedules, deadline eligibility does not verify latestness or distinct point assignment across deadlines.</p>{% endif %}
         {% for schedule in inspection.schedule_data.schedules %}
-        <section class="design-schedule-detail" data-schedule-detail="{{ schedule.id }}" hidden aria-labelledby="{{ schedule.id }}-detail-heading">
+        <section class="design-schedule-detail" data-schedule-detail="{{ schedule.id }}" aria-labelledby="{{ schedule.id }}-detail-heading">
             <h4 id="{{ schedule.id }}-detail-heading"><span class="design-schedule-swatch" data-schedule-swatch="{{ schedule.id }}" aria-hidden="true" hidden></span>{{ schedule.name }}</h4>
-            {% if schedule.timing_status %}<p class="design-help">Timing inspection: {{ schedule.timing_status }}. {{ schedule.timing_message }}</p>{% endif %}
+            {% if schedule.timing_requirements %}
+            <div class="design-preview-table"><table data-schedule-timing>
+                <caption>Timing checks for {{ schedule.name }}</caption>
+                <thead><tr><th scope="col">Requirement</th><th scope="col">Result</th><th scope="col">Status</th></tr></thead>
+                <tbody>{% for requirement in schedule.timing_requirements %}<tr>
+                    <th scope="row">{{ requirement.label }}</th>
+                    <td>{% if requirement.latest_selected %}Selected time: {{ timing_value(requirement.selected_time) }}; deadline: {{ timing_value(requirement.deadline) }}; time before deadline: {{ timing_value(requirement.deadline_slack) }}.
+                        {% elif requirement.status not in ('satisfied', 'not_past_deadline', 'unsatisfied') %}Not assessed.
+                        {% elif requirement.kind == 'window' %}{{ requirement.achieved_count }} / {{ requirement.minimum_count }} required {{ 'new' if requirement.count_scope == 'new' else 'completed or new' }} distinct times.
+                        {% else %}Eligible times: {% for time in requirement.qualifying_times %}{{ timing_value(time) }}{% if not loop.last %}, {% endif %}{% else %}none{% endfor %}; deadline: {{ timing_value(requirement.deadline) }}{% if requirement.deadline_slack is not none %}; time before deadline: {{ timing_value(requirement.deadline_slack) }}{% endif %}.
+                        {% endif %}</td>
+                    <td>{% if requirement.latest_selected %}Latest-before selection retained
+                        {% elif requirement.kind == 'latest_before' and requirement.status in ('satisfied', 'not_past_deadline') %}Deadline met; latestness not assessed
+                        {% elif requirement.status == 'satisfied' %}Met
+                        {% elif requirement.status == 'unsatisfied' %}Not met
+                        {% else %}{{ requirement.status|replace('_', ' ')|capitalize }}: {{ requirement.message }}{% endif %}</td>
+                </tr>{% endfor %}</tbody>
+            </table></div>
+            {% elif inspection.schedule_data.requirements %}<p class="design-help">{% if schedule.timing_status %}{{ schedule.timing_status|replace('_', ' ')|capitalize }}{% if schedule.timing_message %}: {{ schedule.timing_message }}{% endif %}{% else %}Timing assessment unavailable for this schedule.{% endif %}</p>{% endif %}
             <div class="design-preview-table"><table>
                 <caption>Sampling times and retained explanations for {{ schedule.name }}</caption>
                 <thead><tr><th scope="col">In vivo time</th><th scope="col">Measurements</th><th scope="col">Roles and timing contributions</th></tr></thead>
@@ -39,6 +59,6 @@
             </table></div>
         </section>
         {% endfor %}
-        <p class="design-help">A time can have several roles or contribute to several windows. Contributing to a window does not mean that the individual time was mandated. Eligibility before a deadline does not establish that a comparison used the latest feasible time. Completed rows retain their original observations and precision; planned replicates apply only to new measurements.</p>
+        <p class="design-help">A time can have several roles or contribute to several windows. Contributing to a window does not mean that the individual time was mandated. Completed rows retain their original observations and precision; planned replicates apply only to new measurements.</p>
     </details>
 </section>

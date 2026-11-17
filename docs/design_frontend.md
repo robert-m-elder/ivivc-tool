@@ -488,13 +488,28 @@ requirement unavailable. Increase the horizon or revise the requirement when
 scientifically appropriate; the app does not discard nonreaching reference
 weight or change the requested quantile to produce a deadline.
 
-The result lists resolved bounds, generated schedules, and outcomes at every
-requested study size. **Infeasible**, **unresolved**, and **search limit reached**
-have different meanings. Reaching a search limit is not evidence that no
-schedule exists. If no suggested schedule can be produced, the reference and
-requirement diagnostics remain available without invented recovery metrics.
-Evenly spaced and manual comparisons are assessed separately and labeled with
-their requirement coverage; a comparison need not satisfy the requirements.
+The comparison begins with a short timing summary: counts of requested windows
+and deadlines, available suggested study sizes, and grouped exceptions.
+**Infeasible**, **unresolved**, and **search limit reached** have different
+meanings. Reaching a search limit is not evidence that no schedule exists. A
+feasible schedule whose improvement search reaches a limit remains feasible.
+These exceptions stay visible even if no schedule is available for simulation.
+
+The recovery plot and performance/selection table remain together. The table
+retains numerical performance metrics, while exact sampling-time lists and
+lengthy timing messages move into **Exact times and explanations**. Short flags
+beside schedule names identify unmet requirements, unavailable assessment, or
+unverified latestness. Evenly spaced and manual comparisons can be assessed
+without satisfying the timing requirements.
+
+Selected schedules have one compact timing table showing achieved/required
+window counts, eligible deadline times or retained latest-before selections,
+and status, followed by the per-time explanations. A comparison point before a
+deadline establishes eligibility, not that it is the latest feasible selection.
+The closed **Timing details** disclosure contains shared requested/resolved
+bounds and groups study-size outcomes by availability and optimization status.
+It remains available for study sizes without a selectable schedule. Separate
+global latest-before tables and repeated timing-inspection columns are omitted.
 
 This frontend currently combines timing requirements with future-only adaptive
 planning. Gap filling can be assessed without timing requirements; their
@@ -675,8 +690,8 @@ retain all roles and overlapping timing contributions. The baseline remains a
 vertical guide even when it is not sampled. Latest completion is a separate
 guide where applicable, including gap filling with earlier new opportunities.
 Shading shows resolved windows, with deadline lines for latest-before rules.
-Exact requested/resolved bounds and statuses remain in the timing-requirement
-table; unresolved bounds are not drawn at the study end. A time inside a
+Exact requested/resolved bounds and statuses remain under **Timing details**;
+unresolved bounds are not drawn at the study end. A time inside a
 window is not thereby individually mandated.
 
 Selection changes use the current result without further requests or
@@ -686,7 +701,9 @@ well. Switching workspace views preserves the current selection; a successful
 new calculation starts a fresh selection. A failed calculation
 preserves it. The timeline supports hover, zoom/reset, and SVG download through
 the shared Plotly renderer. If interactive rendering is unavailable, selection
-still updates the exact-time tables, which open automatically. The other
+still updates the exact-time tables, which open automatically. If the inspection
+controller itself is unavailable, the native disclosure retains all schedules'
+exact-time and compliance tables. The other
 performance results remain available. On narrow screens, the timeline scrolls
 horizontally; its explanatory key wraps below the chart rather than clipping
 inside it.
@@ -886,6 +903,12 @@ controllers working together.
    axes, with clean captions and source fits only where available. With CDN
    access blocked, each plot should retain its static fallback.
    Add completed observations and one timing requirement, then recalculate.
+   Check the short timing summary and schedule-name flags. Expand Timing
+   details for the shared bounds and grouped study-size diagnostics, then Exact
+   times and explanations for selected compliance counts and deadline choices.
+   Try an unavailable milestone and an infeasible study size; their outcomes
+   should remain visible without selecting a schedule. If inspection scripts
+   are unavailable, exact-time tables should remain accessible for all schedules.
 4. In calibration comparison, generate a candidate, copy it to editable times,
    and assess it alongside an explicit candidate. Check both Approach 1 and
    Approach 2 when they are to be used. Varying both environments should retain

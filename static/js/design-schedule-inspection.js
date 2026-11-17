@@ -133,7 +133,7 @@
             root.addEventListener('change', state.changed);
             render(state);
         } catch (error) {
-            if (status) status.textContent = 'Schedule inspection unavailable. The performance table and calculation settings remain available.';
+            if (status) status.textContent = 'Schedule inspection unavailable. Exact times and explanations for all schedules remain available below.';
         }
     }
 

@@ -171,8 +171,10 @@ class TimingResults(unittest.TestCase):
         self.assertNotIn('Mean IRMSE</th>', html)
         self.assertNotIn('NaN', html)
         compared = template.render(**present_planning_result(self.resolved))
-        self.assertIn('does not certify', compared)
-        self.assertIn('Latest-before selections', compared)
+        self.assertIn('does not verify latestness', compared)
+        self.assertIn('data-schedule-timing', compared)
+        self.assertIn('Latest-before selection retained', compared)
+        self.assertNotIn('Latest-before selections for', compared)
 
 
 if __name__ == '__main__':

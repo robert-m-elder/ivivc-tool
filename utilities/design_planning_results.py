@@ -197,6 +197,106 @@ def _adaptive_presentation(result):
             'future_policy': result.settings.get('future_policy', 'future_only')}
 
 
+def _study_size_ranges(values):
+    """Compact retained integer study sizes without inventing missing outcomes."""
+    sizes = sorted({int(value) for value in values if value is not None})
+    spans = []
+    for size in sizes:
+        if spans and size == spans[-1][-1] + 1:
+            spans[-1].append(size)
+        else:
+            spans.append([size])
+    return ', '.join(str(span[0]) if len(span) == 1 else f'{span[0]}–{span[-1]}'
+                     for span in spans) or 'None'
+
+
+def _timing_outcome_groups(outcomes):
+    groups = {}
+    for row in outcomes:
+        key = (row.get('status', 'unavailable'), row.get('optimization_status', 'not_run'))
+        group = groups.setdefault(key, {'status': key[0], 'optimization_status': key[1],
+                                       'sizes': [], 'messages': []})
+        group['sizes'].append(row.get('number_of_times'))
+        message = str(row.get('message', ''))
+        if message and message not in group['messages']:
+            group['messages'].append(message)
+    return [{**group, 'sizes': _study_size_ranges(group['sizes'])} for group in groups.values()]
+
+
+def _timing_overview(requirements, outcomes, outcome_groups):
+    if not requirements:
+        return None
+    counts = []
+    for kind, label in (('window', 'window'), ('latest_before', 'deadline')):
+        count = sum(row.get('kind') == kind for row in requirements)
+        if count:
+            counts.append(f'{count} {label}' + ('s' if count != 1 else ''))
+    requirements_text = (' and '.join(counts) if counts else
+                         f'{len(requirements)} timing requirements') + ' requested.'
+    available = _study_size_ranges(row.get('number_of_times') for row in outcomes
+                                   if row.get('status') == 'feasible')
+    availability = (f'Suggested schedules available for {available} total sampling times.'
+                    if available != 'None' else
+                    'No suggested schedule was produced for the requested study sizes.' if outcomes else
+                    'Suggested-schedule availability has not been assessed.')
+    exceptions = []
+    failed_requirements = {}
+    for row in requirements:
+        status = row.get('status', 'unavailable')
+        if status in ('ready', 'already_satisfied'):
+            continue
+        message = str(row.get('message', ''))
+        failed_requirements.setdefault((status, message), []).append(str(row.get('label', 'Requirement')))
+    requirement_labels = {
+        'beyond_horizon': 'Unresolved milestone', 'invalid_reference': 'Milestone unavailable',
+        'invalid_window': 'Invalid timing bounds', 'deadline_elapsed': 'Elapsed deadline',
+        'no_feasible_candidate': 'No eligible sampling opportunity',
+        'insufficient_candidates': 'Insufficient sampling opportunities',
+    }
+    for (status, message), labels in failed_requirements.items():
+        exceptions.append({'status': status, 'sizes': '',
+                           'label': requirement_labels.get(status, 'Requirement unavailable') + ': ' + ', '.join(labels),
+                           'message': message or 'This timing requirement could not be resolved or satisfied.'})
+    outcome_labels = {
+        'infeasible': ('Infeasible study sizes', 'No schedule satisfies the requested timing and design constraints at these sizes.'),
+        'search_limit': ('Availability undetermined: search limit', 'The search limit was reached before a feasible schedule was established.'),
+        'unavailable': ('Schedule availability unavailable', 'Timing requirements could not be resolved or evaluated for these sizes.'),
+    }
+    for group in outcome_groups:
+        status, optimization = group['status'], group['optimization_status']
+        if status == 'feasible':
+            if optimization == 'search_limit':
+                label, message = ('Feasible; optimization search limit reached',
+                                  'A timing-compliant schedule is available, but its improvement search was interrupted.')
+            elif optimization == 'exchange_limit':
+                label, message = ('Feasible; exchange limit reached',
+                                  'A timing-compliant schedule is available, but coordinate exchange reached its iteration limit.')
+            else:
+                continue
+        else:
+            label, message = outcome_labels.get(status, (
+                'Schedule outcome: ' + str(status).replace('_', ' '),
+                ' '.join(group['messages']) or 'See the retained outcome details.'))
+        exceptions.append({'status': status, 'sizes': group['sizes'],
+                           'label': label + ' — ' + group['sizes'] + ' total times', 'message': message})
+    return {'requirements_text': requirements_text, 'availability_text': availability,
+            'available_sizes': available, 'exceptions': exceptions}
+
+
+def _timing_flag(evaluation, *, has_requirements, certified=False):
+    """Flag exceptions without interpreting deadline eligibility as latestness."""
+    if not has_requirements:
+        return None
+    if evaluation is None:
+        return {'label': 'Timing not assessed', 'title': 'No timing assessment is available for this schedule.'}
+    status = evaluation['status']
+    if status == 'satisfied' or (status == 'not_past_deadline' and certified):
+        return None
+    label = {'unsatisfied': 'Timing not met', 'unavailable': 'Timing unavailable',
+             'not_past_deadline': 'Latestness unverified'}.get(status, 'Timing: ' + str(status).replace('_', ' '))
+    return {'label': label, 'title': evaluation.get('message') or label}
+
+
 def _timing_presentation(details):
     """Format retained feasibility and inspection outcomes, without new decisions."""
     requirements = []
@@ -222,7 +322,10 @@ def _timing_presentation(details):
                                                 'minimum_count': row.minimum_count,
                                                 'deadline_slack': _number(row.deadline_slack)}
                                                for row in evaluation.requirements]}
-    return {'requirements': requirements, 'outcomes': outcomes, 'evaluations': evaluations}
+    outcome_groups = _timing_outcome_groups(outcomes)
+    return {'requirements': requirements, 'outcomes': outcomes, 'evaluations': evaluations,
+            'outcome_groups': outcome_groups,
+            'overview': _timing_overview(requirements, outcomes, outcome_groups)}
 
 
 def present_planning_result(result, *, source_filename=None, source_summary=None,
@@ -241,7 +344,10 @@ def present_planning_result(result, *, source_filename=None, source_summary=None
     completed = getattr(result, 'completed_observations', None)
     adaptive = _adaptive_presentation(result)
     completed_times = np.array([]) if completed is None else completed.unique_times
-    timing = _timing_presentation(getattr(result, 'timing_details', {}) or {})
+    timing_details = getattr(result, 'timing_details', {}) or {}
+    timing = _timing_presentation(timing_details)
+    latest_labels = {item['label'] for item in timing['requirements']
+                     if item.get('kind') == 'latest_before'}
     summaries = {} if result.comparison is None else result.comparison.summaries
     replicates = int(settings['replicates_per_time'])
     rows, performance = [], {}
@@ -255,13 +361,24 @@ def present_planning_result(result, *, source_filename=None, source_summary=None
         count = len(summary.design_times)
         new_times = np.asarray([time for time in summary.design_times
                                if not np.any(np.isclose(completed_times, time, rtol=0., atol=1e-12))])
+        certified = kind == 'Suggested' and bool(latest_labels) and any(
+            outcome.get('status') == 'feasible' and
+            len(outcome.get('times', ())) == count and
+            np.allclose(np.sort(outcome['times']), np.sort(summary.design_times), rtol=0., atol=1e-12) and
+            latest_labels <= {anchor['label'] for anchor in outcome.get('anchors', ())
+                              if anchor.get('status') == 'selected' and
+                              _number(anchor.get('selected_time')) != '—'}
+            for outcome in timing_details.get('outcomes', ()))
+        timing_evaluation = timing['evaluations'].get(label)
         row = {
             'id': f'schedule-{index}', 'name': label, 'kind': kind, 'number_of_times': count,
             'times': ', '.join(_number(value) for value in summary.design_times),
             'number_of_new_times': len(new_times),
             'new_times': ', '.join(_number(value) for value in new_times) or 'None',
             'experimental_units': len(new_times) * replicates,
-            'timing': timing['evaluations'].get(label),
+            'timing': timing_evaluation,
+            'timing_flag': _timing_flag(timing_evaluation, has_requirements=bool(timing['requirements']),
+                                        certified=certified),
             'n_successful': summary.n_successful, 'n_simulations': summary.n_simulations,
             'failure_rate': _percent(summary.failure_rate),
             'mean_irmse': _number(summary.mean_irmse), 'p90_irmse': _number(summary.p90_irmse),

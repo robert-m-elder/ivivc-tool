@@ -62,6 +62,37 @@ def _outcomes(details):
     } for row in details.get('outcomes', ())]
 
 
+def _schedule_requirements(evaluations, requirements, anchors):
+    """Join retained counts with rule bounds and certified anchor evidence.
+
+    A comparison's eligible point is not a latest-before selection. ``anchors``
+    is supplied only for the matching feasible suggested schedule below.
+    """
+    by_label = {row['label']: row for row in requirements}
+    selected = {row['label']: row for row in anchors
+                if row['status'] == 'selected' and row['selected_time'] is not None}
+    rows = []
+    for evaluation in evaluations:
+        requirement = by_label.get(evaluation.label, {})
+        anchor = selected.get(evaluation.label) if evaluation.kind == 'latest_before' else None
+        rows.append({
+            'label': str(evaluation.label), 'kind': str(evaluation.kind),
+            'status': str(evaluation.status), 'message': str(evaluation.message),
+            'lower': requirement.get('lower'), 'upper': requirement.get('upper'),
+            'count_scope': requirement.get('count_scope', 'new'),
+            'achieved_count': int(evaluation.achieved_count),
+            'minimum_count': int(evaluation.minimum_count),
+            'qualifying_times': [_finite(time) for time in evaluation.qualifying_times],
+            'deadline': (None if evaluation.kind != 'latest_before' else
+                         requirement.get('upper') if anchor is None else anchor['deadline']),
+            'selected_time': None if anchor is None else anchor['selected_time'],
+            'deadline_slack': (_finite(evaluation.deadline_slack) if anchor is None
+                               else anchor['deadline_slack']),
+            'latest_selected': anchor is not None,
+        })
+    return rows
+
+
 def build_schedule_inspection(result):
     """Return JSON-safe point roles, guides, and retained timing diagnostics.
 
@@ -160,6 +191,7 @@ def build_schedule_inspection(result):
             'id': identifier, 'name': str(name), 'kind': kind, 'times': times, 'points': points,
             'timing_status': None if evaluation is None else str(evaluation.status),
             'timing_message': None if evaluation is None else str(evaluation.message),
+            'timing_requirements': _schedule_requirements(evaluations, requirements, anchors),
         })
     return {'baseline_time': baseline, 'planning_start': planning_start,
             'latest_completed_time': latest_completed,

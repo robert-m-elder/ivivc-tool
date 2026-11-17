@@ -5,6 +5,7 @@
         <h3 id="planning-result-heading">Study-planning comparison</h3>
         <p>{{ source_label }}{% if source_filename %}: <strong>{{ source_filename }}</strong>{% endif %}. These results retain the inputs submitted for this calculation.</p>
         <p class="design-help">Suggested schedules use a local information criterion for the chosen fitted curve, followed by coordinate exchange. This search does not establish a globally optimal schedule. Simulated recovery depends on the reference, model, and future measurement assumptions.</p>
+        {% include 'design/_timing_summary.html' %}
         {% if warnings %}<aside class="design-notice" aria-labelledby="planning-cautions-heading">
             <h4 id="planning-cautions-heading">Interpretation and cautions</h4>
             <ul>{% for warning in warnings %}<li>{{ warning }}</li>{% endfor %}</ul>
@@ -77,34 +78,6 @@
     </section>
     {% endif %}
 
-    {% if timing.requirements %}
-    <section class="design-section" aria-labelledby="planning-timing-heading">
-        <h3 id="planning-timing-heading">Timing requirements and schedule availability</h3>
-        <div class="design-preview-table"><table>
-            <caption>Requested windows and deadlines resolved using this reference</caption>
-            <thead><tr><th scope="col">Requirement</th><th scope="col">Rule</th><th scope="col">Lower bound</th><th scope="col">Upper bound or deadline</th><th scope="col">Count</th><th scope="col">Resolution</th></tr></thead>
-            <tbody>{% for requirement in timing.requirements %}<tr>
-                <th scope="row">{{ requirement.label }}</th><td>{{ 'Latest feasible time before deadline' if requirement.kind == 'latest_before' else 'Informative times in window' }}</td>
-                <td>{{ requirement.lower_description }}<br>Resolved: {{ requirement.lower }}</td><td>{{ requirement.upper_description }}<br>Resolved: {{ requirement.upper }}</td>
-                <td>{{ requirement.minimum_count }}; {{ 'completed and new nonbaseline times' if requirement.count_scope == 'all' else 'new nonbaseline times' }}</td><td>{{ requirement.status }}: {{ requirement.message }}</td>
-            </tr>{% endfor %}</tbody>
-        </table></div>
-        <p class="design-help">Windows include their upper bound and exclude their lower bound. Fixed baseline times do not count toward window coverage. The milestone baseline defines the response decrease; placing that guide at another sampled time does not itself exclude that time from window counts. Milestone bounds use the selected degraded fraction, reference quantile, and baseline; a milestone beyond the horizon remains unresolved rather than being moved to the study end.</p>
-        <div class="design-preview-table"><table>
-            <caption>Suggested schedule generation by total distinct study times</caption>
-            <thead><tr><th scope="col">Total times</th><th scope="col">Availability</th><th scope="col">Times</th><th scope="col">Search outcome</th></tr></thead>
-            <tbody>{% for outcome in timing.outcomes %}<tr><th scope="row">{{ outcome.number_of_times }}</th><td>{{ outcome.status }}: {{ outcome.message }}</td><td>{{ outcome.times }}</td><td>{{ outcome.optimization_status }}</td></tr>{% endfor %}</tbody>
-        </table></div>
-        {% for outcome in timing.outcomes %}{% if outcome.anchors %}
-        <div class="design-preview-table"><table>
-            <caption>Latest-before selections for {{ outcome.number_of_times }} total times</caption>
-            <thead><tr><th scope="col">Requirement</th><th scope="col">Selected time</th><th scope="col">Deadline</th><th scope="col">Time before deadline</th><th scope="col">Status</th></tr></thead>
-            <tbody>{% for anchor in outcome.anchors %}<tr><th scope="row">{{ anchor.label }}</th><td>{{ anchor.selected_time }}</td><td>{{ anchor.deadline }}</td><td>{{ anchor.deadline_slack }}</td><td>{{ anchor.status }}: {{ anchor.message }}</td></tr>{% endfor %}</tbody>
-        </table></div>{% endif %}{% endfor %}
-        <p class="design-help">Feasible schedules satisfy the requested timing rules. A schedule-availability status of search limit means availability was not established within the search budget; it is not evidence of infeasibility. A feasible schedule with an optimization search limit remains feasible, but its improvement search was interrupted. Information optimization is heuristic and does not establish a globally optimal schedule.</p>
-    </section>
-    {% endif %}
-
     <section class="design-section" aria-labelledby="planning-performance-heading">
         <h3 id="planning-performance-heading">Curve recovery versus study size</h3>
         {% if has_comparison %}
@@ -112,27 +85,28 @@
         <p class="design-help">IRMSE is the root mean square difference between a recovered curve and its simulated true curve across the planning range, in analyzed response units. Lower error means closer curve recovery under these assumptions. Solid traces show mean error; dashed traces show the 90th percentile. Manual schedules are separate points.</p>
         <p class="design-help">Use Inspect to select up to three schedules, then <a href="#planning-schedule-inspection">view their timelines and exact sampling details</a>.</p>
         <div class="design-preview-table">
-            <table>
+            <table class="design-performance-table">
                 <caption>Schedule performance; recovery errors use successful simulated fits</caption>
-                <thead><tr><th scope="col">Inspect</th><th scope="col">Schedule</th><th scope="col">Total times</th><th scope="col">Sampling times</th>{% if adaptive %}<th scope="col">New times</th><th scope="col">New sampling times</th>{% endif %}<th scope="col">{{ 'New independent units' if adaptive else 'Independent units' }}</th>{% if timing.requirements %}<th scope="col">Timing inspection</th>{% endif %}<th scope="col">Successful fits</th><th scope="col">Failure rate</th><th scope="col">Mean IRMSE</th><th scope="col">90th percentile IRMSE</th><th scope="col">Mean fitted curve interval width</th></tr></thead>
+                <thead><tr><th scope="col">Inspect</th><th scope="col">Schedule</th><th scope="col">Total times</th>{% if adaptive %}<th scope="col">New times</th>{% endif %}<th scope="col">{{ 'New independent units' if adaptive else 'Independent units' }}</th><th scope="col">Successful fits</th><th scope="col">Failure rate</th><th scope="col">Mean IRMSE</th><th scope="col">90th percentile IRMSE</th><th scope="col">Mean fitted curve interval width</th></tr></thead>
                 <tbody>{% for row in rows %}<tr data-schedule-row="{{ row.id }}">
                     <td><label class="design-schedule-checkbox"><input type="checkbox" data-schedule-select="{{ row.id }}" aria-label="Inspect {{ row.name }}" aria-describedby="planning-selection-help planning-selection-status" aria-controls="planning-schedule-inspection" disabled><span class="design-schedule-swatch" data-schedule-swatch="{{ row.id }}" aria-hidden="true" hidden></span></label></td>
-                    <th scope="row">{{ row.name }}</th><td>{{ row.number_of_times }}</td><td>{{ row.times }}</td>{% if adaptive %}<td>{{ row.number_of_new_times }}</td><td>{{ row.new_times }}</td>{% endif %}<td>{{ row.experimental_units }}</td>
-                    {% if timing.requirements %}<td>{% if row.timing %}{{ row.timing.status }}: {{ row.timing.message }}{% for requirement in row.timing.requirements %}<br>{{ requirement.label }}: {{ requirement.status }}{% endfor %}{% else %}No inspection available{% endif %}</td>{% endif %}
+                    <th scope="row">{{ row.name }}{% if row.timing_flag %}<span class="design-timing-flag" title="{{ row.timing_flag.title }}">{{ row.timing_flag.label }}</span>{% endif %}</th><td>{{ row.number_of_times }}</td>{% if adaptive %}<td>{{ row.number_of_new_times }}</td>{% endif %}<td>{{ row.experimental_units }}</td>
                     <td>{{ row.n_successful }} / {{ row.n_simulations }}</td><td>{{ row.failure_rate }}</td><td>{{ row.mean_irmse }}</td><td>{{ row.p90_irmse }}</td><td>{{ row.mean_curve_interval_width }} ({{ row.interval_count }} fits)</td>
                 </tr>{% endfor %}</tbody>
             </table>
         </div>
         <p class="design-help">{% if adaptive %}New units equal new distinct times × planned independent replicates per time. Completed measurements and their reported counts are retained separately; the planned count applies only to new observations.{% else %}Units equal distinct times × independent replicates per time. Fixed times are proposed measurements, not completed observations.{% endif %} The last column averages approximate 95% fitted mean-curve interval widths across time and usable successful fits; it excludes individual measurement scatter. Unavailable errors or widths appear as a dash. Compare error with failure rates rather than interpreting error alone.</p>
-        {% if timing.requirements %}<p class="design-help">Manual and evenly spaced schedules can be assessed even when they miss timing requirements. Their timing inspection is reported alongside recovery performance. Meeting a latest-before deadline alone does not certify that a comparison used the latest feasible opportunity; suggested latest-before selections are reported separately above.</p>{% endif %}
+        {% if timing.requirements %}<p class="design-help">Timing flags identify unmet rules or incomplete timing assessment. Details for selected schedules are in Exact times and explanations; shared requirements and search diagnostics are in Timing details.</p>{% endif %}
         <p class="design-help">All schedules share simulated reference trajectories and measurement-error draws at common times. Small differences may reflect Monte Carlo variation. No automatic overall ranking is assigned.</p>
-        {% else %}<p>No schedule was available for simulation under these settings. Review the requirement-resolution and schedule-availability outcomes above. No recovery error or zero-width interval has been substituted for an unavailable calculation.</p>{% endif %}
+        {% else %}<p>No schedule was available for simulation under these settings. See the timing summary above and expand Timing details for requirement-resolution and schedule-availability outcomes. No recovery error or zero-width interval has been substituted for an unavailable calculation.</p>{% endif %}
     </section>
 
     {% if has_comparison %}
     {% include 'design/_schedule_inspection.html' %}
     {% include 'design/_recovery_inspection.html' %}
     {% endif %}
+
+    {% include 'design/_timing_details.html' %}
 
     <section class="design-section" aria-labelledby="planning-settings-heading">
         <h3 id="planning-settings-heading">Inputs used for this calculation</h3>

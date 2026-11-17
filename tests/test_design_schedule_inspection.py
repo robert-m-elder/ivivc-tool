@@ -113,6 +113,61 @@ class ScheduleInspection(unittest.TestCase):
             self.assertNotIn('latest_before', point['roles'])
             self.assertTrue(any('latestness is not established' in text for text in point['explanations']))
 
+    def test_requirement_rows_retain_actual_window_counts_and_scope(self):
+        for name, schedule in zip(self.result.schedules, self.data['schedules']):
+            evaluations = self.result.timing_details['evaluations'][name].requirements
+            by_label = {row['label']: row for row in schedule['timing_requirements']}
+            self.assertEqual(len(by_label), len(evaluations))
+            for evaluation in evaluations:
+                row = by_label[evaluation.label]
+                self.assertEqual(row['kind'], evaluation.kind)
+                self.assertEqual(row['status'], evaluation.status)
+                self.assertEqual(row['message'], evaluation.message)
+                self.assertEqual(row['achieved_count'], evaluation.achieved_count)
+                self.assertEqual(row['minimum_count'], evaluation.minimum_count)
+                self.assertEqual(row['qualifying_times'], list(evaluation.qualifying_times))
+            self.assertEqual(by_label['Future coverage']['count_scope'], 'new')
+            self.assertEqual(by_label['All coverage']['count_scope'], 'all')
+            self.assertEqual(by_label['Future coverage']['upper'], 6.)
+            self.assertEqual(by_label['Future coverage']['lower'], 0.)
+
+    def test_deadline_rows_separate_certified_anchors_from_comparison_eligibility(self):
+        suggested = next(row for row in self.data['schedules'][0]['timing_requirements']
+                         if row['kind'] == 'latest_before')
+        anchor = self.result.timing_details['outcomes'][0]['anchors'][0]
+        self.assertTrue(suggested['latest_selected'])
+        self.assertEqual(suggested['selected_time'], anchor['selected_time'])
+        self.assertEqual(suggested['deadline'], anchor['deadline'])
+        self.assertEqual(suggested['deadline_slack'], anchor['deadline_slack'])
+        # The ordinary inspection remains eligibility-only even for a suggested
+        # schedule; the independent retained anchor supplies selection evidence.
+        self.assertEqual(suggested['status'], 'not_past_deadline')
+        for schedule in self.data['schedules'][1:]:
+            comparison = next(row for row in schedule['timing_requirements']
+                              if row['kind'] == 'latest_before')
+            self.assertEqual(comparison['status'], 'not_past_deadline')
+            self.assertFalse(comparison['latest_selected'])
+            self.assertIsNone(comparison['selected_time'])
+            self.assertEqual(comparison['qualifying_times'], suggested['qualifying_times'])
+            self.assertEqual(comparison['deadline'], 4.)
+
+    def test_unavailable_rule_on_a_manual_schedule_has_no_invented_bound_or_anchor(self):
+        result = timed_result(timing_row(
+            0, kind='latest_before', upper_mode='milestone', upper_fraction='.9',
+            upper_quantile='.75'))
+        result.schedules = {'Manual · unresolved deadline': np.array([0., 2., 4., 8.])}
+        result.timing_details['evaluations'] = {
+            name: inspect_comparison(times, result.timing_details, result.constraints)
+            for name, times in result.schedules.items()
+        }
+        data = build_schedule_inspection(result)
+        row, = data['schedules'][0]['timing_requirements']
+        self.assertEqual(row['status'], 'beyond_horizon')
+        self.assertIsNone(row['deadline'])
+        self.assertIsNone(row['selected_time'])
+        self.assertFalse(row['latest_selected'])
+        json.dumps(data, allow_nan=False)
+
     def test_unsampled_baseline_remains_a_guide_and_adds_no_point(self):
         result = deepcopy(self.result)
         result.settings['baseline_time'] = .5
@@ -192,6 +247,7 @@ class ScheduleInspection(unittest.TestCase):
         # A similar size with different times must not acquire another outcome's anchors.
         data = build_schedule_inspection(result)
         self.assertTrue(all(not point['latest_before'] for point in data['schedules'][0]['points']))
+        self.assertTrue(all(not row['latest_selected'] for row in data['schedules'][0]['timing_requirements']))
 
 
 if __name__ == '__main__':
