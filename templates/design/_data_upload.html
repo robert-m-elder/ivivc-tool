@@ -13,7 +13,10 @@
     <p class="design-help" data-import-status role="status" aria-live="polite"></p>
     <div id="{{ dataset.id }}-config" data-import-config></div>
     <p class="design-status" data-import-stale hidden></p>
-    <button type="button" data-import-preview-toggle aria-controls="{{ dataset.id }}-preview" aria-expanded="false" hidden>Show preview</button>
+    <div class="design-action-row">
+        <button type="button" data-import-action="preview" data-dataset-id="{{ dataset.id }}" aria-controls="{{ dataset.id }}-preview" disabled>Preview interpreted data</button>
+        <button type="button" data-import-preview-toggle aria-controls="{{ dataset.id }}-preview" aria-expanded="false" hidden>Show preview</button>
+    </div>
     <div id="{{ dataset.id }}-preview" data-import-preview hidden></div>
 </fieldset>
 {%- endmacro %}

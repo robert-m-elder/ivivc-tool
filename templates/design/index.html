@@ -36,6 +36,18 @@
         <p class="design-notice">Plan or extend an in vivo study, or compare how calibration sampling affects an IVIVC. Results describe expected performance under the supplied trajectory and measurement assumptions.</p>
         <noscript><p class="design-notice">Enable JavaScript to calculate comparisons and retain selected files while moving between inputs and comparisons.</p></noscript>
 
+        <div class="design-toolbar">
+            <div class="design-field design-task-field">
+                <label for="task">Analysis task</label>
+                <select id="task" name="task" form="design-setup-form" aria-describedby="task-help">
+                    <option value="study"{% if settings.task == 'study' %} selected{% endif %}>Plan or extend an in vivo study</option>
+                    <option value="calibration"{% if settings.task == 'calibration' %} selected{% endif %}>Compare calibration sampling</option>
+                </select>
+                <p id="task-help" class="design-help">Choose the question to address with the study-design backend.</p>
+                <p id="task-error" class="design-field-error" data-error-for="task" hidden></p>
+            </div>
+        </div>
+
         <nav id="design-section-navigation" class="design-section-navigation" aria-label="Sections and workspace views">
             <div class="design-view-navigation">
                 <button type="button" data-design-view="inputs" aria-pressed="true" aria-controls="design-inputs">Inputs</button>
@@ -55,18 +67,6 @@
         </nav>
 
         <form id="design-setup-form" action="{{ url_for('calculate_comparison') }}" method="post" enctype="multipart/form-data" novalidate>
-            <div class="design-toolbar">
-                <div class="design-field design-task-field">
-                    <label for="task">Analysis task</label>
-                    <select id="task" name="task" aria-describedby="task-help">
-                        <option value="study"{% if settings.task == 'study' %} selected{% endif %}>Plan or extend an in vivo study</option>
-                        <option value="calibration"{% if settings.task == 'calibration' %} selected{% endif %}>Compare calibration sampling</option>
-                    </select>
-                    <p id="task-help" class="design-help">Choose the question to address with the study-design backend.</p>
-                    <p id="task-error" class="design-field-error" data-error-for="task" hidden></p>
-                </div>
-            </div>
-
             <section id="design-inputs" aria-labelledby="design-inputs-heading">
                 <h2 id="design-inputs-heading" tabindex="-1">Analysis inputs</h2>
                 <p id="design-draft-status" class="design-status" aria-live="polite">Configure the inputs, then choose Calculate comparison. No calculations run when inputs change.</p>

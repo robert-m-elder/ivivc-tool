@@ -687,7 +687,9 @@
             syncInputs();
             clearErrors();
             showView('inputs');
-            updateDraftStatus();
+            // The task selector is associated with the form from above the
+            // navigation bar, so its edits do not bubble through the form.
+            noteInputChange();
         });
         source.addEventListener('change', syncInputs);
         form.addEventListener('input', noteInputChange);
