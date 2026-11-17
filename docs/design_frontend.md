@@ -668,15 +668,50 @@ interval draws, simulated experiments, and the seed.
 
 ## Schedule inspection data and endpoint ranges
 
-The ordinary planning milestone table includes the reference median time,
-central 95% range, and reference weight reaching T50 or T90 by the assessment
-horizon. The bounds are the weighted 2.5th and 97.5th percentiles of crossing
-times, using the same baseline and shared crossing-time API as timing
-requirements. Non-reaching trajectories retain their weight beyond the
+In **Calculation settings → Recovery endpoints**, select T50/T90 (the defaults),
+additional percentage decreases, and/or fixed absolute response thresholds.
+The absolute thresholds share an explicit decreasing/increasing direction and
+use the analyzed response scale after preprocessing. Duplicate definitions are
+reported once; at most 20 endpoints can be selected. Unchecking both defaults
+and leaving the optional fields empty selects none. These reporting choices
+do not alter optimization, IRMSE, or independently specified timing requirements.
+
+The reference endpoint table includes the median time, central 95% range, and
+reference weight reaching each selected endpoint by the assessment horizon.
+Tx means an x% decrease from each trajectory's **own** positive, finite response
+at the shared milestone baseline time. Absolute thresholds keep one fixed
+response level for all true and recovered curves. Endpoint times are in vivo
+time coordinates, not durations since baseline. Search starts at baseline,
+including an absolute threshold already satisfied there, and ends at the
+assessment horizon. Crossings use linear interpolation between assessment
+grid points, with the exact baseline and horizon included. Missing baseline
+values are evaluated from the reference or retained fitted parameters without
+refitting or changing the IRMSE evaluation grid.
+
+Reference bounds are the weighted 2.5th and 97.5th percentiles of crossing
+times. Non-reaching trajectories retain their weight beyond the
 horizon. An unresolved percentile reads **Beyond the assessment horizon**;
 it is neither discarded nor replaced by the last sample or assessment time.
 An invalid baseline leaves the milestone unavailable. One usable reference
 trajectory supplies a median when resolvable, but no sampled uncertainty range.
+
+**Endpoint recovery** follows the existing schedule selection and colors.
+Endpoints are computed separately for every simulated true/recovered curve,
+then summarized; an endpoint of the median curve is a different quantity.
+Recovered medians and central 95% ranges use equally weighted simulated studies
+with valid endpoint outcomes, including noncrossings beyond the horizon.
+Failed fits and invalid successful curves remain separate counts. A range
+requires at least two valid outcomes and describes variation across studies,
+not uncertainty within one fitted curve.
+
+Timing errors pair each recovered endpoint with that simulated study's own
+true endpoint. Median and 90th-percentile absolute errors use only pairs with
+two finite times and show their denominator. Expanded availability details
+report true-only crossings, recovered-only crossings, neither reaching,
+invalid curves, failed fits, and median signed error (recovered minus true).
+Two noncrossings never count as zero timing error. The existing interactive
+study-size plot and performance table continue to show IRMSE; endpoint plot
+and measure selectors are a separate follow-up.
 
 Each calculated planning result also contains compact numerical inspection
 data. Select up to three schedules in the performance table to inspect their
@@ -799,6 +834,10 @@ Its versioned payload has these sections:
   and reported counts remain available separately. Pointwise fitted confidence
   bounds are explicitly unavailable because the simulation result does not
   retain them; the existing mean fitted interval width remains separate.
+- `endpoint_recovery` retains the selected endpoint definitions, equal-weight
+  simulated endpoint quantiles, availability counts, and paired timing errors
+  for each schedule. Nonfinite times are represented by null plus an explicit
+  status; neither NaN nor Infinity is serialized.
 - `endpoints` retains numeric crossing quantiles with explicit availability
   statuses, so unresolved horizon bounds do not require nonfinite JSON values.
 

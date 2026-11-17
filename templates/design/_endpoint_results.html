@@ -1,0 +1,33 @@
+{% if endpoints %}
+<section class="design-section" aria-labelledby="planning-endpoint-heading">
+    <h3 id="planning-endpoint-heading">Endpoint recovery</h3>
+    <p class="design-help">These numerical results follow the schedules selected above. Endpoints are calculated for each simulated recovered curve before summarizing; they are not endpoints of the median recovered curve. Tx uses each true and recovered curve's own response at baseline time {{ milestone_baseline_time }}. Absolute thresholds use the same fixed response level for both.</p>
+    {% for schedule in endpoint_recovery %}
+    <section data-recovery-schedule="{{ schedule.id }}" aria-labelledby="{{ schedule.id }}-endpoint-heading">
+        <h4 id="{{ schedule.id }}-endpoint-heading"><span class="design-schedule-swatch" data-recovery-swatch="{{ schedule.id }}" aria-hidden="true" hidden></span>{{ schedule.name }}</h4>
+        <div class="design-preview-table"><table class="design-endpoint-table">
+            <caption>Recovered endpoint times and paired timing errors for {{ schedule.name }}</caption>
+            <thead><tr><th scope="col">Endpoint</th><th scope="col">Recovered time: median and central 95% range</th><th scope="col">Recovered endpoint reached</th><th scope="col">Absolute time error: median / 90th percentile</th><th scope="col">Finite true–recovered pairs</th></tr></thead>
+            <tbody>{% for row in schedule.rows %}<tr>
+                <th scope="row">{{ row.name }}</th>
+                <td>{{ row.median }}<br><span class="design-help">{{ row.range_95 }}</span></td>
+                <td>{{ row.recovered.n_reached }} / {{ row.n_simulations }} studies</td>
+                <td>{{ row.median_absolute_error }} / {{ row.p90_absolute_error }}</td>
+                <td>{{ row.paired.n_finite }} / {{ row.n_simulations }} studies</td>
+            </tr>{% endfor %}</tbody>
+        </table></div>
+        <details class="design-recovery-values">
+            <summary>Endpoint availability and crossing outcomes</summary>
+            <ul>{% for row in schedule.rows %}<li><strong>{{ row.name }}:</strong>
+                True curves: {{ row.truth.n_reached }} reached, {{ row.truth.n_beyond }} beyond horizon, {{ row.truth.n_invalid }} invalid.
+                Recovered curves: {{ row.recovered.n_reached }} reached, {{ row.recovered.n_beyond }} beyond horizon, {{ row.recovered.n_invalid }} invalid despite a successful fit, {{ row.recovered.n_failed }} failed fits.
+                Among pairs with valid endpoint outcomes: {{ row.paired.true_only }} true only reached, {{ row.paired.recovered_only }} recovered only reached, {{ row.paired.neither }} neither reached.
+                Median signed time error among finite pairs (recovered minus true): {{ row.median_signed_error }}.
+            </li>{% endfor %}</ul>
+        </details>
+    </section>
+    {% endfor %}
+    <p class="design-help">Recovered times use equally weighted simulated studies with valid endpoint outcomes. Failed fits and invalid curves are excluded; valid curves that do not reach the threshold retain their mass beyond the assessment horizon. The central 95% range is the empirical 2.5th–97.5th percentile range across studies, not a confidence interval for one fit. At least two valid outcomes are needed for a range. Counts use all simulated studies as their denominator.</p>
+    <p class="design-help">Timing errors compare each recovered endpoint with that study's own true endpoint, using only pairs where both times are finite. Read errors with the finite-pair count and crossing outcomes: two noncrossings do not imply zero error. Crossings are linearly interpolated on the assessment grid including the exact baseline; nothing is extended beyond the assessment horizon. A dash means unavailable. All times and timing errors use in vivo time units. These endpoints assess the suggested schedules and do not change the optimization criterion.</p>
+</section>
+{% endif %}

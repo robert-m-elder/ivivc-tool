@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from study_design_core import reference_crossing_time_summary
-
+from .design_endpoints import (
+    build_endpoint_inspection, endpoint_definitions, reference_endpoint_summary,
+)
 from .design_plotly import make_figure
 from .design_recovery_inspection import build_recovery_inspection
 from .design_schedule_inspection import build_schedule_inspection
@@ -27,51 +28,69 @@ def _percent(value):
     return f'{100 * float(value):.1f}%' if np.isfinite(value) else '—'
 
 
-def _endpoint_presentation(reference, baseline_time, *, range_available):
+def _endpoint_time(quantile):
+    if quantile['status'] == 'beyond_horizon':
+        return 'Beyond the assessment horizon'
+    return _number(quantile['value'])
+
+
+def _endpoint_presentation(reference, baseline_time, *, range_available, definitions=None):
     """Use shared weighted crossing quantiles, retaining noncrossing weight."""
     range_available = bool(range_available)
     rows, numerical, warnings = [], [], []
-    for label, fraction in (('T50', .5), ('T90', .9)):
-        summaries = [reference_crossing_time_summary(
-            reference, degraded_fraction=fraction, quantile=quantile,
-            baseline_time=baseline_time,
-        ) for quantile in (.025, .5, .975)]
+    for definition in (endpoint_definitions({}) if definitions is None else definitions):
+        label = definition['label']
+        summary = reference_endpoint_summary(reference, definition, baseline_time)
+        summaries = summary['quantiles']
         lower, median, upper = summaries
-
-        def display(summary):
-            if summary.status == 'beyond_horizon':
-                return 'Beyond the assessment horizon'
-            return _number(summary.deadline)
-
-        if median.status == 'invalid_reference':
-            warnings.append(f'{label} is unavailable: a positive, finite response at the '
-                            'milestone baseline and finite relative responses are needed '
+        invalid = median['status'] == 'invalid_reference'
+        if invalid:
+            requirement = ('a positive, finite response at the milestone baseline and '
+                           'finite relative responses' if definition['kind'] == 'relative_decrease'
+                           else 'finite responses from the milestone baseline through the assessment horizon')
+            warnings.append(f'{label} is unavailable: {requirement} are needed '
                             'in every positive-weight reference trajectory.')
-        interval = (f'{display(lower)} to {display(upper)}' if range_available else
+        interval = (f'{_endpoint_time(lower)} to {_endpoint_time(upper)}' if range_available else
                     'Not available (one reference trajectory)')
-        if median.status == 'invalid_reference':
+        if invalid:
             interval = '—'
         rows.append({
-            'name': label, 'reached': (_percent(median.reached_weight)
-                                      if median.status != 'invalid_reference' else '—'),
-            'median': display(median), 'status': median.message,
-            'lower_95': display(lower), 'upper_95': display(upper), 'range_95': interval,
-            'median_status': median.status, 'lower_status': lower.status,
-            'upper_status': upper.status, 'range_available': range_available and
-            median.status != 'invalid_reference',
+            'name': label, 'reached': (_percent(summary['reached_weight']) if not invalid else '—'),
+            'median': _endpoint_time(median), 'status': median['status'],
+            'lower_95': _endpoint_time(lower), 'upper_95': _endpoint_time(upper), 'range_95': interval,
+            'median_status': median['status'], 'lower_status': lower['status'],
+            'upper_status': upper['status'], 'range_available': range_available and not invalid,
         })
         numerical.append({
-            'name': label, 'degraded_fraction': fraction,
+            'name': label, 'definition': dict(definition),
+            'degraded_fraction': (definition['value'] / 100
+                                  if definition['kind'] == 'relative_decrease' else None),
             'baseline_time': float(baseline_time),
             'supported_time_range': list(reference.supported_time_range),
-            'reached_weight': (float(median.reached_weight)
-                               if median.status != 'invalid_reference' else None),
-            'sampled_range_available': range_available and median.status != 'invalid_reference',
-            'quantiles': [{'probability': row.quantile, 'value': row.deadline,
-                           'status': row.status, 'message': row.message}
-                          for row in summaries],
+            'reached_weight': summary['reached_weight'],
+            'sampled_range_available': range_available and not invalid,
+            'quantiles': summaries,
         })
     return rows, numerical, warnings
+
+
+def _recovery_endpoint_presentation(inspection):
+    """Format retained endpoint summaries without changing their denominators."""
+    schedules = []
+    for schedule in inspection['schedules']:
+        rows = []
+        for endpoint in schedule['endpoints']:
+            recovered, paired = endpoint['recovered'], endpoint['paired']
+            lower, median, upper = recovered['quantiles']
+            interval = (f'{_endpoint_time(lower)} to {_endpoint_time(upper)}'
+                        if recovered['n_valid'] > 1 else 'Unavailable (fewer than two valid outcomes)')
+            rows.append({**endpoint, 'name': endpoint['definition']['label'],
+                         'median': _endpoint_time(median), 'range_95': interval,
+                         'median_absolute_error': _number(paired['median_absolute_error']),
+                         'p90_absolute_error': _number(paired['p90_absolute_error']),
+                         'median_signed_error': _number(paired['median_signed_error'])})
+        schedules.append({**schedule, 'rows': rows})
+    return schedules
 
 
 def _plot(series, *, band=None, observations=None):
@@ -484,7 +503,9 @@ def present_planning_result(result, *, source_filename=None, source_summary=None
     endpoints, endpoint_data, endpoint_warnings = _endpoint_presentation(
         reference, settings.get('baseline_time', reference.supported_time_range[0]),
         range_available=reference_range_available,
+        definitions=endpoint_definitions(settings),
     )
+    endpoint_recovery = build_endpoint_inspection(result)
     warnings.extend(endpoint_warnings)
     source_range = ((float(np.min(source.time)), float(np.max(source.time)))
                     if source_kind == 'measured' and source is not None else None)
@@ -541,6 +562,8 @@ def present_planning_result(result, *, source_filename=None, source_summary=None
         ('Candidate-time grid', f'{_number(settings.get("candidate_first_time", settings["first_time"]))} to {_number(settings["last_time"])} in steps of {_number(settings["time_step"])}'),
         ('Fixed times, including completed observations' if adaptive else 'Fixed proposed times', ', '.join(_number(value) for value in result.constraints.fixed_times) or 'None'),
         ('Milestone baseline time', _number(settings.get('baseline_time', reference.supported_time_range[0]))),
+        ('Recovery endpoints', '; '.join(item['label'] for item in endpoint_definitions(settings)) or 'None selected'),
+        ('Endpoint definitions', 'Tx uses each curve’s own response at the milestone baseline; absolute thresholds use fixed analyzed response levels. First reaching time from baseline through the assessment horizon.'),
         ('Requested parameter draws per active ratio' if source_kind == 'scaling' else
          'Requested reference draws', str(requested)),
         ('Usable reference draws', f'{reference.n_valid_draws} of {reference.n_draws} generated'),
@@ -581,6 +604,7 @@ def present_planning_result(result, *, source_filename=None, source_summary=None
         'performance_plot': _plot(lines),
         'performance_figure': performance_figure,
         'warnings': list(dict.fromkeys(warnings)), 'endpoints': endpoints, 'ranks': ranks,
+        'endpoint_recovery': _recovery_endpoint_presentation(endpoint_recovery),
         'inspection': {
             'schema_version': 1,
             'reference': {
@@ -596,6 +620,7 @@ def present_planning_result(result, *, source_filename=None, source_summary=None
             'schedule_data': build_schedule_inspection(result),
             'recovery': build_recovery_inspection(result),
             'endpoints': endpoint_data,
+            'endpoint_recovery': endpoint_recovery,
         },
         'settings_rows': settings_rows,
     }

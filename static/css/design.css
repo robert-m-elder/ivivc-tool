@@ -368,6 +368,12 @@
 .design-page .design-milestone-table thead th:nth-child(3) { width: 32%; }
 .design-page .design-milestone-table thead th:nth-child(4) { width: 24%; }
 .design-page .design-existing-calibration-table { min-width: 44rem; }
+.design-page .design-endpoint-table { table-layout: fixed; min-width: 48rem; }
+.design-page .design-endpoint-table thead th:nth-child(1) { width: 16%; }
+.design-page .design-endpoint-table thead th:nth-child(2) { width: 30%; }
+.design-page .design-endpoint-table thead th:nth-child(3) { width: 17%; }
+.design-page .design-endpoint-table thead th:nth-child(4) { width: 22%; }
+.design-page .design-endpoint-table thead th:nth-child(5) { width: 15%; }
 .design-page .design-existing-calibration-table thead th:nth-child(1) { width: 16%; }
 .design-page .design-existing-calibration-table thead th:nth-child(2) { width: 8%; }
 .design-page .design-existing-calibration-table thead th:nth-child(3) { width: 22%; }

@@ -106,6 +106,56 @@ def _times(text, field, *, allow_empty=True):
     return np.sort(values)
 
 
+def _recovery_endpoints(form):
+    """Parse reporting endpoints independently of schedule timing constraints."""
+    def values(field):
+        text = str(form.get(field, '')).strip()
+        if not text:
+            return []
+        try:
+            parts = text.split(',')
+            parsed = [float(part) for part in parts if part.strip()]
+            if len(parsed) != len(parts) or not np.isfinite(parsed).all():
+                raise ValueError
+        except (ValueError, TypeError, OverflowError) as error:
+            raise PlanningInputError('Enter finite numbers separated by commas.', field) from error
+        return parsed
+
+    endpoints = []
+    seen = set()
+
+    def add(kind, value, direction, field):
+        key = (kind, value, direction)
+        if key in seen:
+            return
+        if len(endpoints) >= 20:
+            raise PlanningInputError('Select at most 20 recovery endpoints per comparison.', field)
+        seen.add(key)
+        label = (f'T{value:g}' if kind == 'relative_decrease' else
+                 f'Response {"≤" if direction == "decreasing" else "≥"} {value:g}')
+        endpoints.append({'kind': kind, 'value': float(value),
+                          'direction': direction, 'label': label})
+
+    explicit = 'recovery_endpoints_present' in form
+    for value, field in ((50., 'recovery_t50'), (90., 'recovery_t90')):
+        if not explicit or _checked(form, field):
+            add('relative_decrease', value, 'decreasing', field)
+    for value in values('recovery_tx_custom'):
+        if not 0 < value < 100:
+            raise PlanningInputError('Use percentage decreases greater than 0 and less than 100.',
+                                     'recovery_tx_custom')
+        add('relative_decrease', value, 'decreasing', 'recovery_tx_custom')
+    absolute = values('recovery_absolute_thresholds')
+    if absolute:
+        direction = form.get('recovery_absolute_direction', 'decreasing')
+        if direction not in ('decreasing', 'increasing'):
+            raise PlanningInputError('Select decreasing or increasing response.',
+                                     'recovery_absolute_direction')
+        for value in absolute:
+            add('absolute_threshold', value, direction, 'recovery_absolute_thresholds')
+    return endpoints
+
+
 def _settings(form):
     if form.get('task', 'study') != 'study':
         raise PlanningInputError('Numerical planning currently supports the in vivo study task.', 'task')
@@ -139,6 +189,7 @@ def _settings(form):
         'n_simulations': _number(form, 'n_simulations', 100, integer=True, minimum=2, maximum=1000),
         'random_seed': _number(form, 'random_seed', 12345, integer=True, minimum=0, maximum=2**32-1),
         'include_even': _checked(form, 'include_even'),
+        'recovery_endpoints': _recovery_endpoints(form),
     }
     if kind != 'time_profile_sd':
         settings['observation_value'] = _number(form, 'observation_value', .05, minimum=0.)

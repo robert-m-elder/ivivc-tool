@@ -67,14 +67,15 @@
         {% if adaptive %}<p class="design-help">Dark points are the completed target-study observations on the analyzed response scale. {% if adaptive.has_update %}The dashed line retains the original prior central curve; the shaded band uses the updated weights.{% endif %}</p>{% elif source_kind == 'measured' %}<p class="design-help">Dark points are the supplied reference observations after preprocessing.</p>{% endif %}
         {% if reference_range_available %}<p class="design-help">The shaded band summarizes pointwise weighted percentiles of usable complete reference trajectories. {% if source_kind == 'scaling' %}These preserve the supplied empirical time-scale weights and source-fit parameter uncertainty.{% elif source_kind == 'ivivc' %}These retain the uncertainty supported by the selected IVIVC approach and prediction method.{% else %}These are sampled from fitted parameter uncertainty.{% endif %} The band excludes future measurement variability and is not a simultaneous band or a range for individual future measurements.</p>
         {% else %}<p class="design-help">One complete reference trajectory is available. No sampled reference-uncertainty band is displayed. Future measurement variability still enters the study simulations; a single reference curve does not establish that the underlying behavior is known.</p>{% endif %}
-        <div class="design-preview-table">
+        {% if endpoints %}<div class="design-preview-table">
             <table class="design-milestone-table">
-                <caption>Milestones relative to the response at baseline time {{ milestone_baseline_time }}</caption>
-                <thead><tr><th scope="col">Milestone</th><th scope="col">Reference median time</th><th scope="col">Reference central 95% range</th><th scope="col">Reference weight reaching by the end</th></tr></thead>
+                <caption>Selected reference endpoints, searched from baseline time {{ milestone_baseline_time }}</caption>
+                <thead><tr><th scope="col">Endpoint</th><th scope="col">Reference median time</th><th scope="col">Reference central 95% range</th><th scope="col">Reference weight reaching by the end</th></tr></thead>
                 <tbody>{% for endpoint in endpoints %}<tr><th scope="row">{{ endpoint.name }}</th><td>{{ endpoint.median }}</td><td>{{ endpoint.range_95 }}</td><td>{{ endpoint.reached }}</td></tr>{% endfor %}</tbody>
             </table>
         </div>
-        <p class="design-help">T50 and T90 mean 50% and 90% decrease from that baseline. The milestone baseline and first planning time can differ. The central 95% range runs from the weighted 2.5th to 97.5th percentile of reference milestone times. Reference weight describes uncertainty in the assumed curve, not a fraction of animals. Trajectories that do not reach a milestone keep their weight beyond the assessment horizon when determining the median and both bounds. An unresolved percentile is labeled “Beyond the assessment horizon”; it is not replaced by the study end. One reference trajectory supplies no sampled uncertainty range. A dash indicates unavailable information. Milestones affect schedule selection only when explicitly included in a timing requirement.</p>
+        <p class="design-help">Tx means an x% decrease from each trajectory's own response at the milestone baseline. Absolute thresholds use the same fixed analyzed response level for every trajectory, in the selected direction. Times are in vivo time coordinates, starting the search at baseline; a threshold already met there has that baseline time. The milestone baseline and first planning time can differ. The central 95% range runs from the weighted 2.5th to 97.5th percentile of reference endpoint times. Reference weight describes uncertainty in the assumed curve, not a fraction of animals. Trajectories that do not reach an endpoint keep their weight beyond the assessment horizon when determining the median and both bounds. An unresolved percentile is labeled “Beyond the assessment horizon”; it is not replaced by the study end. One reference trajectory supplies no sampled uncertainty range. A dash indicates unavailable information. Reporting endpoints does not change schedule selection or timing requirements.</p>
+        {% else %}<p class="design-help">No recovery endpoints were selected. Timing requirements are assessed independently.</p>{% endif %}
     </section>
 
     {% if source_details_rows or source_plots or source_fit_rows %}
@@ -133,6 +134,7 @@
     {% if has_comparison %}
     {% include 'design/_schedule_inspection.html' %}
     {% include 'design/_recovery_inspection.html' %}
+    {% include 'design/_endpoint_results.html' %}
     {% endif %}
 
     {% include 'design/_timing_details.html' %}

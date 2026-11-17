@@ -12,7 +12,7 @@ import numpy as np
 
 from ivivc_core import TimeCourse
 from study_design_core import ReferenceTrajectoryEnsemble
-from utilities.design_planning import run_measured_planning
+from utilities.design_planning import _settings, run_measured_planning
 from utilities.design_planning_results import _endpoint_presentation, present_planning_result
 
 try:
@@ -126,6 +126,38 @@ class InspectionPayload(unittest.TestCase):
         self.assertEqual(data['reference']['upper'], first['reference_figure']['data'][1]['y'])
         self.assertEqual(first['inspection'], second['inspection'])
         json.dumps(data, allow_nan=False)
+
+    @unittest.skipIf(Environment is None, 'Jinja is supplied by the Flask environment.')
+    def test_selected_endpoints_reach_reference_and_recovery_tables_without_refitting(self):
+        result = copy(self.result)
+        result.settings = {**result.settings, 'recovery_endpoints': _settings({
+            'recovery_endpoints_present': '1', 'recovery_t50': 'on',
+            'recovery_tx_custom': '25', 'recovery_absolute_thresholds': '.6',
+        })['recovery_endpoints']}
+        with patch('utilities.design_planning.compare_designs_by_simulation',
+                   side_effect=AssertionError('Endpoint reporting must not simulate.')), \
+             patch('study_design_core.simulation.fit_model_once',
+                   side_effect=AssertionError('Endpoint reporting must not refit.')):
+            context = present_planning_result(result)
+        labels = ['T50', 'T25', 'Response ≤ 0.6']
+        self.assertEqual([row['name'] for row in context['endpoints']], labels)
+        raw = context['inspection']['endpoint_recovery']['schedules']
+        self.assertEqual([row['id'] for row in raw], [row['id'] for row in context['rows']])
+        for schedule in raw:
+            self.assertEqual([row['definition']['label'] for row in schedule['endpoints']], labels)
+        json.dumps(context['inspection'], allow_nan=False)
+        environment = Environment(loader=FileSystemLoader(Path(__file__).parents[1] / 'templates'),
+                                  autoescape=True, undefined=StrictUndefined)
+        template = environment.get_template('design/_planning_results.html')
+        html = template.render(**context)
+        self.assertIn('Endpoint recovery', html)
+        self.assertIn('Finite true–recovered pairs', html)
+        self.assertIn('invalid despite a successful fit', html)
+        self.assertNotIn('T90', html)
+        result.settings = {**result.settings, 'recovery_endpoints': []}
+        context = present_planning_result(result)
+        self.assertEqual(context['inspection']['endpoint_recovery']['schedules'], [])
+        self.assertNotIn('id="planning-endpoint-heading"', template.render(**context))
 
     @unittest.skipIf(Environment is None, 'Jinja is supplied by the Flask environment.')
     def test_template_retains_an_inert_html_safe_payload_and_range_column(self):

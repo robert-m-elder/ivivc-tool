@@ -1,0 +1,34 @@
+<div data-design-task="study"{% if settings.task != 'study' %} hidden{% endif %}>
+    <div data-planning-controls aria-labelledby="recovery-endpoints-heading">
+        <h4 id="recovery-endpoints-heading">Recovery endpoints</h4>
+        <input type="hidden" name="recovery_endpoints_present" value="1">
+        <p class="design-help">Choose which endpoints to report for the reference and recovered curves. These choices assess the schedules; they do not change suggested sampling times or add timing requirements.</p>
+        <div class="design-field">
+            <label class="design-checkbox-label" for="recovery_t50"><input id="recovery_t50" name="recovery_t50" type="checkbox" value="on" checked> T50 — 50% decrease</label>
+            <label class="design-checkbox-label" for="recovery_t90"><input id="recovery_t90" name="recovery_t90" type="checkbox" value="on" checked> T90 — 90% decrease</label>
+        </div>
+        <div class="design-field">
+            <label for="recovery_tx_custom">Additional percentage decreases, Tx</label>
+            <input id="recovery_tx_custom" name="recovery_tx_custom" type="text" value="" placeholder="For example: 25, 75" aria-describedby="recovery-tx-help">
+            <p id="recovery-tx-help" class="design-help">Optional comma-separated percentages greater than 0 and less than 100. Each curve uses its own positive response at the shared milestone baseline time (default 0). T75 means the first time its response is at or below 25% of its own baseline response.</p>
+            <p id="recovery_tx_custom-error" class="design-field-error" data-error-for="recovery_tx_custom" hidden></p>
+        </div>
+        <div class="design-field-grid">
+            <div class="design-field">
+                <label for="recovery_absolute_thresholds">Absolute response thresholds</label>
+                <input id="recovery_absolute_thresholds" name="recovery_absolute_thresholds" type="text" value="" placeholder="For example: 0.5, 0.1" aria-describedby="recovery-absolute-help">
+                <p id="recovery-absolute-help" class="design-help">Optional comma-separated response levels on the analyzed scale after preprocessing. The same fixed level applies to every true and recovered curve.</p>
+                <p id="recovery_absolute_thresholds-error" class="design-field-error" data-error-for="recovery_absolute_thresholds" hidden></p>
+            </div>
+            <div class="design-field">
+                <label for="recovery_absolute_direction">Absolute threshold direction</label>
+                <select id="recovery_absolute_direction" name="recovery_absolute_direction">
+                    <option value="decreasing" selected>Decreasing — response at or below threshold</option>
+                    <option value="increasing">Increasing — response at or above threshold</option>
+                </select>
+                <p id="recovery_absolute_direction-error" class="design-field-error" data-error-for="recovery_absolute_direction" hidden></p>
+            </div>
+        </div>
+        <p class="design-help">All endpoint searches begin at the milestone baseline and stop at the assessment horizon. A threshold already satisfied at baseline has that baseline time as its endpoint. Endpoints not reached within the horizon remain explicitly beyond the horizon. Select at most 20 endpoints.</p>
+    </div>
+</div>
