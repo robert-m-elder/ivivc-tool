@@ -1,15 +1,44 @@
 {% from 'design/_charts.html' import chart, interactive_chart %}
 <div data-planning-result>
     <script type="application/json" data-planning-inspection>{{ inspection | tojson }}</script>
+    <section class="design-section" aria-labelledby="planning-settings-heading">
+        <h3 id="planning-settings-heading">Inputs used for this calculation</h3>
+        {% for imported in source_summaries %}
+        {% set summary = imported.get('summary', imported) %}
+        <h4>{{ imported.get('label', 'Source input') }}</h4>
+        <p class="design-help">File: {{ imported.get('filename', summary.get('filename', '')) }}{% if imported.get('worksheet', summary.get('worksheet')) %} · Worksheet: {{ imported.get('worksheet', summary.get('worksheet')) }}{% endif %}.</p>
+        {% if summary.get('interpretation') %}<p>{{ summary.interpretation }}</p>{% endif %}
+        {% if summary.get('mapping') %}<p class="design-help">Mapping: {% for label, value in summary.mapping.items() %}{{ label }} → {{ value }}{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
+        {% if summary.get('retained_rows') is not none %}<p class="design-help">Rows: {{ summary.retained_rows }} retained, {{ summary.get('omitted_rows', 0) }} omitted.</p>{% endif %}
+        {% if summary.get('response_units') %}<p class="design-help">Supplied response units: {{ summary.response_units }}. Normalized outputs use the analyzed response scale.</p>{% endif %}
+        {% endfor %}
+        {% if not source_summaries %}
+        {% if source_filename or source_summary.get('filename') or source_summary.get('worksheet') %}<p class="design-help">Reference file: <strong>{{ source_filename or source_summary.get('filename') or 'Not recorded' }}</strong>{% if source_summary.get('worksheet') %} · Worksheet: {{ source_summary.worksheet }}{% endif %}.</p>{% endif %}
+        {% if source_summary.get('interpretation') %}<p>{{ source_summary.interpretation }}</p>{% endif %}
+        {% if source_summary.get('mapping') %}<p class="design-help">Reference mapping: {% for label, value in source_summary.mapping.items() %}{{ label }} → {{ value }}{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
+        {% if source_summary.get('retained_rows') %}<p class="design-help">Reference rows: {{ source_summary.retained_rows }} retained, {{ source_summary.omitted_rows }} omitted.</p>{% endif %}
+        {% endif %}
+        {% if profile_summary %}
+        <p class="design-help">Future SD profile{% if profile_summary.get('filename') %}: {{ profile_summary.filename }}{% endif %}{% if profile_summary.get('worksheet') %} · Worksheet: {{ profile_summary.worksheet }}{% endif %}. Individual SD uses the analyzed response scale.</p>
+        {% if profile_summary.get('mapping') %}<p class="design-help">Profile mapping: {% for label, value in profile_summary.mapping.items() %}{{ label }} → {{ value }}{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
+        {% if profile_summary.get('time_range') %}<p class="design-help">Profile time range: {{ profile_summary.time_range[0] }}–{{ profile_summary.time_range[1] }}{% if profile_summary.get('individual_sd_range') %} · Individual SD range: {{ profile_summary.individual_sd_range[0] }}–{{ profile_summary.individual_sd_range[1] }}{% endif %}.</p>{% endif %}
+        {% endif %}
+        <div class="design-preview-table"><table class="design-settings-table">
+            <caption>Submitted assumptions and numerical settings</caption>
+            <tbody>{% for label, value in settings_rows %}<tr><th scope="row">{{ label }}</th><td>{{ value }}</td></tr>{% endfor %}</tbody>
+        </table></div>
+    </section>
+
     <section class="design-section" aria-labelledby="planning-result-heading">
-        <h3 id="planning-result-heading">Study-planning comparison</h3>
-        <p>{{ source_label }}{% if source_filename %}: <strong>{{ source_filename }}</strong>{% endif %}. These results retain the inputs submitted for this calculation.</p>
+        <h3 id="planning-result-heading">Interpretation and cautions</h3>
         <p class="design-help">Suggested schedules use a local information criterion for the chosen fitted curve, followed by coordinate exchange. This search does not establish a globally optimal schedule. Simulated recovery depends on the reference, model, and future measurement assumptions.</p>
-        {% include 'design/_timing_summary.html' %}
         {% if warnings %}<aside class="design-notice" aria-labelledby="planning-cautions-heading">
-            <h4 id="planning-cautions-heading">Interpretation and cautions</h4>
+            <h4 id="planning-cautions-heading">Cautions</h4>
             <ul>{% for warning in warnings %}<li>{{ warning }}</li>{% endfor %}</ul>
         </aside>{% endif %}
+        {% if ranks %}<p class="design-help">Local information rank for suggested schedules: {% for rank in ranks %}{{ rank.number_of_times }} times: {{ rank.rank }}/{{ rank.parameters }} parameters{% if not loop.last %}; {% endif %}{% endfor %}. Full rank alone does not establish adequate precision or scientific plausibility.</p>{% endif %}
+        <p class="design-help">Historical observation uncertainty is used only where supported by the selected source analysis. Future individual SD/CV and replicate counts determine new measurement simulation and refitting, separately from the reference uncertainty. Response normalization constants are treated as fixed.</p>
+        {% include 'design/_timing_summary.html' %}
     </section>
 
     {% if adaptive %}
@@ -108,34 +137,4 @@
 
     {% include 'design/_timing_details.html' %}
 
-    <section class="design-section" aria-labelledby="planning-settings-heading">
-        <h3 id="planning-settings-heading">Inputs used for this calculation</h3>
-        {% for imported in source_summaries %}
-        {% set summary = imported.get('summary', imported) %}
-        <h4>{{ imported.get('label', 'Source input') }}</h4>
-        <p class="design-help">File: {{ imported.get('filename', summary.get('filename', '')) }}{% if imported.get('worksheet', summary.get('worksheet')) %} · Worksheet: {{ imported.get('worksheet', summary.get('worksheet')) }}{% endif %}.</p>
-        {% if summary.get('interpretation') %}<p>{{ summary.interpretation }}</p>{% endif %}
-        {% if summary.get('mapping') %}<p class="design-help">Mapping: {% for label, value in summary.mapping.items() %}{{ label }} → {{ value }}{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
-        {% if summary.get('retained_rows') is not none %}<p class="design-help">Rows: {{ summary.retained_rows }} retained, {{ summary.get('omitted_rows', 0) }} omitted.</p>{% endif %}
-        {% if summary.get('response_units') %}<p class="design-help">Supplied response units: {{ summary.response_units }}. Normalized outputs use the analyzed response scale.</p>{% endif %}
-        {% endfor %}
-        {% if not source_summaries %}
-        {% if source_summary.get('worksheet') %}<p>Reference worksheet: {{ source_summary.worksheet }}.</p>{% endif %}
-        {% if source_summary.get('interpretation') %}<p>{{ source_summary.interpretation }}</p>{% endif %}
-        {% if source_summary.get('mapping') %}<p class="design-help">Reference mapping: {% for label, value in source_summary.mapping.items() %}{{ label }} → {{ value }}{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
-        {% if source_summary.get('retained_rows') %}<p class="design-help">Reference rows: {{ source_summary.retained_rows }} retained, {{ source_summary.omitted_rows }} omitted.</p>{% endif %}
-        {% endif %}
-        {% if profile_summary %}
-        <p class="design-help">Future SD profile{% if profile_summary.get('filename') %}: {{ profile_summary.filename }}{% endif %}{% if profile_summary.get('worksheet') %} · Worksheet: {{ profile_summary.worksheet }}{% endif %}. Individual SD uses the analyzed response scale.</p>
-        {% if profile_summary.get('mapping') %}<p class="design-help">Profile mapping: {% for label, value in profile_summary.mapping.items() %}{{ label }} → {{ value }}{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
-        {% if profile_summary.get('time_range') %}<p class="design-help">Profile time range: {{ profile_summary.time_range[0] }}–{{ profile_summary.time_range[1] }}{% if profile_summary.get('individual_sd_range') %} · Individual SD range: {{ profile_summary.individual_sd_range[0] }}–{{ profile_summary.individual_sd_range[1] }}{% endif %}.</p>{% endif %}
-        {% endif %}
-        <div class="design-preview-table"><table class="design-settings-table">
-            <caption>Submitted assumptions and numerical settings</caption>
-            <tbody>{% for label, value in settings_rows %}<tr><th scope="row">{{ label }}</th><td>{{ value }}</td></tr>{% endfor %}</tbody>
-        </table></div>
-        {% if ranks %}<p class="design-help">Local information rank for suggested schedules: {% for rank in ranks %}{{ rank.number_of_times }} times: {{ rank.rank }}/{{ rank.parameters }} parameters{% if not loop.last %}; {% endif %}{% endfor %}. Full rank alone does not establish adequate precision or scientific plausibility.</p>{% endif %}
-        <p class="design-help">Historical observation uncertainty is used only where supported by the selected source analysis. Future individual SD/CV and replicate counts determine new measurement simulation and refitting, separately from the reference uncertainty. Response normalization constants are treated as fixed.</p>
-        <div class="design-action-row"><button type="button" disabled>Generate report</button><span class="design-help">Report generation deferred.</span></div>
-    </section>
 </div>

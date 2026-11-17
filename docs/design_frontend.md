@@ -90,6 +90,11 @@ The completed input summary identifies the analysis task and reference source
 or varied environment alongside the file interpretations and numerical settings
 used for that calculation. It remains tied to the submitted inputs when the
 current draft changes.
+Study-planning comparisons show this complete input record first, followed by
+interpretation/cautions and then the results. File names, worksheets, mappings,
+and retained-row information identify the source data together; a separate
+abbreviated filename introduction is omitted. Freshness remains in the existing
+comparison status displays.
 
 The top navigation remains visible while scrolling. Its section buttons follow
 the selected analysis task and move focus to the corresponding input heading.
@@ -488,8 +493,8 @@ requirement unavailable. Increase the horizon or revise the requirement when
 scientifically appropriate; the app does not discard nonreaching reference
 weight or change the requested quantile to produce a deadline.
 
-The comparison begins with a short timing summary: counts of requested windows
-and deadlines, available suggested study sizes, and grouped exceptions.
+Before the result plots, a short timing summary shows counts of requested
+windows and deadlines, available suggested study sizes, and grouped exceptions.
 **Infeasible**, **unresolved**, and **search limit reached** have different
 meanings. Reaching a search limit is not evidence that no schedule exists. A
 feasible schedule whose improvement search reaches a limit remains feasible.
