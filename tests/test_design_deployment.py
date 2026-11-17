@@ -52,7 +52,9 @@ class DesignDeployment(unittest.TestCase):
         page.feed(response.get_data(as_text=True))
         expected = {PREFIX + path for path in (
             '/review', '/calculate', '/generate-candidates', '/data/inspect',
-            '/data/preview', '/static/css/design.css', '/static/js/design.js',
+            '/data/preview', '/static/css/app-theme.css', '/static/css/design.css',
+            '/static/images/favicon-32.ico', '/static/images/Logo_FDA_Primary_Blue.png',
+            '/static/js/design.js',
             '/static/js/design-data.js', '/static/js/design-plots.js',
             '/static/js/design-timeline-figure.js', '/static/js/design-schedule-inspection.js',
             '/static/js/design-recovery-figure.js', '/static/js/design-recovery-inspection.js')}
