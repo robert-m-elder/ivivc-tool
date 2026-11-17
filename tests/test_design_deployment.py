@@ -51,7 +51,7 @@ class DesignDeployment(unittest.TestCase):
         page = PageURLs()
         page.feed(response.get_data(as_text=True))
         expected = {PREFIX + path for path in (
-            '/review', '/calculate', '/generate-candidates', '/data/inspect',
+            '/calculate', '/generate-candidates', '/data/inspect',
             '/data/preview', '/static/css/app-theme.css', '/static/css/design.css',
             '/static/images/favicon-32.ico', '/static/images/Logo_FDA_Primary_Blue.png',
             '/static/js/design.js',
@@ -68,6 +68,7 @@ class DesignDeployment(unittest.TestCase):
                     self.assertEqual(asset.status_code, 200)
                     self.assertGreater(len(asset.data), 0)
         self.assertEqual(self.client.get('/').status_code, 404)
+        self.assertEqual(self.client.post(PREFIX + '/review').status_code, 404)
         self.assertFalse(response.headers.getlist('Set-Cookie'))
 
     def test_mounted_import_workflow_reads_each_current_upload_without_cached_files(self):
@@ -115,7 +116,7 @@ class DesignDeployment(unittest.TestCase):
     def test_upload_cap_applies_to_every_multipart_post_endpoint(self):
         app = create_app({'TESTING': True, 'MAX_CONTENT_LENGTH': 512})
         client = app.test_client()
-        for path in ('/review', '/data/inspect', '/data/preview', '/calculate',
+        for path in ('/data/inspect', '/data/preview', '/calculate',
                      '/generate-candidates'):
             with self.subTest(path=path):
                 response = client.post(path, data={

@@ -63,6 +63,16 @@ class OtherReferencePresentation(unittest.TestCase):
         self.assertTrue(any('approach2:exponential_normalized' == value
                             for _, value in context['source_details_rows']))
 
+    def test_calculated_input_record_identifies_the_actual_reference_source(self):
+        for result, expected in ((self.ivivc, 'IVIVC prediction'),
+                                 (self.deterministic, 'IVIVC prediction'),
+                                 (self.mapped, 'IVIVC prediction'),
+                                 (self.scaling, 'Empirical time scaling')):
+            with self.subTest(source=expected, model=result.settings['model_name']):
+                settings = dict(present_planning_result(result)['settings_rows'])
+                self.assertEqual(settings['Analysis task'], 'Plan or extend an in vivo study')
+                self.assertEqual(settings['Reference source'], expected)
+
     def test_source_fit_preview_keeps_the_fitted_model_and_its_parameters(self):
         context = present_planning_result(self.ivivc)
         self.assertTrue(context['source_plots'][0]['plot']['series'])

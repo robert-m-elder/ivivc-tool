@@ -96,6 +96,8 @@ class PlanningResultPresentation(unittest.TestCase):
         context = self.present(source_summary=summary)
         self.assertEqual(context['source_summary'], summary)
         settings = dict(context['settings_rows'])
+        self.assertEqual(settings['Analysis task'], 'Plan or extend an in vivo study')
+        self.assertEqual(settings['Reference source'], 'Measured in vivo data')
         self.assertEqual(settings['Model'], 'linear')
         self.assertEqual(settings['Independent replicates at each time'], '2')
         self.assertEqual(settings['Random seed'], '2')

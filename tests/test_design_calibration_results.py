@@ -172,6 +172,15 @@ class CalibrationPresentation(unittest.TestCase):
         self.assertIn('0.01', dict(context['settings_rows'])['Fixed target response transformation'])
         self.assertIn('Calibration interpolation', dict(context['settings_rows']))
 
+    def test_calculated_input_record_keeps_the_submitted_task_and_varied_environment(self):
+        context = present_calibration_result(self.result)
+        settings = dict(context['settings_rows'])
+        self.assertEqual(self.result.settings['varied_environment'], 'in_vivo')
+        self.assertEqual(settings['Analysis task'], 'Compare calibration sampling')
+        self.assertEqual(settings['Varied environment'], 'In vivo only; keep in vitro data fixed')
+        self.assertEqual(context['source_previews'][0]['mode'], 'fixed')
+        self.assertEqual(context['source_previews'][1]['mode'], 'prospective')
+
     def test_source_previews_and_future_noise_show_the_actual_assumptions(self):
         context = present_calibration_result(self.result)
         self.assertEqual([source['side'] for source in context['source_previews']], ['In vitro', 'In vivo'])

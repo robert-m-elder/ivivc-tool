@@ -12,7 +12,6 @@
         const inputs = document.getElementById('design-inputs');
         const results = document.getElementById('design-results');
         const content = document.getElementById('design-results-content');
-        const reviewContent = document.getElementById('design-review-content') || content;
         const resultStatus = document.getElementById('design-results-status');
         const summary = document.getElementById('design-errors');
         const draftStatus = document.getElementById('design-draft-status');
@@ -23,7 +22,6 @@
         const navigation = document.getElementById('design-section-navigation');
         const actionBar = document.getElementById('design-calculation-bar');
         const sectionButtons = Array.from(root.querySelectorAll('[data-design-section]'));
-        const submit = document.getElementById('review-setup');
         const calculate = document.getElementById('calculate-comparison');
         const completed = document.getElementById('has_completed');
         const measuredMode = document.getElementById('measured_adaptive_mode');
@@ -50,7 +48,6 @@
         const files = new WeakMap();
         let nextFile = 0;
         let pending = false;
-        let reviewedSignature = null;
         let calculatedSignature = null;
         let generating = false;
         let generatedSignature = null;
@@ -69,8 +66,7 @@
             else operations.delete(key);
             if (operationFeedback) operationFeedback.hidden = operations.size === 0;
             if (operationText) {
-                const primary = operations.get('calculation') || operations.get('review') ||
-                    operations.get('generation') || operations.values().next().value;
+                const primary = operations.get('calculation') || operations.get('generation') || operations.values().next().value;
                 operationText.textContent = primary ? primary + (operations.size > 1 ?
                     ' (' + (operations.size - 1) + ' other request' + (operations.size > 2 ? 's' : '') + ' running.)' : '') : '';
             }
@@ -138,7 +134,6 @@
         }
 
         function syncButtons() {
-            submit.disabled = pending || generating;
             if (calculate) {
                 calculate.disabled = pending || generating || !calculationAvailable();
                 calculate.textContent = calculatedSignature === null ? 'Calculate comparison' : 'Recalculate comparison';
@@ -450,11 +445,7 @@
                 comparisonStatus.textContent = 'No comparison yet.';
             }
             if (resultStatus) resultStatus.textContent = 'No numerical comparison has been calculated.';
-            draftStatus.textContent = reviewedSignature === null ?
-                'Draft settings. Review setup to check these choices.' :
-                signature() === reviewedSignature ?
-                    'The displayed setup review matches these settings.' :
-                    'Inputs changed. The displayed setup review retains its original settings; review again to check these choices.';
+            draftStatus.textContent = 'Draft settings. Choose Calculate comparison to assess these inputs.';
             measureChrome();
         }
 
@@ -499,7 +490,7 @@
         function showErrors(errors, context = {}) {
             clearErrors();
             const heading = document.createElement('h2');
-            heading.textContent = context.heading || 'The setup review could not be completed';
+            heading.textContent = context.heading || 'The request could not be completed';
             const list = document.createElement('ul');
             const fieldMessages = new Map();
             errors.forEach(error => {
@@ -547,7 +538,7 @@
             summary.hidden = false;
             showView('inputs');
             focusTarget(summary);
-            requestStatus.textContent = context.status || 'Setup review failed. Earlier displayed results remain available.';
+            requestStatus.textContent = context.status || 'Request failed. Earlier displayed results remain available.';
             requestStatus.dataset.state = 'error';
         }
 
@@ -704,13 +695,15 @@
         form.addEventListener('submit', async event => {
             event.preventDefault();
             if (pending || generating) return;
-            const calculating = Boolean(calculate && event.submitter === calculate);
+            // Native Enter submission may omit a submitter. The form has one
+            // calculation action, shared by keyboard and button submission.
+            if (event.submitter && event.submitter !== calculate) return;
             const comparisonName = task.value === 'calibration' ? 'calibration' : 'study';
-            const context = calculating ? {
+            const context = {
                 heading: 'The ' + comparisonName + ' comparison could not be completed',
                 status: 'Calculation failed. Earlier displayed results remain available.',
-            } : {};
-            if (calculating && !calculationAvailable()) {
+            };
+            if (!calculationAvailable()) {
                 showErrors([{message: 'Choose a supported study-planning or calibration-comparison task.'}], context);
                 return;
             }
@@ -724,53 +717,44 @@
             clearErrors();
             requestStatus.textContent = '';
             requestStatus.dataset.state = 'busy';
-            setOperation(calculating ? 'calculation' : 'review', true, calculating ?
-                'Calculating the ' + comparisonName + ' comparison. Keep this page open.' : 'Reviewing setup.');
+            setOperation('calculation', true, 'Calculating the ' + comparisonName + ' comparison. Keep this page open.');
             try {
-                // The form-associated button named "action" shadows form.action
-                // in browsers, so read the declared review URL directly.
-                const response = await fetch(calculating ? calculate.getAttribute('formaction') : form.getAttribute('action'), {
+                // Read the explicit attribute so named controls cannot shadow
+                // the URL through HTMLFormElement's named-property lookup.
+                const response = await fetch(form.getAttribute('action'), {
                     method: 'POST', body: data, headers: {'Accept': 'application/json'},
                 });
                 const payload = await response.json();
                 if (!response.ok || payload.ok !== true) {
                     showErrors(signature() !== submittedSignature ? [{
-                        message: 'Submitted settings could not be ' + (calculating ? 'calculated' : 'reviewed') + '. Inputs changed during the request; check the current choices again.',
+                        message: 'Submitted settings could not be calculated. Inputs changed during the request; check the current choices again.',
                     }] : Array.isArray(payload.errors) && payload.errors.length ? payload.errors :
                         [{message: 'The request could not be completed. Try again.'}], context);
                     return;
                 }
                 if (typeof payload.html !== 'string') throw new Error('Missing response HTML.');
                 // Only this app's server-rendered, escaped template is inserted here.
-                const destination = calculating ? content : reviewContent;
-                if (calculating) {
-                    inspectionAction('dispose', destination);
-                    plotAction('purge', destination);
-                }
-                destination.innerHTML = payload.html;
-                if (calculating) {
-                    inspectionAction('initialize', destination);
-                    plotAction('initialize', destination);
-                }
-                if (calculating) calculatedSignature = submittedSignature;
-                else reviewedSignature = submittedSignature;
+                inspectionAction('dispose', content);
+                plotAction('purge', content);
+                content.innerHTML = payload.html;
+                inspectionAction('initialize', content);
+                plotAction('initialize', content);
+                calculatedSignature = submittedSignature;
                 updateDraftStatus();
                 const unchanged = signature() === submittedSignature;
-                requestStatus.textContent = calculating ? (unchanged ?
+                requestStatus.textContent = unchanged ?
                     comparisonName[0].toUpperCase() + comparisonName.slice(1) + ' comparison calculated.' :
-                    'Submitted ' + comparisonName + ' comparison calculated. Inputs changed during the request; calculate again to assess the current choices.') : unchanged ?
-                    'Setup reviewed. This request did not run a numerical calculation.' :
-                    'Submitted settings reviewed. Inputs changed during the request; review again to check the current choices.';
+                    'Submitted ' + comparisonName + ' comparison calculated. Inputs changed during the request; calculate again to assess the current choices.';
                 requestStatus.dataset.state = 'success';
                 if (unchanged && draftRevision === submittedRevision && navigationRevision === submittedNavigation) {
                     showView('results');
-                    focusTarget(calculating ? document.getElementById('design-results-heading') || destination : destination);
+                    focusTarget(document.getElementById('design-results-heading') || content);
                 }
             } catch (error) {
                 showErrors([{message: 'The request could not be completed. Check the connection and try again.'}], context);
             } finally {
                 pending = false;
-                setOperation(calculating ? 'calculation' : 'review', false);
+                setOperation('calculation', false);
                 syncButtons();
                 form.setAttribute('aria-busy', 'false');
             }

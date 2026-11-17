@@ -58,24 +58,16 @@ draws, simulated studies, candidate designs, or grid size can shorten a trial
 calculation. No session affinity is needed between requests: required files
 and settings are submitted each time.
 
-## Setup and request handling
+## Calculation and request handling
 
 - `GET /` serves the input and comparison workspace.
-- `POST /review` accepts multipart form data and returns a JSON response.
-  It validates the selected task, its active reference/environment choice,
-  and the advanced numerical settings. Success includes server-rendered setup
-  review HTML; errors include a message and an optional field identifier.
-- **Review setup** checks these choices. File previews are requested separately;
-  it does not fit curves, generate schedules, or run simulations. A setup review
-  is not an analysis result.
-  The controller reads the form's explicit `action` attribute for its URL:
-  the form-associated Calculate button is named `action`, which shadows the
-  `form.action` property in a browser. Calculation uses the button's separate
-  `formaction` URL. Both attributes come from `url_for` and retain hosting
-  prefixes.
 - `POST /calculate` imports and validates the current files and settings, then
   completes prospective or adaptive study planning synchronously. It returns server-rendered
   comparison HTML or field-linked errors.
+  The form declares this URL with `url_for`, and the controller reads its
+  explicit `action` attribute to retain hosting prefixes. Calculate/Recalculate
+  is the single submission action; Enter in a single-line input follows the
+  same calculation path. File previews remain separate requests.
 - `POST /generate-candidates` imports the varied calibration environments and
   returns proposed curve-recovery schedules with a review preview. It uses the
   same generation path as calibration comparison, without calibration
@@ -89,11 +81,15 @@ and settings are submitted each time.
 
 JavaScript is required for the workspace. It leaves the input form mounted,
 including selected browser files, while a normal request runs to completion.
-Displayed results change only after a successful calculation. Setup reviews use
-a separate region and never replace numerical results. Validation, network,
+Displayed results change only after a successful calculation, which replaces
+the previous comparison. Validation, network,
 and server errors preserve earlier output. Edits during a request are
 distinguished from the settings submitted in that request; successful results
 retain their original input summary and are marked out of date when needed.
+The completed input summary identifies the analysis task and reference source
+or varied environment alongside the file interpretations and numerical settings
+used for that calculation. It remains tied to the submitted inputs when the
+current draft changes.
 
 The top navigation remains visible while scrolling. Its section buttons follow
 the selected analysis task and move focus to the corresponding input heading.
@@ -114,7 +110,7 @@ errors lead to an error summary with links to the relevant input controls.
 Navigation and focus offsets account for the persistent bars so their targets
 remain visible. No calculation runs merely from moving between sections.
 
-Only the current browser page holds the working form and displayed review.
+Only the current browser page holds the working form and displayed comparison.
 Refreshing or closing it clears that state. There is no project/result store,
 session storage, job queue, polling, numerical progress reporting, or background worker.
 The upload limit defaults to 25 MiB per request. Hosted request timeouts will
@@ -687,7 +683,7 @@ Selection changes use the current result without further requests or
 simulations, and never mark the analysis inputs changed. The comparison's
 existing settings and out-of-date behavior apply to the inspection data as
 well. Switching workspace views preserves the current selection; a successful
-new calculation starts a fresh selection. A failed calculation or setup review
+new calculation starts a fresh selection. A failed calculation
 preserves it. The timeline supports hover, zoom/reset, and SVG download through
 the shared Plotly renderer. If interactive rendering is unavailable, selection
 still updates the exact-time tables, which open automatically. The other
@@ -803,9 +799,10 @@ node --test tests/test_design_frontend.cjs tests/test_design_data_frontend.cjs t
 The frontend checks use Node's built-in test runner and a small DOM fixture;
 they require no additional JavaScript packages. Existing numerical and IVIVC
 tests should continue to run in the usual application environment.
-Routing checks model the named Calculate button shadowing `form.action` and
-exercise Review setup, Enter submission, and calculation at standalone and
-prefixed URLs while retaining uploaded files and comparison freshness.
+Routing checks exercise the Calculate button and Enter submission at standalone
+and prefixed URLs while retaining uploaded files and comparison freshness.
+They also check that the controller reads the declared URL even if a named
+control shadows the form's URL property.
 
 `test_design_navigation_markup.py` renders the actual shell for both tasks and
 URL prefixes. It checks the persistent button's form ownership, focusable
@@ -842,10 +839,9 @@ controllers working together.
    Check narrow windows, browser zoom, and reduced-motion settings. Change tasks
    and workspace views; only the relevant section buttons should be shown.
    If using a prefix, complete the remaining checks at that prefixed URL.
-   Choose Review setup, then return to Inputs and submit a setup review using
-   Enter in a single-line field. Both should reach the setup review without a
-   numerical calculation or a missing-URL error. Repeat Review setup after a
-   calculation and confirm that its comparison and freshness remain intact.
+   With a small configured comparison, check Calculate comparison and Enter in
+   a single-line field. Both should submit the same calculation. A successful
+   recalculation should replace the earlier comparison and its input record.
    After calculating a comparison, check hover values, zoom/reset, legend
    toggles, and figure download on the reference plot. Switch between Inputs
    and Comparisons and resize the browser; the plot should fit the visible

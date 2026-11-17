@@ -90,7 +90,7 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
     const resultsButton = element("button", {"data-design-view": "results"}, navigation);
     const studySection = element("button", {"data-design-section": "study-sampling-heading", "data-section-task": "study"}, navigation);
     const calibrationSection = element("button", {"data-design-section": "calibration-candidates-heading", "data-section-task": "calibration"}, navigation);
-    const commonSection = element("button", {"data-design-section": "design-review-heading", "data-section-task": "all"}, navigation);
+    const commonSection = element("button", {"data-design-section": "design-calculation-heading", "data-section-task": "all"}, navigation);
     const bar = element("aside", {id: "design-calculation-bar"});
     const comparisonStatus = element("p", {id: "design-comparison-status", "data-state": "none"}, bar);
     const operationFeedback = element("p", {id: "design-operation-feedback", hidden: ""}, bar);
@@ -105,7 +105,7 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
         constructor(callback) { this.callback = callback; this.observed = []; resizeObservers.push(this); }
         observe(node) { this.observed.push(node); }
     }
-    const form = element("form", {id: "design-setup-form", action: mountPrefix + "/review"}, root);
+    const form = element("form", {id: "design-setup-form", action: mountPrefix + "/calculate"}, root);
     form.action = form.getAttribute("action");
     const task = element("select", {id: "task", name: "task", value: "study", "aria-describedby": "task-help"}, form);
     const inputs = element("section", {id: "design-inputs"}, form);
@@ -125,13 +125,13 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
     const calibrationHeading = element("h3", {id: "calibration-candidates-heading", tabindex: "-1"}, calibrationGroup);
     const environment = element("select", {id: "varied_environment", name: "varied_environment", value: "in_vivo"}, calibrationGroup);
     const calibrationFile = element("input", {id: "calibration-file", name: "calibration_file", type: "file"}, calibrationGroup);
-    const calculationHeading = element("h3", {id: "design-review-heading", tabindex: "-1"}, inputs);
+    const calculationHeading = element("h3", {id: "design-calculation-heading", tabindex: "-1"}, inputs);
     const outerDetails = element("details", {}, inputs);
     const details = element("details", {}, outerDetails);
     const simulations = element("input", {id: "n_simulations", name: "n_simulations", type: "number", value: "100", "aria-describedby": "n-simulations-help"}, details);
     const seed = element("input", {id: "random_seed", name: "random_seed", type: "number", value: "12345", "aria-describedby": "random-seed-help"}, details);
-    const submit = element("button", {id: "review-setup", disabled: ""}, inputs);
-    let calculate, completed, planningGroup, observationKind, observationValue, minimumSd, profileFile;
+    const calculate = element("button", {id: "calculate-comparison", form: "design-setup-form", type: "submit", disabled: ""}, bar);
+    let completed, planningGroup, observationKind, observationValue, minimumSd, profileFile;
     let availability, ivivcGroup, scalingGroup, ivivcApproach, ivivcModel, ivivcMethod;
     let interpolation, scalingModel, extrapolation, ivivcTarget, ratioFile;
     let measuredMode, completedError, completedFile, completedScaleHelp, firstMode, firstTime, futurePolicy, addTiming;
@@ -221,11 +221,6 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
         minimumSd = element("input", {id: "minimum_sd", name: "minimum_sd", value: ".001"}, cv);
         const profile = element("div", {"data-observation-kind": "time_profile_sd"}, planningGroup);
         profileFile = element("input", {id: "profile-file", name: "profile_file", type: "file"}, profile);
-        calculate = element("button", {id: "calculate-comparison", form: "design-setup-form", type: "submit",
-            name: "action", value: "calculate", formaction: mountPrefix + "/calculate", disabled: ""}, bar);
-        // HTMLFormElement named lookup also includes externally associated
-        // controls, which can shadow built-in properties such as action.
-        form.action = calculate;
         availability = element("p", {"data-planning-availability": ""}, inputs);
     }
     let calibrationControls = null;
@@ -325,9 +320,8 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
     const results = element("section", {id: "design-results", hidden: ""}, root);
     const resultsHeading = element("h2", {id: "design-results-heading", tabindex: "-1"}, results);
     const content = element("div", {id: "design-results-content"}, results);
-    content.innerHTML = "<p>No review yet.</p>";
-    const reviewContent = planning ? element("div", {id: "design-review-content"}, results) : content;
-    const resultStatus = planning ? element("p", {id: "design-results-status"}, results) : null;
+    content.innerHTML = "<p>No comparison yet.</p>";
+    const resultStatus = element("p", {id: "design-results-status"}, results);
     root.append(bar);
 
     document.getElementById = id => root.id === id ? root :
@@ -372,12 +366,6 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
         return event;
     }
 
-    async function successfulReview(html = "<section>Reviewed original settings</section>") {
-        const response = emit(form, "submit");
-        requests.at(-1).resolve({ok: true, json: async () => ({ok: true, html})});
-        await response;
-    }
-
     async function successfulCalculation(html = "<section>Calculated original settings</section>") {
         const response = emit(form, "submit", {submitter: calculate});
         requests.at(-1).resolve({ok: true, json: async () => ({ok: true, html})});
@@ -386,12 +374,12 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
 
     return {root, form, task, sourceField, sourceGroups, fileInputs, calibrationGroup, environment,
         calibrationFile, details, simulations, seed, inputs, results, content, summary, draftStatus,
-        requestStatus, submit, errors, requests, document, inputsButton, resultsButton, emit, successfulReview,
+        requestStatus, errors, requests, document, inputsButton, resultsButton, emit,
         navigation, studySection, calibrationSection, commonSection, studyHeading, calibrationHeading,
         calculationHeading, outerDetails, bar, comparisonStatus, operationFeedback, operationText, resultsHeading,
         cssValues, resizeObservers,
         calculate, completed, planningGroup, observationKind, observationValue, minimumSd, profileFile,
-        availability, reviewContent, resultStatus, successfulCalculation,
+        availability, resultStatus, successfulCalculation,
         ivivcGroup, scalingGroup, ivivcApproach, ivivcModel, ivivcMethod,
         interpolation, scalingModel, extrapolation, ivivcTarget, ratioFile,
         measuredMode, completedError, completedFile, completedScaleHelp, firstMode, firstTime, futurePolicy, addTiming, timingRows,
@@ -400,43 +388,37 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
         calibration: calibrationControls};
 }
 
-test('review reads its declared URL when a named Calculate button shadows form.action', async () => {
+test('explicit Calculate and implicit Enter submit only calculations at standalone and mounted URLs', async () => {
     for (const mountPrefix of ['', '/tools/design']) {
         const page = fixture({planning: true, mountPrefix});
         const file = {name: 'reference.csv', size: 42, lastModified: 123};
         page.fileInputs.measured.files = [file];
-        assert.equal(page.form.action, page.calculate, 'Model native named-control lookup before submitting.');
-
-        const firstReview = page.emit(page.form, 'submit', {submitter: page.submit});
-        assert.equal(page.requests.at(-1).url, mountPrefix + '/review');
-        assert.equal(typeof page.requests.at(-1).url, 'string');
-        page.requests.at(-1).resolve({ok: true, json: async () => ({ok: true, html: '<p>Reviewed setup</p>'})});
-        await firstReview;
-        assert.equal(page.comparisonStatus.dataset.state, 'none');
-        assert.equal(page.fileInputs.measured.files[0], file);
-
-        await page.successfulCalculation('<p>Calculated comparison</p>');
+        // Preserve attribute-based routing even if a future named control
+        // shadows a native form property again.
+        page.form.action = {tagName: 'BUTTON'};
+        assert.equal(page.calculate.getAttribute('name'), null);
+        assert.equal(page.calculate.getAttribute('formaction'), null);
+        await page.successfulCalculation('<p>First comparison</p>');
         assert.equal(page.requests.at(-1).url, mountPrefix + '/calculate');
-        const comparison = page.content.innerHTML;
-        const freshness = page.resultStatus.textContent;
-        await page.emit(page.inputsButton, 'click');
-        // Enter-key/default submission uses the same review URL without an
-        // explicit submitter and must not replace the numerical comparison.
-        await page.successfulReview('<p>Reviewed again</p>');
-        assert.equal(page.requests.at(-1).url, mountPrefix + '/review');
         assert.equal(typeof page.requests.at(-1).url, 'string');
-        assert.equal(page.content.innerHTML, comparison);
-        assert.equal(page.resultStatus.textContent, freshness);
         assert.equal(page.comparisonStatus.dataset.state, 'current');
         assert.equal(page.fileInputs.measured.files[0], file);
-        assert.equal(page.reviewContent.innerHTML, '<p>Reviewed again</p>');
+        await page.emit(page.inputsButton, 'click');
+        const implicit = page.emit(page.form, 'submit');
+        assert.equal(page.requests.at(-1).url, mountPrefix + '/calculate');
+        page.requests.at(-1).resolve({ok: true, json: async () => ({ok: true, html: '<p>Replacement comparison</p>'})});
+        await implicit;
+        assert.equal(page.content.innerHTML, '<p>Replacement comparison</p>');
+        assert.equal(page.document.activeElement, page.resultsHeading);
+        assert.equal(page.fileInputs.measured.files[0], file);
+        assert.equal(page.calculate.textContent, 'Recalculate comparison');
     }
 });
 
 test("task and reference changes enable only active inputs without fetching", async () => {
     const page = fixture();
     assert.equal(page.root.dataset.ready, "true");
-    assert.equal(page.submit.disabled, false);
+    assert.equal(page.calculate.disabled, false);
     assert.equal(page.inputs.hidden, false);
     assert.equal(page.results.hidden, true);
     assert.equal(page.fileInputs.measured.disabled, false);
@@ -466,34 +448,34 @@ test("task and reference changes enable only active inputs without fetching", as
     assert.equal(page.requests.length, 0);
 });
 
-test("successful review replaces only results and preserves selected File objects", async () => {
+test("successful calculation replaces only results and preserves selected File objects", async () => {
     const page = fixture();
     const file = {name: "measurements.csv", size: 42, lastModified: 123};
     const fileInput = page.fileInputs.measured;
     fileInput.files = [file];
     const response = page.emit(page.form, "submit");
     assert.equal(page.requests.length, 1);
-    assert.equal(page.requests[0].url, "/review");
+    assert.equal(page.requests[0].url, "/calculate");
     assert.equal(page.requests[0].options.method, "POST");
     assert.equal(page.requests[0].options.headers.Accept, "application/json");
     assert.equal(Array.from(page.requests[0].options.body.entries()).find(([name]) => name === "measured_file")[1], file);
 
-    page.requests[0].resolve({ok: true, json: async () => ({ok: true, html: "<section>Measured setup review</section>"})});
+    page.requests[0].resolve({ok: true, json: async () => ({ok: true, html: "<section>Measured comparison</section>"})});
     await response;
-    assert.equal(page.content.innerHTML, "<section>Measured setup review</section>");
+    assert.equal(page.content.innerHTML, "<section>Measured comparison</section>");
     assert.equal(page.document.getElementById("design-setup-form"), page.form);
     assert.equal(page.document.getElementById("measured-file"), fileInput);
     assert.equal(fileInput.files[0], file);
     assert.equal(page.results.hidden, false);
     assert.equal(page.inputs.hidden, true);
-    assert.equal(page.document.activeElement, page.content);
+    assert.equal(page.document.activeElement, page.resultsHeading);
     assert.match(page.draftStatus.textContent, /matches these settings/);
 
     await page.emit(page.inputsButton, "click");
     page.simulations.value = "120";
     await page.emit(page.simulations, "input");
     assert.match(page.draftStatus.textContent, /Inputs changed/);
-    assert.equal(page.content.innerHTML, "<section>Measured setup review</section>");
+    assert.equal(page.content.innerHTML, "<section>Measured comparison</section>");
     assert.equal(page.requests.length, 1);
     page.simulations.value = "100";
     await page.emit(page.simulations, "input");
@@ -502,7 +484,7 @@ test("successful review replaces only results and preserves selected File object
 
 test("server validation links errors, opens advanced fields, and retains earlier results", async () => {
     const page = fixture();
-    await page.successfulReview();
+    await page.successfulCalculation();
     const previous = page.content.innerHTML;
     await page.emit(page.inputsButton, "click");
     page.seed.value = "invalid";
@@ -528,7 +510,7 @@ test("server validation links errors, opens advanced fields, and retains earlier
     assert.equal(page.document.activeElement, page.seed);
 
     page.seed.value = "12345";
-    await page.successfulReview("<section>Corrected review</section>");
+    await page.successfulCalculation("<section>Corrected comparison</section>");
     assert.equal(page.summary.hidden, true);
     assert.equal(page.seed.getAttribute("aria-invalid"), "false");
     assert.equal(page.errors.random_seed.hidden, true);
@@ -538,14 +520,14 @@ test("server validation links errors, opens advanced fields, and retains earlier
 test("network and malformed-response failures preserve existing content and release the form", async () => {
     for (const failure of ["network", "invalid-json", "missing-html"]) {
         const page = fixture();
-        await page.successfulReview("<section>Retained review</section>");
+        await page.successfulCalculation("<section>Retained comparison</section>");
         const request = page.emit(page.form, "submit");
         if (failure === "network") page.requests.at(-1).reject(new Error("offline"));
         if (failure === "invalid-json") page.requests.at(-1).resolve({ok: false, json: async () => { throw new Error("not JSON"); }});
         if (failure === "missing-html") page.requests.at(-1).resolve({ok: true, json: async () => ({ok: true})});
         await request;
-        assert.equal(page.content.innerHTML, "<section>Retained review</section>");
-        assert.equal(page.submit.disabled, false);
+        assert.equal(page.content.innerHTML, "<section>Retained comparison</section>");
+        assert.equal(page.calculate.disabled, false);
         assert.equal(page.form.getAttribute("aria-busy"), "false");
         assert.equal(page.summary.hidden, false);
         assert.match(page.summary.textContent, /connection/);
@@ -554,20 +536,20 @@ test("network and malformed-response failures preserve existing content and rele
     }
 });
 
-test("only one review request runs at a time and busy state is restored", async () => {
+test("only one calculation request runs at a time and busy state is restored", async () => {
     const page = fixture();
     const first = page.emit(page.form, "submit");
-    assert.equal(page.submit.disabled, true);
+    assert.equal(page.calculate.disabled, true);
     assert.equal(page.form.getAttribute("aria-busy"), "true");
     await page.emit(page.form, "submit");
     assert.equal(page.requests.length, 1);
-    page.requests[0].resolve({ok: true, json: async () => ({ok: true, html: "<p>First review</p>"})});
+    page.requests[0].resolve({ok: true, json: async () => ({ok: true, html: "<p>First comparison</p>"})});
     await first;
-    assert.equal(page.submit.disabled, false);
+    assert.equal(page.calculate.disabled, false);
     assert.equal(page.form.getAttribute("aria-busy"), "false");
-    await page.successfulReview("<p>Second review</p>");
+    await page.successfulCalculation("<p>Second comparison</p>");
     assert.equal(page.requests.length, 2);
-    assert.equal(page.content.innerHTML, "<p>Second review</p>");
+    assert.equal(page.content.innerHTML, "<p>Second comparison</p>");
 });
 
 test("editing while a request runs retains captured settings and leaves current inputs visible", async () => {
@@ -590,7 +572,7 @@ test("editing while a request runs retains captured settings and leaves current 
 
 test("failed submitted settings do not mark changed or inactive fields as invalid", async () => {
     const page = fixture();
-    await page.successfulReview("<section>Retained review</section>");
+    await page.successfulCalculation("<section>Retained comparison</section>");
     const pending = page.emit(page.form, "submit");
     page.task.value = "calibration";
     await page.emit(page.task, "change");
@@ -598,7 +580,7 @@ test("failed submitted settings do not mark changed or inactive fields as invali
         {field_id: "reference_source", message: "Invalid submitted reference source."},
     ]})});
     await pending;
-    assert.equal(page.content.innerHTML, "<section>Retained review</section>");
+    assert.equal(page.content.innerHTML, "<section>Retained comparison</section>");
     assert.equal(page.task.value, "calibration");
     assert.equal(page.sourceField.disabled, true);
     assert.notEqual(page.sourceField.getAttribute("aria-invalid"), "true");
@@ -616,7 +598,6 @@ test("calculation posts the mounted form to its own endpoint and preserves selec
     assert.equal(page.requests[0].url, "/calculate");
     assert.equal(page.requests[0].options.method, "POST");
     assert.equal(Array.from(page.requests[0].options.body.entries()).find(([name]) => name === "measured_file")[1], file);
-    assert.equal(page.submit.disabled, true);
     assert.equal(page.calculate.disabled, true);
     await page.emit(page.form, "submit");
     assert.equal(page.requests.length, 1);
@@ -630,16 +611,19 @@ test("calculation posts the mounted form to its own endpoint and preserves selec
     assert.equal(page.calculate.disabled, false);
 });
 
-test("setup review never replaces an existing numerical comparison or its freshness", async () => {
+test('non-calculation submitters cannot replace or recertify an earlier comparison', async () => {
     const page = fixture({planning: true});
-    await page.successfulCalculation("<section>Simulation seed 12345</section>");
-    page.seed.value = "999";
-    await page.emit(page.seed, "change");
-    await page.successfulReview("<section>Reviewed seed 999</section>");
-    assert.equal(page.content.innerHTML, "<section>Simulation seed 12345</section>");
-    assert.equal(page.reviewContent.innerHTML, "<section>Reviewed seed 999</section>");
+    await page.successfulCalculation('<section>Simulation seed 12345</section>');
+    await page.emit(page.inputsButton, 'click');
+    page.seed.value = '999';
+    await page.emit(page.seed, 'change');
+    const requests = page.requests.length;
+    const ignored = await page.emit(page.form, 'submit', {submitter: page.addTiming});
+    assert.equal(ignored.defaultPrevented, true);
+    assert.equal(page.requests.length, requests);
+    assert.equal(page.content.innerHTML, '<section>Simulation seed 12345</section>');
+    assert.equal(page.comparisonStatus.dataset.state, 'stale');
     assert.match(page.resultStatus.textContent, /original inputs/);
-    assert.match(page.draftStatus.textContent, /Inputs changed/);
 });
 
 test("successful calculations dispose the previous plot and initialize the inserted result", async () => {
@@ -694,7 +678,8 @@ test("schedule inspection is disposed before replacement and initialized before 
     assert.equal(calls[0][1], previous);
     assert.equal(calls[2][1], '<section>Schedules and timelines</section>');
     calls.length = 0;
-    await page.successfulReview('<section>Review only</section>');
+    await page.emit(page.inputsButton, 'click');
+    await page.emit(page.resultsButton, 'click');
     assert.deepEqual(calls.map(call => call[0]), ['plots-resize']);
     const pending = page.emit(page.form, 'submit', {submitter: page.calculate});
     page.requests.at(-1).resolve({ok: false, json: async () => ({ok: false,
@@ -746,15 +731,13 @@ test("a failed recovery controller cannot prevent schedule inspection or success
     assert.match(page.requestStatus.textContent, /comparison calculated/);
 });
 
-test("review and workspace navigation preserve plots and resize without a new calculation", async () => {
+test("workspace navigation preserves plots and resizes without a new calculation", async () => {
     const calls = [];
     const plots = Object.fromEntries(['purge', 'initialize', 'resize'].map(action =>
         [action, () => calls.push(action)]));
     const page = fixture({planning: true, plots});
     await page.successfulCalculation('<section>Numerical plot</section>');
     calls.length = 0;
-    await page.successfulReview('<section>Setup review</section>');
-    assert.deepEqual(calls, ['resize']);
     assert.equal(page.content.innerHTML, '<section>Numerical plot</section>');
     const status = page.resultStatus.textContent;
     const requests = page.requests.length;
@@ -793,7 +776,6 @@ test("calculation availability follows source and completed-study choices withou
         await page.emit(page.sourceField, "change");
         assert.equal(page.calculate.disabled, false);
         assert.equal(page.observationKind.disabled, false);
-        assert.equal(page.submit.disabled, false);
         assert.match(page.availability.textContent, /selected reference source/);
     }
     page.sourceField.value = "measured";
@@ -875,11 +857,10 @@ test("a same-name replacement File makes calculation output stale and prevents o
     assert.equal(page.calculate.disabled, false);
 });
 
-test("failed calculations retain both earlier numerical results and setup review", async () => {
+test("failed recalculations retain the earlier numerical result", async () => {
     for (const failure of ["network", "invalid-json", "missing-html", "validation"]) {
         const page = fixture({planning: true});
         await page.successfulCalculation("<section>Earlier comparison</section>");
-        await page.successfulReview("<section>Earlier review</section>");
         const pending = page.emit(page.form, "submit", {submitter: page.calculate});
         const request = page.requests.at(-1);
         if (failure === "network") request.reject(new Error("offline"));
@@ -888,10 +869,8 @@ test("failed calculations retain both earlier numerical results and setup review
         if (failure === "validation") request.resolve({ok: false, json: async () => ({ok: false, errors: [{field_id: "random_seed", message: "Invalid seed"}]})});
         await pending;
         assert.equal(page.content.innerHTML, "<section>Earlier comparison</section>");
-        assert.equal(page.reviewContent.innerHTML, "<section>Earlier review</section>");
         assert.equal(page.form.getAttribute("aria-busy"), "false");
         assert.equal(page.calculate.disabled, false);
-        assert.equal(page.submit.disabled, false);
         assert.match(page.summary.textContent, /study comparison/);
     }
 });
@@ -1420,7 +1399,6 @@ test('generation previews without modifying candidates, files, or the saved comp
     assert.equal(page.requests.at(-1).url, '/generate-candidates');
     assert.equal(new Map(page.requests.at(-1).options.body.entries()).get('cal_in_vivo_source_file'), file);
     assert.equal(page.calculate.disabled, true);
-    assert.equal(page.submit.disabled, true);
     assert.equal(cal.generate.disabled, true);
     assert.match(cal.generationStatus.textContent, /without calibration simulations/);
     const count = page.requests.length;
@@ -1558,8 +1536,8 @@ test('persistent comparison status follows calculated inputs and keeps recalcula
     page.seed.value = '999';
     await page.emit(page.seed, 'input');
     assert.equal(page.comparisonStatus.dataset.state, 'stale');
-    await page.successfulReview();
-    assert.equal(page.comparisonStatus.dataset.state, 'stale', 'Reviewing setup must not certify an earlier numerical comparison.');
+    await page.emit(page.resultsButton, 'click');
+    assert.equal(page.comparisonStatus.dataset.state, 'stale', 'Viewing results must not certify an earlier numerical comparison.');
     page.seed.value = '12345';
     await page.emit(page.seed, 'input');
     assert.equal(page.comparisonStatus.dataset.state, 'current');
@@ -1597,7 +1575,6 @@ test('calculation feedback remains visible while the request runs and clears on 
         const pending = page.emit(page.form, 'submit', {submitter: page.calculate});
         assert.equal(page.operationFeedback.hidden, false);
         assert.match(page.operationText.textContent, /calculat/i);
-        assert.equal(page.submit.disabled, true);
         assert.equal(page.calculate.disabled, true);
         const request = page.requests.at(-1);
         if (outcome === 'success') request.resolve({ok: true, json: async () => ({ok: true, html: '<p>Calculated</p>'})});
@@ -1607,7 +1584,6 @@ test('calculation feedback remains visible while the request runs and clears on 
         await pending;
         assert.equal(page.operationFeedback.hidden, true, outcome);
         assert.equal(page.form.getAttribute('aria-busy'), 'false', outcome);
-        assert.equal(page.submit.disabled, false, outcome);
         assert.equal(page.calculate.disabled, false, outcome);
         if (outcome === 'success') {
             assert.equal(page.document.activeElement, page.resultsHeading);
@@ -1619,16 +1595,9 @@ test('calculation feedback remains visible while the request runs and clears on 
     }
 });
 
-test('setup review and generation share persistent request feedback without relabeling comparisons as current', async () => {
+test('generation feedback does not certify a numerical comparison', async () => {
     const page = await generationPage();
-    const review = page.emit(page.form, 'submit');
-    assert.equal(page.operationFeedback.hidden, false);
-    assert.match(page.operationText.textContent, /review/i);
-    page.requests.at(-1).resolve({ok: true, json: async () => ({ok: true, html: '<p>Setup only</p>'})});
-    await review;
-    assert.equal(page.operationFeedback.hidden, true);
     assert.equal(page.comparisonStatus.dataset.state, 'none');
-    await page.emit(page.inputsButton, 'click');
     const generation = page.emit(page.calibration.generate, 'click');
     assert.equal(page.operationFeedback.hidden, false);
     assert.match(page.operationText.textContent, /generat/i);

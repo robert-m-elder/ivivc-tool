@@ -408,6 +408,11 @@ def present_planning_result(result, *, source_filename=None, source_summary=None
         normalization += '; apply one minus response'
     requested = settings['reference_draws']
     settings_rows = [
+        ('Analysis task', 'Plan or extend an in vivo study'),
+        ('Reference source', {
+            'measured': 'Measured in vivo data', 'ivivc': 'IVIVC prediction',
+            'scaling': 'Empirical time scaling',
+        }.get(source_kind, source_label)),
         ('Model', settings['model_name']), ('Normalization', normalization),
         ('Future variability', future), ('Independent replicates at each time', str(replicates)),
         ('Minimum future individual SD', _number(settings['minimum_sd'])),

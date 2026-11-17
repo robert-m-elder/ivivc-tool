@@ -38,8 +38,8 @@ def _default_settings():
     }
 
 
-def _review_settings(form):
-    """Validate only the setup choices exposed by this initial frontend."""
+def _calculation_settings(form):
+    """Validate request-wide choices before importing calculation data."""
     settings = _default_settings()
     errors = []
 
@@ -215,7 +215,7 @@ def create_app(config=None):
                 return import_error('Select which calibration environment will vary.', 'varied_environment')
             settings, errors = dict(task='calibration', varied_environment=environment), []
         else:
-            settings, errors = _review_settings(request.form)
+            settings, errors = _calculation_settings(request.form)
         if errors:
             return jsonify(ok=False, errors=errors), 400
         has_completed = str(request.form.get('has_completed', '')).strip().lower() in (
@@ -382,20 +382,6 @@ def create_app(config=None):
         )
         html = render_template('design/_planning_results.html', **context)
         return jsonify(ok=True, html=html)
-
-    @app.post('/review')
-    def review_setup():
-        settings, errors = _review_settings(request.form)
-        if errors:
-            return jsonify(ok=False, errors=errors), 400
-        html = render_template(
-            'design/_setup_review.html',
-            settings=settings,
-            task_labels=TASK_LABELS,
-            reference_labels=REFERENCE_LABELS,
-            environment_labels=ENVIRONMENT_LABELS,
-        )
-        return jsonify(ok=True, html=html, settings=settings)
 
     @app.errorhandler(HTTPException)
     def http_error(error):

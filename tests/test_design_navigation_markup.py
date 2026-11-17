@@ -48,7 +48,7 @@ class DesignNavigationMarkup(unittest.TestCase):
                 loader=FileSystemLoader(Path(__file__).parents[1] / 'templates'),
                 autoescape=True, undefined=StrictUndefined,
             )
-            routes = dict(review_setup='/review', calculate_comparison='/calculate',
+            routes = dict(calculate_comparison='/calculate',
                           inspect_data='/data/inspect', preview_data='/data/preview',
                           generate_candidates='/candidates/generate')
             def url_for(endpoint, filename=None, prefix=prefix):
@@ -69,7 +69,7 @@ class DesignNavigationMarkup(unittest.TestCase):
             with self.subTest(prefix=prefix, task=task):
                 forms = [attrs for tag, attrs, _ in page.elements if tag == 'form']
                 self.assertEqual(len(forms), 1)
-                self.assertEqual(forms[0]['action'], prefix + '/review')
+                self.assertEqual(forms[0]['action'], prefix + '/calculate')
                 self.assertEqual(forms[0]['method'], 'post')
                 buttons = [(attrs, ancestors) for tag, attrs, ancestors in page.elements
                            if attrs.get('id') == 'calculate-comparison']
@@ -77,12 +77,24 @@ class DesignNavigationMarkup(unittest.TestCase):
                 button, ancestors = buttons[0]
                 self.assertEqual(button['form'], forms[0]['id'])
                 self.assertEqual(button['type'], 'submit')
-                self.assertEqual(button['formaction'], prefix + '/calculate')
+                self.assertNotIn('formaction', button)
+                self.assertNotIn('name', button)
                 self.assertFalse(any(tag == 'form' for tag, _ in ancestors))
                 self.assertIn('design-calculation-bar', [attrs.get('id') for _, attrs in ancestors])
                 self.assertFalse(any('hidden' in attrs for _, attrs in ancestors))
                 self.assertFalse({'design-inputs', 'design-results'} &
                                  {attrs.get('id') for _, attrs in ancestors})
+
+    def test_review_controls_and_panel_are_removed_and_calculate_is_the_only_submitter(self):
+        for prefix, task, page in self.pages:
+            with self.subTest(prefix=prefix, task=task):
+                ids = {attrs.get('id') for _, attrs, _ in page.elements}
+                self.assertFalse({'review-setup', 'design-review-content', 'setup-review-heading',
+                                  'design-review-heading'} & ids)
+                self.assertIn('design-calculation-heading', ids)
+                submitters = [attrs['id'] for tag, attrs, _ in page.elements
+                              if tag == 'button' and attrs.get('type', 'submit') == 'submit']
+                self.assertEqual(submitters, ['calculate-comparison'])
 
     def test_section_buttons_reach_unique_focusable_headings_for_the_selected_task(self):
         for prefix, task, page in self.pages:

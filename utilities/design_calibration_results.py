@@ -285,9 +285,14 @@ def present_calibration_result(result, *, source_summaries=None, profile_summari
     normalized = normalizations.get(settings.get('normalization', 'none'), settings.get('normalization', 'none'))
     if settings.get('one_minus'):
         normalized += '; then one minus response'
-    setting_rows = [('IVIVC approach', approach), ('IVIVC model', settings['model_name']),
+    setting_rows = [('Analysis task', 'Compare calibration sampling'),
+                    ('IVIVC approach', approach), ('IVIVC model', settings['model_name']),
                     ('Prediction method', method), ('Calibration interpolation', settings.get('interpolation', 'none')),
-                    ('Varied environment', settings['varied_environment']),
+                    ('Varied environment', {
+                        'in_vivo': 'In vivo only; keep in vitro data fixed',
+                        'in_vitro': 'In vitro only; keep in vivo data fixed',
+                        'both': 'Both environments',
+                    }.get(settings['varied_environment'], settings['varied_environment'])),
                     ('Common response preprocessing', normalized),
                     ('Source parameter draws per environment', str(settings['reference_draws'])),
                     ('Simulated calibration studies per candidate', str(settings['n_simulations'])),

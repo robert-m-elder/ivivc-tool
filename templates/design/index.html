@@ -33,7 +33,7 @@
 
     <main id="design-workspace" class="design-page-width" tabindex="-1">
         <p class="design-notice">Plan or extend an in vivo study, or compare how calibration sampling affects an IVIVC. Results describe expected performance under the supplied trajectory and measurement assumptions.</p>
-        <noscript><p class="design-notice">Enable JavaScript to review setup and retain selected files while moving between inputs and comparisons.</p></noscript>
+        <noscript><p class="design-notice">Enable JavaScript to calculate comparisons and retain selected files while moving between inputs and comparisons.</p></noscript>
 
         <nav id="design-section-navigation" class="design-section-navigation" aria-label="Sections and workspace views">
             <div class="design-view-navigation">
@@ -49,11 +49,11 @@
                 <button type="button" data-design-section="calibration-reference-heading" data-section-task="calibration"{% if settings.task != 'calibration' %} hidden{% endif %}>2 · Expected behavior</button>
                 <button type="button" data-design-section="calibration-assessment-heading" data-section-task="calibration"{% if settings.task != 'calibration' %} hidden{% endif %}>3 · IVIVC assessment</button>
                 <button type="button" data-design-section="calibration-candidates-heading" data-section-task="calibration"{% if settings.task != 'calibration' %} hidden{% endif %}>4 · Candidates</button>
-                <button type="button" data-design-section="design-review-heading" data-section-task="all">5 · Calculation</button>
+                <button type="button" data-design-section="design-calculation-heading" data-section-task="all">5 · Calculation</button>
             </div>
         </nav>
 
-        <form id="design-setup-form" action="{{ url_for('review_setup') }}" method="post" enctype="multipart/form-data" novalidate>
+        <form id="design-setup-form" action="{{ url_for('calculate_comparison') }}" method="post" enctype="multipart/form-data" novalidate>
             <div class="design-toolbar">
                 <div class="design-field design-task-field">
                     <label for="task">Analysis task</label>
@@ -68,7 +68,7 @@
 
             <section id="design-inputs" aria-labelledby="design-inputs-heading">
                 <h2 id="design-inputs-heading" tabindex="-1">Analysis inputs</h2>
-                <p id="design-draft-status" class="design-status" aria-live="polite">Review the draft setup. No calculations run when inputs change.</p>
+                <p id="design-draft-status" class="design-status" aria-live="polite">Configure the inputs, then choose Calculate comparison. No calculations run when inputs change.</p>
                 <section id="design-errors" class="design-error-summary" role="alert" tabindex="-1" hidden></section>
 
                 <div data-design-task="study"{% if settings.task != 'study' %} hidden{% endif %}>
@@ -170,8 +170,8 @@
                     </section>
                 </div>
 
-                <section class="design-section" aria-labelledby="design-review-heading">
-                    <h3 id="design-review-heading" tabindex="-1">5 · Calculation and review</h3>
+                <section class="design-section" aria-labelledby="design-calculation-heading">
+                    <h3 id="design-calculation-heading" tabindex="-1">5 · Calculation settings</h3>
                     <details class="design-advanced">
                         <summary>Advanced calculation settings</summary>
                         <div class="design-field-grid">
@@ -180,7 +180,7 @@
                             <div class="design-field">
                                 <label for="n_simulations">Monte Carlo studies per candidate</label>
                                 <input id="n_simulations" name="n_simulations" type="number" min="2" step="1" value="{{ settings.n_simulations }}" aria-describedby="n-simulations-help">
-                                <p id="n-simulations-help" class="design-help">More simulations reduce simulation noise and take longer. No simulations run during setup review.</p>
+                                <p id="n-simulations-help" class="design-help">More simulations reduce simulation noise and take longer.</p>
                                 <p id="n-simulations-error" class="design-field-error" data-error-for="n_simulations" hidden></p>
                             </div>
                             <div class="design-field">
@@ -191,10 +191,7 @@
                             </div>
                         </div>
                     </details>
-                    <div class="design-action-row">
-                        <button id="review-setup" type="submit" disabled>Review setup</button>
-                        <p id="design-calculation-help" class="design-help" data-planning-availability>Calculate the selected study-planning or calibration comparison. It runs within this request; keep the page open.</p>
-                    </div>
+                    <p id="design-calculation-help" class="design-help" data-planning-availability>Calculate the selected study-planning or calibration comparison. It runs within this request; keep the page open.</p>
                 </section>
             </section>
         </form>
@@ -205,7 +202,6 @@
             <div id="design-results-content" tabindex="-1">
                 <p class="design-empty-state">No comparison yet. Import the selected task's data, configure candidates, and choose Calculate comparison.</p>
             </div>
-            <div id="design-review-content" tabindex="-1"></div>
             <div class="design-action-row"><button type="button" disabled title="Report generation will be added after the analysis workflows are settled.">Generate report</button></div>
         </section>
         <aside id="design-calculation-bar" class="design-calculation-bar" aria-label="Calculation and comparison status">
@@ -218,7 +214,7 @@
                     </div>
                     <p id="design-request-status" class="design-request-status" role="status" aria-live="polite"></p>
                 </div>
-                <button id="calculate-comparison" class="design-primary" type="submit" form="design-setup-form" name="action" value="calculate" formaction="{{ url_for('calculate_comparison') }}" aria-describedby="design-calculation-help design-comparison-status" disabled>Calculate comparison</button>
+                <button id="calculate-comparison" class="design-primary" type="submit" form="design-setup-form" aria-describedby="design-calculation-help design-comparison-status" disabled>Calculate comparison</button>
             </div>
         </aside>
     </main>

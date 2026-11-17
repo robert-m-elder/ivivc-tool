@@ -205,11 +205,9 @@ class DesignPlanningRoutes(unittest.TestCase):
 
     def test_calculation_remains_a_request_scoped_operation(self):
         payload = self.success(self.calculate())
-        self.assertFalse(self.client.get('/').headers.getlist('Set-Cookie'))
-        review = self.client.post('/review', data={'task': 'study'})
-        self.assertEqual(review.status_code, 200)
-        self.assertIn('Setup review', review.get_json()['html'])
-        self.assertNotIn(payload['html'], review.get_json()['html'])
+        new_workspace = self.client.get('/')
+        self.assertFalse(new_workspace.headers.getlist('Set-Cookie'))
+        self.assertNotIn(payload['html'], new_workspace.get_data(as_text=True))
         self.assertEqual(self.client.get('/calculate').status_code, 405)
 
     def test_upload_limit_applies_to_calculation(self):

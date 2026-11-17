@@ -1,7 +1,4 @@
-"""Requests for the separate study-design Flask application.
-
-F1 reviews a setup; it does not read measurement data or run an analysis.
-"""
+"""Requests and early calculation validation for the study-design app."""
 
 from html.parser import HTMLParser
 import io
@@ -12,7 +9,7 @@ import sys
 import unittest
 from unittest.mock import patch
 
-from design_app import create_app
+from design_app import _calculation_settings, create_app
 
 
 class PageElements(HTMLParser):
@@ -29,10 +26,10 @@ class DesignAppRequests(unittest.TestCase):
         self.app = create_app({'TESTING': True})
         self.client = self.app.test_client()
 
-    def review(self, **changes):
+    def calculate(self, **changes):
         form = {'task': 'study'}
         form.update(changes)
-        return self.client.post('/review', data=form)
+        return self.client.post('/calculate', data=form)
 
     def assert_error(self, response, field_id, status=400):
         self.assertEqual(response.status_code, status)
@@ -89,70 +86,61 @@ class DesignAppRequests(unittest.TestCase):
             '/static/js/design-recovery-figure.js', '/static/js/design-recovery-inspection.js',
             '/static/js/design-schedule-inspection.js', '/static/js/design.js')))
 
-    def test_study_setup_defaults_are_returned_without_numerical_results(self):
-        response = self.review()
-        self.assertEqual(response.status_code, 200)
-        payload = response.get_json()
-        self.assertIs(payload['ok'], True)
-        settings = payload['settings']
-        self.assertEqual(settings['task'], 'study')
-        self.assertEqual(settings['reference_source'], 'measured')
-        self.assertEqual(settings['n_simulations'], 100)
-        self.assertEqual(settings['random_seed'], 12345)
-        self.assertIsInstance(payload['html'], str)
-        self.assertIn('Setup review', payload['html'])
-        self.assertNotIn('100/100', payload['html'])
-        self.assertFalse(response.headers.getlist('Set-Cookie'))
+    def test_calculation_defaults_are_resolved_before_data_import(self):
+        settings, errors = _calculation_settings({'task': 'study'})
+        self.assertEqual(errors, [])
+        self.assertEqual(settings, {'task': 'study', 'reference_source': 'measured',
+                                   'varied_environment': 'in_vivo', 'n_simulations': 100,
+                                   'random_seed': 12345})
 
-    def test_each_supported_reference_source_can_be_reviewed(self):
+    def test_each_supported_reference_source_passes_early_validation(self):
         for source in ('measured', 'ivivc', 'scaling'):
             with self.subTest(source=source):
-                response = self.review(reference_source=source)
-                self.assertEqual(response.status_code, 200)
-                self.assertEqual(response.get_json()['settings']['reference_source'], source)
+                settings, errors = _calculation_settings({'task': 'study', 'reference_source': source})
+                self.assertEqual(errors, [])
+                self.assertEqual(settings['reference_source'], source)
 
-    def test_each_calibration_environment_can_be_reviewed(self):
+    def test_each_calibration_environment_passes_early_validation(self):
         for environment in ('in_vitro', 'in_vivo', 'both'):
             with self.subTest(environment=environment):
-                response = self.review(task='calibration', varied_environment=environment)
-                self.assertEqual(response.status_code, 200)
-                settings = response.get_json()['settings']
+                settings, errors = _calculation_settings({'task': 'calibration',
+                                                          'varied_environment': environment})
+                self.assertEqual(errors, [])
                 self.assertEqual(settings['task'], 'calibration')
                 self.assertEqual(settings['varied_environment'], environment)
 
     def test_calibration_defaults_to_varying_in_vivo(self):
-        response = self.review(task='calibration')
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json()['settings']['varied_environment'], 'in_vivo')
+        settings, errors = _calculation_settings({'task': 'calibration'})
+        self.assertEqual(errors, [])
+        self.assertEqual(settings['varied_environment'], 'in_vivo')
 
     def test_only_the_selected_task_branch_is_validated(self):
-        study = self.review(varied_environment='inactive-invalid-value')
-        calibration = self.review(task='calibration', reference_source='inactive-invalid-value')
-        self.assertEqual(study.status_code, 200)
-        self.assertEqual(calibration.status_code, 200)
+        for form in ({'task': 'study', 'varied_environment': 'inactive-invalid-value'},
+                     {'task': 'calibration', 'reference_source': 'inactive-invalid-value'}):
+            with self.subTest(task=form['task']):
+                _, errors = _calculation_settings(form)
+                self.assertEqual(errors, [])
 
     def test_missing_or_unknown_task_has_a_field_error(self):
-        self.assert_error(self.client.post('/review', data={}), 'task')
+        self.assert_error(self.client.post('/calculate', data={}), 'task')
         for task in ('', 'unknown', '<script>bad()</script>'):
             with self.subTest(task=task):
-                self.assert_error(self.review(task=task), 'task')
+                self.assert_error(self.calculate(task=task), 'task')
 
     def test_invalid_active_task_options_have_field_errors(self):
-        self.assert_error(self.review(reference_source='unknown'), 'reference_source')
-        self.assert_error(self.review(task='calibration', varied_environment='unknown'),
+        self.assert_error(self.calculate(reference_source='unknown'), 'reference_source')
+        self.assert_error(self.calculate(task='calibration', varied_environment='unknown'),
                           'varied_environment')
 
     def test_blank_advanced_fields_use_the_defaults(self):
-        response = self.review(n_simulations='', random_seed='')
-        self.assertEqual(response.status_code, 200)
-        settings = response.get_json()['settings']
+        settings, errors = _calculation_settings({'task': 'study', 'n_simulations': '', 'random_seed': ''})
+        self.assertEqual(errors, [])
         self.assertEqual(settings['n_simulations'], 100)
         self.assertEqual(settings['random_seed'], 12345)
 
     def test_advanced_integer_settings_are_returned_as_numbers(self):
-        response = self.review(n_simulations='2', random_seed='0')
-        self.assertEqual(response.status_code, 200)
-        settings = response.get_json()['settings']
+        settings, errors = _calculation_settings({'task': 'study', 'n_simulations': '2', 'random_seed': '0'})
+        self.assertEqual(errors, [])
         self.assertEqual(settings['n_simulations'], 2)
         self.assertEqual(settings['random_seed'], 0)
         self.assertIsInstance(settings['n_simulations'], int)
@@ -161,30 +149,27 @@ class DesignAppRequests(unittest.TestCase):
     def test_invalid_simulation_counts_have_a_field_error(self):
         for value in ('1', '0', '-1', '2.5', 'nan', 'inf', 'many'):
             with self.subTest(value=value):
-                self.assert_error(self.review(n_simulations=value), 'n_simulations')
+                self.assert_error(self.calculate(n_simulations=value), 'n_simulations')
 
     def test_invalid_seeds_have_a_field_error(self):
         for value in ('-1', '1.5', 'nan', 'inf', 'random'):
             with self.subTest(value=value):
-                self.assert_error(self.review(random_seed=value), 'random_seed')
+                self.assert_error(self.calculate(random_seed=value), 'random_seed')
 
     def test_validation_collects_independent_input_errors(self):
-        response = self.review(reference_source='unknown', n_simulations='1', random_seed='-1')
+        response = self.calculate(reference_source='unknown', n_simulations='1', random_seed='-1')
         self.assertEqual(response.status_code, 400)
         self.assertEqual({error['field_id'] for error in response.get_json()['errors']},
                          {'reference_source', 'n_simulations', 'random_seed'})
 
-    def test_review_does_not_treat_an_upload_as_parsed_measurement_data(self):
-        response = self.review(reference_file=(io.BytesIO(b'not a dataset'), 'measurements.csv'))
-        self.assertEqual(response.status_code, 200)
-        payload = response.get_json()
-        self.assertIs(payload['ok'], True)
-        self.assertNotIn('measurements', payload['settings'])
+    def test_calculation_requires_the_current_source_upload(self):
+        response = self.calculate()
+        self.assert_error(response, 'reference-file')
         self.assertFalse(response.headers.getlist('Set-Cookie'))
 
     def test_upload_limit_returns_a_json_error(self):
         small_app = create_app({'TESTING': True, 'MAX_CONTENT_LENGTH': 100})
-        response = small_app.test_client().post('/review', data={
+        response = small_app.test_client().post('/calculate', data={
             'task': 'study',
             'reference_file': (io.BytesIO(b'x' * 200), 'large.csv'),
         })
@@ -193,18 +178,26 @@ class DesignAppRequests(unittest.TestCase):
         self.assertIs(response.get_json()['ok'], False)
         self.assertNotIn('html', response.get_json())
 
-    def test_wrong_review_method_returns_a_json_error(self):
-        response = self.client.get('/review')
+    def test_removed_review_endpoint_returns_a_json_error(self):
+        for method in ('get', 'post'):
+            with self.subTest(method=method):
+                response = getattr(self.client, method)('/review')
+                self.assertEqual(response.status_code, 404)
+                self.assertTrue(response.is_json)
+                self.assertIs(response.get_json()['ok'], False)
+                self.assertNotIn('html', response.get_json())
+
+    def test_wrong_calculation_method_returns_a_json_error(self):
+        response = self.client.get('/calculate')
         self.assertEqual(response.status_code, 405)
         self.assertTrue(response.is_json)
         self.assertIs(response.get_json()['ok'], False)
 
-    def test_unexpected_review_errors_are_logged_without_exposing_details(self):
-        private_message = 'private template failure that must stay in the log'
-        with patch.object(self.app.jinja_env, 'get_or_select_template',
-                          side_effect=RuntimeError(private_message)):
+    def test_unexpected_calculation_errors_are_logged_without_exposing_details(self):
+        private_message = 'private calculation failure that must stay in the log'
+        with patch('design_app._calculation_settings', side_effect=RuntimeError(private_message)):
             with self.assertLogs(self.app.logger, level='ERROR'):
-                response = self.review()
+                response = self.calculate()
         self.assertEqual(response.status_code, 500)
         self.assertTrue(response.is_json)
         self.assertIs(response.get_json()['ok'], False)
