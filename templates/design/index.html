@@ -174,9 +174,9 @@
                 <section class="design-section" aria-labelledby="design-calculation-heading">
                     <h3 id="design-calculation-heading" tabindex="-1">5 · Calculation settings</h3>
                     {% include 'design/_endpoint_inputs.html' %}
-                    <details class="design-advanced">
-                        <summary>Advanced calculation settings</summary>
-                        <div class="design-field-grid">
+                    <details id="calculation-advanced" class="design-advanced design-sampling-options">
+                        <summary>Advanced calculation settings <span class="design-option-summary" data-calculation-summary="advanced">Parameter draws: 100{% if settings.task == 'calibration' %} · IVIVC uncertainty draws: 100{% endif %} · Simulated studies: {{ settings.n_simulations }} · Seed: {{ settings.random_seed }}</span></summary>
+                        <div class="design-field-grid design-sampling-content">
                             {{ draws_input() }}
                             {{ calibration_advanced() }}
                             <div class="design-field">

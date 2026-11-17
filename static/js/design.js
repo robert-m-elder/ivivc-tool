@@ -424,6 +424,7 @@
 
         function updateDraftStatus() {
             updateSamplingSummaries();
+            updateCalculationSummaries();
             updateGenerationStatus();
             if (calculatedSignature !== null) {
                 const current = signature() === calculatedSignature;
@@ -470,6 +471,30 @@
             };
             root.querySelectorAll('[data-sampling-summary]').forEach(summary => {
                 summary.textContent = summaries[summary.dataset.samplingSummary] || '';
+            });
+        }
+
+        function updateCalculationSummaries() {
+            const field = id => document.getElementById(id);
+            const value = id => String(field(id)?.value || '').trim();
+            const short = text => text.length > 45 ? text.slice(0, 42) + '…' : text;
+            const endpoints = [];
+            for (const [id, label] of [['recovery_t50', 'T50'], ['recovery_t90', 'T90']]) {
+                if (field(id)?.checked) endpoints.push(label);
+            }
+            if (value('recovery_tx_custom')) endpoints.push('Custom Tx: ' + short(value('recovery_tx_custom')));
+            if (value('recovery_absolute_thresholds')) endpoints.push('Absolute ' +
+                (value('recovery_absolute_direction') === 'increasing' ? '≥ ' : '≤ ') +
+                short(value('recovery_absolute_thresholds')));
+            const advanced = ['Parameter draws: ' + (value('reference_draws') || 'not specified')];
+            if (task.value === 'calibration') advanced.push('IVIVC uncertainty draws: ' +
+                (value('cal_interval_draws') || 'not specified'));
+            advanced.push('Simulated studies: ' + (value('n_simulations') || 'not specified'),
+                'Seed: ' + (value('random_seed') || 'not specified'));
+            const summaries = {endpoints: endpoints.join(' · ') || 'None selected',
+                advanced: advanced.join(' · ')};
+            root.querySelectorAll('[data-calculation-summary]').forEach(summary => {
+                summary.textContent = summaries[summary.dataset.calculationSummary] || '';
             });
         }
 

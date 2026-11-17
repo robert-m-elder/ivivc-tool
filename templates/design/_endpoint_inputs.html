@@ -1,7 +1,7 @@
 <div data-design-task="study"{% if settings.task != 'study' %} hidden{% endif %}>
-    <details class="design-advanced">
-        <summary id="recovery-endpoints-heading">Recovery endpoints</summary>
-        <div data-planning-controls aria-labelledby="recovery-endpoints-heading">
+    <details class="design-advanced design-sampling-options">
+        <summary id="recovery-endpoints-heading">Recovery endpoints <span class="design-option-summary" data-calculation-summary="endpoints">T50 · T90</span></summary>
+        <div class="design-sampling-content" data-planning-controls aria-labelledby="recovery-endpoints-heading">
             <input type="hidden" name="recovery_endpoints_present" value="1">
             <p class="design-help">Report up to 20 endpoints for the reference and recovered curves. These choices do not change suggested schedules or timing requirements.</p>
             <div class="design-action-row">
