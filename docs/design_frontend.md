@@ -722,13 +722,21 @@ with IRMSE. Unavailable/beyond-horizon percentiles stay explicit in the table;
 they are never mapped to the assessment horizon. An error bar is drawn only
 when both range bounds are finite and at least two valid outcomes exist.
 
-All schedules remain on the study-size plot. Neutral traces compare schedule
-types; colored markers highlight selected schedules using the same colors as
-their timelines and recovery curves. Manual schedules remain separate points.
-Switching measures preserves the selection and colors, performs no request,
+All schedules remain on the study-size plot. Colors identify schedule types:
+suggested schedules in teal, evenly spaced schedules in orange, and manual
+schedules in purple. Solid/circle and dashed/diamond traces distinguish the
+two error statistics; manual schedules remain separate points. Inspect controls
+the detailed views below without adding duplicate plot points or legend items.
+Switching measures preserves the detailed-view selection, performs no request,
 and does not change comparison freshness. Returning to IRMSE restores its
 original numerical measures. If Plotly is unavailable, the measure controls
 still update the numerical table; a stale plot is not left under a new label.
+Changing the measure or endpoint summary draws a fresh figure, resetting the
+axes and legend state for the new units and statistics. A view with no finite
+values retains its axes and an explanatory annotation; it is not a rendering
+failure and does not discard beyond-horizon outcomes. Returning to a usable
+measure restores the ordinary plot. Actual rendering errors retain their
+original exception in the browser console, together with the plot and view IDs.
 
 Each calculated planning result also contains compact numerical inspection
 data. Select up to three schedules in the performance table to inspect their
@@ -957,9 +965,13 @@ controllers working together.
    and inspect numerical values. Check hover/zoom/download on the study-size
    plot as well. Switch its recovery measure between IRMSE, Tx, and an absolute
    threshold, then switch endpoint error/time views. Confirm headers, values,
-   units, availability counts, and highlighted schedule colors follow the
+   units, availability counts, and schedule-type colors follow the
    controls without recalculation or a freshness change. Try beyond-horizon
-   bounds, failed fits, and a comparison with no selected endpoints. With the
+   bounds, failed fits, and a comparison with no selected endpoints. Select and
+   deselect schedules: the study-size plot should retain its original points
+   and legend while the detailed views follow the selection. Switch rapidly
+   between measures, including an entirely unreached endpoint, then return to
+   IRMSE and confirm that the graph and ordinary status return. With the
    Plotly CDN blocked, the numerical table should still switch measures and
    should not retain an old plot under the new label. Expand
    the shared illustrative study, confirming that a failed example remains

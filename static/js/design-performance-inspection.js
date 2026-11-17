@@ -4,6 +4,7 @@
     if (window.DesignPerformanceInspection) return;
 
     const states = new WeakMap();
+    const colors = Object.freeze({Suggested: '#24535c', 'Evenly spaced': '#a75328', Manual: '#6f4a92'});
     const finite = value => typeof value === 'number' && Number.isFinite(value);
     const array = value => Array.isArray(value) ? value : [];
     const number = value => finite(value) ? String(Number(value.toPrecision(6))) : '—';
@@ -22,7 +23,10 @@
     function plotAction(action, ...args) {
         try {
             if (typeof window.DesignPlots?.[action] === 'function') return Promise.resolve(window.DesignPlots[action](...args));
-        } catch (error) { /* The numerical table remains available. */ }
+        } catch (error) {
+            window.console?.warn?.('Study-size plot update failed.', error);
+            return Promise.resolve({ok: false, error});
+        }
         return Promise.resolve();
     }
 
@@ -80,7 +84,7 @@
             groups.get(schedule.kind).push(schedule);
         });
         const statistics = view === 'time' ? ['primary'] : ['primary', 'secondary'];
-        function trace(rows, statistic, name, color, selected, uid) {
+        function trace(rows, statistic, name, color, uid) {
             const y = rows.map(schedule => {
                 const value = values(schedule, measure, view);
                 return finite(value[statistic]) && finite(schedule.x) &&
@@ -89,18 +93,17 @@
             if (!y.some(finite)) return null;
             const secondary = statistic === 'secondary';
             const result = {
-                type: 'scatter', uid, name: escape(name), legendgroup: uid.split(':')[0],
+                type: 'scatter', uid, name: escape(name), legendgroup: uid,
                 x: rows.map(schedule => finite(schedule.x) ? schedule.x : null), y,
-                mode: selected || String(rows[0]?.kind).toLowerCase() === 'manual' ? 'markers' : 'lines+markers',
+                mode: String(rows[0]?.kind).toLowerCase() === 'manual' ? 'markers' : 'lines+markers',
                 connectgaps: false,
-                line: {color, width: 1.5, dash: secondary ? 'dash' : 'solid'},
-                marker: {color, size: selected ? 11 : 7, symbol: secondary ? 'diamond' : 'circle',
-                    ...(selected ? {line: {color: '#ffffff', width: 1.5}} : {})},
-                showlegend: !selected || !secondary,
+                line: {color, width: 2, dash: secondary ? 'dash' : 'solid'},
+                marker: {color, size: 7, symbol: secondary ? 'diamond' : 'circle'},
+                showlegend: true,
                 customdata: rows.map(schedule => hoverDetail(schedule, values(schedule, measure, view), measure, view)),
                 hovertemplate: '%{customdata}<br>' + escape(state.performance.x_label) + ': %{x:.6g}<br>' +
                     escape(secondary ? labels.secondary_label : labels.primary_label) + ': %{y:.6g}<extra>%{fullData.name}</extra>',
-                meta: {selected, statistic, schedule_ids: rows.map(schedule => schedule.id)},
+                meta: {statistic, schedule_ids: rows.map(schedule => schedule.id)},
             };
             if (view === 'time') {
                 const ranges = rows.map((schedule, index) => {
@@ -112,7 +115,7 @@
                 });
                 if (ranges.some(range => finite(range[0]))) result.error_y = {
                     type: 'data', symmetric: false, array: ranges.map(range => range[0]),
-                    arrayminus: ranges.map(range => range[1]), visible: true, color, thickness: selected ? 2 : 1,
+                    arrayminus: ranges.map(range => range[1]), visible: true, color, thickness: 1,
                 };
             }
             return result;
@@ -120,31 +123,36 @@
         let groupIndex = 0;
         groups.forEach((rows, kind) => {
             rows.sort((a, b) => a.x - b.x);
-            const color = ['#78858f', '#929da6', '#acb5bc'][groupIndex++ % 3];
+            const color = colors[kind] || colors.Manual;
+            groupIndex++;
             statistics.forEach(statistic => {
                 const label = statistic === 'primary' ? labels.primary_label : labels.secondary_label;
-                const result = trace(rows, statistic, kind + ': ' + label, color, false, 'group-' + groupIndex + ':' + statistic);
+                const result = trace(rows, statistic, kind + ': ' + label, color,
+                    'performance-' + measure.id + '-' + view + '-' + groupIndex + '-' + statistic);
                 if (result) data.push(result);
             });
         });
-        state.selection.selectedIds.forEach(id => {
-            const schedule = state.byId.get(id), color = state.selection.colors[id];
-            if (!schedule || typeof color !== 'string' || !/^#[0-9a-f]{6}$/i.test(color)) return;
-            statistics.forEach(statistic => {
-                const result = trace([schedule], statistic, schedule.name, color, true, 'selected-' + id + ':' + statistic);
-                if (result) data.push(result);
-            });
-        });
-        return {data, layout: {
+        const specification = {data, render_key: 'performance-' + measure.id + '-' + view, layout: {
             title: {text: escape(labels.title), x: 0},
             xaxis: {title: {text: escape(state.performance.x_label)}, tickmode: 'linear', tick0: 0, dtick: 1,
                 showgrid: false, zeroline: false, automargin: true},
             yaxis: {title: {text: escape(labels.y_label)}, gridcolor: '#e5ebef', zeroline: false, automargin: true},
             font: {family: 'Arial, sans-serif', color: '#20313d'}, paper_bgcolor: 'white', plot_bgcolor: 'white',
-            margin: {l: 75, r: 25, t: 65, b: 175}, height: 500,
-            legend: {orientation: 'h', x: 0, y: -.25, yanchor: 'top', font: {size: 11}, groupclick: 'togglegroup'},
+            margin: {l: 70, r: 25, t: 65, b: 160}, height: 460,
+            legend: {orientation: 'h', x: 0, y: -45 / 235, yanchor: 'top', font: {size: 11}, groupclick: 'togglegroup'},
             hovermode: 'closest', uirevision: 'performance-' + measure.id + '-' + view,
         }};
+        if (!data.length) {
+            specification.empty_message = 'No finite values to plot for this measure. Beyond-horizon and unavailable outcomes remain in the table.';
+            specification.layout.annotations = [{xref: 'paper', yref: 'paper', x: .5, y: .5,
+                text: 'No finite values for this measure.<br>See numerical results in the table below.',
+                showarrow: false, font: {color: '#506371', size: 13}, align: 'center'}];
+            specification.layout.yaxis.showticklabels = false;
+            specification.layout.xaxis.visible = specification.layout.yaxis.visible = true;
+            const sizes = state.schedules.map(schedule => schedule.x).filter(finite);
+            if (sizes.length) specification.layout.xaxis.range = [Math.min(...sizes) - .5, Math.max(...sizes) + .5];
+        }
+        return specification;
     }
 
     function numericalFallback(state, message) {
@@ -170,7 +178,7 @@
         updateTable(state, measure, view, labels);
         const missing = view === 'time' ? state.schedules.filter(schedule =>
             !finite(values(schedule, measure, view).primary)).map(schedule => schedule.name) : [];
-        state.help.textContent = labels.help + ' Gray traces show all schedules by type; colored markers identify the selected schedules.' +
+        state.help.textContent = labels.help + ' Colors identify schedule types; all schedules remain on this plot.' +
             (missing.length ? ' No finite median time is plotted for ' + missing.join('; ') +
                 '. Read their beyond-horizon or unavailable outcomes in the table.' : '');
         const target = state.plot.querySelector('[data-design-plot-target]');
@@ -180,28 +188,19 @@
         const fallback = state.plot.querySelector('[data-design-plot-fallback]');
         if (fallback) fallback.textContent = 'Numerical results for this measure are available in the schedule performance table below.';
         const specification = figure(state, measure, view, labels);
-        if (!specification.data.length) {
-            plotAction('purge', state.plot);
-            numericalFallback(state, 'No finite values to plot for this measure. Beyond-horizon and unavailable outcomes remain in the table.');
-            return;
-        }
         if (typeof window.DesignPlots?.update !== 'function') {
             numericalFallback(state, 'Interactive plot unavailable. Numerical results remain available below.');
             return;
         }
-        plotAction('update', state.plot, specification).then(() => {
+        plotAction('update', state.plot, specification).then(result => {
             if (state.disposed || version !== state.version) return;
-            if (target?.hidden) numericalFallback(state, 'Interactive plot unavailable. Numerical results remain available below.');
+            if (result?.ok === false || (result == null && target?.hidden)) {
+                numericalFallback(state, 'Interactive plot unavailable. Numerical results remain available below.');
+            }
         }).catch(() => {
             if (!state.disposed && version === state.version) numericalFallback(state,
                 'Interactive plot unavailable. Numerical results remain available below.');
         });
-    }
-
-    function select(state, selection) {
-        state.selection = {selectedIds: array(selection?.selectedIds).filter(id => state.byId.has(id)).slice(0, 3),
-            colors: {...selection?.colors}};
-        render(state);
     }
 
     function initialize(root) {
@@ -215,7 +214,6 @@
             const state = {root, performance, schedules: performance.schedules,
                 byId: new Map(performance.schedules.map(row => [row.id, row])),
                 measures: new Map(performance.measures.map(row => [row.id, row])), version: 0, disposed: false,
-                selection: {selectedIds: [], colors: {}},
                 measure: root.querySelector('[data-performance-measure]'),
                 view: root.querySelector('[data-performance-view]'), viewField: root.querySelector('[data-performance-view-field]'),
                 plot: root.querySelector('[data-performance-plot]'), help: root.querySelector('[data-performance-help]'),
@@ -231,11 +229,9 @@
             state.changed = event => {
                 if (event.target === state.measure || event.target === state.view) render(state);
             };
-            state.selected = event => select(state, event.detail);
             states.set(root, state);
             root.addEventListener('change', state.changed);
-            root.addEventListener('design-schedule-selection-changed', state.selected);
-            select(state, window.DesignScheduleInspection?.getSelection(root));
+            render(state);
         } catch (error) { /* Preserve the server-rendered IRMSE table on invalid data. */ }
     }
 
@@ -248,7 +244,6 @@
                 state.disposed = true;
                 state.version++;
                 root.removeEventListener('change', state.changed);
-                root.removeEventListener('design-schedule-selection-changed', state.selected);
                 plotAction('purge', state.plot);
                 states.delete(root);
             });

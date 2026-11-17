@@ -5,7 +5,9 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 const source = fs.readFileSync(path.join(__dirname, '../static/js/design-performance-inspection.js'), 'utf8');
+const rendererSource = fs.readFileSync(path.join(__dirname, '../static/js/design-plots.js'), 'utf8');
 const flush = async () => { await Promise.resolve(); await Promise.resolve(); };
+const settle = () => new Promise(resolve => setImmediate(resolve));
 
 function data() {
     const labels = (title, primary, secondary) => ({title, primary_label: primary,
@@ -29,7 +31,7 @@ function data() {
                     n_valid: 3, n_reached: 2, n_invalid: 0, n_failed: 1}}}}))}};
 }
 
-function fixture({payload = data(), missingRenderer = false} = {}) {
+function fixture({payload = data(), missingRenderer = false, failEndpoint = false, sharedRenderer = false} = {}) {
     class Element {
         constructor(attributes = {}) {
             this.attributes = {...attributes}; this.children = []; this.listeners = {};
@@ -67,6 +69,8 @@ function fixture({payload = data(), missingRenderer = false} = {}) {
     const measure = add('data-performance-measure', panel), viewField = add('data-performance-view-field', panel);
     const view = add('data-performance-view', viewField), help = add('data-performance-help', panel);
     const plot = add('data-performance-plot', panel), target = add('data-design-plot-target', plot);
+    plot.setAttribute('data-design-plot', '');
+    target.setAttribute('id', 'planning-performance-plot-interactive');
     target.hidden = true;
     const fallback = add('data-design-plot-fallback', plot); fallback.textContent = 'Original IRMSE SVG';
     const status = add('data-design-plot-status', plot), table = add('data-performance-table', panel);
@@ -76,10 +80,35 @@ function fixture({payload = data(), missingRenderer = false} = {}) {
         const row = add('data-schedule-row', table, schedule.id);
         return ['primary', 'secondary', 'availability'].map(name => add('data-performance-' + name, row));
     });
-    const calls = {updates: [], purges: []};
-    const window = {DesignScheduleInspection: {getSelection: () => ({selectedIds: ['schedule-0'], colors: {'schedule-0': '#24535c'}})}};
-    if (!missingRenderer) window.DesignPlots = {
-        update(wrapper, spec) { target.hidden = false; calls.updates.push({wrapper, spec}); return Promise.resolve(); },
+    const calls = {updates: [], purges: [], renders: [], warnings: []};
+    const window = {};
+    if (sharedRenderer) {
+        const draw = (method, target, data, layout) => {
+            calls.renders.push({method, data, layout});
+            if (failEndpoint && /T50/.test(layout.title.text)) {
+                return Promise.reject(new Error('Simulated Plotly draw failure'));
+            }
+            return Promise.resolve();
+        };
+        window.Plotly = {
+            react: (...args) => draw('react', ...args),
+            newPlot: (...args) => draw('newPlot', ...args),
+            purge: target => calls.purges.push(target),
+            Plots: {resize: () => Promise.resolve()},
+        };
+        vm.runInNewContext(rendererSource, {window, console: {warn: (...args) => calls.warnings.push(args)}});
+    } else if (!missingRenderer) window.DesignPlots = {
+        update(wrapper, spec) {
+            calls.updates.push({wrapper, spec});
+            if (failEndpoint && /T50/.test(spec.layout.title.text)) {
+                target.hidden = true;
+                return Promise.resolve({ok: false});
+            }
+            target.hidden = false;
+            fallback.hidden = true;
+            status.textContent = spec.empty_message || 'Interactive plot ready.';
+            return Promise.resolve({ok: true, empty: !spec.data.length});
+        },
         purge(wrapper) { calls.purges.push(wrapper); },
     };
     vm.runInNewContext(source, {window});
@@ -94,6 +123,7 @@ test('shared measure selectors update the numerical table and plot without chang
     const payload = data(), before = JSON.stringify(payload), f = fixture({payload});
     assert.equal(f.cells[0][0].textContent, '4');
     assert.equal(f.viewField.hidden, true);
+    assert.equal(f.calls.updates.at(-1).spec.layout.height, 460);
     f.change(f.measure, 'endpoint-0');
     assert.equal(f.cells[0][0].textContent, '2');
     assert.equal(f.headings[0].textContent, 'Median absolute error');
@@ -118,24 +148,26 @@ test('endpoint ranges preserve beyond-horizon statuses instead of drawing a capp
     const suggested = spec.data.find(trace => trace.meta.schedule_ids.length === 2);
     assert.deepEqual(Array.from(suggested.error_y.array), [4, null]);
     assert.match(suggested.customdata[1], /Beyond the assessment horizon/);
-    assert.match(spec.data.at(-1).name, /&lt;img/);
+    assert.match(suggested.customdata[0], /&lt;img/);
     assert.equal(JSON.stringify(spec).includes('Infinity'), false);
 });
 
-test('selection updates marker colors while every schedule remains in the comparison', () => {
-    const f = fixture(); f.change(f.measure, 'endpoint-0');
+test('schedule-type colors remain stable and selection does not duplicate or redraw points', () => {
+    const payload = data(); payload.performance.schedules[1].kind = 'Evenly spaced';
+    const f = fixture({payload}); f.change(f.measure, 'endpoint-0');
+    const count = f.calls.updates.length;
     f.root.dispatchEvent({type: 'design-schedule-selection-changed', detail: {
         selectedIds: ['schedule-1'], colors: {'schedule-1': '#b34f00'}}});
-    let spec = f.calls.updates.at(-1).spec;
-    const selected = spec.data.filter(trace => trace.meta.selected);
-    assert.equal(selected.length, 2);
-    assert.ok(selected.every(trace => trace.marker.color === '#b34f00'));
+    const spec = f.calls.updates.at(-1).spec;
+    assert.equal(f.calls.updates.length, count);
+    assert.equal(spec.data.length, 6);
+    assert.deepEqual(Array.from(new Set(spec.data.map(trace => trace.line.color))),
+        ['#24535c', '#a75328', '#6f4a92']);
+    assert.ok(spec.data.every(trace => !trace.meta.selected));
     assert.ok(spec.data.some(trace => trace.meta.schedule_ids.includes('schedule-0')));
     assert.ok(spec.data.some(trace => trace.mode === 'markers' && trace.meta.schedule_ids.includes('schedule-2')));
     f.root.dispatchEvent({type: 'design-schedule-selection-changed', detail: {selectedIds: [], colors: {}}});
-    spec = f.calls.updates.at(-1).spec;
-    assert.ok(spec.data.length > 0);
-    assert.equal(spec.data.filter(trace => trace.meta.selected).length, 0);
+    assert.equal(f.calls.updates.length, count);
 });
 
 test('all noncrossing or invalid outcomes remain explicit when no finite median can be plotted', () => {
@@ -145,14 +177,20 @@ test('all noncrossing or invalid outcomes remain explicit when no finite median 
         Object.assign(value, {primary: null, primary_status: 'beyond_horizon', upper: null, upper_status: 'beyond_horizon'});
     });
     const f = fixture({payload}); f.change(f.measure, 'endpoint-0'); f.change(f.view, 'time');
-    assert.equal(f.target.hidden, true);
+    assert.equal(f.target.hidden, false);
     assert.match(f.cells[0][0].textContent, /Beyond the assessment horizon/);
     assert.match(f.status.textContent, /No finite values to plot/);
     assert.match(f.help.textContent, /No finite median time is plotted/);
-    assert.ok(f.calls.purges.length > 0);
+    assert.equal(f.calls.purges.length, 0);
+    assert.equal(f.calls.updates.at(-1).spec.data.length, 0);
+    assert.match(f.calls.updates.at(-1).spec.layout.annotations[0].text, /No finite values/);
+    f.change(f.measure, 'irmse');
+    assert.equal(f.target.hidden, false);
+    assert.match(f.status.textContent, /Interactive plot ready/);
+    assert.ok(f.calls.updates.at(-1).spec.data.length > 0);
 });
 
-test('numerical controls work without plotting and an empty endpoint selection keeps IRMSE usable', () => {
+test('numerical controls survive plotting failure and returning to IRMSE recovers', async () => {
     const f = fixture({missingRenderer: true}); f.change(f.measure, 'endpoint-0'); f.change(f.view, 'time');
     assert.equal(f.cells[0][0].textContent, '5');
     assert.match(f.status.textContent, /Interactive plot unavailable/);
@@ -161,6 +199,47 @@ test('numerical controls work without plotting and an empty endpoint selection k
     const only = fixture({payload});
     assert.equal(only.viewField.hidden, true);
     assert.equal(only.cells[0][0].textContent, '4');
+    const failed = fixture({failEndpoint: true, sharedRenderer: true});
+    await settle();
+    failed.change(failed.measure, 'endpoint-0');
+    await settle();
+    assert.equal(failed.cells[0][0].textContent, '2');
+    assert.match(failed.status.textContent, /Interactive plot unavailable/);
+    assert.match(failed.calls.warnings[0][2].message, /Simulated Plotly draw failure/);
+    assert.equal(failed.calls.warnings[0][1].view, 'performance-endpoint-0-error');
+    failed.change(failed.measure, 'irmse');
+    await settle();
+    assert.equal(failed.target.hidden, false);
+    assert.match(failed.status.textContent, /Interactive plot ready/);
+    assert.ok(failed.calls.renders.every(call => call.method === 'newPlot'));
+});
+
+test('performance controller and shared renderer switch through finite, empty, and rapid views', async () => {
+    const payload = data();
+    payload.performance.schedules.forEach(schedule => Object.assign(schedule.measures['endpoint-0'].time,
+        {primary: null, primary_status: 'beyond_horizon', upper: null, upper_status: 'beyond_horizon'}));
+    const f = fixture({payload, sharedRenderer: true});
+    await settle();
+    assert.match(f.calls.renders.at(-1).layout.title.text, /Curve error/);
+    f.change(f.measure, 'endpoint-0');
+    await settle();
+    assert.match(f.calls.renders.at(-1).layout.title.text, /T50 timing error/);
+    f.change(f.view, 'time');
+    await settle();
+    assert.equal(f.target.hidden, false);
+    assert.equal(f.calls.renders.at(-1).data.length, 0);
+    assert.match(f.status.textContent, /No finite values/);
+    assert.doesNotMatch(f.status.textContent, /unavailable\./);
+    f.change(f.measure, 'irmse');
+    f.change(f.measure, 'endpoint-0');
+    f.change(f.measure, 'irmse');
+    await settle();
+    assert.equal(f.target.hidden, false);
+    assert.equal(f.cells[0][0].textContent, '4');
+    assert.match(f.status.textContent, /Interactive plot ready/);
+    assert.match(f.calls.renders.at(-1).layout.title.text, /Curve error/);
+    assert.ok(f.calls.renders.every(call => call.method === 'newPlot'));
+    assert.equal(f.calls.warnings.length, 0);
 });
 
 test('initialization and disposal are idempotent and detached results ignore later selection', async () => {

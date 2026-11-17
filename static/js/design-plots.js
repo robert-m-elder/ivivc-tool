@@ -45,6 +45,7 @@
             status: wrapper.querySelector('[data-design-plot-status]'),
             plotly: window.Plotly, started: false, rendered: false, disposed: false,
             draining: false, pending: null, ready: Promise.resolve(),
+            renderKey: null, outcome: {ok: false},
             // A wrapper can be intentionally reused after purge. Let a prior
             // in-flight render finish its cleanup before touching its target.
             predecessor: previous && previous.draining ? previous.ready : null,
@@ -71,6 +72,15 @@
                                 !figure || !Array.isArray(figure.data) || !figure.layout ||
                                 typeof figure.layout !== 'object' || Array.isArray(figure.layout)) throw new Error('Unavailable plot specification.');
                         state.plotly = plotly;
+                        // A performance measure can change trace counts, units,
+                        // ranges, and legend state. Start that view on a clean
+                        // graph rather than diffing it against the prior measure.
+                        const fresh = typeof figure.render_key === 'string' &&
+                            figure.render_key !== state.renderKey;
+                        if (fresh && state.started) {
+                            clear(state);
+                            state.started = false;
+                        }
                         state.rendered = false;
                         if (state.fallback) state.fallback.hidden = false;
                         if (state.status) state.status.textContent = 'Preparing interactive plot.';
@@ -78,7 +88,9 @@
                         // containing this result will be shown just afterward.
                         state.target.hidden = false;
                         state.started = true;
-                        await state.plotly.react(state.target, figure.data, {
+                        const draw = fresh && typeof plotly.newPlot === 'function' ?
+                            plotly.newPlot : plotly.react;
+                        await draw.call(plotly, state.target, figure.data, {
                             ...figure.layout,
                             uirevision: figure.layout.uirevision ?? (state.target.id || 'design-plot'),
                         }, {
@@ -87,26 +99,38 @@
                         });
                         if (state.disposed || state.target.isConnected === false) {
                             clear(state);
-                            return;
+                            return {ok: false, disposed: true};
                         }
+                        state.renderKey = typeof figure.render_key === 'string' ? figure.render_key : null;
                         // A more recent selection may arrive while react is
                         // pending. Render only its latest spec next, without
                         // marking the superseded frame as ready.
                         if (state.pending) continue;
                         state.rendered = true;
+                        state.outcome = {ok: true, empty: Boolean(figure.empty_message)};
                         if (state.fallback) state.fallback.hidden = true;
-                        if (state.status) state.status.textContent = 'Interactive plot ready. Hover for values; use the plot toolbar to zoom, reset, or download an SVG.';
+                        if (state.status) state.status.textContent = figure.empty_message ||
+                            'Interactive plot ready. Hover for values; use the plot toolbar to zoom, reset, or download an SVG.';
                         resizeFigure(state);
                     } catch (error) {
                         clear(state);
                         state.started = false;
                         state.rendered = false;
+                        state.renderKey = null;
+                        state.outcome = {ok: false, error};
+                        if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+                            console.warn('Study-design plot could not render', {
+                                plot: state.target && state.target.id,
+                                view: next.spec && next.spec.render_key,
+                            }, error);
+                        }
                         if (!state.disposed && !state.pending) fallback(state);
                     }
                 }
             } finally {
                 state.draining = false;
             }
+            return state.outcome;
         });
         return state.ready;
     }
