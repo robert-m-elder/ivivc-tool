@@ -1,6 +1,7 @@
 """Calibration output presentation using actual small simulated comparisons."""
 from copy import copy
 from pathlib import Path
+import json
 import unittest
 import warnings
 
@@ -213,6 +214,12 @@ class CalibrationPresentation(unittest.TestCase):
                                   autoescape=True, undefined=StrictUndefined)
         html = environment.get_template('design/_calibration_results.html').render(**context)
         self.assertIn('Calibration comparison', html)
+        self.assertIn('Recovered calibration curves', html)
+        self.assertLess(html.index('id="calibration-recovery-heading"'),
+                        html.index('id="calibration-relationship-heading"'))
+        self.assertEqual([row['id'] for row in context['rows']],
+                         [row['id'] for row in context['calibration_inspection']['candidates']])
+        json.dumps(context['calibration_inspection'], allow_nan=False)
         self.assertIn('&lt;script&gt;source&lt;/script&gt;', html)
         self.assertIn('&lt;img src=x&gt;', html)
         self.assertNotIn('<script>', html)

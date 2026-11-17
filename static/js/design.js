@@ -415,7 +415,8 @@
             // Comparison displays subscribe before the schedule controller
             // emits its initial selection, retaining the same result colors.
             for (const api of [window.DesignPerformanceInspection,
-                    window.DesignRecoveryInspection, window.DesignScheduleInspection]) {
+                    window.DesignRecoveryInspection, window.DesignScheduleInspection,
+                    window.DesignCalibrationRecovery]) {
                 try {
                     if (api && typeof api[action] === 'function') api[action](container);
                 } catch (error) { /* Display controls cannot invalidate a successful calculation. */ }

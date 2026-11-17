@@ -10,3 +10,4 @@ study_design_calibration_poc_output/
 .coverage
 htmlcov/
 profiling-output/
+toy-data-partial.xlsx

@@ -1,0 +1,51 @@
+<section id="calibration-recovery-panel" class="design-section" aria-labelledby="calibration-recovery-heading" data-calibration-recovery>
+    <h3 id="calibration-recovery-heading">Recovered calibration curves</h3>
+    {% if not calibration_inspection.supported %}
+    <p class="design-help">{{ calibration_inspection.message }}</p>
+    {% else %}
+    <p id="calibration-selection-help" class="design-help">Select up to three designs in the table above to compare their reconstructed calibration responses. Selection and plot controls use this completed comparison without fitting or simulating again.</p>
+    <p id="calibration-selection-status" class="design-help" data-calibration-selection-status role="status" aria-live="polite">Preparing design selection.</p>
+    <div class="design-field design-recovery-view-field">
+        <label for="calibration-recovery-environment">Calibration environment</label>
+        <select id="calibration-recovery-environment" data-calibration-environment aria-describedby="calibration-recovery-interpretation" disabled>
+            <option value="in_vitro"{% if calibration_inspection.default_environment == 'in_vitro' %} selected{% endif %}>In vitro</option>
+            <option value="in_vivo"{% if calibration_inspection.default_environment == 'in_vivo' %} selected{% endif %}>In vivo</option>
+        </select>
+    </div>
+    <p class="design-help" data-calibration-recovery-empty>Choose a design in the table above to compare its recovered curve.</p>
+    <p class="design-help" data-calibration-recovery-status role="status" aria-live="polite"></p>
+    <div class="design-interactive-plot" data-calibration-recovery-plot data-design-plot hidden>
+        <div id="calibration-recovered-curves-interactive" data-design-plot-target hidden role="img" aria-label="Recovered calibration responses across simulated studies for selected designs."></div>
+        <div data-design-plot-fallback><p class="design-help">Numerical recovery values remain available below.</p></div>
+        <p class="design-help" data-design-plot-status role="status" aria-live="polite"></p>
+    </div>
+    {% for candidate in calibration_inspection.candidates %}
+    <p class="design-help" data-calibration-availability="{{ candidate.id }}"><span class="design-schedule-swatch" data-calibration-swatch="{{ candidate.id }}" aria-hidden="true" hidden></span><strong>{{ candidate.name }}:</strong> {{ candidate.n_fit_successful }} / {{ candidate.n_simulations }} successful IVIVC fits.</p>
+    {% endfor %}
+    <p id="calibration-recovery-interpretation" class="design-help">Colored lines show median fitted responses with shaded pointwise 2.5th–97.5th percentile ranges across usable simulated studies. Click a design's legend entry to hide or show its curve and shaded region together. These ranges describe variation across simulated studies under the source and measurement assumptions; they are not confidence intervals within one fit or simultaneous whole-curve bands. A median needs one usable value; a range needs at least two. Failures remain in the displayed fit counts.</p>
+    <p class="design-help">The gray dashed curve is the central assumed generating reference when supplied. Identical reconstructions for a fixed environment are shown once, without an across-study range: its original observations are held fixed in every simulated study. This does not establish that the underlying curve is known. Fitted responses use the analyzed scale and may extrapolate outside a design's sampled times; inspect the candidate sampling times when interpreting recovery.</p>
+    <details class="design-recovery-values" data-calibration-values>
+        <summary>Numerical recovered responses</summary>
+        <div class="design-preview-table"><table>
+            <caption data-calibration-values-caption>Recovered responses for the selected designs</caption>
+            <thead><tr><th scope="col">Design</th><th scope="col">Time</th><th scope="col">Median</th><th scope="col">2.5th percentile</th><th scope="col">97.5th percentile</th><th scope="col">Usable studies</th></tr></thead>
+            <tbody data-calibration-values-body></tbody>
+        </table></div>
+    </details>
+    <details class="design-recovery-example" data-calibration-example>
+        <summary>Illustrative simulated study — calibration observations and recovered curves</summary>
+        <p class="design-help">Study 1 is predetermined for every selected design. It uses the same sampled source scenarios and measurement errors at common times. A failed fit stays failed and is never replaced by a more favorable study. Gray open circles show retained existing observations once; colored points show newly simulated calibration rows used for fitting, which may be individuals or reported means according to the input configuration. This example has no fitted confidence bands.</p>
+        <p class="design-help" data-calibration-example-status role="status" aria-live="polite"></p>
+        <div class="design-interactive-plot" data-calibration-example-plot data-design-plot hidden>
+            <div id="calibration-example-curves-interactive" data-design-plot-target hidden role="img" aria-label="Calibration observations, reconstructed fits, and matching generating truth for shared simulated study 1."></div>
+            <div data-design-plot-fallback><p class="design-help">Numerical illustrative-study values remain available below.</p></div>
+            <p class="design-help" data-design-plot-status role="status" aria-live="polite"></p>
+        </div>
+        <div class="design-preview-table"><table>
+            <caption>Shared study 1: fitted responses, generating truth, and calibration observations</caption>
+            <thead><tr><th scope="col">Design</th><th scope="col">Row type</th><th scope="col">Time</th><th scope="col">Response</th></tr></thead>
+            <tbody data-calibration-example-values-body></tbody>
+        </table></div>
+    </details>
+    {% endif %}
+</section>

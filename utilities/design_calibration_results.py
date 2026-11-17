@@ -6,6 +6,7 @@ from collections import Counter
 import numpy as np
 
 from .design_planning_results import _number, _percent, _plot, _reference_band
+from .design_calibration_recovery import build_calibration_recovery
 
 
 SIDES = ('in_vitro', 'in_vivo')
@@ -222,6 +223,8 @@ def present_calibration_result(result, *, source_summaries=None, profile_summari
     settings = result.settings
     method, approach = settings['method'], settings['approach_id']
     rows, sections = [], {'relationship': [], 'prediction': []}
+    inspection = build_calibration_recovery(result)
+    identifiers = {candidate['name']: candidate['id'] for candidate in inspection['candidates']}
     for label, summary in result.comparison.summaries.items():
         design, simulated = result.designs[label], result.comparison.results[label]
         side_rows = {}
@@ -233,7 +236,7 @@ def present_calibration_result(result, *, source_summaries=None, profile_summari
                                'time_count': len(times), 'replicates': count,
                                'units': len(times) * count,
                                'observation': _observation_description(observation)}
-        row = {'name': label, 'sides': side_rows,
+        row = {'id': identifiers[label], 'name': label, 'sides': side_rows,
                'new_units': sum(side_rows[side]['units'] for side in SIDES),
                'n_fit_successful': summary['n_fit_successful'],
                'n_simulations': summary['n_simulations'],
@@ -304,6 +307,7 @@ def present_calibration_result(result, *, source_summaries=None, profile_summari
                              'Analyzed response = ' + _number(target_transform['slope']) +
                              ' × supplied response + ' + _number(target_transform['intercept'])))
     return {
+        'calibration_inspection': inspection,
         'rows': rows, 'output_sections': output_sections, 'source_previews': _source_previews(result),
         'existing_rows': _existing_rows(result.analyzed_existing), 'generation_outcomes': generation,
         'warnings': list(result.warnings), 'is_approach1': approach == 'approach1',

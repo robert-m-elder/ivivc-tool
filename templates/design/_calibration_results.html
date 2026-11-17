@@ -1,5 +1,6 @@
 {% from 'design/_charts.html' import chart %}
 <div data-calibration-result>
+    <script type="application/json" data-calibration-inspection>{{ calibration_inspection|tojson }}</script>
     <section class="design-section" aria-labelledby="calibration-result-heading">
         <h3 id="calibration-result-heading">Calibration comparison</h3>
         <p>Each candidate repeats calibration measurement generation, the selected preprocessing, and IVIVC fitting. Existing calibration rows stay fixed; only the proposed measurements are regenerated.</p>
@@ -14,9 +15,10 @@
         <h3 id="calibration-design-results-heading">Candidate designs and calculation success</h3>
         <div class="design-preview-table"><table>
             <caption>Proposed calibration measurements and fitting outcomes</caption>
-            <thead><tr><th scope="col">Candidate</th><th scope="col">Additional in vitro times</th><th scope="col">Replicates at each</th><th scope="col">Additional in vivo times</th><th scope="col">Replicates at each</th><th scope="col">Total new independent units</th><th scope="col">Successful IVIVC fits</th><th scope="col">Fit failure rate</th></tr></thead>
+            <thead><tr>{% if calibration_inspection.supported %}<th scope="col">Inspect</th>{% endif %}<th scope="col">Candidate</th><th scope="col">Additional in vitro times</th><th scope="col">Replicates at each</th><th scope="col">Additional in vivo times</th><th scope="col">Replicates at each</th><th scope="col">Total new independent units</th><th scope="col">Successful IVIVC fits</th><th scope="col">Fit failure rate</th></tr></thead>
             <tbody>{% for row in rows %}<tr>
-                <th scope="row">{{ row.name }}</th><td>{{ row.sides.in_vitro.times }}</td><td>{{ row.sides.in_vitro.replicates }}</td>
+                {% if calibration_inspection.supported %}<td><input type="checkbox" data-calibration-select="{{ row.id }}" aria-label="Inspect {{ row.name }}" aria-describedby="calibration-selection-help calibration-selection-status" aria-controls="calibration-recovery-panel" disabled></td>{% endif %}
+                <th scope="row"><span class="design-schedule-swatch" data-calibration-swatch="{{ row.id }}" aria-hidden="true" hidden></span>{{ row.name }}</th><td>{{ row.sides.in_vitro.times }}</td><td>{{ row.sides.in_vitro.replicates }}</td>
                 <td>{{ row.sides.in_vivo.times }}</td><td>{{ row.sides.in_vivo.replicates }}</td><td>{{ row.new_units }}</td>
                 <td>{{ row.n_fit_successful }} / {{ row.n_simulations }}</td><td>{{ row.fit_failure_rate }}</td>
             </tr>{% endfor %}</tbody>
@@ -40,6 +42,8 @@
             <p class="design-help">Generated times use the existing local curve-recovery information heuristic for each environment. Their IVIVC effects are assessed afterward. This is not optimization for IVIVC performance or a joint optimization of the two environments.</p>
         </details>{% endif %}
     </section>
+
+    {% include 'design/_calibration_recovery.html' %}
 
     {% for output in output_sections %}
     <section class="design-section" aria-labelledby="calibration-{{ output.key }}-heading">

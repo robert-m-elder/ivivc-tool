@@ -641,6 +641,36 @@ measurements to the target prediction intervals.
 
 ### Reading calibration results
 
+For Approach 2, **Recovered calibration curves** leads the graphical results.
+Select up to three candidates in the design table. The default environment is
+the varied environment (in vivo when both vary); switch between in vitro and
+in vivo without recalculation. Each design has a consistent color. Its median
+fitted response and shaded pointwise 2.5th–97.5th percentile range share one
+legend entry, so clicking the entry hides or shows the curve and range together.
+The gray dashed guide is the central generating reference when supplied.
+
+These curves are evaluated from retained calibration profile fits on a common
+environment-specific time grid. No new fit or simulation is performed.
+Pointwise summaries use available fitted responses; failed fits and available
+study counts stay visible. A median can use one value; a range needs two.
+The ranges describe variation across simulated studies under the source and
+measurement assumptions, separately from confidence intervals within one fit.
+Identical reconstructions in a fixed environment are shown once without a
+sampled range; unchanged historical observations do not imply known truth.
+Curves outside a candidate's sampled time range depend on model extrapolation.
+
+The collapsed **Illustrative simulated study** always uses study 1 for every
+selected candidate, including failed fits. It overlays retained existing
+observations once, newly simulated calibration rows, fitted responses, and the
+matching sampled generating truth where available. Added rows at existing
+times remain additional rows. The example is unavailable if shared generating
+selections cannot be verified; a different successful study is never substituted.
+Numerical tables provide the plotted responses and example observations, and
+remain usable when Plotly is unavailable. Design selection and environment
+switching do not mark calculation inputs changed. Approach 1 retains its
+time-mapping results and an explicit explanation that separate parametric
+calibration response curves are not available for that approach.
+
 Results retain explicit proposed times/counts, fixed-data and source provenance,
 normalization constants, generating-model assumptions, and whether schedules
 were specified or generated. The comparison reports fit success, point and
@@ -995,6 +1025,14 @@ controllers working together.
    and assess it alongside an explicit candidate. Check both Approach 1 and
    Approach 2 when they are to be used. Varying both environments should retain
    their separate source and measurement assumptions.
+   For Approach 2, select up to three designs and switch the recovered-curve
+   environment. Click a legend entry and confirm that its line and shaded range
+   hide together. A fixed environment should show an identical fitted curve
+   once. Open the shared study-1 example; check its observations, matched truth,
+   and explicit failures. None of these controls should send a calculation or
+   mark inputs changed. With the CDN unavailable, numerical tables should still
+   work. Approach 1 should show its mapping explanation and retain its existing
+   relationship and target results.
 5. After a successful calculation, change an input, replace a file, and submit
    an invalid request. Earlier output should remain visible with its original
    provenance and an out-of-date label. Stale generated times must not be
