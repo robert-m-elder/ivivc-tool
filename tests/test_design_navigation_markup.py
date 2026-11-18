@@ -80,7 +80,7 @@ class DesignNavigationMarkup(unittest.TestCase):
                 self.assertNotIn('formaction', button)
                 self.assertNotIn('name', button)
                 self.assertFalse(any(tag == 'form' for tag, _ in ancestors))
-                self.assertIn('design-calculation-bar', [attrs.get('id') for _, attrs in ancestors])
+                self.assertIn('design-section-navigation', [attrs.get('id') for _, attrs in ancestors])
                 self.assertFalse(any('hidden' in attrs for _, attrs in ancestors))
                 self.assertFalse({'design-inputs', 'design-results'} &
                                  {attrs.get('id') for _, attrs in ancestors})
@@ -90,7 +90,8 @@ class DesignNavigationMarkup(unittest.TestCase):
             with self.subTest(prefix=prefix, task=task):
                 ids = {attrs.get('id') for _, attrs, _ in page.elements}
                 self.assertFalse({'review-setup', 'design-review-content', 'setup-review-heading',
-                                  'design-review-heading'} & ids)
+                                  'design-review-heading', 'design-calculation-bar',
+                                  'design-draft-status', 'design-results-status'} & ids)
                 self.assertIn('design-calculation-heading', ids)
                 submitters = [attrs['id'] for tag, attrs, _ in page.elements
                               if tag == 'button' and attrs.get('type', 'submit') == 'submit']
@@ -115,6 +116,9 @@ class DesignNavigationMarkup(unittest.TestCase):
                 self.assertEqual(visible.count(task), 4)
                 self.assertEqual(visible.count('all'), 1)
                 self.assertEqual(len(visible), 5)
+                self.assertIn('design-navigation-task', by_id)
+                self.assertEqual(by_id['design-section-select'][0], 'select')
+                self.assertNotIn('name', by_id['design-section-select'][1])
                 for _, attrs, _ in page.elements:
                     if 'data-design-view' in attrs:
                         self.assertIn(attrs['aria-controls'], by_id)
@@ -128,8 +132,9 @@ class DesignNavigationMarkup(unittest.TestCase):
                     self.assertEqual(attrs['role'], 'status')
                     self.assertEqual(attrs['aria-live'], 'polite')
                     self.assertFalse(any(tag == 'form' for tag, _ in ancestors))
-                    self.assertFalse(any('hidden' in attrs for _, attrs in ancestors))
-                    self.assertIn('design-calculation-bar', [item.get('id') for _, item in ancestors])
+                    self.assertFalse(any('hidden' in item and item.get('id') != 'design-navigation-feedback'
+                                         for _, item in ancestors))
+                    self.assertIn('design-section-navigation', [item.get('id') for _, item in ancestors])
 
 
     def test_sampling_options_are_collapsed_in_order_without_disabling_their_values(self):

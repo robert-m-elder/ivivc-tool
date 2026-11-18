@@ -41,11 +41,20 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
         get textContent() { return this._text + this.children.map(child => child.textContent).join(""); }
         set textContent(value) { this._text = String(value); this._html = ""; this.children = []; }
         get innerHTML() { return this._html; }
-        set innerHTML(value) { this._html = String(value); this._text = ""; this.children = []; }
+        set innerHTML(value) {
+            this._html = String(value); this._text = ""; this.children = [];
+            // Comparison navigation needs real heading nodes from inserted fragments.
+            for (const match of this._html.matchAll(/<(h[1-6])\b[^>]*\bid="([^"]+)"[^>]*>([\s\S]*?)<\/h[1-6]>/g)) {
+                const heading = new Element(match[1], {id: match[2]});
+                heading.textContent = match[3].replace(/<[^>]*>/g, "");
+                this.append(heading);
+            }
+        }
         append(...children) { children.forEach(child => { child.parentElement = this; this.children.push(child); }); }
         replaceChildren(...children) { this._text = ""; this._html = ""; this.children = []; this.append(...children); }
         setAttribute(name, value) { this.attributes[name] = String(value); }
         getAttribute(name) { return this.attributes[name] ?? null; }
+        contains(node) { for (; node; node = node.parentElement) if (node === this) return true; return false; }
         removeAttribute(name) { delete this.attributes[name]; }
         addEventListener(type, listener) { (this.listeners[type] ||= []).push(listener); }
         dispatchEvent(event) {
@@ -58,6 +67,7 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
         focus(options) { document.activeElement = this; this.focusOptions = options; }
         scrollIntoView(options) { document.scrolls.push({node: this, options}); }
         matches(selector) {
+            if (selector.startsWith(".")) return (this.attributes.class || "").split(/\s+/).includes(selector.slice(1));
             const attribute = /^\[([^=\]]+)(?:="([^"]*)")?\]$/.exec(selector);
             if (attribute) return this.attributes[attribute[1]] !== undefined &&
                 (attribute[2] === undefined || this.attributes[attribute[1]] === attribute[2]);
@@ -73,6 +83,7 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
             visit(this);
             return found;
         }
+        querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
         closest(selector) {
             for (let node = this; node; node = node.parentElement) if (node.matches(selector)) return node;
             return null;
@@ -86,20 +97,28 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
     };
     const root = element("main", {id: "design-workspace"});
     const navigation = element("nav", {id: "design-section-navigation"}, root);
+    const taskLabel = element("span", {id: "design-navigation-task"}, navigation);
     const inputsButton = element("button", {"data-design-view": "inputs"}, navigation);
     const resultsButton = element("button", {"data-design-view": "results"}, navigation);
-    const studySection = element("button", {"data-design-section": "study-sampling-heading", "data-section-task": "study"}, navigation);
-    const calibrationSection = element("button", {"data-design-section": "calibration-candidates-heading", "data-section-task": "calibration"}, navigation);
-    const commonSection = element("button", {"data-design-section": "design-calculation-heading", "data-section-task": "all"}, navigation);
-    const bar = element("aside", {id: "design-calculation-bar"});
-    const comparisonStatus = element("p", {id: "design-comparison-status", "data-state": "none"}, bar);
-    const operationFeedback = element("p", {id: "design-operation-feedback", hidden: ""}, bar);
+    const sectionControls = element("div", {class: "design-section-navigation-controls"}, navigation);
+    const sectionLinks = element("div", {id: "design-section-buttons", "data-design-section-links": ""}, sectionControls);
+    const studySection = element("button", {"data-design-section": "study-sampling-heading", "data-section-task": "study"}, sectionLinks);
+    studySection.textContent = "Sampling";
+    const calibrationSection = element("button", {"data-design-section": "calibration-candidates-heading", "data-section-task": "calibration"}, sectionLinks);
+    calibrationSection.textContent = "Candidates";
+    const commonSection = element("button", {"data-design-section": "design-calculation-heading", "data-section-task": "all"}, sectionLinks);
+    commonSection.textContent = "Calculation";
+    const sectionSelect = element("select", {id: "design-section-select"}, sectionControls);
+    const comparisonStatus = element("p", {id: "design-comparison-status", "data-state": "none"}, navigation);
+    const navigationFeedback = element("div", {id: "design-navigation-feedback"}, navigation);
+    const operationFeedback = element("p", {id: "design-operation-feedback", hidden: ""}, navigationFeedback);
     const operationText = element("span", {id: "design-operation-text"}, operationFeedback);
     const cssValues = new Map(), resizeObservers = [];
     if (measurements) {
         root.style = {setProperty(name, value) { cssValues.set(name, value); }};
         navigation.getBoundingClientRect = () => ({height: measurements.navigation});
-        bar.getBoundingClientRect = () => ({height: measurements.bar});
+        Object.defineProperty(sectionLinks, "scrollWidth", {get: () => measurements.sectionsRequired || 0});
+        Object.defineProperty(sectionControls, "clientWidth", {get: () => measurements.sectionsAvailable || 0});
     }
     class ResizeObserverFixture {
         constructor(callback) { this.callback = callback; this.observed = []; resizeObservers.push(this); }
@@ -110,7 +129,6 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
     const task = element("select", {id: "task", name: "task", value: "study", "aria-describedby": "task-help"}, form);
     const inputs = element("section", {id: "design-inputs"}, form);
     const summary = element("section", {id: "design-errors", hidden: ""}, inputs);
-    const draftStatus = element("p", {id: "design-draft-status"}, inputs);
     const studyGroup = element("div", {"data-design-task": "study"}, inputs);
     const studyHeading = element("h3", {id: "study-sampling-heading", tabindex: "-1"}, studyGroup);
     const sourceField = element("select", {id: "reference_source", name: "reference_source", value: "measured"}, studyGroup);
@@ -130,7 +148,7 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
     const details = element("details", {}, outerDetails);
     const simulations = element("input", {id: "n_simulations", name: "n_simulations", type: "number", value: "100", "aria-describedby": "n-simulations-help"}, details);
     const seed = element("input", {id: "random_seed", name: "random_seed", type: "number", value: "12345", "aria-describedby": "random-seed-help"}, details);
-    const calculate = element("button", {id: "calculate-comparison", form: "design-setup-form", type: "submit", disabled: ""}, bar);
+    const calculate = element("button", {id: "calculate-comparison", form: "design-setup-form", type: "submit", disabled: ""}, navigation);
     let completed, planningGroup, observationKind, observationValue, minimumSd, profileFile;
     let availability, ivivcGroup, scalingGroup, ivivcApproach, ivivcModel, ivivcMethod;
     let interpolation, scalingModel, extrapolation, ivivcTarget, ratioFile;
@@ -318,13 +336,11 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
     for (const field of [task, sourceField, environment, simulations, seed]) {
         errors[field.id] = element("p", {id: field.id + "-error", "data-error-for": field.id, hidden: ""}, inputs);
     }
-    const requestStatus = element("p", {id: "design-request-status"}, bar);
+    const requestStatus = element("p", {id: "design-request-status"}, navigationFeedback);
     const results = element("section", {id: "design-results", hidden: ""}, root);
     const resultsHeading = element("h2", {id: "design-results-heading", tabindex: "-1"}, results);
     const content = element("div", {id: "design-results-content"}, results);
     content.innerHTML = "<p>No comparison yet.</p>";
-    const resultStatus = element("p", {id: "design-results-status"}, results);
-    root.append(bar);
 
     document.getElementById = id => root.id === id ? root :
         root.querySelectorAll("[id]").find(node => node.id === id) || null;
@@ -378,13 +394,13 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
     }
 
     return {root, form, task, sourceField, sourceGroups, fileInputs, calibrationGroup, environment,
-        calibrationFile, details, simulations, seed, inputs, results, content, summary, draftStatus,
+        calibrationFile, details, simulations, seed, inputs, results, content, summary,
         requestStatus, errors, requests, document, inputsButton, resultsButton, emit,
         navigation, studySection, calibrationSection, commonSection, studyHeading, calibrationHeading,
-        calculationHeading, outerDetails, bar, comparisonStatus, operationFeedback, operationText, resultsHeading,
+        calculationHeading, outerDetails, comparisonStatus, taskLabel, sectionSelect, sectionLinks, sectionControls, operationFeedback, operationText, resultsHeading,
         cssValues, resizeObservers,
         calculate, completed, planningGroup, observationKind, observationValue, minimumSd, profileFile,
-        availability, resultStatus, successfulCalculation,
+        availability, successfulCalculation,
         ivivcGroup, scalingGroup, ivivcApproach, ivivcModel, ivivcMethod,
         interpolation, scalingModel, extrapolation, ivivcTarget, ratioFile,
         measuredMode, completedError, completedFile, completedScaleHelp, firstMode, firstTime, futurePolicy, addTiming, timingRows,
@@ -416,7 +432,7 @@ test('explicit Calculate and implicit Enter submit only calculations at standalo
         assert.equal(page.content.innerHTML, '<p>Replacement comparison</p>');
         assert.equal(page.document.activeElement, page.resultsHeading);
         assert.equal(page.fileInputs.measured.files[0], file);
-        assert.equal(page.calculate.textContent, 'Recalculate comparison');
+        assert.equal(page.calculate.textContent, 'Recalculate');
     }
 });
 
@@ -474,17 +490,17 @@ test("successful calculation replaces only results and preserves selected File o
     assert.equal(page.results.hidden, false);
     assert.equal(page.inputs.hidden, true);
     assert.equal(page.document.activeElement, page.resultsHeading);
-    assert.match(page.draftStatus.textContent, /matches these settings/);
+    assert.match(page.comparisonStatus.textContent, /^Current$/);
 
     await page.emit(page.inputsButton, "click");
     page.simulations.value = "120";
     await page.emit(page.simulations, "input");
-    assert.match(page.draftStatus.textContent, /Inputs changed/);
+    assert.match(page.comparisonStatus.textContent, /Inputs changed/);
     assert.equal(page.content.innerHTML, "<section>Measured comparison</section>");
     assert.equal(page.requests.length, 1);
     page.simulations.value = "100";
     await page.emit(page.simulations, "input");
-    assert.match(page.draftStatus.textContent, /matches these settings/);
+    assert.match(page.comparisonStatus.textContent, /^Current$/);
 });
 
 test("server validation links errors, opens advanced fields, and retains earlier results", async () => {
@@ -570,7 +586,7 @@ test("editing while a request runs retains captured settings and leaves current 
     assert.equal(page.inputs.hidden, false);
     assert.equal(page.results.hidden, true);
     assert.match(page.requestStatus.textContent, /Inputs changed during the request/);
-    assert.match(page.draftStatus.textContent, /retains its original settings/);
+    assert.match(page.comparisonStatus.textContent, /^Inputs changed$/);
     await page.emit(page.resultsButton, "click");
     assert.equal(page.content.innerHTML, "<section>Submitted random seed: 12345</section>");
 });
@@ -612,7 +628,7 @@ test("calculation posts the mounted form to its own endpoint and preserves selec
     assert.equal(page.fileInputs.measured.files[0], file);
     assert.equal(page.results.hidden, false);
     assert.equal(page.document.activeElement, page.resultsHeading);
-    assert.match(page.resultStatus.textContent, /current inputs/);
+    assert.match(page.comparisonStatus.textContent, /^Current$/);
     assert.equal(page.calculate.disabled, false);
 });
 
@@ -628,7 +644,7 @@ test('non-calculation submitters cannot replace or recertify an earlier comparis
     assert.equal(page.requests.length, requests);
     assert.equal(page.content.innerHTML, '<section>Simulation seed 12345</section>');
     assert.equal(page.comparisonStatus.dataset.state, 'stale');
-    assert.match(page.resultStatus.textContent, /original inputs/);
+    assert.match(page.comparisonStatus.textContent, /^Inputs changed$/);
 });
 
 test("successful calculations dispose the previous plot and initialize the inserted result", async () => {
@@ -746,14 +762,14 @@ test("workspace navigation preserves plots and resizes without a new calculation
     await page.successfulCalculation('<section>Numerical plot</section>');
     calls.length = 0;
     assert.equal(page.content.innerHTML, '<section>Numerical plot</section>');
-    const status = page.resultStatus.textContent;
+    const status = page.comparisonStatus.textContent;
     const requests = page.requests.length;
     calls.length = 0;
     await page.emit(page.inputsButton, 'click');
     await page.emit(page.resultsButton, 'click');
     assert.deepEqual(calls, ['resize']);
     assert.equal(page.requests.length, requests);
-    assert.equal(page.resultStatus.textContent, status);
+    assert.equal(page.comparisonStatus.textContent, status);
 });
 
 test("plot initialization errors cannot turn successful calculations into failed requests", async () => {
@@ -771,7 +787,7 @@ test("plot initialization errors cannot turn successful calculations into failed
         assert.equal(page.results.hidden, false);
         assert.equal(page.summary.hidden, true);
         assert.equal(page.calculate.disabled, false);
-        assert.match(page.resultStatus.textContent, /current inputs/);
+        assert.match(page.comparisonStatus.textContent, /^Current$/);
         assert.match(page.requestStatus.textContent, /comparison calculated/);
     }
 });
@@ -841,7 +857,7 @@ test("a completed calculation retains submitted settings when the current draft 
     assert.equal(page.seed.value, "999");
     assert.equal(page.content.innerHTML, "<section>Seed 12345</section>");
     assert.equal(page.inputs.hidden, false);
-    assert.match(page.resultStatus.textContent, /original inputs/);
+    assert.match(page.comparisonStatus.textContent, /^Inputs changed$/);
     assert.match(page.requestStatus.textContent, /Inputs changed during the request/);
 });
 
@@ -857,7 +873,7 @@ test("a same-name replacement File makes calculation output stale and prevents o
     ]})});
     await pending;
     assert.equal(page.content.innerHTML, "<section>Original file results</section>");
-    assert.match(page.resultStatus.textContent, /original inputs/);
+    assert.match(page.comparisonStatus.textContent, /^Inputs changed$/);
     assert.notEqual(page.seed.getAttribute("aria-invalid"), "true");
     assert.equal(page.summary.querySelectorAll("a").length, 0);
     assert.match(page.summary.textContent, /Inputs changed during the request/);
@@ -990,7 +1006,7 @@ test("changing reference source during calculation keeps its successful output l
     assert.equal(page.sourceField.value, "scaling");
     assert.equal(page.scalingModel.disabled, false);
     assert.equal(page.inputs.hidden, false);
-    assert.match(page.resultStatus.textContent, /original inputs/);
+    assert.match(page.comparisonStatus.textContent, /^Inputs changed$/);
     assert.equal(page.calculate.disabled, false);
     assert.equal(page.requests.length, 1);
 });
@@ -1092,7 +1108,7 @@ test("timing editor submits active numeric or milestone controls and removes row
     await page.emit(first.remove, "click");
     assert.equal(first.kind.disabled, true);
     assert.equal(second.kind.disabled, false);
-    assert.match(page.resultStatus.textContent, /Inputs changed/);
+    assert.match(page.comparisonStatus.textContent, /Inputs changed/);
     await page.emit(page.addTiming, "click");
     assert.equal(first.bounds.upper.mode.value, "milestone");
     assert.equal(first.bounds.upper.quantile.value, ".25");
@@ -1307,7 +1323,7 @@ test("calibration candidates retain manual or generated choices while inactive r
     page.requests.at(-1).resolve({ok: true, json: async () => ({ok: true, html: "<p>Six candidates</p>"})});
     await pending;
     await page.emit(row.remove, "click");
-    assert.match(page.resultStatus.textContent, /Inputs changed/);
+    assert.match(page.comparisonStatus.textContent, /Inputs changed/);
 });
 
 test("calibration errors retain earlier results and do not mark removed candidates invalid", async () => {
@@ -1353,7 +1369,7 @@ test("a calibration request preserves submitted results when the user returns to
     assert.equal(page.observationValue.disabled, false);
     assert.equal(cal.candidates[0].name.disabled, true);
     assert.equal(cal.sides.in_vivo.sourceFile.files[0], expected);
-    assert.match(page.resultStatus.textContent, /original inputs/);
+    assert.match(page.comparisonStatus.textContent, /^Inputs changed$/);
     assert.match(page.requestStatus.textContent, /Submitted calibration comparison/);
 });
 
@@ -1461,7 +1477,7 @@ test('copying a candidate makes only its generated sides editable and marks the 
     assert.equal(second.sides.in_vivo.times.value, '2, 8');
     assert.equal(cal.candidates[0].sides.in_vivo.replicates.value, '3');
     assert.match(cal.generationStatus.textContent, /explicitly specified/);
-    assert.match(page.resultStatus.textContent, /Inputs changed/);
+    assert.match(page.comparisonStatus.textContent, /Inputs changed/);
     assert.equal(page.content.innerHTML, '<p>Comparison before copying</p>');
     assert.equal(copy.disabled, true);
 });
@@ -1552,13 +1568,13 @@ test('changing task during generation cannot apply or copy an obsolete calibrati
 
 test('persistent comparison status follows calculated inputs and keeps recalculation available in either view', async () => {
     const page = fixture({planning: true});
-    assert.equal(page.calculate.parentElement, page.bar);
+    assert.equal(page.calculate.closest("nav"), page.navigation);
     assert.equal(page.calculate.getAttribute('form'), page.form.id);
     assert.equal(page.comparisonStatus.dataset.state, 'none');
-    assert.match(page.calculate.textContent, /^Calculate comparison$/);
+    assert.match(page.calculate.textContent, /^Calculate$/);
     await page.successfulCalculation();
     assert.equal(page.comparisonStatus.dataset.state, 'current');
-    assert.match(page.calculate.textContent, /^Recalculate comparison$/);
+    assert.match(page.calculate.textContent, /^Recalculate$/);
     assert.equal(page.calculate.disabled, false);
     assert.equal(page.results.hidden, false);
     await page.emit(page.inputsButton, 'click');
@@ -1598,6 +1614,39 @@ test('section navigation follows the active task and focuses headings without ca
     assert.equal(page.requests.length, 0);
 });
 
+test('comparison navigation follows retained results, omits missing outputs, and supports the section picker', async () => {
+    const page = fixture({planning: true, calibration: true});
+    await page.successfulCalculation([
+        '<h3 id="planning-settings-heading">Inputs</h3>',
+        '<h3 id="planning-result-heading">Interpretation</h3>',
+        '<h3 id="planning-performance-heading">Performance</h3>',
+        '<h3 id="planning-recovery-heading">Recovery</h3>',
+    ].join(''));
+    const visible = () => page.sectionLinks.querySelectorAll('[data-design-section]').filter(button => !button.hidden);
+    assert.deepEqual(visible().map(button => button.dataset.designSection), [
+        'planning-settings-heading', 'planning-result-heading', 'planning-performance-heading', 'planning-recovery-heading',
+    ]);
+    assert.equal(page.taskLabel.textContent, 'Study planning');
+    const requests = page.requests.length;
+    await page.emit(visible().find(button => button.dataset.designSection === 'planning-performance-heading'), 'click');
+    assert.equal(page.document.activeElement.id, 'planning-performance-heading');
+    assert.equal(page.document.activeElement.getAttribute('tabindex'), '-1');
+    page.sectionSelect.value = 'planning-settings-heading';
+    await page.emit(page.sectionSelect, 'change');
+    assert.equal(page.document.activeElement.id, 'planning-settings-heading');
+    assert.equal(page.requests.length, requests);
+    await page.emit(page.inputsButton, 'click');
+    page.task.value = 'calibration';
+    await page.emit(page.task, 'change');
+    assert.equal(page.taskLabel.textContent, 'Calibration sampling');
+    await page.emit(page.resultsButton, 'click');
+    assert.equal(page.taskLabel.textContent, 'Study planning');
+    assert.equal(page.comparisonStatus.dataset.state, 'stale');
+    assert.ok(visible().every(button => button.dataset.designSection.startsWith('planning-')));
+    assert.ok(!page.sectionSelect.querySelectorAll('option').some(option => option.value === 'planning-endpoint-heading'));
+    assert.equal(page.requests.length, requests);
+});
+
 test('calculation feedback remains visible while the request runs and clears on every outcome', async () => {
     for (const outcome of ['success', 'validation', 'network', 'malformed']) {
         const page = fixture({planning: true});
@@ -1605,6 +1654,7 @@ test('calculation feedback remains visible while the request runs and clears on 
         assert.equal(page.operationFeedback.hidden, false);
         assert.match(page.operationText.textContent, /calculat/i);
         assert.equal(page.calculate.disabled, true);
+        assert.equal(page.calculate.textContent, 'Calculating…');
         const request = page.requests.at(-1);
         if (outcome === 'success') request.resolve({ok: true, json: async () => ({ok: true, html: '<p>Calculated</p>'})});
         if (outcome === 'validation') request.resolve({ok: false, json: async () => ({ok: false, errors: [{field_id: 'random_seed', message: 'Check the seed.'}]})});
@@ -1723,19 +1773,20 @@ test('validation from comparisons returns to the summary and error links reveal 
     assert.equal(page.comparisonStatus.dataset.state, 'stale');
 });
 
-test('measured navigation and action-bar offsets refresh after resize and without an observer', () => {
+test('measured navigation offsets refresh after resize and without an observer', () => {
     // Mock rectangles verify the measurement-to-CSS plumbing. They do not
     // validate actual browser layout, stacking, zoom, or focus visibility.
     for (const observeResize of [true, false]) {
-        const measurements = {navigation: 89.1, bar: 143.01};
+        const measurements = {navigation: 89.1, sectionsRequired: 600, sectionsAvailable: 720};
         const page = fixture({planning: true, measurements, observeResize});
         assert.equal(page.cssValues.get('--design-navigation-height'), '90px');
-        assert.equal(page.cssValues.get('--design-action-bar-height'), '144px');
+        assert.equal(page.cssValues.has('--design-action-bar-height'), false);
+        assert.equal(page.navigation.dataset.compact, 'false');
         measurements.navigation = 124.2;
-        measurements.bar = 211.7;
+        measurements.sectionsAvailable = 450;
         if (observeResize) {
             assert.equal(page.resizeObservers.length, 1);
-            assert.deepEqual(page.resizeObservers[0].observed, [page.navigation, page.bar]);
+            assert.deepEqual(page.resizeObservers[0].observed, [page.navigation]);
             page.resizeObservers[0].callback();
         } else {
             assert.equal(page.resizeObservers.length, 0);
@@ -1744,7 +1795,8 @@ test('measured navigation and action-bar offsets refresh after resize and withou
             }});
         }
         assert.equal(page.cssValues.get('--design-navigation-height'), '125px');
-        assert.equal(page.cssValues.get('--design-action-bar-height'), '212px');
+        assert.equal(page.cssValues.has('--design-action-bar-height'), false);
+        assert.equal(page.navigation.dataset.compact, 'true');
     }
 });
 
@@ -1896,7 +1948,7 @@ test('opening or closing sampling panels preserves a current comparison and acti
     }
     assert.equal(page.comparisonStatus.dataset.state, 'current');
     assert.equal(page.comparisonStatus.textContent, status);
-    assert.equal(page.calculate.textContent, 'Recalculate comparison');
+    assert.equal(page.calculate.textContent, 'Recalculate');
     assert.equal(timing.bounds.upper.time.value, '18');
     assert.equal(timing.bounds.upper.time.disabled, false);
     assert.equal(page.requests.length, 1);

@@ -51,11 +51,15 @@
         </div>
 
         <nav id="design-section-navigation" class="design-section-navigation" aria-label="Sections and workspace views">
+            <div class="design-navigation-context">
+            <span id="design-navigation-task" class="design-navigation-task">{{ 'Calibration sampling' if settings.task == 'calibration' else 'Study planning' }}</span>
             <div class="design-view-navigation">
                 <button type="button" data-design-view="inputs" aria-pressed="true" aria-controls="design-inputs">Inputs</button>
                 <button type="button" data-design-view="results" aria-pressed="false" aria-controls="design-results">Comparisons</button>
             </div>
-            <div class="design-section-links" data-design-section-links>
+            </div>
+            <div class="design-section-navigation-controls">
+            <div id="design-section-buttons" class="design-section-links" data-design-section-links>
                 <button type="button" data-design-section="study-data-heading" data-section-task="study"{% if settings.task != 'study' %} hidden{% endif %}>1 · Data</button>
                 <button type="button" data-design-section="study-reference-heading" data-section-task="study"{% if settings.task != 'study' %} hidden{% endif %}>2 · Reference</button>
                 <button type="button" data-design-section="study-measurements-heading" data-section-task="study"{% if settings.task != 'study' %} hidden{% endif %}>3 · Measurements</button>
@@ -66,12 +70,27 @@
                 <button type="button" data-design-section="calibration-candidates-heading" data-section-task="calibration"{% if settings.task != 'calibration' %} hidden{% endif %}>4 · Candidates</button>
                 <button type="button" data-design-section="design-calculation-heading" data-section-task="all">5 · Calculation</button>
             </div>
+            <div class="design-section-picker">
+                <label class="design-sr-only" for="design-section-select">Jump to section</label>
+                <select id="design-section-select" aria-label="Jump to section"><option value="">Choose section</option></select>
+            </div>
+            </div>
+            <div class="design-navigation-actions">
+                <p id="design-comparison-status" class="design-comparison-status" data-state="none" role="status" aria-live="polite" aria-atomic="true">No comparison</p>
+                <button id="calculate-comparison" class="design-primary" type="submit" form="design-setup-form" aria-describedby="design-calculation-help design-comparison-status" disabled>Calculate</button>
+            </div>
+            <div id="design-navigation-feedback" class="design-navigation-feedback" hidden>
+                <div id="design-operation-feedback" class="design-operation-feedback" role="status" aria-live="polite" aria-atomic="true" hidden>
+                    <span class="design-spinner" aria-hidden="true"></span>
+                    <span id="design-operation-text"></span>
+                </div>
+                <p id="design-request-status" class="design-request-status" role="status" aria-live="polite"></p>
+            </div>
         </nav>
 
         <form id="design-setup-form" action="{{ url_for('calculate_comparison') }}" method="post" enctype="multipart/form-data" novalidate>
             <section id="design-inputs" aria-labelledby="design-inputs-heading">
                 <h2 id="design-inputs-heading" tabindex="-1">Analysis inputs</h2>
-                <p id="design-draft-status" class="design-status" aria-live="polite">Configure the inputs, then choose Calculate comparison. No calculations run when inputs change.</p>
                 <section id="design-errors" class="design-error-summary" role="alert" tabindex="-1" hidden></section>
 
                 <div data-design-task="study"{% if settings.task != 'study' %} hidden{% endif %}>
@@ -205,24 +224,10 @@
                 <h2 id="design-results-heading" tabindex="-1">Comparisons</h2>
                 <button type="button" disabled title="Report generation will be added after the analysis workflows are settled.">Generate report</button>
             </div>
-            <p id="design-results-status" class="design-status" role="status" aria-live="polite"></p>
             <div id="design-results-content" tabindex="-1">
                 <p class="design-empty-state">No comparison yet. Import the selected task's data, configure candidates, and choose Calculate comparison.</p>
             </div>
         </section>
-        <aside id="design-calculation-bar" class="design-calculation-bar" aria-label="Calculation and comparison status">
-            <div class="design-page-width design-calculation-inner">
-                <div class="design-calculation-state">
-                    <p id="design-comparison-status" class="design-comparison-status" data-state="none" role="status" aria-live="polite" aria-atomic="true">No comparison yet.</p>
-                    <div id="design-operation-feedback" class="design-operation-feedback" role="status" aria-live="polite" aria-atomic="true" hidden>
-                        <span class="design-spinner" aria-hidden="true"></span>
-                        <span id="design-operation-text"></span>
-                    </div>
-                    <p id="design-request-status" class="design-request-status" role="status" aria-live="polite"></p>
-                </div>
-                <button id="calculate-comparison" class="design-primary" type="submit" form="design-setup-form" aria-describedby="design-calculation-help design-comparison-status" disabled>Calculate comparison</button>
-            </div>
-        </aside>
     </main>
 </body>
 </html>

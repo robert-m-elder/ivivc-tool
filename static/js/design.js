@@ -12,15 +12,17 @@
         const inputs = document.getElementById('design-inputs');
         const results = document.getElementById('design-results');
         const content = document.getElementById('design-results-content');
-        const resultStatus = document.getElementById('design-results-status');
         const summary = document.getElementById('design-errors');
-        const draftStatus = document.getElementById('design-draft-status');
         const requestStatus = document.getElementById('design-request-status');
         const comparisonStatus = document.getElementById('design-comparison-status');
         const operationFeedback = document.getElementById('design-operation-feedback');
         const operationText = document.getElementById('design-operation-text');
         const navigation = document.getElementById('design-section-navigation');
-        const actionBar = document.getElementById('design-calculation-bar');
+        const navigationTask = document.getElementById('design-navigation-task');
+        const navigationFeedback = document.getElementById('design-navigation-feedback');
+        const sectionLinks = root.querySelector('[data-design-section-links]');
+        const sectionControls = root.querySelector('.design-section-navigation-controls');
+        const sectionSelect = document.getElementById('design-section-select');
         const sectionButtons = Array.from(root.querySelectorAll('[data-design-section]'));
         const calculate = document.getElementById('calculate-comparison');
         const completed = document.getElementById('has_completed');
@@ -50,6 +52,7 @@
         let nextFile = 0;
         let pending = false;
         let calculatedSignature = null;
+        let calculatedTask = null;
         let generating = false;
         let generatedSignature = null;
         let generatedSchedules = [];
@@ -62,6 +65,32 @@
         let draftRevision = 0;
         let navigationRevision = 0;
         const operations = new Map();
+        const taskLabels = {study: 'Study planning', calibration: 'Calibration sampling'};
+        const comparisonSections = {
+            study: [
+                ['settings', 'Inputs'], ['result', 'Interpretation'], ['reference-result', 'Reference'],
+                ['performance', 'Performance'], ['schedule-inspection', 'Schedules'],
+                ['recovery', 'Recovery'], ['endpoint', 'Endpoints'],
+            ],
+            calibration: [
+                ['settings', 'Inputs'], ['result', 'Interpretation'], ['source', 'Expected behavior'],
+                ['design-results', 'Designs'], ['recovery', 'Recovery'], ['relationship', 'IVIVC'],
+                ['prediction', 'Targets'], ['failures', 'Details'],
+            ],
+        };
+        if (sectionLinks) Object.entries(comparisonSections).forEach(([kind, sections]) => {
+            sections.forEach(([key, label]) => {
+                const button = document.createElement('button');
+                button.setAttribute('type', 'button');
+                button.dataset.designSection = (kind === 'study' ? 'planning' : 'calibration') + '-' + key + '-heading';
+                button.dataset.sectionTask = kind;
+                button.dataset.sectionView = 'results';
+                button.textContent = label;
+                button.hidden = true;
+                sectionLinks.append(button);
+                sectionButtons.push(button);
+            });
+        });
 
         function setOperation(key, active, message) {
             if (active) operations.set(key, message);
@@ -87,18 +116,31 @@
         });
 
         function measureChrome() {
-            if (!root.style || typeof root.style.setProperty !== 'function') return;
-            for (const [element, property] of [[navigation, '--design-navigation-height'],
-                [actionBar, '--design-action-bar-height']]) {
-                if (!element || typeof element.getBoundingClientRect !== 'function') continue;
-                const height = element.getBoundingClientRect().height;
-                if (height > 0) root.style.setProperty(property, Math.ceil(height) + 'px');
+            if (requestStatus) requestStatus.hidden = !requestStatus.textContent ||
+                ['success', 'busy'].includes(requestStatus.dataset.state);
+            if (navigationFeedback) navigationFeedback.hidden =
+                (!operationFeedback || operationFeedback.hidden) && (!requestStatus || requestStatus.hidden);
+            if (!navigation) return;
+            navigation.dataset.compact = 'false';
+            if (sectionLinks && sectionControls && !sectionControls.hidden) {
+                const style = typeof window.getComputedStyle === 'function' ? window.getComputedStyle(sectionControls) : null;
+                const padding = style ? (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0) : 0;
+                const available = sectionControls.clientWidth - padding, required = sectionLinks.scrollWidth;
+                navigation.dataset.compact = String(required > 0 && required > available);
+            }
+            if (root.style && typeof root.style.setProperty === 'function' &&
+                    typeof navigation.getBoundingClientRect === 'function') {
+                const height = navigation.getBoundingClientRect().height;
+                if (height > 0) root.style.setProperty('--design-navigation-height', Math.ceil(height) + 'px');
             }
         }
 
         function focusTarget(target) {
             if (!target) return;
             measureChrome();
+            if (target.getAttribute('tabindex') === null && /^(H[1-6]|SECTION)$/.test(target.tagName)) {
+                target.setAttribute('tabindex', '-1');
+            }
             if (target.tagName === 'DETAILS') target.open = true;
             for (let ancestor = target.parentElement; ancestor && ancestor !== root; ancestor = ancestor.parentElement) {
                 if (ancestor.tagName === 'DETAILS') ancestor.open = true;
@@ -108,12 +150,39 @@
         }
 
         function syncNavigation() {
+            const contextTask = activeView === 'results' && calculatedTask ? calculatedTask : task.value;
+            if (navigationTask) {
+                navigationTask.textContent = taskLabels[contextTask] || contextTask;
+                navigationTask.title = activeView === 'results' && calculatedTask ?
+                    'Showing the ' + taskLabels[calculatedTask].toLowerCase() + ' comparison.' +
+                    (calculatedTask !== task.value ? ' Current inputs select ' + taskLabels[task.value].toLowerCase() + '.' : '') :
+                    'Selected analysis: ' + taskLabels[task.value] + '.';
+            }
+            const resultTargets = new Set(Array.from(content.querySelectorAll('[id]'), target => target.id));
+            const visible = [];
             sectionButtons.forEach(button => {
-                button.hidden = activeView !== 'inputs' ||
-                    !['all', task.value].includes(button.dataset.sectionTask || 'all');
+                const view = button.dataset.sectionView || 'inputs';
+                button.hidden = view !== activeView ||
+                    !['all', contextTask].includes(button.dataset.sectionTask || 'all') ||
+                    (view === 'results' && (!calculatedTask || !resultTargets.has(button.dataset.designSection)));
                 button.setAttribute('aria-current', !button.hidden && button.dataset.designSection === activeSection ? 'location' : 'false');
+                if (!button.hidden) visible.push(button);
             });
-            root.querySelectorAll('[data-design-section-links]').forEach(row => { row.hidden = activeView !== 'inputs'; });
+            if (sectionControls) sectionControls.hidden = visible.length === 0;
+            if (sectionSelect) {
+                const placeholder = document.createElement('option');
+                placeholder.value = '';
+                placeholder.textContent = 'Jump to section';
+                const options = visible.map(button => {
+                    const option = document.createElement('option');
+                    option.value = button.dataset.designSection;
+                    option.textContent = button.textContent;
+                    return option;
+                });
+                sectionSelect.replaceChildren(placeholder, ...options);
+                sectionSelect.disabled = !visible.length;
+                sectionSelect.value = visible.some(button => button.dataset.designSection === activeSection) ? activeSection : '';
+            }
             measureChrome();
         }
 
@@ -138,7 +207,9 @@
         function syncButtons() {
             if (calculate) {
                 calculate.disabled = pending || generating || !calculationAvailable();
-                calculate.textContent = calculatedSignature === null ? 'Calculate comparison' : 'Recalculate comparison';
+                calculate.textContent = pending ? 'Calculating…' : calculatedSignature === null ? 'Calculate' : 'Recalculate';
+                calculate.title = (calculatedSignature === null ? 'Calculate' : 'Recalculate') +
+                    ' using the current ' + (taskLabels[task.value] || task.value).toLowerCase() + ' inputs.';
             }
             if (generateCandidates) {
                 const requested = calibrationCandidates.some(row =>
@@ -436,28 +507,23 @@
             updateSamplingSummaries();
             updateCalculationSummaries();
             updateGenerationStatus();
+            syncNavigation();
             if (calculatedSignature !== null) {
                 const current = signature() === calculatedSignature;
                 if (comparisonStatus) {
                     comparisonStatus.dataset.state = current ? 'current' : 'stale';
-                    comparisonStatus.textContent = current ? 'Comparison is current.' :
-                        'Comparison is out of date. Recalculate for these inputs.';
+                    comparisonStatus.textContent = current ? 'Current' : 'Inputs changed';
+                    comparisonStatus.title = current ? 'The comparison matches the current inputs.' :
+                        'The comparison retains its original inputs and settings. Recalculate to assess the current choices.';
                 }
-                draftStatus.textContent = current ?
-                    'The displayed comparison matches these settings.' :
-                    'Inputs changed. The displayed comparison retains its original settings; calculate again to assess these choices.';
-                if (resultStatus) resultStatus.textContent = current ?
-                    'Comparison for the current inputs.' :
-                    'Inputs changed. This comparison still uses its original inputs and settings.';
                 measureChrome();
                 return;
             }
             if (comparisonStatus) {
                 comparisonStatus.dataset.state = 'none';
-                comparisonStatus.textContent = 'No comparison yet.';
+                comparisonStatus.textContent = 'No comparison';
+                comparisonStatus.title = 'Configure the inputs, then choose Calculate.';
             }
-            if (resultStatus) resultStatus.textContent = 'No numerical comparison has been calculated.';
-            draftStatus.textContent = 'Draft settings. Choose Calculate comparison to assess these inputs.';
             measureChrome();
         }
 
@@ -596,16 +662,22 @@
                     (button.dataset.designView === 'inputs' ? inputs : results));
             });
         });
-        sectionButtons.forEach(button => button.addEventListener('click', () => {
+        function navigateSection(button) {
             if (button.hidden || button.disabled) return;
             const target = document.getElementById(button.dataset.designSection);
             if (!target) return;
             navigationRevision++;
-            showView('inputs');
+            showView(button.dataset.sectionView || 'inputs');
             activeSection = button.dataset.designSection;
             syncNavigation();
             focusTarget(target);
-        }));
+        }
+        sectionButtons.forEach(button => button.addEventListener('click', () => navigateSection(button)));
+        if (sectionSelect) sectionSelect.addEventListener('change', () => {
+            const button = sectionButtons.find(candidate => !candidate.hidden &&
+                candidate.dataset.designSection === sectionSelect.value);
+            if (button) navigateSection(button);
+        });
         root.addEventListener('click', event => {
             const add = event.target.closest('[data-add-timing]');
             const remove = event.target.closest('[data-remove-timing]');
@@ -670,7 +742,7 @@
             form.setAttribute('aria-busy', 'true');
             requestStatus.textContent = '';
             requestStatus.dataset.state = 'busy';
-            setOperation('generation', true, 'Generating calibration candidate schedules.');
+            setOperation('generation', true, 'Generating candidate times…');
             updateGenerationStatus();
             try {
                 const response = await fetch(generateCandidates.dataset.generationUrl, {
@@ -755,6 +827,7 @@
                 return;
             }
             const data = new FormData(form);
+            const submittedTask = task.value;
             const submittedSignature = signature(data);
             const submittedRevision = draftRevision;
             const submittedNavigation = navigationRevision;
@@ -764,7 +837,7 @@
             clearErrors();
             requestStatus.textContent = '';
             requestStatus.dataset.state = 'busy';
-            setOperation('calculation', true, 'Calculating the ' + comparisonName + ' comparison. Keep this page open.');
+            setOperation('calculation', true, 'Calculating ' + comparisonName + ' comparison…');
             try {
                 // Read the explicit attribute so named controls cannot shadow
                 // the URL through HTMLFormElement's named-property lookup.
@@ -787,6 +860,7 @@
                 inspectionAction('initialize', content);
                 plotAction('initialize', content);
                 calculatedSignature = submittedSignature;
+                calculatedTask = submittedTask;
                 updateDraftStatus();
                 const unchanged = signature() === submittedSignature;
                 requestStatus.textContent = unchanged ?
@@ -816,7 +890,6 @@
             if (typeof window.ResizeObserver === 'function') {
                 const observer = new window.ResizeObserver(measureChrome);
                 if (navigation) observer.observe(navigation);
-                if (actionBar) observer.observe(actionBar);
             }
             if (typeof window.addEventListener === 'function') window.addEventListener('resize', measureChrome);
         }
