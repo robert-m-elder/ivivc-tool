@@ -8,6 +8,7 @@ import numpy as np
 from .design_planning_results import _number, _percent, _plot, _reference_band
 from .design_calibration_recovery import build_calibration_recovery
 from .design_calibration_outputs import build_calibration_outputs
+from .design_plotly import make_figure
 
 
 SIDES = ('in_vitro', 'in_vivo')
@@ -203,8 +204,23 @@ def _source_previews(result):
                 parameters.append({'name': name, 'value': _number(value),
                                    'se': _number(np.sqrt(variance) if np.isfinite(variance)
                                                  and variance >= 0 else None)})
+        identifier = 'calibration-source-' + side
+        figure = make_figure(
+            series, band=band, observations=observations,
+            title=SIDE_LABELS[side] + ' generating reference and calibration observations',
+            x_label=SIDE_LABELS[side] + ' time', y_label='Analyzed response',
+            identifier=identifier, band_label='Pointwise 95% source-parameter range',
+            observation_label='Source observations')
+        if figure is not None and reference is not None:
+            # In this view the source range belongs to the generating curve;
+            # retain independent legend controls for each observation dataset.
+            for trace in figure['data']:
+                group = trace['legendgroup']
+                if group in ('range', 'series-0'):
+                    trace['legendgroup'] = 'reference'
+                    trace['showlegend'] = group == 'series-0'
         previews.append({
-            'side': SIDE_LABELS[side], 'identifier': 'calibration-source-' + side,
+            'side': SIDE_LABELS[side], 'identifier': identifier,
             'mode': details.get('mode', 'fixed'), 'source_kind': details.get('source_kind', 'none'),
             'model': details.get('model') or '—', 'parameters': parameters,
             'has_reference': reference is not None,
@@ -215,6 +231,7 @@ def _source_previews(result):
             'intercept': _number(normalization.get('intercept', 0.)),
             'generation_grid': details.get('generation_grid'),
             'plot': _plot(series, band=band, observations=observations),
+            'figure': figure,
         })
     return previews
 

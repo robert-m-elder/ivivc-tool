@@ -10,7 +10,7 @@ import numpy as np
 from ivivc_core import AnalysisError, ResolvedObservationUncertainty, TimeCourse
 from study_design_core import IVIVCCalibrationAssessment, ObservationModel, summarize_calibration_simulation
 from utilities.design_calibration import run_calibration_comparison
-from utilities.design_calibration_results import present_calibration_result, _observation_description, _quantity_labels
+from utilities.design_calibration_results import present_calibration_result, _observation_description, _quantity_labels, _source_previews
 
 try:
     from jinja2 import Environment, FileSystemLoader, StrictUndefined
@@ -97,12 +97,17 @@ class CalibrationPresentation(unittest.TestCase):
         self.assertEqual(context['rows'][0]['sides']['in_vitro']['units'], 0)
 
     def test_precision_only_comparison_does_not_invent_truth_or_zero_error(self):
-        item = present_calibration_result(self.without_truth)['rows'][0]['outputs']['relationship']
+        context = present_calibration_result(self.without_truth)
+        item = context['rows'][0]['outputs']['relationship']
         self.assertEqual(item['truth_count'], 0)
         self.assertEqual(item['error_count'], 0)
         self.assertEqual(item['rmse'], '—')
         self.assertEqual(item['coverage'], '—')
         self.assertGreater(item['width_count'], 0)
+        source = context['source_previews'][0]
+        self.assertFalse(source['has_reference'])
+        self.assertEqual([trace['name'] for trace in source['figure']['data']],
+                         ['Fixed calibration observations'])
 
     def test_missing_intervals_keep_full_truth_and_availability_denominators(self):
         result = self.mutable_result()
@@ -189,6 +194,39 @@ class CalibrationPresentation(unittest.TestCase):
         self.assertTrue(context['source_previews'][0]['parameters'])
         self.assertIn('0.05', context['rows'][0]['sides']['in_vivo']['observation'])
         self.assertEqual(context['source_previews'][1]['range'], '0–16')
+        for side, source in zip(('in_vitro', 'in_vivo'), context['source_previews']):
+            traces = source['figure']['data']
+            reference = self.result.references[side]
+            center = next(trace for trace in traces if trace['name'] == 'Central generating reference')
+            np.testing.assert_allclose(center['x'], reference.time_grid)
+            np.testing.assert_allclose(center['y'], reference.central_curve)
+            reference_traces = [trace for trace in traces if trace['legendgroup'] == center['legendgroup']]
+            self.assertTrue(any(trace.get('fill') == 'tonexty' for trace in reference_traces))
+            self.assertEqual(sum(trace.get('showlegend', True) for trace in reference_traces), 1)
+            self.assertEqual(source['figure']['layout']['legend']['groupclick'], 'togglegroup')
+            fixed = self.result.analyzed_existing.get(side)
+            if fixed is not None:
+                observed = next(trace for trace in traces if trace['name'] == 'Fixed calibration observations')
+                np.testing.assert_allclose(observed['x'], fixed.time)
+                np.testing.assert_allclose(observed['y'], fixed.value)
+                self.assertNotEqual(observed['legendgroup'], center['legendgroup'])
+            if self.result.source_details[side]['source_kind'] == 'file':
+                observed = next(trace for trace in traces if trace['name'] == 'Source observations')
+                course = self.result.source_details[side]['analyzed_source']
+                np.testing.assert_allclose(observed['x'], course.time)
+                np.testing.assert_allclose(observed['y'], course.value)
+            json.dumps(source['figure'], allow_nan=False)
+
+        single = copy(self.result)
+        single.references = {side: copy(reference) for side, reference in self.result.references.items()}
+        for reference in single.references.values():
+            reference.valid_draws = reference.valid_draws.copy()
+            usable = np.flatnonzero(reference.valid_draws & (reference.draw_weights > 0))
+            reference.valid_draws[:] = False
+            reference.valid_draws[usable[0]] = True
+        for source in _source_previews(single):
+            self.assertTrue(any(trace['name'] == 'Central generating reference' for trace in source['figure']['data']))
+            self.assertFalse(any(trace.get('fill') == 'tonexty' for trace in source['figure']['data']))
 
     def test_reported_mean_units_are_not_inferred_from_new_replicates(self):
         result = self.mutable_result()
@@ -213,10 +251,20 @@ class CalibrationPresentation(unittest.TestCase):
         environment = Environment(loader=FileSystemLoader(Path(__file__).parents[1]/'templates'),
                                   autoescape=True, undefined=StrictUndefined)
         html = environment.get_template('design/_calibration_results.html').render(**context)
-        self.assertIn('Calibration comparison', html)
+        self.assertIn('Interpretation and cautions', html)
         self.assertIn('Recovered calibration curves', html)
-        self.assertLess(html.index('id="calibration-recovery-heading"'),
-                        html.index('id="calibration-relationship-heading"'))
+        headings = ['settings', 'result', 'source', 'design-results', 'recovery',
+                    'relationship', 'prediction', 'failures']
+        positions = [html.index(f'id="calibration-{heading}-heading"') for heading in headings]
+        self.assertEqual(positions, sorted(positions))
+        retained_caption = 'Existing observations retained in every simulated calibration dataset'
+        self.assertEqual(html.count(retained_caption), 1)
+        self.assertLess(html.index(retained_caption), positions[1])
+        for side in ('in_vitro', 'in_vivo'):
+            self.assertIn(f'id="calibration-source-{side}-interactive"', html)
+        self.assertEqual(html.count('data-design-plot-spec'), 2)
+        self.assertIn('<details><summary>Numerical simulation settings and target response scale</summary>', html)
+        self.assertIn('<details><summary>Unavailable calculations and failures by candidate</summary>', html)
         self.assertEqual([row['id'] for row in context['rows']],
                          [row['id'] for row in context['calibration_inspection']['candidates']])
         self.assertEqual(set(context['calibration_inspection']['outputs']), {'relationship', 'prediction'})

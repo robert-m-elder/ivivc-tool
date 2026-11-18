@@ -1,14 +1,63 @@
-{% from 'design/_charts.html' import chart %}
+{% from 'design/_charts.html' import interactive_chart %}
 <div data-calibration-result>
     <script type="application/json" data-calibration-inspection>{{ calibration_inspection|tojson }}</script>
+    <section class="design-section" aria-labelledby="calibration-settings-heading">
+        <h3 id="calibration-settings-heading">Inputs used for this comparison</h3>
+        {% set detailed_settings = ['Source parameter draws per environment', 'Simulated calibration studies per candidate', 'Propagation draws per fitted IVIVC', 'Random seed', 'Fixed target response transformation'] %}
+        <div class="design-preview-table"><table class="design-settings-table">
+            <caption>Selected analysis settings</caption>
+            <tbody>{% for label, value in settings_rows if label not in detailed_settings %}<tr><th scope="row">{{ label }}</th><td>{{ value }}</td></tr>{% endfor %}</tbody>
+        </table></div>
+        {% for imported in source_summaries + profile_summaries %}{% set summary = imported.get('summary', imported) %}
+        <h4>{{ imported.get('label', 'Input data') }}</h4>
+        <p class="design-help">File: {{ imported.get('filename', summary.get('filename', '')) }}{% if imported.get('worksheet', summary.get('worksheet')) %} · Worksheet: {{ imported.get('worksheet', summary.get('worksheet')) }}{% endif %}.</p>
+        {% if summary.get('interpretation') %}<p>{{ summary.interpretation }}</p>{% endif %}
+        {% if summary.get('mapping') %}<details><summary>Column mapping for {{ imported.get('label', 'input data') }}</summary>
+            <p class="design-help">{% for label, value in summary.mapping.items() %}{{ label }} → {{ value }}{% if not loop.last %}; {% endif %}{% endfor %}.</p>
+        </details>{% endif %}
+        {% if summary.get('retained_rows') is not none %}<p class="design-help">Rows: {{ summary.retained_rows }} retained, {{ summary.get('omitted_rows', 0) }} omitted.</p>{% endif %}
+        {% endfor %}
+        <div class="design-preview-table"><table class="design-existing-calibration-table">
+            <caption>Existing observations retained in every simulated calibration dataset</caption>
+            <thead><tr><th scope="col">Environment</th><th scope="col">Rows</th><th scope="col">Times</th><th scope="col">Reported independent units</th><th scope="col">Precision</th></tr></thead>
+            <tbody>{% for row in existing_rows %}<tr><th scope="row">{{ row.side }}</th><td>{{ row.rows }}</td><td>{{ row.times }}</td><td>{{ row.units }}</td><td>{{ row.precision }}</td></tr>{% endfor %}</tbody>
+        </table></div>
+        <details><summary>Numerical simulation settings and target response scale</summary>
+            <div class="design-preview-table"><table class="design-settings-table">
+                <caption>Numerical simulation settings and any fixed target transformation</caption>
+                <tbody>{% for label, value in settings_rows if label in detailed_settings %}<tr><th scope="row">{{ label }}</th><td>{{ value }}</td></tr>{% endfor %}</tbody>
+            </table></div>
+        </details>
+    </section>
+
     <section class="design-section" aria-labelledby="calibration-result-heading">
-        <h3 id="calibration-result-heading">Calibration comparison</h3>
+        <h3 id="calibration-result-heading">Interpretation and cautions</h3>
         <p>Each candidate repeats calibration measurement generation, the selected preprocessing, and IVIVC fitting. Existing calibration rows stay fixed; only the proposed measurements are regenerated.</p>
         {% if warnings %}<aside class="design-notice" aria-labelledby="calibration-cautions-heading">
-            <h4 id="calibration-cautions-heading">Interpretation and cautions</h4>
+            <h4 id="calibration-cautions-heading">Cautions</h4>
             <ul>{% for warning in warnings %}<li>{{ warning }}</li>{% endfor %}</ul>
         </aside>{% endif %}
         <p class="design-help">These results compare the specified candidates under the assumed generating curves and measurement variability. They do not select the best IVIVC overall or establish transferability to a new material.</p>
+        <p class="design-help">All candidates share source selections and measurement-error draws at common times; small differences can reflect Monte Carlo noise. Future SD/CV/profile inputs here describe calibration measurements. Downstream target intervals propagate the selected fitted and target-input uncertainty; they exclude scatter of additional future individual in vivo target measurements. Assumed-truth errors and coverage are model-based comparisons, not external validation or universal data-sufficiency thresholds.</p>
+    </section>
+
+    <section class="design-section" aria-labelledby="calibration-source-heading">
+        <h3 id="calibration-source-heading">Expected behavior and fixed response scales</h3>
+        {% for source in source_previews %}<h4>{{ source.side }}</h4>
+        <p class="design-help">Mode: {{ source.mode }}. Generating source: {{ source.source_kind }}. Source model: {{ source.model }}. Usable reference draws: {{ source.draws }}. Reference time range: {{ source.range }}.</p>
+        {{ interactive_chart(source.figure, source.plot, source.side ~ ' generating reference and calibration observations', source.side ~ ' time', 'Analyzed response', source.identifier) }}
+        {% if not source.has_reference %}<p class="design-help">No generating reference was supplied in this environment; truth-based errors or coverage that require it are unavailable.</p>{% endif %}
+        <details><summary>{{ source.side }} source fit, sampling grid, and response scale</summary>
+        {% if source.generation_grid %}<p class="design-help">Candidate-generation grid: first {{ source.generation_grid.first_time }}, last bound {{ source.generation_grid.last_time_bound }}, step {{ source.generation_grid.time_step }}. Explicit added times at already measured times are possible in manual schedules; generated additions use unmeasured opportunities.</p>{% endif %}
+        {% if source.parameters %}<div class="design-preview-table"><table>
+            <caption>{{ source.side }} source fit parameters</caption>
+            <thead><tr><th scope="col">Parameter</th><th scope="col">Estimate</th><th scope="col">Standard error</th></tr></thead>
+            <tbody>{% for parameter in source.parameters %}<tr><th scope="row">{{ parameter.name }}</th><td>{{ parameter.value }}</td><td>{{ parameter.se }}</td></tr>{% endfor %}</tbody>
+        </table></div>{% endif %}
+        <p class="design-help">Fixed response transformation: analyzed response = {{ source.slope }} × supplied response + {{ source.intercept }}. The same constants are used for every candidate and simulation.</p>
+        </details>
+        {% endfor %}
+        <p class="design-help">Source observations describe generating assumptions and do not automatically become calibration measurements. Shaded reference bands, where present, summarize source-parameter uncertainty and exclude future measurement scatter. Click a generating reference's legend entry to hide or show its curve and shaded range together. Generating curves are independent between environments; they are not assumed to be paired joint scenarios.</p>
     </section>
 
     <section class="design-section" aria-labelledby="calibration-design-results-heading">
@@ -29,11 +78,6 @@
             <tbody>{% for row in rows %}<tr><th scope="row">{{ row.name }}</th><td>{{ row.sides.in_vitro.observation }}</td><td>{{ row.sides.in_vivo.observation }}</td></tr>{% endfor %}</tbody></table></div>
             <p class="design-help">SDs use the analyzed response scale. CV is a fraction of absolute response. The replicate counts above apply separately to the generated measurements.</p>
         </details>
-        <div class="design-preview-table"><table class="design-existing-calibration-table">
-            <caption>Existing observations retained in every simulated calibration dataset</caption>
-            <thead><tr><th scope="col">Environment</th><th scope="col">Rows</th><th scope="col">Times</th><th scope="col">Reported independent units</th><th scope="col">Precision</th></tr></thead>
-            <tbody>{% for row in existing_rows %}<tr><th scope="row">{{ row.side }}</th><td>{{ row.rows }}</td><td>{{ row.times }}</td><td>{{ row.units }}</td><td>{{ row.precision }}</td></tr>{% endfor %}</tbody>
-        </table></div>
         {% if generation_outcomes %}<details><summary>How candidate times were specified or generated</summary>
             <div class="design-preview-table"><table>
                 <thead><tr><th scope="col">Candidate</th><th scope="col">Environment</th><th scope="col">Origin</th><th scope="col">Outcome</th><th scope="col">New times</th></tr></thead>
@@ -90,44 +134,15 @@
     {% endfor %}
 
     <section class="design-section" aria-labelledby="calibration-failures-heading">
-        <h3 id="calibration-failures-heading">Unavailable calculations and failures</h3>
+        <h3 id="calibration-failures-heading">Calculation details and failures</h3>
+        <details><summary>Unavailable calculations and failures by candidate</summary>
         {% for row in rows %}<details><summary>{{ row.name }} — {{ row.n_fit_successful }} / {{ row.n_simulations }} fits available</summary>
             {% if row.stages %}<p>{% for stage in row.stages %}{{ stage.stage }}: {{ stage.count }}{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% else %}<p>No stage exceptions were recorded. Point and interval availability are reported separately above.</p>{% endif %}
             {% if row.error_examples %}<ul>{% for error in row.error_examples %}<li>{{ error.stage }} ({{ error.type }}): {{ error.message }}</li>{% endfor %}</ul>{% endif %}
         </details>{% endfor %}
         <p class="design-help">Stage counts may overlap within a simulated study. Failed fits and missing intervals remain in their respective availability denominators. A usable relationship can remain available when an optional target calculation fails.</p>
-    </section>
-
-    <section class="design-section" aria-labelledby="calibration-source-heading">
-        <h3 id="calibration-source-heading">Expected behavior and fixed response scales</h3>
-        {% for source in source_previews %}<h4>{{ source.side }}</h4>
-        <p class="design-help">Mode: {{ source.mode }}. Generating source: {{ source.source_kind }}. Source model: {{ source.model }}. Usable reference draws: {{ source.draws }}. Reference time range: {{ source.range }}.</p>
-        {% if source.generation_grid %}<p class="design-help">Candidate-generation grid: first {{ source.generation_grid.first_time }}, last bound {{ source.generation_grid.last_time_bound }}, step {{ source.generation_grid.time_step }}. Explicit added times at already measured times are possible in manual schedules; generated additions use unmeasured opportunities.</p>{% endif %}
-        {{ chart(source.plot, source.side ~ ' generating reference and calibration observations', source.side ~ ' time', 'Analyzed response', source.identifier) }}
-        {% if source.parameters %}<div class="design-preview-table"><table>
-            <caption>{{ source.side }} source fit parameters</caption>
-            <thead><tr><th scope="col">Parameter</th><th scope="col">Estimate</th><th scope="col">Standard error</th></tr></thead>
-            <tbody>{% for parameter in source.parameters %}<tr><th scope="row">{{ parameter.name }}</th><td>{{ parameter.value }}</td><td>{{ parameter.se }}</td></tr>{% endfor %}</tbody>
-        </table></div>{% endif %}
-        <p class="design-help">Fixed response transformation: analyzed response = {{ source.slope }} × supplied response + {{ source.intercept }}. The same constants are used for every candidate and simulation. {% if not source.has_reference %}No generating reference was supplied in this environment; truth-based errors or coverage that require it are unavailable.{% endif %}</p>
-        {% endfor %}
-        <p class="design-help">Source observations describe generating assumptions and do not automatically become calibration measurements. Shaded reference bands, where present, summarize source-parameter uncertainty and exclude future measurement scatter. Generating curves are independent between environments; they are not assumed to be paired joint scenarios.</p>
-    </section>
-
-    <section class="design-section" aria-labelledby="calibration-settings-heading">
-        <h3 id="calibration-settings-heading">Inputs used for this comparison</h3>
-        <div class="design-preview-table"><table class="design-settings-table">
-            <caption>Selected analysis and simulation settings</caption>
-            <tbody>{% for label, value in settings_rows %}<tr><th scope="row">{{ label }}</th><td>{{ value }}</td></tr>{% endfor %}</tbody>
-        </table></div>
-        {% for imported in source_summaries + profile_summaries %}{% set summary = imported.get('summary', imported) %}
-        <h4>{{ imported.get('label', 'Input data') }}</h4>
-        <p class="design-help">File: {{ imported.get('filename', summary.get('filename', '')) }}{% if imported.get('worksheet', summary.get('worksheet')) %} · Worksheet: {{ imported.get('worksheet', summary.get('worksheet')) }}{% endif %}.</p>
-        {% if summary.get('interpretation') %}<p>{{ summary.interpretation }}</p>{% endif %}
-        {% if summary.get('mapping') %}<p class="design-help">Mapping: {% for label, value in summary.mapping.items() %}{{ label }} → {{ value }}{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
-        {% if summary.get('retained_rows') is not none %}<p class="design-help">Rows: {{ summary.retained_rows }} retained, {{ summary.get('omitted_rows', 0) }} omitted.</p>{% endif %}
-        {% endfor %}
-        <p class="design-help">All candidates share source selections and measurement-error draws at common times; small differences can reflect Monte Carlo noise. Future SD/CV/profile inputs here describe calibration measurements. Downstream target intervals propagate the selected fitted and target-input uncertainty; they exclude scatter of additional future individual in vivo target measurements. Assumed-truth errors and coverage are model-based comparisons, not external validation or universal data-sufficiency thresholds.</p>
+        </details>
         <div class="design-action-row"><button type="button" disabled>Generate report</button><span class="design-help">Report generation deferred.</span></div>
     </section>
+
 </div>
