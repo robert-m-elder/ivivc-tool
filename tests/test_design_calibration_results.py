@@ -221,6 +221,8 @@ class CalibrationPresentation(unittest.TestCase):
                          [row['id'] for row in context['calibration_inspection']['candidates']])
         self.assertEqual(set(context['calibration_inspection']['outputs']), {'relationship', 'prediction'})
         self.assertIn('data-calibration-output="relationship"', html)
+        self.assertNotIn('id="calibration-relationship-view"', html)
+        self.assertIn('id="calibration-prediction-view"', html)
         self.assertIn('In vivo response versus in vivo time', html)
         self.assertIn('Precision, error, and availability for all designs', html)
         json.dumps(context['calibration_inspection'], allow_nan=False)

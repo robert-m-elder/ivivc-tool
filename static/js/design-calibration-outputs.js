@@ -30,7 +30,7 @@
 
     const selected = (state, panel) => panel.output.candidates.filter(candidate => state.selection.selectedIds.includes(candidate.id));
     const values = (panel, candidate, example) => {
-        const view = candidate.views?.[panel.view.value] || {};
+        const view = candidate.views?.[panel.viewKey] || {};
         return example ? view.example || {} : view;
     };
     const counts = (value, example) => array(example ? value.point_counts : value.counts);
@@ -46,7 +46,7 @@
 
     function series(panel, candidate, example, meta) {
         const value = values(panel, candidate, example), available = counts(value, example);
-        const scalar = Boolean(meta.scalar || panel.output.scalar && panel.view.value === 'native');
+        const scalar = Boolean(meta.scalar || panel.output.scalar && panel.viewKey === 'native');
         const x = array(value.x).map((coordinate, index) =>
             finite(coordinate) && finite(value.y?.[index]) && available[index] > 0 ?
                 scalar ? escape(candidate.name) : coordinate : null);
@@ -60,7 +60,7 @@
         const {value, available, scalar, x, y, connected} = series(panel, candidate, example, meta);
         if (!y.some(finite)) return [];
         const shade = color(state, candidate, index), group = 'output-' + candidate.id;
-        const prefix = panel.key + '-' + panel.view.value + '-' + (example ? 'example-' : 'summary-') + candidate.id;
+        const prefix = panel.key + '-' + panel.viewKey + '-' + (example ? 'example-' : 'summary-') + candidate.id;
         const data = [], axis = meta.range_axis === 'x' ? 'x' : 'y';
         const main = {type: 'scatter', mode: connected && y.filter(finite).length > 1 ? 'lines+markers' : 'markers',
             x, y, uid: prefix + '-center', legendgroup: group, name: legendName(candidate.name), showlegend: true,
@@ -129,7 +129,7 @@
         selected(state, panel).forEach(candidate => {
             const truth = values(panel, candidate, example).truth;
             if (!truth) return;
-            const scalar = Boolean(meta.scalar || panel.output.scalar && panel.view.value === 'native');
+            const scalar = Boolean(meta.scalar || panel.output.scalar && panel.viewKey === 'native');
             const x = array(truth.x).map((coordinate, index) => finite(coordinate) && finite(truth.y?.[index]) && truth.counts?.[index] > 0 ?
                 scalar ? escape(candidate.name) : coordinate : null);
             const y = x.map((coordinate, index) => coordinate !== null ? truth.y[index] : null);
@@ -140,7 +140,7 @@
         });
         return Array.from(groups.values(), (item, index) => ({type: 'scatter',
             mode: item.y.filter(finite).length > 1 && meta.connect_points !== false ? 'lines+markers' : 'markers',
-            x: item.x, y: item.y, uid: panel.key + '-' + panel.view.value + '-truth-' + index,
+            x: item.x, y: item.y, uid: panel.key + '-' + panel.viewKey + '-truth-' + index,
             name: legendName((example ? 'Assumed truth — study 1' : 'Median assumed truth') +
                 (groups.size > 1 ? ' — ' + item.names[0] : '')), showlegend: true,
             legendgroup: 'truth-' + index, line: {color: '#62717c', width: 2, dash: 'dash'},
@@ -150,10 +150,10 @@
     }
 
     function figure(state, panel, example) {
-        const meta = panel.output.views[panel.view.value];
+        const meta = panel.output.views[panel.viewKey];
         const data = truthTraces(state, panel, example, meta);
         selected(state, panel).forEach((candidate, index) => data.push(...candidateTraces(state, panel, candidate, index, example, meta)));
-        const key = ['calibration-output', panel.key, panel.view.value, example ? 'example' : 'summary',
+        const key = ['calibration-output', panel.key, panel.viewKey, example ? 'example' : 'summary',
             ...state.selection.selectedIds.map(id => id + '-' + (state.selection.colors[id] || '').replace('#', ''))].join('-');
         const lines = data.filter(trace => trace.showlegend).reduce((sum, trace) => sum + trace.name.split('<br>').length, 0);
         const bottom = 70 + 20 * lines;
@@ -185,7 +185,7 @@
         if (example ? !panel.example.open : !panel.values.open) return;
         const body = example ? panel.exampleBody : panel.valuesBody;
         body.replaceChildren();
-        const meta = panel.output.views[panel.view.value], axis = meta.range_axis === 'x' ? 'x' : 'y';
+        const meta = panel.output.views[panel.viewKey], axis = meta.range_axis === 'x' ? 'x' : 'y';
         if (!example && panel.caption) panel.caption.textContent = meta.title + ' — across simulated studies';
         selected(state, panel).forEach(candidate => {
             const item = series(panel, candidate, example, meta), value = item.value;
@@ -222,7 +222,7 @@
         const current = () => !state.disposed && version === (example ? panel.exampleVersion : panel.version);
         wrapper.hidden = false;
         const spec = figure(state, panel, example), target = wrapper.querySelector('[data-design-plot-target]');
-        if (target) target.setAttribute('aria-label', panel.output.views[panel.view.value].title);
+        if (target) target.setAttribute('aria-label', panel.output.views[panel.viewKey].title);
         try {
             if (typeof window.DesignPlots?.update !== 'function') throw new Error('Renderer unavailable.');
             Promise.resolve(window.DesignPlots.update(wrapper, spec)).then(result => {
@@ -232,9 +232,9 @@
     }
 
     function renderPanel(state, panel) {
-        const meta = panel.output.views[panel.view.value], rows = selected(state, panel);
+        const meta = panel.output.views[panel.viewKey], rows = selected(state, panel);
         const special = meta.connect_points === false ? ' Repeated or nonmonotonic coordinates are shown as points with pointwise ranges, without a connecting band.' : '';
-        const unavailable = panel.view.value !== 'response' && panel.output.views.response?.available === false ?
+        const unavailable = panel.viewKey !== 'response' && panel.output.views.response?.available === false ?
             ' ' + (panel.output.views.response.help || 'A response-versus-time view is unavailable for these retained coordinates.') : '';
         if (panel.help) panel.help.textContent = (meta.help || panel.output.message || '') + special + unavailable;
         for (const [selector, label] of [['[data-calibration-output-x-heading]', meta.x_label], ['[data-calibration-output-y-heading]', meta.y_label],
@@ -273,15 +273,19 @@
                     caption: get('data-calibration-output-values-caption'), example: get('data-calibration-output-example'),
                     examplePlot: get('data-calibration-output-example-plot'), exampleStatus: get('data-calibration-output-example-status'),
                     exampleBody: get('data-calibration-output-example-values-body')};
-                if ([panel.view, panel.status, panel.plot, panel.values, panel.valuesBody, panel.example, panel.examplePlot, panel.exampleStatus, panel.exampleBody].some(value => !value)) return;
+                if ([panel.status, panel.plot, panel.values, panel.valuesBody, panel.example, panel.examplePlot, panel.exampleStatus, panel.exampleBody].some(value => !value)) return;
                 const valid = Object.keys(output.views).filter(view => output.views[view].available !== false);
                 if (!valid.length) return;
-                panel.view.querySelectorAll('option').forEach(option => { option.disabled = !valid.includes(option.value); });
-                panel.view.value = key === 'prediction' && valid.includes('response') ? 'response' : valid.includes('native') ? 'native' : valid[0];
-                panel.view.disabled = valid.length < 2;
+                panel.viewKey = key === 'prediction' && valid.includes('response') ? 'response' : valid.includes('native') ? 'native' : valid[0];
+                if (panel.view) {
+                    panel.view.querySelectorAll('option').forEach(option => { option.disabled = !valid.includes(option.value); });
+                    panel.view.value = panel.viewKey;
+                    panel.view.disabled = valid.length < 2;
+                }
                 panel.changed = event => {
-                    if (event.target !== panel.view) return;
-                    if (!valid.includes(panel.view.value)) panel.view.value = valid[0];
+                    if (!panel.view || event.target !== panel.view) return;
+                    panel.viewKey = valid.includes(panel.view.value) ? panel.view.value : valid[0];
+                    panel.view.value = panel.viewKey;
                     renderPanel(state, panel);
                 };
                 panel.toggled = () => { numerical(state, panel, true); draw(state, panel, true); };

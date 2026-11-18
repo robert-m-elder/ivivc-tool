@@ -1,13 +1,15 @@
 {% set visual = calibration_inspection.outputs.get(output.key) %}
 {% if visual %}
 <p class="design-help">These overlays use the designs selected above and the same colors as the calibration-curve comparison. A legend entry hides or shows its central curve and uncertainty range together.</p>
+{% if output.key == 'prediction' %}
 <div class="design-field">
     <label for="calibration-{{ output.key }}-view">Plot view</label>
     <select id="calibration-{{ output.key }}-view" data-calibration-output-view aria-describedby="calibration-{{ output.key }}-help" disabled>
         {% if 'response' in visual.views %}<option value="response" selected>In vivo response versus in vivo time</option>{% endif %}
-        <option value="native"{% if 'response' not in visual.views %} selected{% endif %}>{{ 'IVIVC relationship' if output.key == 'relationship' else 'Prediction on the evaluation coordinates' }}</option>
+        <option value="native"{% if 'response' not in visual.views %} selected{% endif %}>Prediction on the evaluation coordinates</option>
     </select>
 </div>
+{% endif %}
 <p id="calibration-{{ output.key }}-help" class="design-help" data-calibration-output-help aria-live="polite"></p>
 <p class="design-help" data-calibration-output-status role="status" aria-live="polite">Preparing the selected designs' output comparison.</p>
 <div class="design-interactive-plot" data-calibration-output-plot data-design-plot hidden>

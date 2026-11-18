@@ -64,8 +64,8 @@ function fixture({data = payload(), missingRenderer = false, sharedRenderer = fa
     const panels = {};
     for (const [key, output] of Object.entries(data.outputs)) {
         const element = add('data-calibration-output', root, 'section', key);
-        const view = add('data-calibration-output-view', element, 'select');
-        for (const name of Object.keys(output.views)) view.append(new Element('option', {value: name}));
+        const view = key === 'prediction' ? add('data-calibration-output-view', element, 'select') : null;
+        if (view) for (const name of Object.keys(output.views)) view.append(new Element('option', {value: name}));
         const status = add('data-calibration-output-status', element, 'p');
         const help = add('data-calibration-output-help', element, 'p');
         const wrapper = name => {
@@ -115,7 +115,8 @@ function fixture({data = payload(), missingRenderer = false, sharedRenderer = fa
 test('relationship and target overlays preserve source data and group each curve with its empirical range', () => {
     const data = payload(), before = JSON.stringify(data), f = fixture({data});
     assert.equal(f.panels.prediction.view.value, 'response');
-    assert.equal(f.panels.relationship.view.value, 'native');
+    assert.equal(f.panels.relationship.view, null);
+    assert.ok(f.latest('relationship').data.some(trace => trace.meta.kind === 'center'));
     const spec = f.latest('prediction'), group = spec.data.filter(trace => trace.legendgroup === 'output-calibration-design-0');
     assert.equal(group.length, 3);
     assert.equal(group.filter(trace => trace.showlegend).length, 1);
