@@ -84,6 +84,16 @@
 
 .design-page .design-task-field { flex: 1 1 380px; max-width: 650px; }
 .design-page .design-view-navigation { display: flex; flex-wrap: wrap; gap: .5rem; }
+.design-page .design-results-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: .5rem 1rem;
+    margin: 1.35rem 0 .65rem;
+}
+.design-page .design-results-header h2 { margin: 0; }
+.design-page .design-results-header button { font-size: .875rem; }
 
 /* Keep navigation and calculation available while moving through long forms. */
 .design-page .design-section-navigation {

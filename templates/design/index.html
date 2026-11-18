@@ -201,12 +201,14 @@
         </form>
 
         <section id="design-results" aria-labelledby="design-results-heading" hidden>
-            <h2 id="design-results-heading" tabindex="-1">Comparisons</h2>
+            <div class="design-results-header">
+                <h2 id="design-results-heading" tabindex="-1">Comparisons</h2>
+                <button type="button" disabled title="Report generation will be added after the analysis workflows are settled.">Generate report</button>
+            </div>
             <p id="design-results-status" class="design-status" role="status" aria-live="polite"></p>
             <div id="design-results-content" tabindex="-1">
                 <p class="design-empty-state">No comparison yet. Import the selected task's data, configure candidates, and choose Calculate comparison.</p>
             </div>
-            <div class="design-action-row"><button type="button" disabled title="Report generation will be added after the analysis workflows are settled.">Generate report</button></div>
         </section>
         <aside id="design-calculation-bar" class="design-calculation-bar" aria-label="Calculation and comparison status">
             <div class="design-page-width design-calculation-inner">

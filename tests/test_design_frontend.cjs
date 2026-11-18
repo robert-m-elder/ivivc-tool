@@ -285,6 +285,8 @@ function fixture({planning = false, calibration = false, plots, inspection, reco
         cal.add = element("button", {type: "button", "data-add-calibration-candidate": ""}, calibrationGroup);
         cal.generate = element("button", {id: "generate-calibration-candidates", type: "button",
             "data-generation-url": "/generate-candidates"}, calibrationGroup);
+        cal.generationToggle = element("button", {id: "toggle-calibration-generation-preview", type: "button",
+            "aria-controls": "calibration-generation-content", "aria-expanded": "false", hidden: ""}, calibrationGroup);
         cal.generationStatus = element("p", {id: "calibration-generation-status"}, calibrationGroup);
         cal.generationContent = element("div", {id: "calibration-generation-content"}, calibrationGroup);
         cal.copyButton = index => element("button", {type: "button",
@@ -1396,6 +1398,8 @@ test('generation is enabled only for active generated environments', async () =>
 test('generation previews without modifying candidates, files, or the saved comparison', async () => {
     const page = await generationPage();
     const cal = page.calibration;
+    assert.equal(cal.generationToggle.hidden, true);
+    assert.equal(cal.generationContent.hidden, true);
     const file = {name: 'expected.csv', size: 40, lastModified: 2};
     cal.sides.in_vivo.sourceFile.files = [file];
     await page.successfulCalculation('<p>Original comparison remains</p>');
@@ -1419,6 +1423,21 @@ test('generation previews without modifying candidates, files, or the saved comp
     assert.equal(cal.sides.in_vivo.sourceFile.files[0], file);
     assert.equal(page.calculate.disabled, false);
     assert.equal(page.document.activeElement, cal.generationContent);
+    assert.equal(cal.generationToggle.hidden, false);
+    assert.equal(cal.generationToggle.textContent, 'Hide preview');
+    assert.equal(cal.generationToggle.getAttribute('aria-expanded'), 'true');
+    const preview = cal.generationContent.innerHTML;
+    const requests = page.requests.length;
+    await page.emit(cal.generationToggle, 'click');
+    assert.equal(cal.generationContent.hidden, true);
+    assert.equal(cal.generationToggle.textContent, 'Show preview');
+    assert.equal(cal.generationToggle.getAttribute('aria-expanded'), 'false');
+    await page.emit(cal.generationToggle, 'click');
+    assert.equal(cal.generationContent.hidden, false);
+    assert.equal(cal.generationContent.innerHTML, preview);
+    assert.equal(page.requests.length, requests);
+    assert.equal(page.content.innerHTML, '<p>Original comparison remains</p>');
+    assert.match(page.comparisonStatus.textContent, /current/i);
 });
 
 test('copying a candidate makes only its generated sides editable and marks the comparison stale', async () => {
@@ -1470,7 +1489,9 @@ test('failed generation retains both earlier preview and comparison and restores
     await page.successfulCalculation('<p>Saved comparison</p>');
     await successfulGeneration(page);
     const preview = cal.generationContent.innerHTML;
+    await page.emit(cal.generationToggle, 'click');
     let pending = page.emit(cal.generate, 'click');
+    assert.equal(cal.generationToggle.disabled, true);
     page.requests.at(-1).resolve({ok: false, json: async () => ({ok: false, errors: [
         {field_id: 'cal_candidate_0_in_vivo_number_of_times', message: 'Too many new times.'},
     ]})});
@@ -1480,12 +1501,15 @@ test('failed generation retains both earlier preview and comparison and restores
     assert.match(page.summary.textContent, /Too many new times/);
     assert.equal(page.calculate.disabled, false);
     assert.equal(cal.generate.disabled, false);
+    assert.equal(cal.generationContent.hidden, true);
+    assert.equal(cal.generationToggle.disabled, false);
     pending = page.emit(cal.generate, 'click');
     page.requests.at(-1).reject(new Error('Connection lost'));
     await pending;
     assert.equal(cal.generationContent.innerHTML, preview);
     assert.equal(page.content.innerHTML, '<p>Saved comparison</p>');
     assert.match(cal.generationStatus.textContent, /Check the connection/);
+    assert.equal(cal.generationContent.hidden, true);
 });
 
 test('superseded generated times and field errors cannot replace the current draft or preview', async () => {

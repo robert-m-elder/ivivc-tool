@@ -43,6 +43,7 @@
         const generateCandidates = document.getElementById('generate-calibration-candidates');
         const generationStatus = document.getElementById('calibration-generation-status');
         const generationContent = document.getElementById('calibration-generation-content');
+        const generationPreviewToggle = document.getElementById('toggle-calibration-generation-preview');
         const calibrationChoices = new Map();
         let previousCalibrationApproach = null;
         const files = new WeakMap();
@@ -52,6 +53,7 @@
         let generating = false;
         let generatedSignature = null;
         let generatedSchedules = [];
+        let generationPreviewVisible = false;
         let generationNotice = '';
         let activeView = 'inputs';
         let activeSection = null;
@@ -149,6 +151,13 @@
             if (generationContent) generationContent.querySelectorAll('[data-copy-generated-candidate]').forEach(button => {
                 button.disabled = pending || generating || generatedSignature === null || signature() !== generatedSignature;
             });
+            if (generationContent) generationContent.hidden = generatedSignature === null || !generationPreviewVisible;
+            if (generationPreviewToggle) {
+                generationPreviewToggle.hidden = generatedSignature === null;
+                generationPreviewToggle.disabled = pending || generating || !calibrationAvailable();
+                generationPreviewToggle.textContent = generationPreviewVisible ? 'Hide preview' : 'Show preview';
+                generationPreviewToggle.setAttribute('aria-expanded', String(generationPreviewVisible));
+            }
         }
 
         function updateGenerationStatus() {
@@ -641,6 +650,13 @@
             noteInputChange();
             focusTarget(document.getElementById('cal_candidate_' + index + '_' + schedules[0].side + '_times'));
         });
+        if (generationPreviewToggle) generationPreviewToggle.addEventListener('click', event => {
+            event.preventDefault();
+            if (generationPreviewToggle.disabled || generatedSignature === null) return;
+            navigationRevision++;
+            generationPreviewVisible = !generationPreviewVisible;
+            syncButtons();
+        });
         if (generateCandidates) generateCandidates.addEventListener('click', async event => {
             event.preventDefault();
             if (generateCandidates.disabled || pending || generating || !calibrationAvailable()) return;
@@ -685,6 +701,8 @@
                 generationContent.innerHTML = payload.html;
                 generatedSchedules = payload.schedules;
                 generatedSignature = submittedSignature;
+                generationPreviewVisible = true;
+                syncButtons();
                 requestStatus.textContent = 'Candidate schedules generated. Review the times before calculating a comparison.';
                 requestStatus.dataset.state = 'success';
                 if (draftRevision === submittedRevision && navigationRevision === submittedNavigation) {
