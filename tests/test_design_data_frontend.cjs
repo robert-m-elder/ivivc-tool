@@ -38,6 +38,8 @@ function fixture() {
         set disabled(value) { if (value) this.attributes.disabled = ""; else delete this.attributes.disabled; }
         get hidden() { return this.attributes.hidden !== undefined; }
         set hidden(value) { if (value) this.attributes.hidden = ""; else delete this.attributes.hidden; }
+        get open() { return this.attributes.open !== undefined; }
+        set open(value) { if (value) this.attributes.open = ""; else delete this.attributes.open; }
         get checked() { return this.attributes.checked !== undefined; }
         set checked(value) { if (value) this.attributes.checked = ""; else delete this.attributes.checked; }
         get textContent() { return this._text + this.children.map(child => child.textContent).join(""); }
@@ -104,15 +106,20 @@ function fixture() {
     function makeDataset(id, parent) {
         const container = element("div", {"data-design-dataset": id, "data-dataset-kind": "course",
             "data-inspect-url": "/data/inspect", "data-preview-url": "/data/preview"}, parent);
-        const file = element("input", {id, name: id.replaceAll("-", "_"), type: "file"}, container);
-        const inspect = element("button", {type: "button", "data-import-action": "inspect"}, container);
-        const config = element("div", {"data-import-config": ""}, container);
+        const panel = element("details", {"data-import-panel": "", open: ""}, container);
+        const heading = element("summary", {}, panel);
+        const datasetSummary = element("span", {"data-import-dataset-summary": ""}, heading);
+        const file = element("input", {id, name: id.replaceAll("-", "_"), type: "file"}, panel);
+        const config = element("div", {"data-import-config": ""}, panel);
+        const inspect = element("button", {type: "button", "data-import-action": "inspect"}, panel);
+        const previewButton = element("button", {type: "button", "data-import-action": "preview", disabled: ""}, panel);
         const toggle = element("button", {type: "button", "data-import-preview-toggle": "",
-            "aria-controls": id + "-preview", "aria-expanded": "false", hidden: ""}, container);
-        const preview = element("div", {id: id + "-preview", "data-import-preview": "", hidden: ""}, container);
-        const status = element("p", {"data-import-status": ""}, container);
-        const stale = element("p", {"data-import-stale": "", hidden: ""}, container);
-        return {id, container, file, inspect, config, preview, toggle, status, stale};
+            "aria-controls": id + "-preview", "aria-expanded": "false", hidden: ""}, panel);
+        const preview = element("div", {id: id + "-preview", "data-import-preview": "", hidden: ""}, panel);
+        const status = element("p", {"data-import-status": ""}, panel);
+        const stale = element("p", {"data-import-stale": "", hidden: ""}, panel);
+        return {id, container, panel, datasetSummary, file, inspect, config, previewButton, preview, toggle, status, stale,
+            get mapping() { return config.querySelector('[data-import-mapping]'); }};
     }
     const dataset = makeDataset("reference-file", studyGroup);
     const completed = makeDataset("completed-target-file", completedGroup);
@@ -123,10 +130,14 @@ function fixture() {
         const id = container.closest("[data-design-dataset]").dataset.designDataset;
         const key = id + "__profile__";
         if (token.includes("SHEETS") || token.includes("EXCEL_MAPPING")) {
-            element("select", {id: id + "__sheet", name: id + "__sheet", value: token.includes("MAPPING") ? "Data" : ""}, container);
+            const worksheet = element("div", {"data-import-worksheet": ""}, container);
+            element("select", {id: id + "__sheet", name: id + "__sheet", "data-import-sheet": "", value: token.includes("MAPPING") ? "Data" : ""}, worksheet);
         }
         if (!token.includes("MAPPING")) return;
-        const columns = element("div", {"data-column-fields": ""}, container);
+        const mapping = element("details", {"data-import-mapping": "", open: ""}, container);
+        const title = element("summary", {}, mapping);
+        element("span", {"data-import-mapping-summary": ""}, title);
+        const columns = element("div", {"data-column-fields": ""}, mapping);
         const options = element("fieldset", {"data-course-options": key}, columns);
         const field = (name, tag, value, parent = options) => element(tag, {id: key + name, name: key + name, value}, parent);
         field("time_column", "select", "time");
@@ -145,7 +156,6 @@ function fixture() {
         const countColumn = element("div", {"data-count-source": "column"}, countFields);
         field("count_column", "select", "n", countColumn);
         field("response_units", "input", "fraction remaining");
-        element("button", {type: "button", "data-import-action": "preview"}, columns);
     };
 
     document.getElementById = id => root.id === id ? root : root.querySelectorAll("[id]").find(node => node.id === id) || null;
@@ -184,7 +194,7 @@ function fixture() {
     function control(name) { return document.getElementById(prefix + name); }
     async function readColumns(token = "CSV_MAPPING") {
         dataset.file.files = [file(token === "EXCEL_MAPPING" ? "measurements.xlsx" : "measurements.csv")];
-        void emit(dataset.inspect, "click");
+        await emit(dataset.file, "change");
         await respond(token);
     }
     return {root, form, task, studyGroup, hasCompleted, completedGroup, dataset, completed, requests, errors, updates, activity,
@@ -200,10 +210,10 @@ test("a missing file reports its field without sending a request", async () => {
     assert.equal(page.errors[0].errors[0].field_id, page.dataset.id);
 });
 
-test("column inspection preserves the file input and sends only its selected file", async () => {
+test("selecting a file automatically reads columns while preserving its input and leaves preview explicit", async () => {
     const page = fixture(), input = page.dataset.file, selected = page.file();
     input.files = [selected];
-    void page.emit(page.dataset.inspect, "click");
+    await page.emit(input, "change");
     assert.equal(page.requests.length, 1);
     assert.equal(page.requests[0].url, "/data/inspect");
     assert.equal(page.requests[0].options.body.get("file"), selected);
@@ -213,18 +223,20 @@ test("column inspection preserves the file input and sends only its selected fil
     assert.equal(input.files[0], selected);
     assert(page.control("time_column"));
     assert(page.updates.length > 0);
+    assert.equal(page.dataset.preview.innerHTML, '');
+    assert.equal(page.requests.length, 1);
+    assert.match(page.dataset.datasetSummary.textContent, /measurements\.csv/);
 });
 
-test("Excel worksheet selection replaces mappings only after another column inspection", async () => {
+test("Excel automatically loads the explicitly selected worksheet and blank choices do not start requests", async () => {
     const page = fixture();
     page.dataset.file.files = [page.file("measurements.xlsx")];
-    void page.emit(page.dataset.inspect, "click");
+    await page.emit(page.dataset.file, "change");
     await page.respond("SHEETS", {requires_sheet: true, sheets: ["Data", "Other"]});
     const sheet = page.document.getElementById(page.dataset.id + "__sheet");
     assert(sheet);
     assert.equal(page.control("time_column"), null);
     sheet.value = "Data"; await page.emit(sheet, "change");
-    void page.emit(page.dataset.inspect, "click");
     assert.equal(page.requests.at(-1).options.body.get("sheet"), "Data");
     await page.respond("EXCEL_MAPPING", {requires_sheet: false, selected_sheet: "Data"});
     const columns = page.dataset.config.querySelector("[data-column-fields]");
@@ -233,7 +245,33 @@ test("Excel worksheet selection replaces mappings only after another column insp
     changedSheet.value = "Other"; await page.emit(changedSheet, "change");
     assert.equal(columns.hidden, true);
     assert.equal(original.disabled, true);
+    assert.equal(page.requests.length, 3);
+    assert.equal(page.requests.at(-1).options.body.get('sheet'), 'Other');
+    changedSheet.value = ''; await page.emit(changedSheet, 'change');
+    assert.equal(page.requests.length, 3);
+    await page.respond('EXCEL_MAPPING', {selected_sheet: 'Other'});
+    assert.equal(columns.hidden, true, 'The response for an obsolete sheet cannot reactivate its mapping.');
+});
+
+test('a later file selection owns the mapping and activity even when the earlier file finishes last', async () => {
+    const page = fixture();
+    page.dataset.file.files = [page.file('first.xlsx')];
+    await page.emit(page.dataset.file, 'change');
+    const earlier = page.requests[0];
+    const selected = page.file('latest.csv');
+    page.dataset.file.files = [selected];
+    await page.emit(page.dataset.file, 'change');
     assert.equal(page.requests.length, 2);
+    await page.respond('CSV_MAPPING');
+    const current = page.control('time_column');
+    earlier.resolve({ok: true, json: async () => ({ok: true, html: 'SHEETS', requires_sheet: true})});
+    await page.flush();
+    assert.equal(page.control('time_column'), current);
+    assert.equal(page.document.getElementById(page.dataset.id + '__sheet'), null);
+    assert.equal(page.dataset.file.files[0], selected);
+    assert.equal(page.dataset.inspect.disabled, false);
+    assert.deepEqual(page.activity.map(item => item.active), [true, true, false]);
+    assert.equal(page.errors.length, 0);
 });
 
 test("uncertainty controls distinguish means with SD from means with SEM", async () => {
@@ -256,7 +294,7 @@ test("uncertainty controls distinguish means with SD from means with SEM", async
 
 test("preview submits mapped controls and preserves the earlier preview on failure", async () => {
     const page = fixture(); await page.readColumns();
-    void page.emit(page.dataset.config.querySelector('[data-import-action="preview"]'), "click");
+    void page.emit(page.dataset.previewButton, "click");
     assert.equal(page.requests.at(-1).url, "/data/preview");
     assert.equal(page.requests.at(-1).options.body.get(page.dataset.id + "__profile__time_column"), "time");
     await page.respond("<table>First interpreted data</table>");
@@ -264,7 +302,7 @@ test("preview submits mapped controls and preserves the earlier preview on failu
     page.control("response_column").value = "other"; await page.emit(page.control("response_column"), "change");
     assert.equal(page.dataset.stale.hidden, false);
     assert.equal(page.requests.length, 2);
-    void page.emit(page.dataset.config.querySelector('[data-import-action="preview"]'), "click");
+    void page.emit(page.dataset.previewButton, "click");
     page.requests.at(-1).resolve({ok: false, json: async () => ({ok: false, errors: [{field_id: page.dataset.id + "__profile__response_column", message: "Choose a response column."}]})});
     await page.flush();
     assert.equal(page.dataset.preview.innerHTML, previous);
@@ -273,20 +311,22 @@ test("preview submits mapped controls and preserves the earlier preview on failu
 
 test("file replacement clears old mappings while retaining the labeled earlier preview", async () => {
     const page = fixture(); await page.readColumns();
-    void page.emit(page.dataset.config.querySelector('[data-import-action="preview"]'), "click");
+    void page.emit(page.dataset.previewButton, "click");
     await page.respond("<table>Earlier file preview</table>");
     page.dataset.file.files = [page.file("replacement.csv")];
     await page.emit(page.dataset.file, "change");
     assert.equal(page.dataset.config.children.length, 0);
     assert.equal(page.dataset.preview.innerHTML, "<table>Earlier file preview</table>");
     assert.equal(page.dataset.stale.hidden, false);
-    assert.equal(page.requests.length, 2);
+    assert.equal(page.requests.length, 3);
+    assert.equal(page.requests.at(-1).url, '/data/inspect');
+    await page.respond('CSV_MAPPING');
 });
 
 test("network and malformed-response failures keep the last preview and release import buttons", async () => {
     for (const failure of ["network", "invalid-json"]) {
         const page = fixture(); await page.readColumns();
-        const button = page.dataset.config.querySelector('[data-import-action="preview"]');
+        const button = page.dataset.previewButton;
         void page.emit(button, "click"); await page.respond("<table>Retained interpreted data</table>");
         void page.emit(button, "click");
         if (failure === "network") page.requests.at(-1).reject(new Error("offline"));
@@ -301,7 +341,7 @@ test("network and malformed-response failures keep the last preview and release 
 
 test("a changed file or mapping discards in-flight responses and stale field errors", async () => {
     const page = fixture(); await page.readColumns();
-    const button = page.dataset.config.querySelector('[data-import-action="preview"]');
+    const button = page.dataset.previewButton;
     void page.emit(button, "click");
     void page.emit(button, "click");
     assert.equal(page.requests.length, 2);
@@ -309,11 +349,15 @@ test("a changed file or mapping discards in-flight responses and stale field err
     await page.respond("<table>Obsolete response</table>");
     assert.equal(page.dataset.preview.innerHTML, "");
     void page.emit(button, "click");
+    const previous = page.requests.at(-1);
     page.dataset.file.files = [page.file("new.csv")]; await page.emit(page.dataset.file, "change");
-    page.requests.at(-1).resolve({ok: false, json: async () => ({ok: false, errors: [{field_id: page.dataset.id, message: "Old file invalid."}]})});
+    previous.resolve({ok: false, json: async () => ({ok: false, errors: [{field_id: page.dataset.id, message: "Old file invalid."}]})});
     await page.flush();
     assert.equal(page.errors.length, 0);
     assert.equal(page.dataset.preview.innerHTML, "");
+    assert.equal(page.dataset.inspect.disabled, true, 'Obsolete completion must not release the latest column request.');
+    await page.respond('CSV_MAPPING');
+    assert.equal(page.dataset.inspect.disabled, false);
 });
 
 test("visibility changes cannot enable inactive dataset or completed-observation controls", async () => {
@@ -345,7 +389,7 @@ test('file inspection and preview announce request activity only while their req
     assert.deepEqual(page.activity.map(item => item.active), [true, false]);
     assert.equal(page.activity[1].key, page.activity[0].key);
     page.activity.length = 0;
-    void page.emit(page.dataset.config.querySelector('[data-import-action="preview"]'), 'click');
+    void page.emit(page.dataset.previewButton, 'click');
     assert.equal(page.activity.length, 1);
     assert.match(page.activity[0].message, /preview/i);
     await page.respond('<table>Interpreted data</table>');
@@ -358,7 +402,7 @@ test('failed and superseded data requests always release their persistent activi
         const page = fixture();
         await page.readColumns();
         page.activity.length = 0;
-        void page.emit(page.dataset.config.querySelector('[data-import-action="preview"]'), 'click');
+        void page.emit(page.dataset.previewButton, 'click');
         assert.equal(page.activity[0].active, true);
         const request = page.requests.at(-1);
         if (outcome === 'network') request.reject(new Error('offline'));
@@ -370,8 +414,12 @@ test('failed and superseded data requests always release their persistent activi
             request.resolve({ok: true, json: async () => ({ok: true, html: '<p>Obsolete preview</p>'})});
         }
         await page.flush();
-        assert.deepEqual(page.activity.map(item => item.active), [true, false], outcome);
-        assert.equal(page.activity[1].key, page.activity[0].key, outcome);
+        if (outcome === 'superseded') {
+            assert.deepEqual(page.activity.map(item => item.active), [true, true], outcome);
+            await page.respond('CSV_MAPPING');
+            assert.deepEqual(page.activity.map(item => item.active), [true, true, false], outcome);
+        } else assert.deepEqual(page.activity.map(item => item.active), [true, false], outcome);
+        assert.equal(page.activity.at(-1).key, page.activity[0].key, outcome);
         assert.equal(page.dataset.preview.innerHTML, '', outcome);
     }
 });
@@ -407,7 +455,7 @@ test('preview visibility toggles without requests, input updates, or loss of sel
     assert.equal(page.dataset.preview.hidden, true);
     await page.readColumns();
     assert.equal(page.dataset.toggle.hidden, true);
-    const previewButton = page.dataset.config.querySelector('[data-import-action="preview"]');
+    const previewButton = page.dataset.previewButton;
     void page.emit(previewButton, 'click');
     await page.respond('<figure>Original file, mapped rows and caption</figure>');
     assert.equal(page.dataset.preview.hidden, false);
@@ -434,10 +482,40 @@ test('preview visibility toggles without requests, input updates, or loss of sel
     assert.equal(page.activity.length, activity);
 });
 
+test('mapping and dataset panels collapse without disabling inputs and validation reopens the relevant controls', async () => {
+    const page = fixture();
+    await page.readColumns();
+    const mapping = page.dataset.mapping;
+    assert.equal(mapping.open, true);
+    void page.emit(page.dataset.previewButton, 'click');
+    await page.respond('<table>Verified interpreted data</table>');
+    assert.equal(mapping.open, false);
+    assert.equal(page.dataset.panel.open, true);
+    assert.equal(page.dataset.preview.hidden, false);
+    assert.match(page.dataset.datasetSummary.textContent, /measurements\.csv/);
+    assert.match(page.dataset.datasetSummary.textContent, /preview/i);
+    const requests = page.requests.length, updates = page.updates.length;
+    page.dataset.panel.open = false;
+    await page.emit(page.dataset.panel, 'toggle');
+    assert.equal(page.control('time_column').disabled, false);
+    assert.equal(page.requests.length, requests);
+    assert.equal(page.updates.length, updates);
+    page.dataset.panel.open = true;
+    void page.emit(page.dataset.previewButton, 'click');
+    page.dataset.panel.open = false;
+    page.requests.at(-1).resolve({ok: false, json: async () => ({ok: false, errors: [{
+        field_id: page.control('response_column').id, message: 'Review the response mapping.',
+    }]})});
+    await page.flush();
+    assert.equal(page.dataset.panel.open, true);
+    assert.equal(mapping.open, true);
+    assert.equal(page.dataset.preview.innerHTML, '<table>Verified interpreted data</table>');
+});
+
 test('collapsed stale previews retain their original content and can be shown after mapping or file changes', async () => {
     const page = fixture();
     await page.readColumns('EXCEL_MAPPING');
-    void page.emit(page.dataset.config.querySelector('[data-import-action="preview"]'), 'click');
+    void page.emit(page.dataset.previewButton, 'click');
     await page.respond('<figure>Original worksheet Data and original column mapping</figure>');
     await page.emit(page.dataset.toggle, 'click');
     page.control('response_column').value = 'changed-response';
@@ -471,7 +549,7 @@ test('failed and superseded preview refreshes preserve collapsed earlier data wh
     for (const outcome of ['network', 'malformed', 'validation', 'mapping', 'file', 'inactive']) {
         const page = fixture();
         await page.readColumns();
-        const previewButton = page.dataset.config.querySelector('[data-import-action="preview"]');
+        const previewButton = page.dataset.previewButton;
         void page.emit(previewButton, 'click');
         await page.respond('<figure>Retained original preview</figure>');
         await page.emit(page.dataset.toggle, 'click');
@@ -511,7 +589,7 @@ test('failed and superseded preview refreshes preserve collapsed earlier data wh
 test('a successful explicit preview refresh opens the newly interpreted data', async () => {
     const page = fixture();
     await page.readColumns();
-    const previewButton = page.dataset.config.querySelector('[data-import-action="preview"]');
+    const previewButton = page.dataset.previewButton;
     void page.emit(previewButton, 'click');
     await page.respond('<p>Earlier interpreted data</p>');
     await page.emit(page.dataset.toggle, 'click');
@@ -529,14 +607,14 @@ test('a successful explicit preview refresh opens the newly interpreted data', a
 test('preview visibility belongs to each dataset and inactive roles cannot change it', async () => {
     const page = fixture();
     await page.readColumns();
-    void page.emit(page.dataset.config.querySelector('[data-import-action="preview"]'), 'click');
+    void page.emit(page.dataset.previewButton, 'click');
     await page.respond('<p>Reference preview</p>');
     page.hasCompleted.checked = true;
     await page.emit(page.hasCompleted, 'change');
     page.completed.file.files = [page.file('completed.csv')];
     void page.emit(page.completed.inspect, 'click');
     await page.respond('CSV_MAPPING', {dataset_id: page.completed.id});
-    void page.emit(page.completed.config.querySelector('[data-import-action="preview"]'), 'click');
+    void page.emit(page.completed.previewButton, 'click');
     await page.respond('<p>Completed observations preview</p>', {dataset_id: page.completed.id});
     await page.emit(page.dataset.toggle, 'click');
     assert.equal(page.dataset.preview.hidden, true);

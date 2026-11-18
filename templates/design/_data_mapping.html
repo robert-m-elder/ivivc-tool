@@ -15,7 +15,7 @@
 
 {% set dataset_prefix = dataset.id ~ '__' %}
 {% if sheet_names %}
-<div class="design-field">
+<div class="design-field" data-import-worksheet>
     <label for="{{ dataset_prefix }}sheet">Worksheet</label>
     <select id="{{ dataset_prefix }}sheet" name="{{ dataset_prefix }}sheet" data-import-sheet>
         <option value="">Select a worksheet</option>
@@ -26,8 +26,10 @@
 {% endif %}
 
 {% if columns is none %}
-<p class="design-help">Select a worksheet and choose Read columns again.</p>
+<p class="design-help">Select a worksheet to load its columns.</p>
 {% else %}
+<details data-import-mapping open>
+<summary>Column mapping and uncertainty<span data-import-mapping-summary class="design-option-summary"></span></summary>
 <div data-column-fields>
     <p class="design-help">Column choices below are starting suggestions. Check them before previewing the data.</p>
     {% if dataset.kind in ('course', 'pair') %}
@@ -35,10 +37,9 @@
     {% set prefix = dataset_prefix ~ series.key ~ '__' %}
     <fieldset class="design-course-options" data-course-options="{{ prefix }}">
         <legend>{{ series.label }}</legend>
-        <div class="design-field-grid">
+        <div class="design-field-grid design-import-course-grid">
             {{ column_select(prefix ~ 'time_column', 'Time column', columns[series.time_default] if series.time_default < columns|length else '') }}
             {{ column_select(prefix ~ 'response_column', 'Response column', columns[series.response_default] if series.response_default < columns|length else '') }}
-        </div>
         <div class="design-field">
             <label for="{{ prefix }}uncertainty">Response and uncertainty interpretation</label>
             <select id="{{ prefix }}uncertainty" name="{{ prefix }}uncertainty" data-uncertainty-kind>
@@ -49,7 +50,14 @@
             </select>
             {{ error_for(prefix ~ 'uncertainty') }}
         </div>
-        <div data-error-fields hidden>
+        <div class="design-field">
+            <label for="{{ prefix }}response_units">Response units (optional)</label>
+            <input id="{{ prefix }}response_units" name="{{ prefix }}response_units" type="text" placeholder="For example: fraction remaining">
+            {{ error_for(prefix ~ 'response_units') }}
+        </div>
+        </div>
+        <div class="design-import-precision-grid">
+        <div class="design-field-grid" data-error-fields hidden>
             <div class="design-field">
                 <label for="{{ prefix }}error_source">SD or SEM source</label>
                 <select id="{{ prefix }}error_source" name="{{ prefix }}error_source">
@@ -67,7 +75,7 @@
                 {{ column_select(prefix ~ 'error_column', 'SD or SEM column') }}
             </div>
         </div>
-        <div data-count-fields hidden>
+        <div class="design-field-grid" data-count-fields hidden>
             <div class="design-field">
                 <label for="{{ prefix }}count_source">Independent replicate count</label>
                 <select id="{{ prefix }}count_source" name="{{ prefix }}count_source">
@@ -86,18 +94,18 @@
                 {{ column_select(prefix ~ 'count_column', 'Independent replicate-count column') }}
             </div>
         </div>
-        <div class="design-field">
-            <label for="{{ prefix }}response_units">Response units (optional)</label>
-            <input id="{{ prefix }}response_units" name="{{ prefix }}response_units" type="text" placeholder="For example: fraction remaining">
-            {{ error_for(prefix ~ 'response_units') }}
         </div>
-        <p class="design-help">Individual SD is retained as observation uncertainty. Mean + SD + count is converted once to SEM = SD/√n. Supplied SEM is retained without further division. Original measurement errors are assumed independent; counts should represent independent experimental units.</p>
+        <details class="design-import-help"><summary>How supplied uncertainty is interpreted</summary>
+            <p class="design-help">Individual SD is retained as observation uncertainty. Mean + SD + count is converted once to SEM = SD/√n. Supplied SEM is retained without further division. Original measurement errors are assumed independent; counts should represent independent experimental units.</p>
+        </details>
     </fieldset>
     {% endfor %}
     {% elif dataset.kind == 'ratios' %}
+    <div class="design-field-grid design-import-ratio-grid">
     {{ column_select(dataset_prefix ~ 'ratio_column', 'In vivo / in vitro time-scale ratio', 'ratio' if 'ratio' in columns else (columns[0] if columns else '')) }}
     {{ column_select(dataset_prefix ~ 'weight_column', 'Weight column (optional)', 'weight' if 'weight' in columns else '', 'No weight column — equal weights') }}
     {{ column_select(dataset_prefix ~ 'source_column', 'Source identifier column (optional)', 'source_id' if 'source_id' in columns else '', 'No source identifier column') }}
+    </div>
     <p class="design-help">Ratios must be positive. Supplied weights must be nonnegative and have positive total weight; blank cells in a selected weight column are errors. Ratios refer to compatible in vivo/in vitro time-scale definitions and units.</p>
     {% elif dataset.kind == 'sd_profile' %}
     <div class="design-field-grid">
@@ -107,4 +115,5 @@
     <p class="design-help">This profile specifies individual future-measurement SD, not SEM or reference-curve uncertainty. Times must increase without duplicates. Planning uses the nearest-time SD and extends endpoint values beyond the profile range.</p>
     {% endif %}
 </div>
+</details>
 {% endif %}

@@ -388,6 +388,65 @@
 .design-page .design-dataset > legend,
 .design-page .design-course-options > legend { font-weight: 600; padding-inline: .35rem; }
 .design-page .design-course-options { background: var(--design-background); }
+.design-page .design-dataset { margin: .75rem 0; padding: .7rem .8rem; }
+.design-page .design-dataset [data-import-panel] > summary,
+.design-page .design-dataset [data-import-mapping] > summary {
+    cursor: pointer;
+    font-size: .875rem;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+.design-page .design-dataset [data-import-panel][open] > summary,
+.design-page .design-dataset [data-import-mapping][open] > summary { margin-bottom: .65rem; }
+.design-page .design-dataset-content {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: .65rem 1rem;
+    align-items: start;
+}
+.design-page .design-dataset [data-import-config] { display: contents; }
+.design-page .design-dataset [data-import-config] > *,
+.design-page .design-dataset-actions,
+.design-page .design-dataset [data-import-status],
+.design-page .design-dataset [data-import-stale],
+.design-page .design-dataset [data-import-preview] { grid-column: 1 / -1; }
+.design-page .design-dataset .design-field { margin-bottom: 0; }
+.design-page .design-dataset label { font-size: .875rem; margin-bottom: .2rem; }
+.design-page .design-dataset input,
+.design-page .design-dataset select { padding: .45rem .55rem; font-size: .875rem; }
+.design-page .design-dataset input[type="file"] { padding: .3rem; }
+.design-page .design-dataset input[type="file"]::file-selector-button { padding: .3rem .5rem; }
+.design-page .design-dataset .design-field-grid { gap: .65rem .8rem; }
+.design-page .design-dataset .design-course-options { margin: .65rem 0; padding: .65rem; }
+.design-page .design-dataset .design-course-options:last-child { margin-bottom: 0; }
+.design-page .design-dataset .design-import-course-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+}
+.design-page .design-import-precision-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 21rem), 1fr));
+    gap: .65rem .8rem;
+    margin-top: .65rem;
+}
+.design-page .design-dataset .design-import-help { margin-top: .5rem; font-size: .8125rem; }
+.design-page .design-dataset .design-import-help > summary { cursor: pointer; color: var(--design-muted); }
+.design-page .design-dataset .design-dataset-actions { gap: .45rem; }
+.design-page .design-dataset .design-dataset-actions button { padding: .4rem .6rem; font-size: .8125rem; }
+.design-page .design-dataset [data-import-status] { margin: 0; }
+.design-page .design-dataset [data-import-status]:empty { display: none; }
+.design-page .design-dataset [data-import-stale] { margin: 0; padding: .5rem .65rem; font-size: .8125rem; }
+.design-page .design-dataset [data-import-preview] .design-data-preview { margin-top: 0; padding-top: .65rem; }
+@media (min-width: 700px) {
+    .design-page .design-dataset-content:has([data-import-worksheet]) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .design-page .design-dataset-content:has([data-import-worksheet]) .design-dataset-file { grid-column: 1; }
+    .design-page .design-dataset [data-import-config] > [data-import-worksheet] { grid-column: 2; }
+    .design-page .design-dataset .design-import-ratio-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 699px) {
+    .design-page .design-dataset .design-field-grid { grid-template-columns: minmax(0, 1fr); }
+}
 .design-page .design-data-preview { margin-top: 1rem; border-top: 1px solid var(--design-border); padding-top: 1rem; }
 .design-page .design-data-preview h4 { font-size: 1rem; margin: 0 0 .7rem; overflow-wrap: anywhere; }
 .design-page .design-preview-series + .design-preview-series { margin-top: 1.4rem; }
