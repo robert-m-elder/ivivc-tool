@@ -3,7 +3,7 @@
 
 \subsubsection{Normalization}
 
-Normalization changes how response values are expressed without adding or removing observations. Initial-value normalization expresses each profile relative to its first response value, whereas min-max normalization expresses each profile relative to its observed range; either transformation changes the response scale used for subsequent fitting, mapping, and metrics.
+Normalization changes how response values are expressed without adding or removing observations. Initial-value normalization expresses each profile relative to its first response value, whereas min-max normalization expresses each profile relative to its observed range. Optional response reversal applies 1 minus the response after these normalizations and before logarithmic scaling or interpolation. These choices change the response scale used for fitting, mapping, and metrics.
 
 \begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.22\textwidth}>{\raggedright\arraybackslash}p{0.20\textwidth}>{\raggedright\arraybackslash}p{0.50\textwidth}@{}}
 \toprule
@@ -16,6 +16,7 @@ Normalization changes how response values are expressed without adding or removi
 \endhead
 Min-max normalization & min\_max & Converts response values to a 0-1 scale using the observed minimum and maximum within each dataset. \\
 Initial-value normalization & initial\_value & Expresses each response value relative to the first response value in the corresponding dataset. \\
+Reverse response (1 - value) & one\_minus & Applies 1 minus each response after any selected normalizations and before logarithmic scaling or interpolation. For data already expressed as fractions, this converts fraction lost to fraction remaining without requiring another normalization. The same selection applies to both calibration profiles and prediction inputs; values are not clipped to 0-1. \\
 \bottomrule
 \end{longtable}
 
